@@ -56,6 +56,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);
     detect_credit_card(text, &mut candidates);
+    detect_date(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -362,6 +363,170 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     }
 }
 
+fn is_leap_year(year: u16) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn days_in_month(year: u16, month: u8) -> u8 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+fn is_valid_date(year: u16, month: u8, day: u8) -> bool {
+    year >= 1000 && (1..=12).contains(&month) && day >= 1 && day <= days_in_month(year, month)
+}
+
+fn fixed_digits_at(bytes: &[u8], start: usize, width: usize) -> Option<u16> {
+    let end = start.checked_add(width)?;
+
+    if end <= bytes.len() && bytes[start..end].iter().all(|byte| byte.is_ascii_digit()) {
+        Some(digits_value(&bytes[start..end]))
+    } else {
+        None
+    }
+}
+
+fn numeric_date_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
+    if start + 10 <= bytes.len() && bytes[start + 4] == b'-' && bytes[start + 7] == b'-' {
+        let year = fixed_digits_at(bytes, start, 4)?;
+        let month = fixed_digits_at(bytes, start + 5, 2)? as u8;
+        let day = fixed_digits_at(bytes, start + 8, 2)? as u8;
+
+        return Some((start + 10, year, month, day));
+    }
+
+    if start + 10 <= bytes.len()
+        && (bytes[start + 2] == b'/' || bytes[start + 2] == b'-')
+        && bytes[start + 5] == bytes[start + 2]
+    {
+        let month = fixed_digits_at(bytes, start, 2)? as u8;
+        let day = fixed_digits_at(bytes, start + 3, 2)? as u8;
+        let year = fixed_digits_at(bytes, start + 6, 4)?;
+
+        return Some((start + 10, year, month, day));
+    }
+
+    None
+}
+
+const MONTH_NAMES: [(&[u8], u8); 23] = [
+    (b"january", 1),
+    (b"jan", 1),
+    (b"february", 2),
+    (b"feb", 2),
+    (b"march", 3),
+    (b"mar", 3),
+    (b"april", 4),
+    (b"apr", 4),
+    (b"may", 5),
+    (b"june", 6),
+    (b"jun", 6),
+    (b"july", 7),
+    (b"jul", 7),
+    (b"august", 8),
+    (b"aug", 8),
+    (b"september", 9),
+    (b"sep", 9),
+    (b"october", 10),
+    (b"oct", 10),
+    (b"november", 11),
+    (b"nov", 11),
+    (b"december", 12),
+    (b"dec", 12),
+];
+
+fn month_name_at(bytes: &[u8], start: usize) -> Option<(usize, u8)> {
+    for (name, month) in MONTH_NAMES {
+        let end = start + name.len();
+
+        if end <= bytes.len()
+            && bytes[start..end].eq_ignore_ascii_case(name)
+            && (end == bytes.len() || !bytes[end].is_ascii_alphabetic())
+        {
+            return Some((end, month));
+        }
+    }
+
+    None
+}
+
+fn named_date_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
+    let (mut cursor, month) = month_name_at(bytes, start)?;
+
+    if bytes.get(cursor) != Some(&b' ') {
+        return None;
+    }
+    cursor += 1;
+
+    let day_start = cursor;
+    while cursor < bytes.len() && bytes[cursor].is_ascii_digit() && cursor - day_start < 2 {
+        cursor += 1;
+    }
+
+    if cursor == day_start || (cursor < bytes.len() && bytes[cursor].is_ascii_digit()) {
+        return None;
+    }
+
+    let day = digits_value(&bytes[day_start..cursor]) as u8;
+
+    if bytes.get(cursor) != Some(&b',') {
+        return None;
+    }
+    cursor += 1;
+
+    if bytes.get(cursor) != Some(&b' ') {
+        return None;
+    }
+    cursor += 1;
+
+    let year = fixed_digits_at(bytes, cursor, 4)?;
+    Some((cursor + 4, year, month, day))
+}
+
+fn date_parts_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
+    numeric_date_at(bytes, start).or_else(|| named_date_at(bytes, start))
+}
+
+fn detect_date(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if (!bytes[start].is_ascii_digit() && !bytes[start].is_ascii_alphabetic())
+            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        let Some((end, year, month, day)) = date_parts_at(bytes, start) else {
+            start += 1;
+            continue;
+        };
+
+        if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
+            start += 1;
+            continue;
+        }
+
+        if is_valid_date(year, month, day) {
+            candidates.push(Candidate {
+                label: Label::Date,
+                start_byte: start,
+                end_byte: end,
+            });
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Entity, scan};
@@ -482,5 +647,30 @@ mod tests {
         assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
         assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
         assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
+    }
+
+    #[test]
+    fn detects_numeric_and_named_dates() {
+        assert_eq!(
+            scan("Date: 2024-02-29"),
+            vec![Entity {
+                label: "DATE".to_owned(),
+                text: "2024-02-29".to_owned(),
+                start: 6,
+                end: 16,
+            }]
+        );
+
+        assert_eq!(scan("12/27/1988")[0].label, "DATE");
+        assert_eq!(scan("Jan 15, 2024")[0].label, "DATE");
+    }
+
+    #[test]
+    fn rejects_invalid_or_unsupported_dates() {
+        assert!(scan("2023-02-29").is_empty());
+        assert!(scan("2024-02-30").is_empty());
+        assert!(scan("12/27/88").is_empty());
+        assert!(scan("27/12/2024").is_empty());
+        assert!(scan("version2024-02-29x").is_empty());
     }
 }
