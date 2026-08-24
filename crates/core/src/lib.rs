@@ -53,6 +53,7 @@ struct Candidate {
 pub fn scan(text: &str) -> Vec<Entity> {
     let mut candidates: Vec<Candidate> = Vec::new();
     detect_email(text, &mut candidates);
+    detect_phone(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -103,6 +104,60 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Entity> {
 fn code_point_offset(text: &str, byte_offset: usize) -> usize {
     text[..byte_offset].chars().count()
 }
+static PHONE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?x)
+        (?:
+            (?:\+?1[\s.-]?)?
+            (?:\(\d{3}\)|\d{3})
+            [\s.-]?\d{3}[\s.-]?\d{4}
+          |
+            \+\d(?:[\s.-]?\d){6,14}
+        )",
+    )
+    .expect("phone regex is valid")
+});
+
+fn has_phone_boundaries(text: &str, start: usize, end: usize) -> bool {
+    let bytes = text.as_bytes();
+
+    let before_is_alphanumeric = start > 0 && bytes[start - 1].is_ascii_alphanumeric();
+    let after_is_alphanumeric = end < bytes.len() && bytes[end].is_ascii_alphanumeric();
+
+    !before_is_alphanumeric && !after_is_alphanumeric
+}
+
+fn is_valid_phone(candidate: &str) -> bool {
+    let digits: String = candidate
+        .bytes()
+        .filter(|byte| byte.is_ascii_digit())
+        .map(char::from)
+        .collect();
+
+    if candidate.starts_with('+') {
+        (7..=15).contains(&digits.len())
+    } else {
+        digits.len() == 10 || (digits.len() == 11 && digits.starts_with('1'))
+    }
+}
+
+fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
+    for matched in PHONE_RE.find_iter(text) {
+        if !has_phone_boundaries(text, matched.start(), matched.end()) {
+            continue;
+        }
+
+        if !is_valid_phone(matched.as_str()) {
+            continue;
+        }
+
+        candidates.push(Candidate {
+            label: Label::Phone,
+            start_byte: matched.start(),
+            end_byte: matched.end(),
+        });
+    }
+}
 
 static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -123,10 +178,68 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
 
 #[cfg(test)]
 mod tests {
-    use super::scan;
+    use super::{Entity, scan};
 
     #[test]
     fn empty_input_has_no_entities() {
         assert!(scan("").is_empty());
+    }
+
+    #[test]
+    fn detects_email_without_trailing_punctuation() {
+        assert_eq!(
+            scan("Contact jane@example.com."),
+            vec![Entity {
+                label: "EMAIL".to_owned(),
+                text: "jane@example.com".to_owned(),
+                start: 8,
+                end: 24,
+            }]
+        );
+    }
+
+    #[test]
+    fn reports_email_offsets_as_unicode_code_points() {
+        assert_eq!(
+            scan("👋 jane@example.com"),
+            vec![Entity {
+                label: "EMAIL".to_owned(),
+                text: "jane@example.com".to_owned(),
+                start: 2,
+                end: 18,
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_north_american_phone_number() {
+        assert_eq!(
+            scan("Call (212) 555-0100."),
+            vec![Entity {
+                label: "PHONE".to_owned(),
+                text: "(212) 555-0100".to_owned(),
+                start: 5,
+                end: 19,
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_international_phone_number() {
+        assert_eq!(
+            scan("Intl +44 20 7946 0958"),
+            vec![Entity {
+                label: "PHONE".to_owned(),
+                text: "+44 20 7946 0958".to_owned(),
+                start: 5,
+                end: 21,
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_short_or_embedded_phone_candidates() {
+        assert!(scan("Call 555-0100").is_empty());
+        assert!(scan("order212-555-0100x").is_empty());
     }
 }
