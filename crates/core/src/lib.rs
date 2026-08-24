@@ -57,6 +57,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_ssn(text, &mut candidates);
     detect_credit_card(text, &mut candidates);
     detect_date(text, &mut candidates);
+    detect_zip_code(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -527,6 +528,64 @@ fn detect_date(text: &str, candidates: &mut Vec<Candidate>) {
     }
 }
 
+fn zip_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let five_digit_end = start + 5;
+
+    if five_digit_end > bytes.len()
+        || !bytes[start..five_digit_end]
+            .iter()
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+
+    if bytes.get(five_digit_end) == Some(&b'-') {
+        let zip_plus_four_end = five_digit_end + 5;
+
+        if zip_plus_four_end <= bytes.len()
+            && bytes[five_digit_end + 1..zip_plus_four_end]
+                .iter()
+                .all(|byte| byte.is_ascii_digit())
+        {
+            return Some(zip_plus_four_end);
+        }
+
+        return None;
+    }
+
+    Some(five_digit_end)
+}
+
+fn detect_zip_code(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        let Some(end) = zip_end_at(bytes, start) else {
+            start += 1;
+            continue;
+        };
+
+        if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
+            start += 1;
+            continue;
+        }
+
+        candidates.push(Candidate {
+            label: Label::ZipCode,
+            start_byte: start,
+            end_byte: end,
+        });
+        start = end;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Entity, scan};
@@ -672,5 +731,29 @@ mod tests {
         assert!(scan("12/27/88").is_empty());
         assert!(scan("27/12/2024").is_empty());
         assert!(scan("version2024-02-29x").is_empty());
+    }
+
+    #[test]
+    fn detects_five_digit_and_plus_four_zip_codes() {
+        assert_eq!(
+            scan("ZIP: 94105-1234"),
+            vec![Entity {
+                label: "ZIP_CODE".to_owned(),
+                text: "94105-1234".to_owned(),
+                start: 5,
+                end: 15,
+            }]
+        );
+
+        assert_eq!(scan("94105")[0].label, "ZIP_CODE");
+    }
+
+    #[test]
+    fn rejects_invalid_or_embedded_zip_codes() {
+        assert!(scan("1234").is_empty());
+        assert!(scan("123456").is_empty());
+        assert!(scan("x94105").is_empty());
+        assert!(scan("94105x").is_empty());
+        assert!(scan("94105-123").is_empty());
     }
 }
