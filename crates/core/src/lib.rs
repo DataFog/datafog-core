@@ -1,6 +1,8 @@
 //! Core PII scanning API for the DataFog Rust proof of concept.
 use regex::Regex;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
+
 /// A PII entity detected in an input string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
@@ -58,6 +60,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_credit_card(text, &mut candidates);
     detect_date(text, &mut candidates);
     detect_zip_code(text, &mut candidates);
+    detect_ip_address(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -586,6 +589,117 @@ fn detect_zip_code(text: &str, candidates: &mut Vec<Candidate>) {
     }
 }
 
+fn ipv4_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut end = start;
+
+    for group in 0..4 {
+        let group_start = end;
+
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+
+        if !(1..=3).contains(&(end - group_start)) {
+            return None;
+        }
+
+        if group < 3 {
+            if bytes.get(end) != Some(&b'.') {
+                return None;
+            }
+            end += 1;
+        }
+    }
+
+    Some(end)
+}
+
+fn ipv6_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    if !bytes[start].is_ascii_hexdigit() && bytes[start] != b':' {
+        return None;
+    }
+
+    let mut end = start;
+    let mut has_colon = false;
+
+    while end < bytes.len() && (bytes[end].is_ascii_hexdigit() || bytes[end] == b':') {
+        has_colon |= bytes[end] == b':';
+        end += 1;
+    }
+
+    has_colon.then_some(end)
+}
+
+fn has_ip_boundaries(bytes: &[u8], start: usize, end: usize) -> bool {
+    (start == 0 || !bytes[start - 1].is_ascii_alphanumeric())
+        && (end == bytes.len() || !bytes[end].is_ascii_alphanumeric())
+}
+
+fn is_part_of_longer_ipv4(bytes: &[u8], start: usize, end: usize) -> bool {
+    (start >= 2 && bytes[start - 1] == b'.' && bytes[start - 2].is_ascii_digit())
+        || (bytes.get(end) == Some(&b'.')
+            && bytes.get(end + 1).is_some_and(|byte| byte.is_ascii_digit()))
+}
+
+fn is_valid_ipv4(bytes: &[u8], start: usize, end: usize) -> bool {
+    let Ok(candidate) = std::str::from_utf8(&bytes[start..end]) else {
+        return false;
+    };
+
+    candidate.parse::<Ipv4Addr>().is_ok()
+}
+
+fn is_valid_ipv6(bytes: &[u8], start: usize, end: usize) -> bool {
+    let Ok(candidate) = std::str::from_utf8(&bytes[start..end]) else {
+        return false;
+    };
+
+    candidate.parse::<Ipv6Addr>().is_ok()
+}
+
+fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if (!bytes[start].is_ascii_hexdigit() && bytes[start] != b':')
+            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        if let Some(end) = ipv4_end_at(bytes, start) {
+            if has_ip_boundaries(bytes, start, end)
+                && !is_part_of_longer_ipv4(bytes, start, end)
+                && is_valid_ipv4(bytes, start, end)
+            {
+                candidates.push(Candidate {
+                    label: Label::IpAddress,
+                    start_byte: start,
+                    end_byte: end,
+                });
+                start = end;
+                continue;
+            }
+        }
+
+        if let Some(end) = ipv6_end_at(bytes, start) {
+            if has_ip_boundaries(bytes, start, end) && is_valid_ipv6(bytes, start, end) {
+                candidates.push(Candidate {
+                    label: Label::IpAddress,
+                    start_byte: start,
+                    end_byte: end,
+                });
+                start = end;
+                continue;
+            }
+        }
+
+        start += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Entity, scan};
@@ -755,5 +869,30 @@ mod tests {
         assert!(scan("x94105").is_empty());
         assert!(scan("94105x").is_empty());
         assert!(scan("94105-123").is_empty());
+    }
+
+    #[test]
+    fn detects_ipv4_and_ipv6_addresses() {
+        assert_eq!(
+            scan("IPv4: 192.168.1.10"),
+            vec![Entity {
+                label: "IP_ADDRESS".to_owned(),
+                text: "192.168.1.10".to_owned(),
+                start: 6,
+                end: 18,
+            }]
+        );
+
+        assert_eq!(scan("2001:db8::1")[0].label, "IP_ADDRESS");
+        assert_eq!(scan("[2001:db8::1]:443")[0].text, "2001:db8::1");
+        assert_eq!(scan("192.168.1.10:8080")[0].text, "192.168.1.10");
+    }
+
+    #[test]
+    fn rejects_invalid_or_embedded_ip_addresses() {
+        assert!(scan("256.1.1.1").is_empty());
+        assert!(scan("1.2.3.4.5").is_empty());
+        assert!(scan("2001:db8::zzzz").is_empty());
+        assert!(scan("host192.168.1.10name").is_empty());
     }
 }
