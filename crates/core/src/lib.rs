@@ -55,6 +55,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);
+    detect_credit_card(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -183,6 +184,12 @@ fn digits_value(digits: &[u8]) -> u16 {
         .fold(0, |value, digit| value * 10 + u16::from(*digit - b'0'))
 }
 
+fn digits_value_u32(digits: &[u8]) -> u32 {
+    digits
+        .iter()
+        .fold(0, |value, digit| value * 10 + u32::from(*digit - b'0'))
+}
+
 fn is_valid_ssn(area: u16, group: u16, serial: u16) -> bool {
     area != 0 && area != 666 && area < 900 && group != 0 && serial != 0
 }
@@ -249,6 +256,102 @@ fn detect_ssn(text: &str, candidates: &mut Vec<Candidate>) {
         if is_valid_ssn(area, group, serial) {
             candidates.push(Candidate {
                 label: Label::Ssn,
+                start_byte: start,
+                end_byte: end,
+            });
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+}
+
+fn passes_luhn(digits: &[u8]) -> bool {
+    let mut sum = 0_u32;
+
+    for (position, digit) in digits.iter().rev().enumerate() {
+        let mut value = u32::from(*digit - b'0');
+
+        if position % 2 == 1 {
+            value *= 2;
+            if value > 9 {
+                value -= 9;
+            }
+        }
+
+        sum += value;
+    }
+
+    sum % 10 == 0
+}
+
+fn has_supported_card_prefix(digits: &[u8]) -> bool {
+    match digits {
+        [b'4', ..] => true,                                           // Visa
+        [b'3', b'4' | b'7', ..] => true,                              // American Express
+        [b'5', second, ..] if (b'1'..=b'5').contains(second) => true, // Mastercard
+        [b'2', _, _, _, ..] => (2221..=2720).contains(&digits_value(&digits[..4])),
+        [b'6', b'0', b'1', b'1', ..] => true, // Discover 6011
+        [b'6', b'5', ..] => true,             // Discover 65
+        [b'6', b'4', third, ..] if (b'4'..=b'9').contains(third) => true, // Discover 644–649
+        [b'6', b'2', _, _, _, _, ..] => (622126..=622925).contains(&digits_value_u32(&digits[..6])),
+        _ => false,
+    }
+}
+
+fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
+    let mut end = start;
+    let mut last_digit_end = start;
+    let mut digits = Vec::with_capacity(19);
+    let mut previous_was_separator = false;
+
+    while end < bytes.len() {
+        let byte = bytes[end];
+
+        if byte.is_ascii_digit() {
+            if digits.len() == 19 {
+                break;
+            }
+
+            digits.push(byte);
+            end += 1;
+            last_digit_end = end;
+            previous_was_separator = false;
+        } else if (byte == b' ' || byte == b'-') && !previous_was_separator {
+            end += 1;
+            previous_was_separator = true;
+        } else {
+            break;
+        }
+    }
+
+    (last_digit_end, digits)
+}
+
+fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        let (end, digits) = card_parts_at(bytes, start);
+
+        if end == start || (end < bytes.len() && bytes[end].is_ascii_alphanumeric()) {
+            start += 1;
+            continue;
+        }
+
+        if (13..=19).contains(&digits.len())
+            && has_supported_card_prefix(&digits)
+            && passes_luhn(&digits)
+        {
+            candidates.push(Candidate {
+                label: Label::CreditCard,
                 start_byte: start,
                 end_byte: end,
             });
@@ -352,5 +455,32 @@ mod tests {
         assert!(scan("123-00-4567").is_empty());
         assert!(scan("123-45-0000").is_empty());
         assert!(scan("ref123-45-6789x").is_empty());
+    }
+
+    #[test]
+    fn detects_formatted_credit_card() {
+        assert_eq!(
+            scan("Card: 4111-1111-1111-1111"),
+            vec![Entity {
+                label: "CREDIT_CARD".to_owned(),
+                text: "4111-1111-1111-1111".to_owned(),
+                start: 6,
+                end: 25,
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_supported_card_issuers() {
+        assert_eq!(scan("5555 5555 5555 4444")[0].label, "CREDIT_CARD");
+        assert_eq!(scan("378282246310005")[0].label, "CREDIT_CARD");
+        assert_eq!(scan("6011111111111117")[0].label, "CREDIT_CARD");
+    }
+
+    #[test]
+    fn rejects_invalid_credit_card_candidates() {
+        assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
+        assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
+        assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
     }
 }
