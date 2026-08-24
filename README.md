@@ -6,7 +6,7 @@ Evaluate whether a Rust implementation of `scan(text, engine="regex")` should re
 
 ## Scope
 
-PII fields: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DOB`, and `ZIP`.
+PII fields: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`.
 
 Exclude spaCy, GLiNER, `smart`, and all NER model download/loading time.
 
@@ -16,18 +16,7 @@ Exclude spaCy, GLiNER, `smart`, and all NER model download/loading time.
 - Version: `4.8.0a6`
 - Commit: `75e414b2`
 - Invocation: `scan(text, engine="regex")`
-- Fields: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DOB`, `ZIP`
-
-### Canonical output labels
-
-The evaluation vocabulary uses `DOB` and `ZIP`. Normalize baseline Python
-output before scoring:
-
-- `DATE` → `DOB`
-- `ZIP_CODE` → `ZIP`
-
-Compare canonical `(label, text, start, end)` tuples. Preserve raw baseline
-output alongside normalized output.
+- Fields: `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, `ZIP_CODE`
 
 ## Measurements
 
