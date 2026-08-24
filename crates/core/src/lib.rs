@@ -54,6 +54,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     let mut candidates: Vec<Candidate> = Vec::new();
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
+    detect_ssn(text, &mut candidates);
     finalize(text, candidates)
 }
 
@@ -176,6 +177,88 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
     }
 }
 
+fn digits_value(digits: &[u8]) -> u16 {
+    digits
+        .iter()
+        .fold(0, |value, digit| value * 10 + u16::from(*digit - b'0'))
+}
+
+fn is_valid_ssn(area: u16, group: u16, serial: u16) -> bool {
+    area != 0 && area != 666 && area < 900 && group != 0 && serial != 0
+}
+
+fn ssn_parts_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u16, u16)> {
+    if start + 11 <= bytes.len()
+        && bytes[start + 3] == b'-'
+        && bytes[start + 6] == b'-'
+        && bytes[start..start + 3]
+            .iter()
+            .all(|byte| byte.is_ascii_digit())
+        && bytes[start + 4..start + 6]
+            .iter()
+            .all(|byte| byte.is_ascii_digit())
+        && bytes[start + 7..start + 11]
+            .iter()
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return Some((
+            start + 11,
+            digits_value(&bytes[start..start + 3]),
+            digits_value(&bytes[start + 4..start + 6]),
+            digits_value(&bytes[start + 7..start + 11]),
+        ));
+    }
+
+    if start + 9 <= bytes.len()
+        && bytes[start..start + 9]
+            .iter()
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return Some((
+            start + 9,
+            digits_value(&bytes[start..start + 3]),
+            digits_value(&bytes[start + 3..start + 5]),
+            digits_value(&bytes[start + 5..start + 9]),
+        ));
+    }
+
+    None
+}
+
+fn detect_ssn(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        let Some((end, area, group, serial)) = ssn_parts_at(bytes, start) else {
+            start += 1;
+            continue;
+        };
+
+        if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
+            start += 1;
+            continue;
+        }
+
+        if is_valid_ssn(area, group, serial) {
+            candidates.push(Candidate {
+                label: Label::Ssn,
+                start_byte: start,
+                end_byte: end,
+            });
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Entity, scan};
@@ -241,5 +324,33 @@ mod tests {
     fn rejects_short_or_embedded_phone_candidates() {
         assert!(scan("Call 555-0100").is_empty());
         assert!(scan("order212-555-0100x").is_empty());
+    }
+
+    #[test]
+    fn detects_dashed_ssn() {
+        assert_eq!(
+            scan("SSN: 123-45-6789"),
+            vec![Entity {
+                label: "SSN".to_owned(),
+                text: "123-45-6789".to_owned(),
+                start: 5,
+                end: 16,
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_undashed_ssn() {
+        assert_eq!(scan("123456789")[0].label, "SSN");
+    }
+
+    #[test]
+    fn rejects_invalid_or_embedded_ssn_candidates() {
+        assert!(scan("000-12-3456").is_empty());
+        assert!(scan("666-12-3456").is_empty());
+        assert!(scan("900-12-3456").is_empty());
+        assert!(scan("123-00-4567").is_empty());
+        assert!(scan("123-45-0000").is_empty());
+        assert!(scan("ref123-45-6789x").is_empty());
     }
 }
