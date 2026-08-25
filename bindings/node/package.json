@@ -1,0 +1,30 @@
+{
+  "name": "@datafog/node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "types": "./index.d.ts",
+  "engines": {
+    "node": "24.x"
+  },
+  "napi": {
+    "binaryName": "datafog",
+    "targets": [
+      "aarch64-apple-darwin"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.8.6"
+  }
+}
