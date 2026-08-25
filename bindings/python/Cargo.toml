@@ -2,6 +2,9 @@
 name = "datafog-core-python"
 version = "0.1.0"
 edition = "2024"
+description = "Python bindings for datafog-core"
+license = "MIT"
+repository = "https://github.com/DataFog/datafog-core"
 
 [lib]
 name = "datafog_core"
