@@ -2,9 +2,12 @@
 name = "datafog-core"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Fast structured PII detection library"
 license = "MIT"
+homepage = "https://datafog.ai"
 repository = "https://github.com/DataFog/datafog-core"
+readme = "../../README.md"
 keywords = ["pii", "privacy", "detection"]
 categories = ["text-processing"]
 
