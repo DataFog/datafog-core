@@ -27,9 +27,11 @@
     "dtsHeaderFile": "dts-header.d.ts"
   },
   "scripts": {
-    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts"
+    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts",
+    "test:package": "node ../../scripts/test-node-package.mjs"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.8.6"
+    "@napi-rs/cli": "3.8.6",
+    "typescript": "7.0.2"
   }
 }

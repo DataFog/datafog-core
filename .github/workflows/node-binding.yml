@@ -1,0 +1,33 @@
+name: Node binding
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/core/**"
+      - "bindings/node/**"
+      - "fixtures/**"
+      - "scripts/test-node-package.mjs"
+      - ".github/workflows/node-binding.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/core/**"
+      - "bindings/node/**"
+      - "fixtures/**"
+      - "scripts/test-node-package.mjs"
+      - ".github/workflows/node-binding.yml"
+
+jobs:
+  installed-package:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix bindings/node
+      - run: npm run test:package --prefix bindings/node
