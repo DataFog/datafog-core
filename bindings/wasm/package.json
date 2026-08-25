@@ -1,7 +1,15 @@
 {
   "name": "@datafog/wasm",
   "version": "0.1.0",
-  "private": true,
+  "description": "Fast structured PII detection for browsers, powered by Rust and WebAssembly",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DataFog/datafog-core.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "files": [
     "index.js",
@@ -15,6 +23,13 @@
     }
   },
   "types": "./index.d.ts",
+  "keywords": [
+    "pii",
+    "privacy",
+    "detection",
+    "wasm",
+    "webassembly"
+  ],
   "scripts": {
     "build": "cargo build --manifest-path Cargo.toml --release --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir dist --out-name datafog_wasm ../../target/wasm32-unknown-unknown/release/datafog_wasm.wasm",
     "test:package": "node ../../scripts/test-wasm-package.mjs"
