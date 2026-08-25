@@ -12,7 +12,7 @@ All bindings use the same Rust implementation and return the matched text with z
 
 ```text
 crates/core/        Rust scanning library
-bindings/python/    Python extension: datafog-core-python / datafog_core
+bindings/python/    Python extension: datafog-core / datafog_core
 bindings/node/      Node package: @datafog/node
 bindings/wasm/      Browser package: @datafog/wasm
 fixtures/           Shared conformance fixtures
@@ -63,8 +63,12 @@ console.log(scan("Email jane@example.com"));
 The repository builds the following packages locally:
 
 - `datafog-core` for Rust consumers
-- `datafog-core-python` for Python consumers
+- `datafog-core` for Python consumers, imported as `datafog_core`
 - `@datafog/node` for Node.js consumers
 - `@datafog/wasm` for browser and bundler consumers
 
 Publishing and cross-platform release automation are the next production steps.
+
+## License
+
+MIT
