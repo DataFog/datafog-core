@@ -1,0 +1,26 @@
+name: Python binding
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  installed-wheel:
+    name: CPython ${{ matrix.python-version }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install maturin
+      - run: maturin build --manifest-path bindings/python/Cargo.toml --release
+      - run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install target/wheels/*.whl
+          .venv/bin/python bindings/python/tests/test_installed.py
