@@ -44,6 +44,33 @@ Run its installed-wheel fixture test with:
 .venv/bin/python bindings/python/tests/test_installed.py
 ```
 
+## WASM binding
+
+The browser package is `@datafog/wasm`. Build it with the Rust WASM target and a matching `wasm-bindgen` CLI:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.127 --locked
+npm ci --prefix bindings/wasm
+npm run build --prefix bindings/wasm
+```
+
+Use it from a browser ESM application:
+
+```js
+import { init, scan } from "@datafog/wasm";
+
+await init();
+console.log(scan("Email jane@example.com"));
+```
+
+Run the installed-package browser test with:
+
+```bash
+npx --prefix bindings/wasm playwright install chromium
+npm run test:package --prefix bindings/wasm
+```
+
 ## Reproduce Comparison Results on macOS
 
 Use this workflow to compare the pinned `datafog-python` baseline, the Rust core, and the Rust-backed Python binding on another Mac. It works on Apple Silicon and Intel Macs; the generated wheel filename differs by Python version and CPU architecture.

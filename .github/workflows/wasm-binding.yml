@@ -1,0 +1,37 @@
+name: WASM binding
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/core/**"
+      - "bindings/wasm/**"
+      - "fixtures/**"
+      - "scripts/test-wasm-package.mjs"
+      - ".github/workflows/wasm-binding.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/core/**"
+      - "bindings/wasm/**"
+      - "fixtures/**"
+      - "scripts/test-wasm-package.mjs"
+      - ".github/workflows/wasm-binding.yml"
+
+jobs:
+  installed-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: npm ci --prefix bindings/wasm
+      - run: npx --prefix bindings/wasm playwright install --with-deps chromium
+      - run: npm run test:package --prefix bindings/wasm

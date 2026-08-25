@@ -1,0 +1,26 @@
+{
+  "name": "@datafog/wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "types": "./index.d.ts",
+  "scripts": {
+    "build": "cargo build --manifest-path Cargo.toml --release --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir dist --out-name datafog_wasm ../../target/wasm32-unknown-unknown/release/datafog_wasm.wasm",
+    "test:package": "node ../../scripts/test-wasm-package.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "typescript": "7.0.2"
+  }
+}
