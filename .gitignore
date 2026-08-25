@@ -9,4 +9,6 @@ node_modules/
 *.node
 *.tgz
 /bindings/node/native.js
+/bindings/node/npm/
+/bindings/node/artifacts/
 /bindings/wasm/dist/
