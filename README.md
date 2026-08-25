@@ -26,23 +26,32 @@ Exclude spaCy, GLiNER, `smart`, and all NER model download/loading time.
 - Startup time
 - Peak memory use
 
-## Results
+## Python binding
 
-### Final 1,000-sentence comparison
+The existing `datafog` package remains the Python baseline. The parallel Rust-backed binding is distributed as `datafog-core-python` and imported as `datafog_core`.
 
-![Final 1,000-sentence results](docs/images/1000-sentences.png)
+```bash
+python3 -m pip install maturin
+maturin build --manifest-path bindings/python/Cargo.toml --release
+python3 -m venv .venv
+.venv/bin/python -m pip install target/wheels/*.whl
+.venv/bin/python -c 'from datafog_core import scan; print(scan("Email jane@example.com"))'
+```
 
-### Throughput scaling
+Run its installed-wheel fixture test with:
 
-![Throughput scaling results](docs/images/scaling-view.png)
+```bash
+.venv/bin/python bindings/python/tests/test_installed.py
+```
 
 ## Local tools
 
 ### Results Viewer
 
 1. Run a comparison: `python3 scripts/compare.py fixtures/final.jsonl`.
-2. Or run batch scaling: `python3 scripts/compare.py scale fixtures/development.jsonl fixtures/final.jsonl`.
-3. Open `results-viewer.html` in a browser and select the timestamped JSON report from `results/`.
+2. Include the Python binding wheel: `python3 scripts/compare.py fixtures/final.jsonl --wheel target/wheels/*.whl`.
+3. Or run batch scaling: `python3 scripts/compare.py scale fixtures/development.jsonl fixtures/final.jsonl`.
+4. Open `results-viewer.html` in a browser and select the timestamped JSON report from `results/`.
 
 ![Results Viewer](docs/images/results-viewer.png)
 
