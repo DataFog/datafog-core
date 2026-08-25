@@ -50,7 +50,7 @@
       </svg>
     </div>
     <section class="layout">
-      <div><h2>Planned repository layout</h2><pre>README.md<br>docs/<br>  rust-trd.md<br>  rust-design.md<br>  python-baseline.md<br>  rust-architecture.html<br>fixtures/<br>  development.jsonl<br>  final.jsonl<br>crates/<br>  core/                 # Rust scan core<br>bindings/<br>  python/               # future<br>  typescript/           # future<br>  wasm/                 # future</pre></div>
+      <div><h2>Planned repository layout</h2><pre>README.md<br>docs/<br>  rust-poc/<br>    rust-trd.md<br>    rust-design.md<br>    python-baseline.md<br>    rust-architecture.html<br>    adr/<br>  python-binding/       # future binding docs<br>fixtures/<br>  development.jsonl<br>  final.jsonl<br>crates/<br>  core/                 # Rust scan core<br>bindings/<br>  python/               # future<br>  typescript/           # future<br>  wasm/                 # future</pre></div>
       <div><h2>Shared-framework responsibilities</h2><p class="note">Label detectors own candidate discovery and label-specific validation. The framework owns byte-range collection, conversion to public Unicode code-point offsets, deterministic sorting, exact deduplication, and preservation of non-identical overlaps. Matchers and lookup data are initialized once; scanning itself does not copy input text or perform I/O.</p></div>
     </section>
     <section class="performance">

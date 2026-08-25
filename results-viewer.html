@@ -23,10 +23,12 @@
     .chart text { fill: #111; font: 12px Arial, sans-serif; }
     .chart .axis { stroke: #111; }
     .chart .grid { stroke: #ccc; stroke-dasharray: 3 3; }
-    .chart .rust { fill: none; stroke: #1565c0; stroke-width: 2; }
-    .chart .python { fill: none; stroke: #c65d00; stroke-width: 2; }
-    .chart .rust-dot { fill: #1565c0; }
-    .chart .python-dot { fill: #c65d00; }
+    .chart .rust-poc { fill: none; stroke: #1565c0; stroke-width: 2; }
+    .chart .datafog-python { fill: none; stroke: #c65d00; stroke-width: 2; }
+    .chart .datafog-rs { fill: none; stroke: #6a1b9a; stroke-width: 2; }
+    .chart .rust-poc-dot { fill: #1565c0; }
+    .chart .datafog-python-dot { fill: #c65d00; }
+    .chart .datafog-rs-dot { fill: #6a1b9a; }
     [hidden] { display: none; }
   </style>
 </head>
@@ -43,13 +45,13 @@
 
       <h2>Summary</h2>
       <table>
-        <thead><tr><th></th><th>Rust</th><th>Python</th></tr></thead>
+        <thead><tr><th></th><th>Python baseline</th><th>datafog-rs Python binding</th><th>Rust core</th></tr></thead>
         <tbody id="summary"></tbody>
       </table>
 
       <h2>Quality</h2>
       <table>
-        <thead><tr><th>Label</th><th>Rust F1</th><th>Python F1</th><th>Rust P / R</th><th>Python P / R</th></tr></thead>
+        <thead><tr><th>Label</th><th>Python baseline F1</th><th>datafog-rs Python binding F1</th><th>Rust core F1</th><th>Python baseline P / R</th><th>datafog-rs Python binding P / R</th><th>Rust core P / R</th></tr></thead>
         <tbody id="quality"></tbody>
       </table>
 
@@ -60,10 +62,10 @@
 
     <section id="scaling" hidden>
       <h2>Throughput</h2>
-      <p class="muted"><span style="color:#1565c0">Rust</span> · <span style="color:#c65d00">Python</span></p>
+      <p class="muted"><span style="color:#c65d00">Python baseline</span> · <span style="color:#6a1b9a">datafog-rs Python binding</span> · <span style="color:#1565c0">Rust core</span></p>
       <svg id="throughput-chart" class="chart" viewBox="0 0 800 280" role="img" aria-label="Throughput by sentence count"></svg>
       <table>
-        <thead><tr><th>Fixture</th><th>Sentences</th><th>Rust batch</th><th>Python batch</th><th>Rust throughput</th><th>Python throughput</th><th>Speedup</th></tr></thead>
+        <thead><tr><th>Fixture</th><th>Sentences</th><th>Python baseline batch</th><th>datafog-rs Python binding batch</th><th>Rust core batch</th><th>Python baseline throughput</th><th>datafog-rs Python binding throughput</th><th>Rust core throughput</th></tr></thead>
         <tbody id="scaling-table"></tbody>
       </table>
     </section>
@@ -90,48 +92,65 @@
 
     function renderComparison() {
       const data = report.datasets[datasetSelect.value];
-      const rust = data.quality.rust.overall;
-      const python = data.quality.python.overall;
-      const rustPerf = data.performance.rust;
-      const pythonPerf = data.performance.python;
+      const python = data.quality.python_baseline.overall;
+      const binding = data.quality.datafog_rs_python_binding?.overall;
+      const rust = data.quality.rust_core.overall;
+      const pythonPerf = data.performance.python_baseline;
+      const bindingPerf = data.performance.datafog_rs_python_binding;
+      const rustPerf = data.performance.rust_core;
+      const value = (source, format) => source ? format(source) : '—';
       const rows = [
-        ['Overall F1', percent(rust.f1), percent(python.f1)],
-        ['Throughput', `${rate(rustPerf.sentences_per_second)}/s`, `${rate(pythonPerf.sentences_per_second)}/s`],
-        ['P95 latency', `${fixed(rustPerf.p95_latency_us)} µs`, `${fixed(pythonPerf.p95_latency_us)} µs`],
+        ['Overall F1', percent(python.f1), value(binding, item => percent(item.f1)), percent(rust.f1)],
+        ['Throughput', `${rate(pythonPerf.sentences_per_second)}/s`, value(bindingPerf, item => `${rate(item.sentences_per_second)}/s`), `${rate(rustPerf.sentences_per_second)}/s`],
+        ['P95 latency', `${fixed(pythonPerf.p95_latency_us)} µs`, value(bindingPerf, item => `${fixed(item.p95_latency_us)} µs`), `${fixed(rustPerf.p95_latency_us)} µs`],
       ];
-      if (data.startup_time_ms_median) rows.push(['Startup', `${fixed(data.startup_time_ms_median.rust)} ms`, `${fixed(data.startup_time_ms_median.python)} ms`]);
-      if (data.peak_memory_bytes) rows.push(['Peak memory', megabytes(data.peak_memory_bytes.rust), megabytes(data.peak_memory_bytes.python)]);
-      document.querySelector('#summary').innerHTML = rows.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join('');
+      if (data.startup_time_ms_median) rows.push(['Startup', `${fixed(data.startup_time_ms_median.python_baseline)} ms`, value(data.startup_time_ms_median.datafog_rs_python_binding, item => `${fixed(item)} ms`), `${fixed(data.startup_time_ms_median.rust_core)} ms`]);
+      if (data.peak_memory_bytes) rows.push(['Peak memory', megabytes(data.peak_memory_bytes.python_baseline), value(data.peak_memory_bytes.datafog_rs_python_binding, megabytes), megabytes(data.peak_memory_bytes.rust_core)]);
+      document.querySelector('#summary').innerHTML = rows.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td></tr>`).join('');
 
-      const labels = Object.keys(data.quality.rust).filter(label => label !== 'overall');
+      const labels = Object.keys(data.quality.rust_core).filter(label => label !== 'overall');
       labels.push('overall');
       document.querySelector('#quality').innerHTML = labels.map(label => {
-        const rust = data.quality.rust[label];
-        const python = data.quality.python[label];
-        return `<tr><td>${label === 'overall' ? 'Overall' : label}</td><td>${percent(rust.f1)}</td><td>${percent(python.f1)}</td><td>${percent(rust.precision)} / ${percent(rust.recall)}</td><td>${percent(python.precision)} / ${percent(python.recall)}</td></tr>`;
+        const python = data.quality.python_baseline[label];
+        const binding = data.quality.datafog_rs_python_binding?.[label];
+        const rust = data.quality.rust_core[label];
+        return `<tr><td>${label === 'overall' ? 'Overall' : label}</td><td>${percent(python.f1)}</td><td>${value(binding, item => percent(item.f1))}</td><td>${percent(rust.f1)}</td><td>${percent(python.precision)} / ${percent(python.recall)}</td><td>${value(binding, item => `${percent(item.precision)} / ${percent(item.recall)}`)}</td><td>${percent(rust.precision)} / ${percent(rust.recall)}</td></tr>`;
       }).join('');
 
-      const differences = data.output_difference.differences;
-      document.querySelector('#difference-summary').textContent = differences.length ? `${number(differences.length)} sentences differ.` : 'No differences.';
-      document.querySelector('#differences').innerHTML = differences.map(item => `<details><summary>${item.id}</summary><pre>${escapeHtml(JSON.stringify({ python: item.python, rust: item.rust }, null, 2))}</pre></details>`).join('');
+      const rustDifferences = data.output_differences.python_baseline_vs_rust_core.differences;
+      const bindingDifferences = data.output_differences.python_baseline_vs_datafog_rs_python_binding?.differences;
+      const summaries = [
+        `Python baseline vs Rust core: ${rustDifferences.length ? `${number(rustDifferences.length)} sentences differ.` : 'no differences.'}`,
+        bindingDifferences && `Python baseline vs datafog-rs Python binding: ${bindingDifferences.length ? `${number(bindingDifferences.length)} sentences differ.` : 'no differences.'}`,
+      ].filter(Boolean);
+      document.querySelector('#difference-summary').textContent = summaries.join(' ');
+      const allDifferences = [
+        ...rustDifferences.map(item => ({ title: `Python baseline vs Rust core · ${item.id}`, item })),
+        ...(bindingDifferences || []).map(item => ({ title: `Python baseline vs datafog-rs Python binding · ${item.id}`, item })),
+      ];
+      document.querySelector('#differences').innerHTML = allDifferences.map(({ title, item }) => `<details><summary>${title}</summary><pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre></details>`).join('');
     }
 
     function renderScaling() {
       const workloads = report.workloads;
       document.querySelector('#scaling-table').innerHTML = workloads.map(workload => {
-        const speedup = workload.rust.sentences_per_second / workload.python.sentences_per_second;
-        return `<tr><td>${escapeHtml(workload.fixture.split('/').pop())}</td><td>${number(workload.sentences)}</td><td>${fixed(workload.rust.median_batch_ms)} ms</td><td>${fixed(workload.python.median_batch_ms)} ms</td><td>${rate(workload.rust.sentences_per_second)}/s</td><td>${rate(workload.python.sentences_per_second)}/s</td><td>${fixed(speedup)}×</td></tr>`;
+        const binding = workload.datafog_rs_python_binding;
+        const bindingBatch = binding ? `${fixed(binding.median_batch_ms)} ms` : '—';
+        const bindingRate = binding ? `${rate(binding.sentences_per_second)}/s` : '—';
+        return `<tr><td>${escapeHtml(workload.fixture.split('/').pop())}</td><td>${number(workload.sentences)}</td><td>${fixed(workload.python_baseline.median_batch_ms)} ms</td><td>${bindingBatch}</td><td>${fixed(workload.rust_core.median_batch_ms)} ms</td><td>${rate(workload.python_baseline.sentences_per_second)}/s</td><td>${bindingRate}</td><td>${rate(workload.rust_core.sentences_per_second)}/s</td></tr>`;
       }).join('');
 
       const chart = document.querySelector('#throughput-chart');
       const width = 800, height = 280, left = 125, right = 20, top = 20, bottom = 44;
       const minSentences = Math.min(...workloads.map(workload => workload.sentences));
       const maxSentences = Math.max(...workloads.map(workload => workload.sentences));
-      const maxThroughput = Math.max(...workloads.flatMap(workload => [workload.rust.sentences_per_second, workload.python.sentences_per_second]));
+      const implementations = ['python_baseline', 'datafog_rs_python_binding', 'rust_core'].filter(implementation => workloads.every(workload => workload[implementation]));
+      const className = { python_baseline: 'datafog-python', datafog_rs_python_binding: 'datafog-rs', rust_core: 'rust-poc' };
+      const maxThroughput = Math.max(...workloads.flatMap(workload => implementations.map(implementation => workload[implementation].sentences_per_second)));
       const x = value => minSentences === maxSentences ? (left + width - right) / 2 : left + (value - minSentences) / (maxSentences - minSentences) * (width - left - right);
       const y = value => top + (1 - value / maxThroughput) * (height - top - bottom);
       const points = implementation => workloads.map(workload => `${x(workload.sentences)},${y(workload[implementation].sentences_per_second)}`).join(' ');
-      const dots = implementation => workloads.map(workload => `<circle class="${implementation}-dot" cx="${x(workload.sentences)}" cy="${y(workload[implementation].sentences_per_second)}" r="4" />`).join('');
+      const dots = implementation => workloads.map(workload => `<circle class="${className[implementation]}-dot" cx="${x(workload.sentences)}" cy="${y(workload[implementation].sentences_per_second)}" r="4" />`).join('');
       const labels = workloads.map(workload => `<text x="${x(workload.sentences)}" y="${height - 16}" text-anchor="middle">${number(workload.sentences)}</text>`).join('');
       chart.innerHTML = `
         <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${height - bottom}" />
@@ -140,9 +159,8 @@
         <text x="${left - 8}" y="${top + 4}" text-anchor="end">${rate(maxThroughput)}/s</text>
         <text x="${left - 8}" y="${height - bottom + 4}" text-anchor="end">0</text>
         <text x="${(left + width - right) / 2}" y="${height - 1}" text-anchor="middle">sentences</text>
-        <polyline class="rust" points="${points('rust')}" />
-        <polyline class="python" points="${points('python')}" />
-        ${dots('rust')}${dots('python')}${labels}`;
+        ${implementations.map(implementation => `<polyline class="${className[implementation]}" points="${points(implementation)}" />`).join('')}
+        ${implementations.map(dots).join('')}${labels}`;
     }
 
     fileInput.addEventListener('change', async event => {
@@ -153,8 +171,8 @@
         if (!report.metadata || (report.kind === 'scaling' ? !report.workloads : !report.datasets)) throw new Error('Invalid report.');
         document.querySelector('#metadata').textContent = [
           report.metadata.generated_at_utc && `Generated: ${new Date(report.metadata.generated_at_utc).toLocaleString()}`,
-          `Python: ${report.metadata.python_commit.slice(0, 8)}`,
-          `Rust: ${report.metadata.rust_commit.slice(0, 8)}`,
+          `Python: ${report.metadata.python_baseline_commit.slice(0, 8)}`,
+          `Rust: ${report.metadata.rust_core_commit.slice(0, 8)}`,
           report.metadata.platform,
         ].filter(Boolean).join(' · ');
         message.hidden = true;

@@ -1,0 +1,12 @@
+[package]
+name = "datafog_rs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "datafog_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+datafog_scan_core = { path = "../../crates/core" }
+pyo3 = { version = "0.29", features = ["abi3-py310"] }

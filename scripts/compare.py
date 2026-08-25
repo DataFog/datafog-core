@@ -65,6 +65,35 @@ for record in records:
     print(json.dumps({"id": record["id"], "entities": entities, "durations_ns": durations_ns}))
 '''
 
+BINDING_RUNNER = r'''
+import json
+import sys
+import time
+from datafog_rs import scan
+
+warmups = int(sys.argv[1])
+runs = int(sys.argv[2])
+records = [json.loads(line) for line in sys.stdin if line.strip()]
+
+for _ in range(warmups):
+    for record in records:
+        scan(record["text"])
+
+for record in records:
+    durations_ns = []
+    entities = []
+    for run in range(runs):
+        started = time.perf_counter_ns()
+        result = scan(record["text"])
+        durations_ns.append(time.perf_counter_ns() - started)
+        if run == 0:
+            entities = [
+                {"label": entity.label, "text": entity.text, "start": entity.start, "end": entity.end}
+                for entity in result
+            ]
+    print(json.dumps({"id": record["id"], "entities": entities, "durations_ns": durations_ns}))
+'''
+
 
 def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, check=True, text=True, **kwargs)
@@ -124,18 +153,22 @@ def quality(expected: list[dict[str, Any]], actual: list[dict[str, Any]]) -> dic
 
 
 def compare_outputs(
-    records: list[dict[str, Any]], python_output: list[dict[str, Any]], rust_output: list[dict[str, Any]]
+    records: list[dict[str, Any]],
+    left_output: list[dict[str, Any]],
+    right_output: list[dict[str, Any]],
+    left_name: str = "python",
+    right_name: str = "rust",
 ) -> dict[str, Any]:
     differences = []
-    for record, python_record, rust_record in zip(records, python_output, rust_output, strict=True):
-        python_entities = normalize(python_record["entities"])
-        rust_entities = normalize(rust_record["entities"])
-        if python_entities != rust_entities:
+    for record, left_record, right_record in zip(records, left_output, right_output, strict=True):
+        left_entities = normalize(left_record["entities"])
+        right_entities = normalize(right_record["entities"])
+        if left_entities != right_entities:
             differences.append(
                 {
                     "id": record["id"],
-                    "python": python_entities,
-                    "rust": rust_entities,
+                    left_name: left_entities,
+                    right_name: right_entities,
                 }
             )
     return {
@@ -185,8 +218,16 @@ def run_rust(binary: Path, fixture: Path) -> list[dict[str, Any]]:
 
 
 def run_python(interpreter: Path, fixture: Path) -> list[dict[str, Any]]:
+    return run_python_runner(interpreter, PYTHON_RUNNER, fixture)
+
+
+def run_python_binding(interpreter: Path, fixture: Path) -> list[dict[str, Any]]:
+    return run_python_runner(interpreter, BINDING_RUNNER, fixture)
+
+
+def run_python_runner(interpreter: Path, runner: str, fixture: Path) -> list[dict[str, Any]]:
     completed = run(
-        [str(interpreter), "-c", PYTHON_RUNNER, str(WARMUP_RUNS), str(MEASURED_RUNS)],
+        [str(interpreter), "-c", runner, str(WARMUP_RUNS), str(MEASURED_RUNS)],
         input=fixture.read_text(),
         capture_output=True,
     )
@@ -225,10 +266,10 @@ def build_rust_runner() -> Path:
 def metadata(python: Path) -> dict[str, str | int]:
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "python_repository": PYTHON_REPOSITORY,
-        "python_commit": PYTHON_COMMIT,
-        "rust_commit": git_revision(ROOT),
-        "python_version": run([str(python), "--version"], capture_output=True).stdout.strip(),
+        "python_baseline_repository": PYTHON_REPOSITORY,
+        "python_baseline_commit": PYTHON_COMMIT,
+        "rust_core_commit": git_revision(ROOT),
+        "python_baseline_version": run([str(python), "--version"], capture_output=True).stdout.strip(),
         "rust_version": run(["rustc", "--version"], capture_output=True).stdout.strip(),
         "platform": platform.platform(),
         "machine": platform.machine(),
@@ -253,14 +294,25 @@ def install_baseline(temporary_directory: str) -> Path:
     return python
 
 
-def compare_fixture(fixture: Path) -> None:
+def install_wheel(temporary_directory: str, wheel: Path) -> Path:
+    venv = Path(temporary_directory) / "binding-venv"
+    run([sys.executable, "-m", "venv", str(venv)])
+    python = venv / "bin" / "python"
+    run([str(python), "-m", "pip", "install", "--quiet", str(wheel)])
+    return python
+
+
+def compare_fixture(fixture: Path, wheel: Path | None) -> None:
     if not fixture.is_file():
         raise SystemExit(f"Fixture file not found: {fixture}")
+    if wheel is not None and not wheel.is_file():
+        raise SystemExit(f"Wheel file not found: {wheel}")
 
     rust_binary = build_rust_runner()
 
     with tempfile.TemporaryDirectory(prefix="datafog-rust-poc-") as temporary_directory:
         python = install_baseline(temporary_directory)
+        binding_python = install_wheel(temporary_directory, wheel) if wheel else None
 
         records = load_records(fixture)
         python_output = run_python(python, fixture)
@@ -272,30 +324,51 @@ def compare_fixture(fixture: Path) -> None:
             "fixture": str(fixture),
             "sentences": len(records),
             "quality": {
-                "python": quality(records, python_output),
-                "rust": quality(records, rust_output),
+                "python_baseline": quality(records, python_output),
+                "rust_core": quality(records, rust_output),
             },
-            "output_difference": compare_outputs(records, python_output, rust_output),
+            "output_differences": {
+                "python_baseline_vs_rust_core": compare_outputs(
+                    records, python_output, rust_output, "python_baseline", "rust_core"
+                ),
+            },
             "performance": {
-                "python": performance(python_output),
-                "rust": performance(rust_output),
+                "python_baseline": performance(python_output),
+                "rust_core": performance(rust_output),
             },
         }
+        if binding_python is not None:
+            binding_output = run_python_binding(binding_python, fixture)
+            if len(binding_output) != len(records):
+                raise RuntimeError(f"Python binding output count did not match {fixture.name}.")
+            dataset["quality"]["datafog_rs_python_binding"] = quality(records, binding_output)
+            dataset["performance"]["datafog_rs_python_binding"] = performance(binding_output)
+            dataset["output_differences"]["python_baseline_vs_datafog_rs_python_binding"] = compare_outputs(
+                records, python_output, binding_output, "python_baseline", "datafog_rs_python_binding"
+            )
         dataset["startup_time_ms_median"] = {
-            "python": startup_time([str(python), "-c", "from datafog.engine import scan"]),
-            "rust": startup_time([str(rust_binary)]),
+            "python_baseline": startup_time([str(python), "-c", "from datafog.engine import scan"]),
+            "rust_core": startup_time([str(rust_binary)]),
         }
         dataset["peak_memory_bytes"] = {
-            "python": peak_memory_bytes(
+            "python_baseline": peak_memory_bytes(
                 [str(python), "-c", PYTHON_RUNNER, "0", "1"], fixture
             ),
-            "rust": peak_memory_bytes([str(rust_binary), "--warmups", "0", "--runs", "1"], fixture),
+            "rust_core": peak_memory_bytes([str(rust_binary), "--warmups", "0", "--runs", "1"], fixture),
         }
+        if binding_python is not None:
+            dataset["startup_time_ms_median"]["datafog_rs_python_binding"] = startup_time(
+                [str(binding_python), "-c", "from datafog_rs import scan"]
+            )
+            dataset["peak_memory_bytes"]["datafog_rs_python_binding"] = peak_memory_bytes(
+                [str(binding_python), "-c", BINDING_RUNNER, "0", "1"], fixture
+            )
 
         report = {
             "kind": "comparison",
             "metadata": {
                 **metadata(python),
+                "datafog_rs_python_binding_wheel": wheel.name if wheel else None,
             },
             "datasets": {fixture.stem: dataset},
         }
@@ -303,14 +376,17 @@ def compare_fixture(fixture: Path) -> None:
     write_report("comparison", report)
 
 
-def scale_fixtures(fixtures: list[Path]) -> None:
+def scale_fixtures(fixtures: list[Path], wheel: Path | None) -> None:
     if any(not fixture.is_file() for fixture in fixtures):
         missing = next(fixture for fixture in fixtures if not fixture.is_file())
         raise SystemExit(f"Fixture file not found: {missing}")
+    if wheel is not None and not wheel.is_file():
+        raise SystemExit(f"Wheel file not found: {wheel}")
 
     rust_binary = build_rust_runner()
     with tempfile.TemporaryDirectory(prefix="datafog-rust-poc-") as temporary_directory:
         python = install_baseline(temporary_directory)
+        binding_python = install_wheel(temporary_directory, wheel) if wheel else None
         workloads = []
 
         for fixture in fixtures:
@@ -320,18 +396,22 @@ def scale_fixtures(fixtures: list[Path]) -> None:
             if len(python_output) != len(records) or len(rust_output) != len(records):
                 raise RuntimeError(f"Scanner output count did not match {fixture.name}.")
 
-            workloads.append(
-                {
-                    "fixture": str(fixture),
-                    "sentences": len(records),
-                    "rust": batch_performance(rust_output),
-                    "python": batch_performance(python_output),
-                }
-            )
+            workload = {
+                "fixture": str(fixture),
+                "sentences": len(records),
+                "rust_core": batch_performance(rust_output),
+                "python_baseline": batch_performance(python_output),
+            }
+            if binding_python is not None:
+                binding_output = run_python_binding(binding_python, fixture)
+                if len(binding_output) != len(records):
+                    raise RuntimeError(f"Python binding output count did not match {fixture.name}.")
+                workload["datafog_rs_python_binding"] = batch_performance(binding_output)
+            workloads.append(workload)
 
         report = {
             "kind": "scaling",
-            "metadata": metadata(python),
+            "metadata": {**metadata(python), "datafog_rs_python_binding_wheel": wheel.name if wheel else None},
             "workloads": sorted(workloads, key=lambda workload: workload["sentences"]),
         }
 
@@ -345,16 +425,21 @@ def main() -> None:
         )
         parser.add_argument("mode")
         parser.add_argument("fixtures", nargs="+", type=Path, help="JSONL fixture paths to benchmark.")
+        parser.add_argument("--wheel", type=Path, help="Path to a datafog-rs wheel to include.")
         arguments = parser.parse_args()
-        scale_fixtures([fixture.resolve() for fixture in arguments.fixtures])
+        scale_fixtures(
+            [fixture.resolve() for fixture in arguments.fixtures],
+            arguments.wheel.resolve() if arguments.wheel else None,
+        )
         return
 
     parser = argparse.ArgumentParser(
         description="Compare the pinned Python baseline with the Rust core for one JSONL fixture."
     )
     parser.add_argument("fixture", type=Path, help="Path to the JSONL fixture to compare.")
+    parser.add_argument("--wheel", type=Path, help="Path to a datafog-rs wheel to include.")
     arguments = parser.parse_args()
-    compare_fixture(arguments.fixture.resolve())
+    compare_fixture(arguments.fixture.resolve(), arguments.wheel.resolve() if arguments.wheel else None)
 
 
 if __name__ == "__main__":
