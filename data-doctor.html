@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Doctor</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, sans-serif; }
+    .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    aside { padding: 24px 18px; background: #f3f3f3; border-right: 1px solid #bbb; }
+    main { max-width: 960px; width: 100%; margin: 0 auto; padding: 42px 32px; }
+    h1 { margin: 0 0 20px; font-size: 24px; }
+    h2 { margin: 26px 0 10px; font-size: 18px; }
+    h3 { margin: 24px 0 8px; font-size: 14px; }
+    input, button, select { font: inherit; }
+    input[type=file] { width: 100%; }
+    button { padding: 7px 10px; border: 1px solid #888; background: #fff; color: #111; cursor: pointer; }
+    button:disabled { color: #888; cursor: default; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+    button.review { background: #eee; }
+    .details { margin: 0; padding: 0; list-style: none; }
+    .details li { margin: 5px 0; }
+    .muted { color: #555; }
+    progress { width: 100%; height: 12px; }
+    .record-nav, .actions, .add-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .record-nav { justify-content: space-between; margin-bottom: 20px; }
+    .sentence { min-height: 180px; padding: 36px; border: 1px solid #bbb; font-size: 22px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; user-select: text; }
+    .entity { background: #fff0b3; border-bottom: 2px solid #b07d00; padding: 1px 2px; }
+    .entity::after { content: " " attr(data-label); color: #6a4a00; font-size: 11px; font-weight: bold; vertical-align: top; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: left; }
+    th { background: #eee; }
+    .bad-span { color: #9b0000; }
+    .history { margin: 0; padding-left: 18px; }
+    .history li { margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    [hidden] { display: none; }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid #bbb; }
+      main { padding: 24px 16px; }
+      .sentence { padding: 22px; font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>Data Doctor</h1>
+      <input id="file" type="file" accept="application/json,.jsonl">
+
+      <section id="project" hidden>
+        <h3>Fixture</h3>
+        <ul class="details">
+          <li id="file-name"></li>
+          <li id="record-count"></li>
+        </ul>
+
+        <h3>Progress</h3>
+        <p id="progress-text" class="muted"></p>
+        <progress id="progress" value="0" max="1"></progress>
+
+        <h3>Recent</h3>
+        <ol id="history" class="history"></ol>
+
+        <p><button id="download-fixture" type="button">Download updated fixture</button></p>
+        <p><button id="download-review" type="button">Download review</button></p>
+      </section>
+    </aside>
+
+    <main>
+      <p id="empty" class="muted">Select a JSONL fixture file.</p>
+
+      <section id="review" hidden>
+        <div class="record-nav">
+          <button id="previous" type="button">Previous</button>
+          <strong id="record-title"></strong>
+          <button id="next" type="button">Next</button>
+        </div>
+
+        <p id="category" class="muted"></p>
+        <div id="sentence" class="sentence"></div>
+
+        <h2>Labels</h2>
+        <table>
+          <thead><tr><th>Label</th><th>Text</th><th>Start</th><th>End</th><th>Span</th><th></th></tr></thead>
+          <tbody id="labels"></tbody>
+        </table>
+
+        <div class="add-label">
+          <select id="new-label">
+            <option>EMAIL</option><option>PHONE</option><option>SSN</option>
+            <option>CREDIT_CARD</option><option>IP_ADDRESS</option><option>DATE</option><option>ZIP_CODE</option>
+          </select>
+          <button id="add-label" type="button">Add selected label</button>
+          <span id="selection-status" class="muted">Select text in the sentence to add a label.</span>
+        </div>
+
+        <div class="actions">
+          <button id="correct" class="primary" type="button">Mark correct</button>
+          <button id="needs-review" class="review" type="button">Needs review</button>
+          <button id="revert" type="button">Revert record</button>
+          <span id="status" class="muted"></span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const LABELS = ["EMAIL", "PHONE", "SSN", "CREDIT_CARD", "IP_ADDRESS", "DATE", "ZIP_CODE"];
+    const fileInput = document.querySelector('#file');
+    const empty = document.querySelector('#empty');
+    const project = document.querySelector('#project');
+    const review = document.querySelector('#review');
+    const sentence = document.querySelector('#sentence');
+    const labels = document.querySelector('#labels');
+    const history = document.querySelector('#history');
+    const statuses = new Map();
+    const originalEntities = new Map();
+    const historyItems = [];
+    let records = [];
+    let fileName = '';
+    let current = 0;
+    let selectedRange = null;
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function codePointToUtf16(text, index) {
+      return Array.from(text).slice(0, index).join('').length;
+    }
+
+    function utf16ToCodePoint(text, index) {
+      return Array.from(text.slice(0, index)).length;
+    }
+
+    function appendText(value) {
+      sentence.append(document.createTextNode(value));
+    }
+
+    function renderSentence(record) {
+      sentence.replaceChildren();
+      const entities = [...record.entities].sort((left, right) => left.start - right.start || right.end - left.end);
+      let cursor = 0;
+
+      for (const entity of entities) {
+        const start = codePointToUtf16(record.text, entity.start);
+        const end = codePointToUtf16(record.text, entity.end);
+        if (start < cursor || end < start) continue;
+        appendText(record.text.slice(cursor, start));
+        const mark = document.createElement('span');
+        mark.className = 'entity';
+        mark.dataset.label = entity.label;
+        mark.textContent = record.text.slice(start, end);
+        sentence.append(mark);
+        cursor = end;
+      }
+      appendText(record.text.slice(cursor));
+    }
+
+    function renderLabels(record) {
+      labels.replaceChildren();
+      record.entities.forEach((entity, index) => {
+        const start = codePointToUtf16(record.text, entity.start);
+        const end = codePointToUtf16(record.text, entity.end);
+        const actual = record.text.slice(start, end);
+        const row = document.createElement('tr');
+
+        const labelCell = document.createElement('td');
+        const labelSelect = document.createElement('select');
+        labelSelect.dataset.index = index;
+        LABELS.forEach(label => {
+          const option = document.createElement('option');
+          option.value = label;
+          option.textContent = label;
+          option.selected = label === entity.label;
+          labelSelect.append(option);
+        });
+        labelCell.append(labelSelect);
+        row.append(labelCell);
+
+        [entity.text, entity.start, entity.end].forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        const span = document.createElement('td');
+        span.textContent = actual === entity.text ? 'OK' : `Expected: ${actual}`;
+        if (actual !== entity.text) span.className = 'bad-span';
+        row.append(span);
+
+        const removeCell = document.createElement('td');
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.dataset.remove = index;
+        remove.textContent = 'Remove';
+        removeCell.append(remove);
+        row.append(removeCell);
+        labels.append(row);
+      });
+    }
+
+    function setStatus(record, status) {
+      statuses.set(record.id, status);
+      historyItems.unshift({ id: record.id, status });
+    }
+
+    function isEdited(record) {
+      return JSON.stringify(record.entities) !== JSON.stringify(originalEntities.get(record.id));
+    }
+
+    function renderSidebar() {
+      const reviewed = statuses.size;
+      const flagged = [...statuses.values()].filter(status => status === 'needs_review').length;
+      document.querySelector('#file-name').textContent = fileName;
+      document.querySelector('#record-count').textContent = `${records.length} records`;
+      document.querySelector('#progress-text').textContent = `${reviewed} reviewed · ${flagged} need review`;
+      document.querySelector('#progress').value = reviewed;
+      document.querySelector('#progress').max = records.length;
+      history.replaceChildren();
+      historyItems.slice(0, 8).forEach(item => {
+        const row = document.createElement('li');
+        row.textContent = `${item.id}: ${item.status.replace('_', ' ')}`;
+        history.append(row);
+      });
+    }
+
+    function render() {
+      const record = records[current];
+      selectedRange = null;
+      document.querySelector('#selection-status').textContent = 'Select text in the sentence to add a label.';
+      document.querySelector('#record-title').textContent = `${record.id} · ${current + 1} of ${records.length}`;
+      document.querySelector('#category').textContent = record.category || '';
+      document.querySelector('#status').textContent = statuses.get(record.id)?.replace('_', ' ') || '';
+      document.querySelector('#previous').disabled = current === 0;
+      document.querySelector('#next').disabled = current === records.length - 1;
+      renderSentence(record);
+      renderLabels(record);
+      renderSidebar();
+    }
+
+    function move(offset) {
+      current = Math.max(0, Math.min(records.length - 1, current + offset));
+      render();
+    }
+
+    function markCorrect() {
+      const record = records[current];
+      setStatus(record, isEdited(record) ? 'edited' : 'correct');
+      if (current < records.length - 1) current += 1;
+      render();
+    }
+
+    function markNeedsReview() {
+      const record = records[current];
+      setStatus(record, 'needs_review');
+      if (current < records.length - 1) current += 1;
+      render();
+    }
+
+    function captureSelection() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0);
+      if (!sentence.contains(range.startContainer) || !sentence.contains(range.endContainer)) return;
+      const beforeStart = range.cloneRange();
+      beforeStart.selectNodeContents(sentence);
+      beforeStart.setEnd(range.startContainer, range.startOffset);
+      const beforeEnd = range.cloneRange();
+      beforeEnd.selectNodeContents(sentence);
+      beforeEnd.setEnd(range.endContainer, range.endOffset);
+      const record = records[current];
+      const startUtf16 = beforeStart.toString().length;
+      const endUtf16 = beforeEnd.toString().length;
+      if (startUtf16 === endUtf16) return;
+      selectedRange = {
+        start: utf16ToCodePoint(record.text, startUtf16),
+        end: utf16ToCodePoint(record.text, endUtf16),
+        text: range.toString(),
+      };
+      document.querySelector('#selection-status').textContent = `Selected: “${selectedRange.text}”`;
+    }
+
+    function addSelectedLabel() {
+      if (!selectedRange) {
+        document.querySelector('#selection-status').textContent = 'Select text in the sentence first.';
+        return;
+      }
+      const record = records[current];
+      if (record.entities.some(entity => entity.start === selectedRange.start && entity.end === selectedRange.end)) {
+        document.querySelector('#selection-status').textContent = 'That exact span is already labeled.';
+        return;
+      }
+      record.entities.push({
+        label: document.querySelector('#new-label').value,
+        text: record.text.slice(codePointToUtf16(record.text, selectedRange.start), codePointToUtf16(record.text, selectedRange.end)),
+        start: selectedRange.start,
+        end: selectedRange.end,
+      });
+      record.entities.sort((left, right) => left.start - right.start || left.end - right.end || left.label.localeCompare(right.label));
+      setStatus(record, 'edited');
+      render();
+    }
+
+    function removeLabel(index) {
+      const record = records[current];
+      record.entities.splice(index, 1);
+      setStatus(record, 'edited');
+      render();
+    }
+
+    function changeLabel(index, label) {
+      const record = records[current];
+      record.entities[index].label = label;
+      setStatus(record, 'edited');
+      render();
+    }
+
+    function revertRecord() {
+      const record = records[current];
+      record.entities = clone(originalEntities.get(record.id));
+      statuses.delete(record.id);
+      historyItems.unshift({ id: record.id, status: 'reverted' });
+      render();
+    }
+
+    function download(name, content) {
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadFixture() {
+      download(`${fileName.replace(/\.[^.]+$/, '')}-updated.jsonl`, records.map(record => JSON.stringify(record)).join('\n') + '\n');
+    }
+
+    function downloadReview() {
+      const reviewData = {
+        fixture: fileName,
+        records: records.map(record => ({ id: record.id, status: statuses.get(record.id) || 'unreviewed' })),
+      };
+      download(`${fileName.replace(/\.[^.]+$/, '')}-review.json`, JSON.stringify(reviewData, null, 2) + '\n');
+    }
+
+    fileInput.addEventListener('change', async event => {
+      const [file] = event.target.files;
+      if (!file) return;
+      try {
+        const parsed = (await file.text()).split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+        if (!parsed.length || parsed.some(record => typeof record.id !== 'string' || typeof record.text !== 'string' || !Array.isArray(record.entities))) {
+          throw new Error('Expected JSONL records with id, text, and entities.');
+        }
+        records = parsed;
+        fileName = file.name;
+        current = 0;
+        statuses.clear();
+        originalEntities.clear();
+        historyItems.length = 0;
+        records.forEach(record => originalEntities.set(record.id, clone(record.entities)));
+        empty.hidden = true;
+        project.hidden = false;
+        review.hidden = false;
+        render();
+      } catch (error) {
+        empty.hidden = false;
+        empty.textContent = `Could not load fixture: ${error.message}`;
+        project.hidden = true;
+        review.hidden = true;
+      }
+    });
+
+    document.addEventListener('selectionchange', captureSelection);
+    document.querySelector('#previous').addEventListener('click', () => move(-1));
+    document.querySelector('#next').addEventListener('click', () => move(1));
+    document.querySelector('#correct').addEventListener('click', markCorrect);
+    document.querySelector('#needs-review').addEventListener('click', markNeedsReview);
+    document.querySelector('#revert').addEventListener('click', revertRecord);
+    document.querySelector('#add-label').addEventListener('click', addSelectedLabel);
+    document.querySelector('#download-fixture').addEventListener('click', downloadFixture);
+    document.querySelector('#download-review').addEventListener('click', downloadReview);
+    labels.addEventListener('change', event => {
+      if (event.target.matches('select[data-index]')) changeLabel(Number(event.target.dataset.index), event.target.value);
+    });
+    labels.addEventListener('click', event => {
+      if (event.target.matches('button[data-remove]')) removeLabel(Number(event.target.dataset.remove));
+    });
+  </script>
+</body>
+</html>

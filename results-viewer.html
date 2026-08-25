@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results Viewer</title>
+  <style>
+    body { max-width: 1000px; margin: 32px auto; padding: 0 16px; background: #fff; color: #111; font: 14px/1.45 Arial, sans-serif; }
+    h1 { margin: 0 0 20px; font-size: 24px; }
+    h2 { margin: 28px 0 8px; font-size: 18px; }
+    label { display: block; margin: 12px 0; }
+    select, input { font: inherit; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+    th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: right; }
+    th { background: #eee; }
+    th:first-child, td:first-child { text-align: left; }
+    .meta, .muted { color: #555; }
+    .meta { margin: 12px 0; }
+    details { margin: 6px 0; border: 1px solid #bbb; }
+    summary { padding: 6px 8px; cursor: pointer; }
+    pre { margin: 0; padding: 8px; overflow: auto; border-top: 1px solid #bbb; background: #f7f7f7; }
+    .chart { display: block; width: 100%; min-width: 600px; height: auto; margin: 8px 0; }
+    .chart text { fill: #111; font: 12px Arial, sans-serif; }
+    .chart .axis { stroke: #111; }
+    .chart .grid { stroke: #ccc; stroke-dasharray: 3 3; }
+    .chart .rust { fill: none; stroke: #1565c0; stroke-width: 2; }
+    .chart .python { fill: none; stroke: #c65d00; stroke-width: 2; }
+    .chart .rust-dot { fill: #1565c0; }
+    .chart .python-dot { fill: #c65d00; }
+    [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Results Viewer</h1>
+  <input id="file" type="file" accept="application/json,.json">
+  <p id="message" class="muted">Select a report JSON file.</p>
+
+  <main id="content" hidden>
+    <p id="metadata" class="meta"></p>
+
+    <section id="comparison" hidden>
+      <label>Dataset <select id="dataset"></select></label>
+
+      <h2>Summary</h2>
+      <table>
+        <thead><tr><th></th><th>Rust</th><th>Python</th></tr></thead>
+        <tbody id="summary"></tbody>
+      </table>
+
+      <h2>Quality</h2>
+      <table>
+        <thead><tr><th>Label</th><th>Rust F1</th><th>Python F1</th><th>Rust P / R</th><th>Python P / R</th></tr></thead>
+        <tbody id="quality"></tbody>
+      </table>
+
+      <h2>Differences</h2>
+      <p id="difference-summary" class="muted"></p>
+      <div id="differences"></div>
+    </section>
+
+    <section id="scaling" hidden>
+      <h2>Throughput</h2>
+      <p class="muted"><span style="color:#1565c0">Rust</span> · <span style="color:#c65d00">Python</span></p>
+      <svg id="throughput-chart" class="chart" viewBox="0 0 800 280" role="img" aria-label="Throughput by sentence count"></svg>
+      <table>
+        <thead><tr><th>Fixture</th><th>Sentences</th><th>Rust batch</th><th>Python batch</th><th>Rust throughput</th><th>Python throughput</th><th>Speedup</th></tr></thead>
+        <tbody id="scaling-table"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.querySelector('#file');
+    const message = document.querySelector('#message');
+    const content = document.querySelector('#content');
+    const comparison = document.querySelector('#comparison');
+    const scaling = document.querySelector('#scaling');
+    const datasetSelect = document.querySelector('#dataset');
+    let report;
+
+    const percent = value => `${(value * 100).toFixed(1)}%`;
+    const number = value => new Intl.NumberFormat().format(value);
+    const fixed = value => Number(value).toFixed(1);
+    const rate = value => new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+    const megabytes = value => `${(value / 1_000_000).toFixed(1)} MB`;
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+    }
+
+    function renderComparison() {
+      const data = report.datasets[datasetSelect.value];
+      const rust = data.quality.rust.overall;
+      const python = data.quality.python.overall;
+      const rustPerf = data.performance.rust;
+      const pythonPerf = data.performance.python;
+      const rows = [
+        ['Overall F1', percent(rust.f1), percent(python.f1)],
+        ['Throughput', `${rate(rustPerf.sentences_per_second)}/s`, `${rate(pythonPerf.sentences_per_second)}/s`],
+        ['P95 latency', `${fixed(rustPerf.p95_latency_us)} µs`, `${fixed(pythonPerf.p95_latency_us)} µs`],
+      ];
+      if (data.startup_time_ms_median) rows.push(['Startup', `${fixed(data.startup_time_ms_median.rust)} ms`, `${fixed(data.startup_time_ms_median.python)} ms`]);
+      if (data.peak_memory_bytes) rows.push(['Peak memory', megabytes(data.peak_memory_bytes.rust), megabytes(data.peak_memory_bytes.python)]);
+      document.querySelector('#summary').innerHTML = rows.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join('');
+
+      const labels = Object.keys(data.quality.rust).filter(label => label !== 'overall');
+      labels.push('overall');
+      document.querySelector('#quality').innerHTML = labels.map(label => {
+        const rust = data.quality.rust[label];
+        const python = data.quality.python[label];
+        return `<tr><td>${label === 'overall' ? 'Overall' : label}</td><td>${percent(rust.f1)}</td><td>${percent(python.f1)}</td><td>${percent(rust.precision)} / ${percent(rust.recall)}</td><td>${percent(python.precision)} / ${percent(python.recall)}</td></tr>`;
+      }).join('');
+
+      const differences = data.output_difference.differences;
+      document.querySelector('#difference-summary').textContent = differences.length ? `${number(differences.length)} sentences differ.` : 'No differences.';
+      document.querySelector('#differences').innerHTML = differences.map(item => `<details><summary>${item.id}</summary><pre>${escapeHtml(JSON.stringify({ python: item.python, rust: item.rust }, null, 2))}</pre></details>`).join('');
+    }
+
+    function renderScaling() {
+      const workloads = report.workloads;
+      document.querySelector('#scaling-table').innerHTML = workloads.map(workload => {
+        const speedup = workload.rust.sentences_per_second / workload.python.sentences_per_second;
+        return `<tr><td>${escapeHtml(workload.fixture.split('/').pop())}</td><td>${number(workload.sentences)}</td><td>${fixed(workload.rust.median_batch_ms)} ms</td><td>${fixed(workload.python.median_batch_ms)} ms</td><td>${rate(workload.rust.sentences_per_second)}/s</td><td>${rate(workload.python.sentences_per_second)}/s</td><td>${fixed(speedup)}×</td></tr>`;
+      }).join('');
+
+      const chart = document.querySelector('#throughput-chart');
+      const width = 800, height = 280, left = 125, right = 20, top = 20, bottom = 44;
+      const minSentences = Math.min(...workloads.map(workload => workload.sentences));
+      const maxSentences = Math.max(...workloads.map(workload => workload.sentences));
+      const maxThroughput = Math.max(...workloads.flatMap(workload => [workload.rust.sentences_per_second, workload.python.sentences_per_second]));
+      const x = value => minSentences === maxSentences ? (left + width - right) / 2 : left + (value - minSentences) / (maxSentences - minSentences) * (width - left - right);
+      const y = value => top + (1 - value / maxThroughput) * (height - top - bottom);
+      const points = implementation => workloads.map(workload => `${x(workload.sentences)},${y(workload[implementation].sentences_per_second)}`).join(' ');
+      const dots = implementation => workloads.map(workload => `<circle class="${implementation}-dot" cx="${x(workload.sentences)}" cy="${y(workload[implementation].sentences_per_second)}" r="4" />`).join('');
+      const labels = workloads.map(workload => `<text x="${x(workload.sentences)}" y="${height - 16}" text-anchor="middle">${number(workload.sentences)}</text>`).join('');
+      chart.innerHTML = `
+        <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${height - bottom}" />
+        <line class="axis" x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" />
+        <line class="grid" x1="${left}" y1="${top}" x2="${width - right}" y2="${top}" />
+        <text x="${left - 8}" y="${top + 4}" text-anchor="end">${rate(maxThroughput)}/s</text>
+        <text x="${left - 8}" y="${height - bottom + 4}" text-anchor="end">0</text>
+        <text x="${(left + width - right) / 2}" y="${height - 1}" text-anchor="middle">sentences</text>
+        <polyline class="rust" points="${points('rust')}" />
+        <polyline class="python" points="${points('python')}" />
+        ${dots('rust')}${dots('python')}${labels}`;
+    }
+
+    fileInput.addEventListener('change', async event => {
+      const [file] = event.target.files;
+      if (!file) return;
+      try {
+        report = JSON.parse(await file.text());
+        if (!report.metadata || (report.kind === 'scaling' ? !report.workloads : !report.datasets)) throw new Error('Invalid report.');
+        document.querySelector('#metadata').textContent = [
+          report.metadata.generated_at_utc && `Generated: ${new Date(report.metadata.generated_at_utc).toLocaleString()}`,
+          `Python: ${report.metadata.python_commit.slice(0, 8)}`,
+          `Rust: ${report.metadata.rust_commit.slice(0, 8)}`,
+          report.metadata.platform,
+        ].filter(Boolean).join(' · ');
+        message.hidden = true;
+        content.hidden = false;
+
+        if (report.kind === 'scaling') {
+          comparison.hidden = true;
+          scaling.hidden = false;
+          renderScaling();
+        } else {
+          scaling.hidden = true;
+          comparison.hidden = false;
+          const names = Object.keys(report.datasets);
+          datasetSelect.innerHTML = names.map(name => `<option value="${name}">${name}</option>`).join('');
+          datasetSelect.value = names.includes('final') ? 'final' : names[0];
+          renderComparison();
+        }
+      } catch (error) {
+        content.hidden = true;
+        message.hidden = false;
+        message.textContent = `Could not load report: ${error.message}`;
+      }
+    });
+
+    datasetSelect.addEventListener('change', renderComparison);
+  </script>
+</body>
+</html>

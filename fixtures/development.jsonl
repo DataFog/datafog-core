@@ -1,7 +1,7 @@
 {"id":"dev-0001","text":"DEV case 1: please review \"memberdev0001@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0001@example.test","start":27,"end":53}],"category":"single_positive"}
 {"id":"dev-0002","text":"DEV example 2 begins with +1-555-1002; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1002","start":26,"end":37}],"category":"single_positive"}
 {"id":"dev-0003","text":"DEV observation 3 — 813-13-1003 appears beside ordinary prose.","entities":[{"label":"SSN","text":"813-13-1003","start":20,"end":31}],"category":"single_positive"}
-{"id":"dev-0004","text":"DEV record 4: café context, value=4111-1111-1004-2004, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1004-2004","start":34,"end":53}],"category":"single_positive"}
+{"id":"dev-0004","text":"DEV record 4: café context, value=4111-1111-1004-2002, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1004-2002","start":34,"end":53}],"category":"single_positive"}
 {"id":"dev-0005","text":"DEV item 5: the supplied token is 198.51.0.6\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.6","start":34,"end":44}],"category":"single_positive"}
 {"id":"dev-0006","text":"DEV boundary 6: (07/07/1976) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"07/07/1976","start":17,"end":27}],"category":"single_positive"}
 {"id":"dev-0007","text":"DEV sample 7: attach 10007 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10007","start":21,"end":26}],"category":"single_positive"}
@@ -15,14 +15,14 @@
 {"id":"dev-0015","text":"DEV case 15: please review \"memberdev0015@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0015@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0016","text":"DEV example 16 begins with +1-555-1016; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1016","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0017","text":"DEV observation 17 — 827-27-1017 appears beside ordinary prose.","entities":[{"label":"SSN","text":"827-27-1017","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0018","text":"DEV record 18: café context, value=4111-1111-1018-2018, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1018-2018","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0018","text":"DEV record 18: café context, value=4111-1111-1018-2014, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1018-2014","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0019","text":"DEV item 19: the supplied token is 198.51.0.20\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.20","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0020","text":"DEV boundary 20: (09/21/1990) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"09/21/1990","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0021","text":"DEV sample 21: attach 10021 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10021","start":22,"end":27}],"category":"single_positive"}
 {"id":"dev-0022","text":"DEV case 22: please review \"memberdev0022@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0022@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0023","text":"DEV example 23 begins with +1-555-1023; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1023","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0024","text":"DEV observation 24 — 834-34-1024 appears beside ordinary prose.","entities":[{"label":"SSN","text":"834-34-1024","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0025","text":"DEV record 25: café context, value=4111-1111-1025-2025, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1025-2025","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0025","text":"DEV record 25: café context, value=4111-1111-1025-2023, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1025-2023","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0026","text":"DEV item 26: the supplied token is 198.51.0.27\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.27","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0027","text":"DEV boundary 27: (04/01/1997) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"04/01/1997","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0028","text":"DEV sample 28: attach 10028 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10028","start":22,"end":27}],"category":"single_positive"}
@@ -36,21 +36,21 @@
 {"id":"dev-0036","text":"DEV case 36: please review \"memberdev0036@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0036@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0037","text":"DEV example 37 begins with +1-555-1037; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1037","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0038","text":"DEV observation 38 — 848-48-1038 appears beside ordinary prose.","entities":[{"label":"SSN","text":"848-48-1038","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0039","text":"DEV record 39: café context, value=4111-1111-1039-2039, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1039-2039","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0039","text":"DEV record 39: café context, value=4111-1111-1039-2035, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1039-2035","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0040","text":"DEV item 40: the supplied token is 198.51.0.41\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.41","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0041","text":"DEV boundary 41: (06/15/1981) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"06/15/1981","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0042","text":"DEV sample 42: attach 10042 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10042","start":22,"end":27}],"category":"single_positive"}
 {"id":"dev-0043","text":"DEV case 43: please review \"memberdev0043@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0043@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0044","text":"DEV example 44 begins with +1-555-1044; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1044","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0045","text":"DEV observation 45 — 855-55-1045 appears beside ordinary prose.","entities":[{"label":"SSN","text":"855-55-1045","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0046","text":"DEV record 46: café context, value=4111-1111-1046-2046, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1046-2046","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0046","text":"DEV record 46: café context, value=4111-1111-1046-2044, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1046-2044","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0047","text":"DEV item 47: the supplied token is 198.51.0.48\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.48","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0048","text":"DEV boundary 48: (01/22/1988) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"01/22/1988","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0049","text":"DEV sample 49: attach 10049 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10049","start":22,"end":27}],"category":"single_positive"}
 {"id":"dev-0050","text":"DEV case 50: please review \"memberdev0050@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0050@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0051","text":"DEV example 51 begins with +1-555-1051; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1051","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0052","text":"DEV observation 52 — 862-62-1052 appears beside ordinary prose.","entities":[{"label":"SSN","text":"862-62-1052","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0053","text":"DEV record 53: café context, value=4111-1111-1053-2053, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1053-2053","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0053","text":"DEV record 53: café context, value=4111-1111-1053-2051, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1053-2051","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0054","text":"DEV item 54: the supplied token is 198.51.0.55\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.55","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0055","text":"DEV boundary 55: (08/02/1995) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"08/02/1995","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0056","text":"DEV sample 56: attach 10056 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10056","start":22,"end":27}],"category":"single_positive"}
@@ -64,18 +64,18 @@
 {"id":"dev-0064","text":"DEV case 64: please review \"memberdev0064@example.test\" before noon.","entities":[{"label":"EMAIL","text":"memberdev0064@example.test","start":28,"end":54}],"category":"single_positive"}
 {"id":"dev-0065","text":"DEV example 65 begins with +1-555-1065; retain the accompanying note.","entities":[{"label":"PHONE","text":"+1-555-1065","start":27,"end":38}],"category":"single_positive"}
 {"id":"dev-0066","text":"DEV observation 66 — 876-76-1066 appears beside ordinary prose.","entities":[{"label":"SSN","text":"876-76-1066","start":21,"end":32}],"category":"single_positive"}
-{"id":"dev-0067","text":"DEV record 67: café context, value=4111-1111-1067-2067, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1067-2067","start":35,"end":54}],"category":"single_positive"}
+{"id":"dev-0067","text":"DEV record 67: café context, value=4111-1111-1067-2063, then a period.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1067-2063","start":35,"end":54}],"category":"single_positive"}
 {"id":"dev-0068","text":"DEV item 68: the supplied token is 198.51.0.69\nfor verification.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.69","start":35,"end":46}],"category":"single_positive"}
 {"id":"dev-0069","text":"DEV boundary 69: (10/16/1979) is the only sensitive-looking value.","entities":[{"label":"DATE","text":"10/16/1979","start":18,"end":28}],"category":"single_positive"}
 {"id":"dev-0070","text":"DEV sample 70: attach 10070 to the synthetic request.","entities":[{"label":"ZIP_CODE","text":"10070","start":22,"end":27}],"category":"single_positive"}
-{"id":"dev-0071","text":"DEV paired 1: first memberdev0100@example.test; second 4111-1111-1200-2200.","entities":[{"label":"EMAIL","text":"memberdev0100@example.test","start":20,"end":46},{"label":"CREDIT_CARD","text":"4111-1111-1200-2200","start":55,"end":74}],"category":"multi_entity"}
+{"id":"dev-0071","text":"DEV paired 1: first memberdev0100@example.test; second 4111-1111-1200-2202.","entities":[{"label":"EMAIL","text":"memberdev0100@example.test","start":20,"end":46},{"label":"CREDIT_CARD","text":"4111-1111-1200-2202","start":55,"end":74}],"category":"multi_entity"}
 {"id":"dev-0072","text":"DEV dual 2: +1-555-1101 and 198.51.0.202 occur together — synthetic only.","entities":[{"label":"PHONE","text":"+1-555-1101","start":12,"end":23},{"label":"IP_ADDRESS","text":"198.51.0.202","start":28,"end":40}],"category":"multi_entity"}
 {"id":"dev-0073","text":"DEV bundle 3: (822-22-1102)\nthen (11/14/1992) in one fixture.","entities":[{"label":"SSN","text":"822-22-1102","start":15,"end":26},{"label":"DATE","text":"11/14/1992","start":34,"end":44}],"category":"multi_entity"}
-{"id":"dev-0074","text":"DEV paired 4: first 4111-1111-1103-2103; second 10203.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1103-2103","start":20,"end":39},{"label":"ZIP_CODE","text":"10203","start":48,"end":53}],"category":"multi_entity"}
+{"id":"dev-0074","text":"DEV paired 4: first 4111-1111-1103-2101; second 10203.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1103-2101","start":20,"end":39},{"label":"ZIP_CODE","text":"10203","start":48,"end":53}],"category":"multi_entity"}
 {"id":"dev-0075","text":"DEV dual 5: 198.51.0.105 and memberdev0204@example.test occur together — synthetic only.","entities":[{"label":"IP_ADDRESS","text":"198.51.0.105","start":12,"end":24},{"label":"EMAIL","text":"memberdev0204@example.test","start":29,"end":55}],"category":"multi_entity"}
 {"id":"dev-0076","text":"DEV bundle 6: (10/25/1985)\nthen (+1-555-1205) in one fixture.","entities":[{"label":"DATE","text":"10/25/1985","start":15,"end":25},{"label":"PHONE","text":"+1-555-1205","start":33,"end":44}],"category":"multi_entity"}
 {"id":"dev-0077","text":"DEV paired 7: first 10106; second 836-36-1206.","entities":[{"label":"ZIP_CODE","text":"10106","start":20,"end":25},{"label":"SSN","text":"836-36-1206","start":34,"end":45}],"category":"multi_entity"}
-{"id":"dev-0078","text":"DEV dual 8: memberdev0107@example.test and 4111-1111-1207-2207 occur together — synthetic only.","entities":[{"label":"EMAIL","text":"memberdev0107@example.test","start":12,"end":38},{"label":"CREDIT_CARD","text":"4111-1111-1207-2207","start":43,"end":62}],"category":"multi_entity"}
+{"id":"dev-0078","text":"DEV dual 8: memberdev0107@example.test and 4111-1111-1207-2205 occur together — synthetic only.","entities":[{"label":"EMAIL","text":"memberdev0107@example.test","start":12,"end":38},{"label":"CREDIT_CARD","text":"4111-1111-1207-2205","start":43,"end":62}],"category":"multi_entity"}
 {"id":"dev-0079","text":"DEV bundle 9: (+1-555-1108)\nthen (198.51.0.209) in one fixture.","entities":[{"label":"PHONE","text":"+1-555-1108","start":15,"end":26},{"label":"IP_ADDRESS","text":"198.51.0.209","start":34,"end":46}],"category":"multi_entity"}
 {"id":"dev-0080","text":"DEV paired 10: first 829-29-1109; second 06/21/1999.","entities":[{"label":"SSN","text":"829-29-1109","start":21,"end":32},{"label":"DATE","text":"06/21/1999","start":41,"end":51}],"category":"multi_entity"}
 {"id":"dev-0081","text":"DEV dual 11: 4111-1111-1110-2110 and 10210 occur together — synthetic only.","entities":[{"label":"CREDIT_CARD","text":"4111-1111-1110-2110","start":13,"end":32},{"label":"ZIP_CODE","text":"10210","start":37,"end":42}],"category":"multi_entity"}
@@ -98,4 +98,3 @@
 {"id":"dev-0098","text":"DEV negative 13: version 2026.12.x, order 1212, and prose only.","entities":[],"category":"negative"}
 {"id":"dev-0099","text":"DEV negative 14: faux date 19/39/2013 is deliberately malformed.","entities":[],"category":"negative"}
 {"id":"dev-0100","text":"DEV negative 15: test card-like token 4111-xxxx-0000-0000 is not a label.","entities":[],"category":"negative"}
-
