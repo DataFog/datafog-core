@@ -1,5 +1,6 @@
 /target/
 /results/
+/fixtures/final-jumbo.jsonl
 .DS_Store
 __pycache__/
 *.pyc
