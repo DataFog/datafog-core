@@ -23,6 +23,7 @@ enum Label {
     Phone,
     Ssn,
     CreditCard,
+    PrivateKey,
     IpAddress,
     Date,
     ZipCode,
@@ -36,6 +37,7 @@ impl Label {
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
             Label::CreditCard => "CREDIT_CARD",
+            Label::PrivateKey => "PRIVATE_KEY",
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
@@ -58,6 +60,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);
     detect_credit_card(text, &mut candidates);
+    detect_private_key(text, &mut candidates);
     detect_date(text, &mut candidates);
     detect_zip_code(text, &mut candidates);
     detect_ip_address(text, &mut candidates);
@@ -358,6 +361,93 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         {
             candidates.push(Candidate {
                 label: Label::CreditCard,
+                start_byte: start,
+                end_byte: end,
+            });
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+}
+
+const PRIVATE_KEY_TYPES: [&[u8]; 5] = [
+    b"PRIVATE KEY",
+    b"RSA PRIVATE KEY",
+    b"EC PRIVATE KEY",
+    b"OPENSSH PRIVATE KEY",
+    b"ENCRYPTED PRIVATE KEY",
+];
+
+fn is_base64_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=')
+}
+
+fn has_private_key_body(bytes: &[u8]) -> bool {
+    let mut has_content = false;
+
+    for line in bytes.split(|byte| *byte == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+
+        if line.is_empty() {
+            continue;
+        }
+
+        if !line.iter().all(|byte| is_base64_byte(*byte)) {
+            return false;
+        }
+
+        has_content = true;
+    }
+
+    has_content
+}
+
+fn private_key_parts_at(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
+    for key_type in PRIVATE_KEY_TYPES {
+        let begin = [b"-----BEGIN ".as_slice(), key_type, b"-----"].concat();
+
+        if !bytes[start..].starts_with(&begin) {
+            continue;
+        }
+
+        let body_start = start + begin.len();
+        let end_marker = [b"-----END ".as_slice(), key_type, b"-----"].concat();
+        let end_start =
+            (body_start..=bytes.len().saturating_sub(end_marker.len())).find(|end_start| {
+                bytes[*end_start..].starts_with(&end_marker)
+                    && (*end_start == body_start || bytes[*end_start - 1] == b'\n')
+            })?;
+        let end = end_start + end_marker.len();
+
+        if has_private_key_body(&bytes[body_start..end_start]) {
+            return Some((end, body_start));
+        }
+    }
+
+    None
+}
+
+fn detect_private_key(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !bytes[start..].starts_with(b"-----BEGIN ")
+            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
+
+        let Some((end, _body_start)) = private_key_parts_at(bytes, start) else {
+            start += 1;
+            continue;
+        };
+
+        if end == bytes.len() || !bytes[end].is_ascii_alphanumeric() {
+            candidates.push(Candidate {
+                label: Label::PrivateKey,
                 start_byte: start,
                 end_byte: end,
             });
@@ -821,6 +911,46 @@ mod tests {
         assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
         assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
         assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
+    }
+
+    #[test]
+    fn detects_generic_private_key_pem_block() {
+        let key = "-----BEGIN PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END PRIVATE KEY-----";
+
+        assert_eq!(
+            scan(&format!("Key:\n{key}")),
+            vec![Entity {
+                label: "PRIVATE_KEY".to_owned(),
+                text: key.to_owned(),
+                start: 5,
+                end: 5 + key.chars().count(),
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_typed_private_key_pem_block_with_unicode_offset() {
+        let key =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
+
+        assert_eq!(scan(&format!("🔒 {key}"))[0].start, 2);
+    }
+
+    #[test]
+    fn rejects_invalid_private_key_pem_blocks() {
+        assert!(scan("-----BEGIN PRIVATE KEY-----\nMIIEowIBAAKCAQEA").is_empty());
+        assert!(
+            scan("-----BEGIN PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----")
+                .is_empty()
+        );
+        assert!(
+            scan("-----BEGIN CERTIFICATE-----\nMIIEowIBAAKCAQEA\n-----END CERTIFICATE-----")
+                .is_empty()
+        );
+        assert!(scan("-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----").is_empty());
+        assert!(
+            scan("-----BEGIN PRIVATE KEY-----\nnot base64\n-----END PRIVATE KEY-----").is_empty()
+        );
     }
 
     #[test]
