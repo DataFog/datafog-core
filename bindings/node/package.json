@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "index.js",
+    "native.js",
     "index.d.ts",
     "*.node"
   ],
@@ -22,7 +23,11 @@
     "binaryName": "datafog",
     "targets": [
       "aarch64-apple-darwin"
-    ]
+    ],
+    "dtsHeaderFile": "dts-header.d.ts"
+  },
+  "scripts": {
+    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts"
   },
   "devDependencies": {
     "@napi-rs/cli": "3.8.6"

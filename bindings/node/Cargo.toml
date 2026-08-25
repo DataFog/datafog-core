@@ -8,3 +8,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 datafog-core = { path = "../../crates/core" }
+napi = "=3.12.2"
+napi-derive = "=3.6.3"
+
+[build-dependencies]
+napi-build = "=2.4.1"
