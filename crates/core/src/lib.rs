@@ -1,5 +1,7 @@
 //! Core PII scanning API for the DataFog Rust proof of concept.
+use base64::Engine;
 use regex::Regex;
+use serde_json::Value;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
 
@@ -23,6 +25,7 @@ enum Label {
     Phone,
     Ssn,
     CreditCard,
+    Jwt,
     IpAddress,
     Date,
     ZipCode,
@@ -36,6 +39,7 @@ impl Label {
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
             Label::CreditCard => "CREDIT_CARD",
+            Label::Jwt => "JWT",
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
@@ -58,6 +62,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);
     detect_credit_card(text, &mut candidates);
+    detect_jwt(text, &mut candidates);
     detect_date(text, &mut candidates);
     detect_zip_code(text, &mut candidates);
     detect_ip_address(text, &mut candidates);
@@ -358,6 +363,113 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         {
             candidates.push(Candidate {
                 label: Label::CreditCard,
+                start_byte: start,
+                end_byte: end,
+            });
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+}
+
+fn is_base64_url_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
+}
+
+fn jwt_segment_end(bytes: &[u8], start: usize) -> usize {
+    let mut end = start;
+
+    while end < bytes.len() && is_base64_url_byte(bytes[end]) {
+        end += 1;
+    }
+
+    end
+}
+
+fn jwt_parts_at(bytes: &[u8], start: usize) -> Option<(usize, [std::ops::Range<usize>; 3])> {
+    let header_end = jwt_segment_end(bytes, start);
+    if header_end == start || bytes.get(header_end) != Some(&b'.') {
+        return None;
+    }
+
+    let payload_start = header_end + 1;
+    let payload_end = jwt_segment_end(bytes, payload_start);
+    if payload_end == payload_start || bytes.get(payload_end) != Some(&b'.') {
+        return None;
+    }
+
+    let signature_start = payload_end + 1;
+    let signature_end = jwt_segment_end(bytes, signature_start);
+    if signature_end == signature_start {
+        return None;
+    }
+
+    Some((
+        signature_end,
+        [
+            start..header_end,
+            payload_start..payload_end,
+            signature_start..signature_end,
+        ],
+    ))
+}
+
+fn decode_jwt_json(segment: &[u8]) -> Option<Value> {
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(segment)
+        .ok()?;
+    serde_json::from_slice(&decoded).ok()
+}
+
+fn is_valid_jwt(bytes: &[u8], segments: &[std::ops::Range<usize>; 3]) -> bool {
+    let Some(header) = decode_jwt_json(&bytes[segments[0].clone()]) else {
+        return false;
+    };
+    let Some(payload) = decode_jwt_json(&bytes[segments[1].clone()]) else {
+        return false;
+    };
+
+    header
+        .as_object()
+        .and_then(|object| object.get("alg"))
+        .is_some_and(Value::is_string)
+        && payload.is_object()
+        && base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(&bytes[segments[2].clone()])
+            .is_ok()
+}
+
+fn has_jwt_boundaries(bytes: &[u8], start: usize, end: usize) -> bool {
+    (start == 0 || (!is_base64_url_byte(bytes[start - 1]) && bytes[start - 1] != b'.'))
+        && (end == bytes.len()
+            || (!is_base64_url_byte(bytes[end])
+                && (bytes[end] != b'.'
+                    || !bytes
+                        .get(end + 1)
+                        .is_some_and(|byte| is_base64_url_byte(*byte)))))
+}
+
+fn detect_jwt(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !is_base64_url_byte(bytes[start])
+            || (start > 0 && (is_base64_url_byte(bytes[start - 1]) || bytes[start - 1] == b'.'))
+        {
+            start += 1;
+            continue;
+        }
+
+        let Some((end, segments)) = jwt_parts_at(bytes, start) else {
+            start += 1;
+            continue;
+        };
+
+        if has_jwt_boundaries(bytes, start, end) && is_valid_jwt(bytes, &segments) {
+            candidates.push(Candidate {
+                label: Label::Jwt,
                 start_byte: start,
                 end_byte: end,
             });
@@ -821,6 +933,38 @@ mod tests {
         assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
         assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
         assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
+    }
+
+    #[test]
+    fn detects_jwt_with_exact_offsets() {
+        let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIn0.c2lnbmF0dXJl";
+
+        assert_eq!(
+            scan(&format!("Bearer {token}.")),
+            vec![Entity {
+                label: "JWT".to_owned(),
+                text: token.to_owned(),
+                start: 7,
+                end: 7 + token.chars().count(),
+            }]
+        );
+    }
+
+    #[test]
+    fn detects_jwt_after_unicode_prefix() {
+        let token = "eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjMifQ.c2ln";
+
+        assert_eq!(scan(&format!("🔒 {token}"))[0].start, 2);
+    }
+
+    #[test]
+    fn rejects_invalid_or_embedded_jwt_candidates() {
+        assert!(scan("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ").is_empty()); // two segments
+        assert!(scan("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2ln.extra").is_empty()); // four segments
+        assert!(scan("not-json.eyJzdWIiOiIxMjMifQ.c2ln").is_empty());
+        assert!(scan("eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjMifQ.c2ln").is_empty()); // missing alg
+        assert!(scan("eyJhbGciOiJIUzI1NiJ9.W10.c2ln").is_empty()); // payload is an array
+        assert!(scan("xeyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2ln").is_empty()); // embedded
     }
 
     #[test]
