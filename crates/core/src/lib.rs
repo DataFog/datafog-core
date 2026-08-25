@@ -111,6 +111,7 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Entity> {
 fn code_point_offset(text: &str, byte_offset: usize) -> usize {
     text[..byte_offset].chars().count()
 }
+
 static PHONE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?x)

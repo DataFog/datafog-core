@@ -44,12 +44,49 @@ Run its installed-wheel fixture test with:
 .venv/bin/python bindings/python/tests/test_installed.py
 ```
 
+## Reproduce Comparison Results on macOS
+
+Use this workflow to compare the pinned `datafog-python` baseline, the Rust core, and the Rust-backed Python binding on another Mac. It works on Apple Silicon and Intel Macs; the generated wheel filename differs by Python version and CPU architecture.
+
+### Prerequisites
+
+- Git
+- Python 3.10 or newer (`python3 --version`)
+- A stable Rust toolchain (`rustc --version`); install it with [rustup](https://rustup.rs/) if needed
+- Network access: the comparison script installs the pinned Python baseline from GitHub into a temporary virtual environment
+
+### Setup and run
+
+```bash
+git clone https://github.com/DataFog/rust-poc.git
+cd rust-poc
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip maturin
+.venv/bin/maturin build --manifest-path bindings/python/Cargo.toml --release
+```
+
+Run the final-fixture comparison across all three implementations:
+
+```bash
+WHEEL="$(find target/wheels -name 'datafog_core_python-*.whl' -print -quit)" \
+  && .venv/bin/python scripts/compare.py fixtures/final.jsonl --wheel "$WHEEL"
+```
+
+Run the scaling comparison across the development and final fixtures:
+
+```bash
+WHEEL="$(find target/wheels -name 'datafog_core_python-*.whl' -print -quit)" \
+  && .venv/bin/python scripts/compare.py scale fixtures/development.jsonl fixtures/final.jsonl --wheel "$WHEEL"
+```
+
+Each command builds the release Rust runner, creates isolated temporary environments for the Python baseline and binding, and writes a timestamped JSON report to `results/`.
+
 ## Local tools
 
 ### Results Viewer
 
 1. Run a comparison: `python3 scripts/compare.py fixtures/final.jsonl`.
-2. Include the Python binding wheel: `python3 scripts/compare.py fixtures/final.jsonl --wheel target/wheels/*.whl`.
+2. Include the Python binding wheel: `WHEEL="$(find target/wheels -name 'datafog_core_python-*.whl' -print -quit)" && python3 scripts/compare.py fixtures/final.jsonl --wheel "$WHEEL"`.
 3. Or run batch scaling: `python3 scripts/compare.py scale fixtures/development.jsonl fixtures/final.jsonl`.
 4. Open `results-viewer.html` in a browser and select the timestamped JSON report from `results/`.
 
