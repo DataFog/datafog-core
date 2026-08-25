@@ -13,8 +13,8 @@ Expose the Rust `scan` core as an installable Python package.
 
 ## Public API
 
-- Distribution name: `datafog-rs`.
-- Import name: `datafog_rs`.
+- Distribution name: `datafog-core-python`.
+- Import name: `datafog_core`.
 - `scan(text)` returns `list[Entity]`.
 - `Entity` is an immutable value type with `label`, `text`, `start`, and `end` attributes.
 - Preserve core ordering and return an empty collection when nothing is found.
@@ -40,8 +40,8 @@ Return the core's zero-based Unicode code-point offsets unchanged.
 ## Acceptance criteria
 
 - Build a wheel, create a clean virtual environment, and install the wheel with `pip`.
-- Import `datafog_rs` from the installed package.
-- Run the 100- and 1,000-sentence fixtures through `datafog_rs.scan`.
+- Import `datafog_core` from the installed package.
+- Run the 100- and 1,000-sentence fixtures through `datafog_core.scan`.
 - Produce entities identical to the Rust core for `label`, `text`, `start`, and `end`.
 
 ## Out of scope

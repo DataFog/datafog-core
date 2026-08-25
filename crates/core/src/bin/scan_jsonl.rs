@@ -1,4 +1,4 @@
-use datafog_scan_core::scan;
+use datafog_core::scan;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::{self, BufRead, Write};

@@ -69,7 +69,7 @@ BINDING_RUNNER = r'''
 import json
 import sys
 import time
-from datafog_rs import scan
+from datafog_core import scan
 
 warmups = int(sys.argv[1])
 runs = int(sys.argv[2])
@@ -341,10 +341,10 @@ def compare_fixture(fixture: Path, wheel: Path | None) -> None:
             binding_output = run_python_binding(binding_python, fixture)
             if len(binding_output) != len(records):
                 raise RuntimeError(f"Python binding output count did not match {fixture.name}.")
-            dataset["quality"]["datafog_rs_python_binding"] = quality(records, binding_output)
-            dataset["performance"]["datafog_rs_python_binding"] = performance(binding_output)
-            dataset["output_differences"]["python_baseline_vs_datafog_rs_python_binding"] = compare_outputs(
-                records, python_output, binding_output, "python_baseline", "datafog_rs_python_binding"
+            dataset["quality"]["datafog_core_python_binding"] = quality(records, binding_output)
+            dataset["performance"]["datafog_core_python_binding"] = performance(binding_output)
+            dataset["output_differences"]["python_baseline_vs_datafog_core_python_binding"] = compare_outputs(
+                records, python_output, binding_output, "python_baseline", "datafog_core_python_binding"
             )
         dataset["startup_time_ms_median"] = {
             "python_baseline": startup_time([str(python), "-c", "from datafog.engine import scan"]),
@@ -357,10 +357,10 @@ def compare_fixture(fixture: Path, wheel: Path | None) -> None:
             "rust_core": peak_memory_bytes([str(rust_binary), "--warmups", "0", "--runs", "1"], fixture),
         }
         if binding_python is not None:
-            dataset["startup_time_ms_median"]["datafog_rs_python_binding"] = startup_time(
-                [str(binding_python), "-c", "from datafog_rs import scan"]
+            dataset["startup_time_ms_median"]["datafog_core_python_binding"] = startup_time(
+                [str(binding_python), "-c", "from datafog_core import scan"]
             )
-            dataset["peak_memory_bytes"]["datafog_rs_python_binding"] = peak_memory_bytes(
+            dataset["peak_memory_bytes"]["datafog_core_python_binding"] = peak_memory_bytes(
                 [str(binding_python), "-c", BINDING_RUNNER, "0", "1"], fixture
             )
 
@@ -368,7 +368,7 @@ def compare_fixture(fixture: Path, wheel: Path | None) -> None:
             "kind": "comparison",
             "metadata": {
                 **metadata(python),
-                "datafog_rs_python_binding_wheel": wheel.name if wheel else None,
+                "datafog_core_python_binding_wheel": wheel.name if wheel else None,
             },
             "datasets": {fixture.stem: dataset},
         }
@@ -406,12 +406,12 @@ def scale_fixtures(fixtures: list[Path], wheel: Path | None) -> None:
                 binding_output = run_python_binding(binding_python, fixture)
                 if len(binding_output) != len(records):
                     raise RuntimeError(f"Python binding output count did not match {fixture.name}.")
-                workload["datafog_rs_python_binding"] = batch_performance(binding_output)
+                workload["datafog_core_python_binding"] = batch_performance(binding_output)
             workloads.append(workload)
 
         report = {
             "kind": "scaling",
-            "metadata": {**metadata(python), "datafog_rs_python_binding_wheel": wheel.name if wheel else None},
+            "metadata": {**metadata(python), "datafog_core_python_binding_wheel": wheel.name if wheel else None},
             "workloads": sorted(workloads, key=lambda workload: workload["sentences"]),
         }
 
@@ -425,7 +425,7 @@ def main() -> None:
         )
         parser.add_argument("mode")
         parser.add_argument("fixtures", nargs="+", type=Path, help="JSONL fixture paths to benchmark.")
-        parser.add_argument("--wheel", type=Path, help="Path to a datafog-rs wheel to include.")
+        parser.add_argument("--wheel", type=Path, help="Path to a datafog-core-python wheel to include.")
         arguments = parser.parse_args()
         scale_fixtures(
             [fixture.resolve() for fixture in arguments.fixtures],
@@ -437,7 +437,7 @@ def main() -> None:
         description="Compare the pinned Python baseline with the Rust core for one JSONL fixture."
     )
     parser.add_argument("fixture", type=Path, help="Path to the JSONL fixture to compare.")
-    parser.add_argument("--wheel", type=Path, help="Path to a datafog-rs wheel to include.")
+    parser.add_argument("--wheel", type=Path, help="Path to a datafog-core-python wheel to include.")
     arguments = parser.parse_args()
     compare_fixture(arguments.fixture.resolve(), arguments.wheel.resolve() if arguments.wheel else None)
 

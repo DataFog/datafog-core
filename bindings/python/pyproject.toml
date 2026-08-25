@@ -3,9 +3,9 @@ requires = ["maturin>=1.9.4,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "datafog-rs"
+name = "datafog-core-python"
 version = "0.1.0"
 requires-python = ">=3.10"
 
 [tool.maturin]
-module-name = "datafog_rs"
+module-name = "datafog_core"

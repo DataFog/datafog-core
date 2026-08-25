@@ -12,20 +12,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "datafog_rs"
-version = "0.1.0"
-dependencies = [
- "datafog_scan_core",
- "pyo3",
-]
-
-[[package]]
-name = "datafog_scan_core"
+name = "datafog-core"
 version = "0.1.0"
 dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "datafog-core-python"
+version = "0.1.0"
+dependencies = [
+ "datafog-core",
+ "pyo3",
 ]
 
 [[package]]

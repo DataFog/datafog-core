@@ -1,5 +1,5 @@
 [package]
-name = "datafog_scan_core"
+name = "datafog-core"
 version = "0.1.0"
 edition = "2024"
 
