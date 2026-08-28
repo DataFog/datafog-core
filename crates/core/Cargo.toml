@@ -2,7 +2,7 @@
 name = "datafog-core"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Fast structured PII detection library"
 license = "MIT"
 homepage = "https://datafog.ai"

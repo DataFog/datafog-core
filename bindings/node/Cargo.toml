@@ -2,6 +2,7 @@
 name = "datafog-node"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 description = "Node.js bindings for datafog-core"
 license = "MIT"
 repository = "https://github.com/DataFog/datafog-core"
