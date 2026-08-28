@@ -13,12 +13,21 @@ Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score.
 
-The initial transformation strategy is `redact`, which replaces each selected
-finding with an unnumbered `[ENTITY_TYPE]` placeholder. `transform` requires
-explicit findings; `scan_and_transform` (or `scanAndTransform` in JavaScript)
-is the explicit scan-then-transform convenience. Results include the transformed
-text and an ordered record for every applied replacement, including its output
-byte and code-point ranges.
+The initial transformation strategies are `redact`, `mask`, and `remove`.
+Redaction uses an unnumbered `[ENTITY_TYPE]` placeholder, masking supports full
+or leading/trailing reveal modes, and removal deletes only the exact finding
+span. `transform` requires explicit findings; `scan_and_transform` (or
+`scanAndTransform` in JavaScript) is the explicit scan-then-transform
+convenience. Results include the transformed text and an ordered record for
+every applied replacement, including its output byte and code-point ranges.
+
+Object-oriented bindings use a discriminated configuration:
+
+```text
+{ strategy: "redact" }
+{ strategy: "remove" }
+{ strategy: "mask", character: "*", reveal: { direction: "last", count: 4 } }
+```
 
 ## Packages
 
@@ -66,8 +75,14 @@ print(findings[0].entity_type)       # EMAIL
 print(findings[0].matched_text)      # jane@example.com
 print(findings[0].byte_range.start)  # 6
 
-result = scan_and_transform("Email jane@example.com", "redact")
+result = scan_and_transform("Email jane@example.com", {"strategy": "redact"})
 assert result.text == "Email [EMAIL]"
+
+masked = scan_and_transform(
+    "Email jane@example.com",
+    {"strategy": "mask", "reveal": {"direction": "last", "count": 4}},
+)
+assert masked.text == "Email ************.com"
 ```
 
 ### Node.js
@@ -78,7 +93,9 @@ assert result.text == "Email [EMAIL]"
 import { scan, scanAndTransform } from "@datafog/node";
 
 console.log(scan("Email jane@example.com"));
-console.log(scanAndTransform("Email jane@example.com", "redact").text);
+console.log(
+  scanAndTransform("Email jane@example.com", { strategy: "redact" }).text,
+);
 ```
 
 The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows x64.
@@ -92,7 +109,9 @@ import { init, scan, scanAndTransform } from "@datafog/wasm";
 
 await init();
 console.log(scan("Email jane@example.com"));
-console.log(scanAndTransform("Email jane@example.com", "redact").text);
+console.log(
+  scanAndTransform("Email jane@example.com", { strategy: "redact" }).text,
+);
 ```
 
 ## Development

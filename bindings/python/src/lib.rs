@@ -1,6 +1,7 @@
 use ::datafog_core as core;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::{PyAny, PyBool, PyDict};
 
 /// A zero-based, end-exclusive text range.
 #[pyclass(frozen, skip_from_py_object)]
@@ -182,6 +183,8 @@ impl From<core::Transformation> for Transformation {
             finding: transformation.finding.into(),
             strategy: match transformation.strategy {
                 core::TransformationStrategy::Redact => "redact".to_owned(),
+                core::TransformationStrategy::Remove => "remove".to_owned(),
+                core::TransformationStrategy::Mask(_) => "mask".to_owned(),
             },
             replacement: transformation.replacement,
             output_byte_range: transformation.output_byte_range.into(),
@@ -238,10 +241,100 @@ impl TransformResult {
     }
 }
 
-fn parse_strategy(strategy: &str) -> PyResult<core::TransformationStrategy> {
-    match strategy {
-        "redact" => Ok(core::TransformationStrategy::Redact),
-        _ => Err(PyValueError::new_err("strategy must be 'redact'")),
+fn validate_config_keys(config: &Bound<'_, PyDict>, allowed: &[&str]) -> PyResult<()> {
+    for (key, _) in config.iter() {
+        let key = key
+            .extract::<String>()
+            .map_err(|_| PyValueError::new_err("configuration keys must be strings"))?;
+        if !allowed.contains(&key.as_str()) {
+            return Err(PyValueError::new_err(format!(
+                "unexpected configuration field: {key}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn required_item<'py>(config: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+    config
+        .get_item(key)?
+        .ok_or_else(|| PyValueError::new_err(format!("missing configuration field: {key}")))
+}
+
+fn parse_strategy(config: &Bound<'_, PyAny>) -> PyResult<core::TransformationStrategy> {
+    let config = config
+        .cast::<PyDict>()
+        .map_err(|_| PyValueError::new_err("strategy configuration must be a dict"))?;
+    let strategy = required_item(config, "strategy")?
+        .extract::<String>()
+        .map_err(|_| PyValueError::new_err("strategy must be a string"))?;
+
+    match strategy.as_str() {
+        "redact" => {
+            validate_config_keys(config, &["strategy"])?;
+            Ok(core::TransformationStrategy::Redact)
+        }
+        "remove" => {
+            validate_config_keys(config, &["strategy"])?;
+            Ok(core::TransformationStrategy::Remove)
+        }
+        "mask" => {
+            validate_config_keys(config, &["strategy", "character", "reveal"])?;
+            let character = config
+                .get_item("character")?
+                .map(|value| value.extract::<String>())
+                .transpose()
+                .map_err(|_| PyValueError::new_err("mask character must be a string"))?
+                .unwrap_or_else(|| "*".to_owned());
+            let mut characters = character.chars();
+            let character = characters
+                .next()
+                .filter(|_| characters.next().is_none())
+                .ok_or_else(|| {
+                    PyValueError::new_err("mask character must contain exactly one code point")
+                })?;
+
+            let reveal = match config.get_item("reveal")? {
+                None => core::MaskReveal::None,
+                Some(reveal) => {
+                    let reveal = reveal.cast::<PyDict>().map_err(|_| {
+                        PyValueError::new_err("mask reveal configuration must be a dict")
+                    })?;
+                    validate_config_keys(reveal, &["direction", "count"])?;
+                    let direction = required_item(reveal, "direction")?
+                        .extract::<String>()
+                        .map_err(|_| PyValueError::new_err("reveal direction must be a string"))?;
+                    let count = required_item(reveal, "count")?;
+                    if count.is_instance_of::<PyBool>() {
+                        return Err(PyValueError::new_err(
+                            "reveal count must be a non-negative integer",
+                        ));
+                    }
+                    let count = count.extract::<usize>().map_err(|_| {
+                        PyValueError::new_err("reveal count must be a non-negative integer")
+                    })?;
+                    match direction.as_str() {
+                        "first" => core::MaskReveal::First(count),
+                        "last" => core::MaskReveal::Last(count),
+                        _ => {
+                            return Err(PyValueError::new_err(
+                                "reveal direction must be 'first' or 'last'",
+                            ));
+                        }
+                    }
+                }
+            };
+            core::MaskConfig::new(character, reveal)
+                .map(core::TransformationStrategy::Mask)
+                .map_err(|_| {
+                    PyValueError::new_err(
+                        "mask character must not be whitespace or a control character",
+                    )
+                })
+        }
+        _ => Err(PyValueError::new_err(
+            "strategy must be 'redact', 'mask', or 'remove'",
+        )),
     }
 }
 
@@ -258,9 +351,9 @@ fn transform(
     py: Python<'_>,
     text: &str,
     findings: Vec<Py<Finding>>,
-    strategy: &str,
+    config: &Bound<'_, PyAny>,
 ) -> PyResult<TransformResult> {
-    let strategy = parse_strategy(strategy)?;
+    let strategy = parse_strategy(config)?;
     let core_findings: Vec<core::Finding> = findings
         .iter()
         .map(|finding| finding.bind(py).borrow().to_core())
@@ -272,8 +365,8 @@ fn transform(
 
 /// Scan text and transform the detected findings.
 #[pyfunction]
-fn scan_and_transform(text: &str, strategy: &str) -> PyResult<TransformResult> {
-    core::scan_and_transform(text, parse_strategy(strategy)?)
+fn scan_and_transform(text: &str, config: &Bound<'_, PyAny>) -> PyResult<TransformResult> {
+    core::scan_and_transform(text, parse_strategy(config)?)
         .map(TransformResult::from)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
 }

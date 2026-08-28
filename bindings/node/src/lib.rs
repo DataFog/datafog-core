@@ -36,6 +36,20 @@ pub struct Finding {
     pub detector_version: Option<String>,
 }
 
+#[napi(object)]
+pub struct NativeMaskRevealConfig {
+    pub direction: String,
+    pub count: f64,
+}
+
+#[napi(object)]
+pub struct NativeTransformationConfig {
+    #[napi(ts_type = "TransformationStrategy")]
+    pub strategy: String,
+    pub character: Option<String>,
+    pub reveal: Option<NativeMaskRevealConfig>,
+}
+
 #[napi(object, object_from_js = false)]
 pub struct Transformation {
     #[napi(readonly)]
@@ -109,10 +123,71 @@ fn core_finding(finding: Finding) -> datafog_core::Finding {
     }
 }
 
-fn core_strategy(strategy: &str) -> napi::Result<datafog_core::TransformationStrategy> {
-    match strategy {
-        "redact" => Ok(datafog_core::TransformationStrategy::Redact),
-        _ => Err(Error::new(Status::InvalidArg, "strategy must be 'redact'")),
+fn core_strategy(
+    config: NativeTransformationConfig,
+) -> napi::Result<datafog_core::TransformationStrategy> {
+    match config.strategy.as_str() {
+        "redact" if config.character.is_none() && config.reveal.is_none() => {
+            Ok(datafog_core::TransformationStrategy::Redact)
+        }
+        "remove" if config.character.is_none() && config.reveal.is_none() => {
+            Ok(datafog_core::TransformationStrategy::Remove)
+        }
+        "mask" => {
+            let character = config.character.unwrap_or_else(|| "*".to_owned());
+            let mut characters = character.chars();
+            let character = characters
+                .next()
+                .filter(|_| characters.next().is_none())
+                .ok_or_else(|| {
+                    Error::new(
+                        Status::InvalidArg,
+                        "mask character must contain exactly one code point",
+                    )
+                })?;
+            let reveal = match config.reveal {
+                None => datafog_core::MaskReveal::None,
+                Some(reveal) => {
+                    if !reveal.count.is_finite()
+                        || reveal.count < 0.0
+                        || reveal.count.fract() != 0.0
+                        || reveal.count > 9_007_199_254_740_991.0
+                    {
+                        return Err(Error::new(
+                            Status::InvalidArg,
+                            "reveal count must be a non-negative safe integer",
+                        ));
+                    }
+                    let count = reveal.count as usize;
+                    match reveal.direction.as_str() {
+                        "first" => datafog_core::MaskReveal::First(count),
+                        "last" => datafog_core::MaskReveal::Last(count),
+                        _ => {
+                            return Err(Error::new(
+                                Status::InvalidArg,
+                                "reveal direction must be 'first' or 'last'",
+                            ));
+                        }
+                    }
+                }
+            };
+            datafog_core::MaskConfig::new(character, reveal)
+                .map(datafog_core::TransformationStrategy::Mask)
+                .map_err(|_| {
+                    Error::new(
+                        Status::InvalidArg,
+                        "mask character must not be whitespace or a control character",
+                    )
+                })
+        }
+        "redact" | "remove" => Err(Error::new(
+            Status::InvalidArg,
+            "redact and remove do not accept mask configuration",
+        )),
+        _ => Err(Error::new(
+            Status::InvalidArg,
+            "strategy must be 'redact', 'mask', or 'remove'",
+        )),
     }
 }
 
@@ -127,6 +202,8 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
                     finding: js_finding(transformation.finding)?,
                     strategy: match transformation.strategy {
                         datafog_core::TransformationStrategy::Redact => "redact".to_owned(),
+                        datafog_core::TransformationStrategy::Remove => "remove".to_owned(),
+                        datafog_core::TransformationStrategy::Mask(_) => "mask".to_owned(),
                     },
                     replacement: transformation.replacement,
                     output_byte_range: js_range(transformation.output_byte_range)?,
@@ -151,10 +228,10 @@ pub fn scan(text: String) -> napi::Result<Vec<Finding>> {
 pub fn transform(
     text: String,
     findings: Vec<Finding>,
-    #[napi(ts_arg_type = "TransformationStrategy")] strategy: String,
+    #[napi(ts_arg_type = "TransformationConfig")] config: NativeTransformationConfig,
 ) -> napi::Result<TransformResult> {
     let findings = findings.into_iter().map(core_finding).collect::<Vec<_>>();
-    datafog_core::transform(&text, &findings, core_strategy(&strategy)?)
+    datafog_core::transform(&text, &findings, core_strategy(config)?)
         .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
         .and_then(js_transform_result)
 }
@@ -163,9 +240,9 @@ pub fn transform(
 #[napi(strict, catch_unwind)]
 pub fn scan_and_transform(
     text: String,
-    #[napi(ts_arg_type = "TransformationStrategy")] strategy: String,
+    #[napi(ts_arg_type = "TransformationConfig")] config: NativeTransformationConfig,
 ) -> napi::Result<TransformResult> {
-    datafog_core::scan_and_transform(&text, core_strategy(&strategy)?)
+    datafog_core::scan_and_transform(&text, core_strategy(config)?)
         .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
         .and_then(js_transform_result)
 }

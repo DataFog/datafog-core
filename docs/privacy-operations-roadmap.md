@@ -68,6 +68,8 @@ and Unicode cases satisfy ADR 001.
 
 ## Slice 3: Mask and remove
 
+**Status: complete**
+
 - Use a discriminated strategy configuration across public bindings.
 - Mask every non-revealed Unicode code point, including punctuation.
 - Support `first` and `last` reveal modes with a non-negative code-point count.

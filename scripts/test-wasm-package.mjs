@@ -85,7 +85,9 @@ import {
   transform,
   type EntityType,
   type Finding,
+  type MaskRevealConfig,
   type TextRange,
+  type TransformationConfig,
   type TransformResult,
 } from "@datafog/wasm";
 
@@ -96,18 +98,26 @@ const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
 const transformed: TransformResult = transform(
   "Email jane@example.com",
   findings,
-  "redact",
+  { strategy: "redact" },
 );
 const scannedAndTransformed: TransformResult = scanAndTransform(
   "Email jane@example.com",
-  "redact",
+  { strategy: "redact" },
 );
+const reveal: MaskRevealConfig = { direction: "last", count: 4 };
+const maskConfig: TransformationConfig = {
+  strategy: "mask",
+  character: "•",
+  reveal,
+};
+const masked: TransformResult = scanAndTransform("Email jane@example.com", maskConfig);
 
 void ready;
 void entityType;
 void range;
 void transformed;
 void scannedAndTransformed;
+void masked;
 `.trimStart(),
   );
 
@@ -261,8 +271,8 @@ try {
 
     const text = "👋 jane@example.com and jane@example.com";
     const findings = scan(text);
-    const explicit = transform(text, findings, "redact");
-    const convenient = scanAndTransform(text, "redact");
+    const explicit = transform(text, findings, { strategy: "redact" });
+    const convenient = scanAndTransform(text, { strategy: "redact" });
     if (JSON.stringify(explicit) !== JSON.stringify(convenient)) {
       throw new Error("explicit and convenience transforms differ");
     }
@@ -283,8 +293,72 @@ try {
       throw new Error("transformation records do not select their replacements");
     }
 
+    if (
+      scanAndTransform("Email jane@example.com", { strategy: "mask" }).text !==
+      "Email ****************"
+    ) {
+      throw new Error("full masking did not replace every code point");
+    }
+
+    const partialMask = scanAndTransform("Email jane@example.com", {
+      strategy: "mask",
+      character: "•",
+      reveal: { direction: "last", count: 4 },
+    });
+    if (
+      partialMask.text !== "Email ••••••••••••.com" ||
+      partialMask.transformations[0].strategy !== "mask" ||
+      partialMask.transformations[0].replacement !== "••••••••••••.com" ||
+      JSON.stringify(partialMask.transformations[0].outputByteRange) !==
+        JSON.stringify({ start: 6, end: 46 })
+    ) {
+      throw new Error("partial multibyte masking contract failed");
+    }
+
+    if (
+      scanAndTransform("Email jane@example.com", {
+        strategy: "mask",
+        reveal: { direction: "first", count: 99 },
+      }).text !== "Email jane@example.com"
+    ) {
+      throw new Error("oversized reveal count should preserve the finding");
+    }
+
+    const removed = scanAndTransform("Email jane@example.com today", {
+      strategy: "remove",
+    });
+    if (
+      removed.text !== "Email  today" ||
+      removed.transformations[0].strategy !== "remove" ||
+      removed.transformations[0].replacement !== "" ||
+      JSON.stringify(removed.transformations[0].outputCodepointRange) !==
+        JSON.stringify({ start: 6, end: 6 })
+    ) {
+      throw new Error("exact removal contract failed");
+    }
+
+    for (const invalidConfig of [
+      { strategy: "mask", character: "" },
+      { strategy: "mask", character: "**" },
+      { strategy: "mask", character: " " },
+      { strategy: "mask", unexpected: true },
+      { strategy: "remove", character: "*" },
+      { strategy: "mask", reveal: { direction: "last", count: -1 } },
+      { strategy: "mask", reveal: { direction: "middle", count: 4 } },
+    ]) {
+      expectThrows(
+        () => scanAndTransform("Email jane@example.com", invalidConfig),
+        "TypeError",
+      );
+    }
+
     expectThrows(
-      () => transform(text, [{ ...findings[0], confidence: 2 }], "redact"),
+      () =>
+        transform(
+          text,
+          [{ ...findings[0], confidence: 2 }],
+          { strategy: "redact" },
+        ),
       "Error",
     );
   });
