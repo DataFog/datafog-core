@@ -15,7 +15,7 @@ for a PII detection and transformation engine.
 | Locale selection | Preserve | Pass locale constraints to detectors without placing detector implementations in the transformation layer. |
 | Precomputed findings | Preserve | Permit transformations over caller-supplied findings after strict validation. |
 | Prompt/output guardrails | Out of scope | A governance layer may consume Core findings and results to make and enforce `allow`, `warn`, or `block` decisions. |
-| Hash replacement | Redesign | Retain as a compatibility fingerprint with explicit equality and guessing leakage; do not call it pseudonymization. |
+| Hash replacement | Compatibility only | Exclude unkeyed hashing from canonical Core transformations; consider a plainly named fingerprint in a separate compatibility layer only for an accepted migration requirement. |
 | Pseudonymization | Redesign | Implement a new keyed, scoped, deterministic, one-way value pseudonym. Do not copy numbered Python placeholders. |
 | Reversible tokenization | New | Add opaque, authorized, reversible tokens through a key or vault boundary. |
 | Restoration | New | Restore only known reversible tokens under explicit authorization and scope checks. |

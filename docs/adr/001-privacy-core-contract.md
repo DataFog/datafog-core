@@ -31,7 +31,6 @@ Canonical transformation strategies are:
 remove
 redact
 mask
-hash
 pseudonymize
 tokenize
 ```
@@ -356,8 +355,14 @@ original values are excluded from default debug and log output.
   configuration, does not consume surrounding whitespace, and does not
   normalize the remaining text. Its transformation record uses an empty output
   range at the deletion position.
-- `hash` is a compatibility fingerprint with explicitly documented leakage and
-  must not be presented as secure pseudonymization.
+- Unkeyed `hash` is not a canonical Core transformation. Predictable PII can
+  be tested through brute-force or dictionary attacks, while deterministic
+  output exposes equality and cross-dataset linkage. Salting does not provide
+  a useful middle ground: a public or shared salt remains guessable, a random
+  per-value salt removes deterministic matching, and a secret salt is a keyed
+  pseudonymization design. A separately scoped compatibility adapter may offer
+  a plainly named fingerprint only when a concrete migration requirement
+  justifies it.
 - `pseudonymize` is a new keyed, scoped, deterministic, one-way operation. It
   is not based on the Python numbered-placeholder behavior.
 - `tokenize` creates opaque reversible or vault-backed tokens.
@@ -391,7 +396,6 @@ and documented separately.
 
 This ADR does not choose:
 
-- compatibility hash format;
 - HMAC token encoding, key provider, scope fields, or rotation procedure;
 - reversible-token storage or cryptographic construction;
 - production audit and mapping storage.

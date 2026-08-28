@@ -33,7 +33,7 @@ The decisions cover:
 - strict validation of supplied findings;
 - deterministic duplicate and overlap handling;
 - the transformation result shape; and
-- the security meaning of hash, pseudonymize, and tokenize.
+- the security meaning and disposition of hash, pseudonymize, and tokenize.
 
 ## Slice 1: Finding and scan contract
 
@@ -83,6 +83,8 @@ replacements. Invalid strategy fields and masking characters are rejected.
 
 ## Slice 4: Transformation selection
 
+**Status: complete**
+
 - Replace the temporary single-strategy request with one canonical
   transformation-configuration envelope. Do not retain the old shape as a
   shorthand or add a second transformation operation.
@@ -121,15 +123,22 @@ override fallback, dormant rules, malformed configuration, and Unicode cases
 produce the same result whether findings come directly from `scan` or are
 supplied to `transform`.
 
-## Slice 5: Compatibility hash
+## Slice 5: Exclude unkeyed hash
 
-- Select and document the compatibility digest and encoding.
-- Specify determinism, truncation, and collision behavior.
-- Document equality leakage and low-entropy guessing risk.
-- Keep hash distinct from secure pseudonymization.
+**Status: complete**
 
-**Proof:** fixed vectors are stable and the API never describes the output as
-anonymous or securely tokenized.
+- Do not expose unkeyed hashing as a canonical privacy transformation.
+- Treat brute-force guessing and deterministic linkage as disqualifying for
+  predictable PII, regardless of digest length or encoding.
+- Do not add salt configuration as a compromise: public salts remain guessable,
+  per-value random salts remove stable equality, and secret salts belong to the
+  keyed pseudonymization design.
+- Permit a non-Core compatibility fingerprint only when a concrete migration
+  requirement is separately accepted and documented.
+
+**Proof:** the canonical strategy set contains no unkeyed hash operation and
+documentation directs deterministic one-way privacy requirements to scoped,
+keyed pseudonymization.
 
 ## Slice 6: One-way pseudonymization
 
@@ -152,16 +161,27 @@ changing any scope component, entity type, or key version changes the output.
 **Proof:** authorized round trips succeed and every unauthorized variant fails
 closed without revealing the original value.
 
-## Slice 8: Binding rollout
+## Slice 8: Binding completion and release hardening
 
-After the Rust contract stabilizes:
+Python, Node, and WASM already expose Slices 1 through 4. New stateless
+operations should continue to ship through those bindings in the same vertical
+slice as their Rust implementation rather than waiting for a separate binding
+rollout.
 
-1. expose the API through the Python binding;
-2. expose it through Node with explicit UTF-16 coordinate support; and
-3. expose stateless operations through WASM.
+Remaining binding work is:
 
-Reversible token storage is not promised in WASM without a separate key-custody
-and storage design.
+1. add explicitly named UTF-16 code-unit ranges for JavaScript consumers as
+   required by ADR 001, without changing the existing byte or code-point
+   fields;
+2. carry one-way pseudonymization through Python, Node, and WASM when that
+   slice is implemented;
+3. expose reversible tokenization and restoration only through runtimes with a
+   separately accepted key-custody, authorization, and storage boundary; and
+4. retain installed-package and cross-binding conformance tests as release
+   gates.
+
+Reversible token storage is not promised in WASM without that separate
+key-custody and storage design.
 
 ## Acceptance bar
 
