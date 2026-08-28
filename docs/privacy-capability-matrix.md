@@ -2,19 +2,19 @@
 
 DataFog Core preserves useful privacy capabilities without treating the Python
 API as a contract. Each capability is classified by the treatment appropriate
-for a new PII protection engine.
+for a PII detection and transformation engine.
 
 | Capability | Treatment | Core direction |
 | --- | --- | --- |
 | PII scanning | Preserve | Return validated findings with explicit byte and code-point ranges, optional confidence, and detector provenance. |
 | Typed redaction | Preserve | Replace findings with typed, document-local placeholders after deterministic overlap resolution. |
 | Character masking | Preserve | Support configurable masking with explicit direction and length semantics. |
-| Entity-type selection | Preserve | Select canonical entity types through policy. |
+| Entity-type selection | Preserve | Select canonical entity types through transformation configuration. |
 | Exact allowlists | Preserve | Exempt exact values using documented, case-sensitive matching. |
 | Regex allowlists | Preserve | Use full-match semantics, validated patterns, and bounded execution. |
 | Locale selection | Preserve | Pass locale constraints to detectors without placing detector implementations in the transformation layer. |
 | Precomputed findings | Preserve | Permit transformations over caller-supplied findings after strict validation. |
-| Prompt/output guardrails | Preserve | Provide typed `allow`, `transform`, `warn`, and `block` outcomes. |
+| Prompt/output guardrails | Out of scope | A governance layer may consume Core findings and results to make and enforce `allow`, `warn`, or `block` decisions. |
 | Hash replacement | Redesign | Retain as a compatibility fingerprint with explicit equality and guessing leakage; do not call it pseudonymization. |
 | Pseudonymization | Redesign | Implement a new keyed, scoped, deterministic, one-way value pseudonym. Do not copy numbered Python placeholders. |
 | Reversible tokenization | New | Add opaque, authorized, reversible tokens through a key or vault boundary. |

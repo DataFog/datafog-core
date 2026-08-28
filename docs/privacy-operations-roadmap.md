@@ -1,18 +1,16 @@
-# PII Protection Engine Roadmap
+# PII Privacy Core Roadmap
 
 ## Product framing
 
-DataFog Core is a new PII protection engine. It detects sensitive information,
-applies policy-driven privacy transformations, and enforces protection
-decisions. It preserves useful capabilities from DataFog Python without
-inheriting its API structure, legacy aliases, or weak security semantics.
+DataFog Core detects sensitive information, applies privacy transformations,
+and restores explicitly reversible tokens. Governance decisions and payload
+enforcement belong to a separate layer.
 
 The target model is:
 
 ```text
 scan(text)       -> findings
 transform(...)   -> transformed text and transformation records
-protect(...)     -> allow, transform, warn, or block
 restore(...)     -> authorized restoration of reversible tokens
 ```
 
@@ -33,8 +31,7 @@ The decisions cover:
 - the finding shape;
 - strict validation of supplied findings;
 - deterministic duplicate and overlap handling;
-- transformation and protection result shapes;
-- block semantics; and
+- the transformation result shape; and
 - the security meaning of hash, pseudonymize, and tokenize.
 
 ## Slice 1: Finding and scan contract
@@ -70,28 +67,18 @@ and Unicode cases satisfy ADR 001.
 **Proof:** transformation records identify the exact input and output spans for
 full, partial, and zero-length replacements.
 
-## Slice 4: Policy selection
+## Slice 4: Transformation selection
 
 - Add entity-type selection.
 - Add exact, case-sensitive allowlists.
 - Add full-match regex allowlists with bounded behavior.
 - Add locale selection and per-entity strategy overrides.
-- Define policy validation and precedence.
+- Define transformation-configuration validation and precedence.
 
-**Proof:** the same policy retains the same findings whether it scans internally
-or receives precomputed findings.
+**Proof:** the same configuration retains the same findings whether it scans
+internally or receives precomputed findings.
 
-## Slice 5: Protection enforcement
-
-- Implement typed `allow`, `transform`, `warn`, and `block` outcomes.
-- Ensure blocking results omit original text and matched values by default.
-- Provide safe finding summaries and policy-rule attribution.
-- Keep calling-application enforcement explicit.
-
-**Proof:** a blocking finding prevents transformed or original content from
-appearing in the ordinary result; clean input passes unchanged.
-
-## Slice 6: Compatibility hash
+## Slice 5: Compatibility hash
 
 - Select and document the compatibility digest and encoding.
 - Specify determinism, truncation, and collision behavior.
@@ -101,10 +88,10 @@ appearing in the ordinary result; clean input passes unchanged.
 **Proof:** fixed vectors are stable and the API never describes the output as
 anonymous or securely tokenized.
 
-## Slice 7: One-way pseudonymization
+## Slice 6: One-way pseudonymization
 
 - Define the key-provider boundary.
-- Define required tenant, dataset, purpose, and policy-version scope.
+- Define required tenant, dataset, purpose, and scope-version context.
 - Use a reviewed keyed construction with domain separation.
 - Define token encoding and key rotation behavior.
 - Suppress sensitive source mappings by default.
@@ -112,7 +99,7 @@ anonymous or securely tokenized.
 **Proof:** identical values are stable within the same entity type and scope;
 changing any scope component, entity type, or key version changes the output.
 
-## Slice 8: Reversible tokenization and restoration
+## Slice 7: Reversible tokenization and restoration
 
 - Define opaque token format and authorization context.
 - Introduce a vault or reviewed reversible cryptographic boundary.
@@ -122,7 +109,7 @@ changing any scope component, entity type, or key version changes the output.
 **Proof:** authorized round trips succeed and every unauthorized variant fails
 closed without revealing the original value.
 
-## Slice 9: Binding rollout
+## Slice 8: Binding rollout
 
 After the Rust contract stabilizes:
 
@@ -150,6 +137,8 @@ Every completed slice must have:
 - OCR and image extraction;
 - spaCy, GLiNER, or other detector implementations;
 - legacy Python APIs and return shapes unless separately approved;
+- governance decisions and enforcement actions such as `allow`, `warn`, and
+  `block`;
 - claims of complete anonymization;
 - identity resolution across different identifiers; and
 - dataset-level techniques such as k-anonymity, generalization, synthetic data,

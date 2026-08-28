@@ -5,18 +5,13 @@
 
 ## Context
 
-DataFog Core is a new PII protection engine, not a Rust port of the DataFog
-Python API. The Python library is evidence of useful capabilities and existing
-user expectations, but it is not the design authority. The core should preserve
-valuable operations without inheriting ambiguous names, unsafe defaults, or
-legacy return shapes.
+DataFog Core is a PII detection and transformation engine.
 
-The engine is organized around four operations:
+The engine is organized around three operations:
 
 ```text
 scan(text)       -> findings
 transform(...)   -> transformed text and transformation records
-protect(...)     -> allow, transform, warn, or block
 restore(...)     -> authorized restoration of reversible tokens
 ```
 
@@ -24,7 +19,7 @@ restore(...)     -> authorized restoration of reversible tokens
 
 ### Operation taxonomy
 
-Canonical core operations are `scan`, `transform`, `protect`, and `restore`.
+Canonical core operations are `scan`, `transform`, and `restore`.
 
 Canonical transformation strategies are:
 
@@ -37,19 +32,10 @@ pseudonymize
 tokenize
 ```
 
-Canonical protection actions are:
-
-```text
-allow
-transform
-warn
-block
-```
-
-`block` and `warn` are enforcement decisions, not transformations. Blocking
-rejects the entire payload; it does not delete only the detected span. Legacy
-Python names and return shapes may be handled by separate compatibility
-wrappers, but they do not shape the core API.
+`allow`, `warn`, and `block` are governance decisions, not Core operations or
+transformation strategies. A separate governance layer may consume findings
+and transformation results to make those decisions. The calling application,
+proxy, or firewall is responsible for enforcing them.
 
 ### Text ranges
 
@@ -119,7 +105,7 @@ Overlapping findings are ranked by:
 5. stable lexical ordering.
 
 The selected non-overlapping findings are returned in document order. Entity
-priority has a core default and may later be made policy-configurable.
+priority has a core default and may later be made configurable.
 
 ### Transformation result
 
@@ -146,34 +132,7 @@ the original value and source range, so the canonical payload does not contain
 a second original-to-replacement mapping.
 
 A mapping view may be offered as an explicit convenience API. Sensitive
-original values are excluded from default debug and log output. Protection
-responses do not expose matched PII unless sensitive diagnostics are explicitly
-requested.
-
-### Protection result
-
-Protection produces a typed outcome:
-
-```text
-Allowed
-Transformed
-Warned
-Blocked
-```
-
-A blocked result does not return the original text or matched values by
-default. It may return safe diagnostics such as the policy rule, entity types,
-and finding count. The calling application is responsible for honoring a block
-by stopping the prompt, response, message, or other payload.
-
-When a future policy assigns different actions to different findings, the
-decision precedence is:
-
-```text
-block > warn > transform > allow
-```
-
-Any blocking finding blocks the entire payload.
+original values are excluded from default debug and log output.
 
 ### Security meaning of strategies
 
@@ -190,7 +149,7 @@ Any blocking finding blocks the entire payload.
 Pseudonymization is value pseudonymization, not identity resolution. The core
 does not infer that different identifiers belong to the same person.
 
-## Capability-continuity policy
+## Capability-continuity stance
 
 Python behavior is classified as preserved, redesigned, compatibility-only, or
 dropped. Compatibility means preserving valuable user capabilities, not
@@ -208,6 +167,7 @@ and documented separately.
 - Secure pseudonymization and tokenization require explicit key and scope
   contracts in later ADRs.
 - Pseudonymized data remains sensitive and must not be described as anonymous.
+- Governance decisions and payload enforcement remain outside DataFog Core.
 
 ## Deferred decisions
 
@@ -217,5 +177,4 @@ This ADR does not choose:
 - compatibility hash format;
 - HMAC token encoding, key provider, scope fields, or rotation procedure;
 - reversible-token storage or cryptographic construction;
-- streaming enforcement behavior; or
 - production audit and mapping storage.
