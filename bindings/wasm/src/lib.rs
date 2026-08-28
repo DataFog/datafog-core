@@ -51,11 +51,18 @@ impl From<Finding> for datafog_core::Finding {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Transformation {
-    finding: Finding,
+    entity_type: String,
+    source_byte_range: TextRange,
+    source_codepoint_range: TextRange,
+    confidence: Option<f32>,
+    detector_name: String,
+    detector_version: Option<String>,
     strategy: &'static str,
     replacement: String,
     output_byte_range: TextRange,
     output_codepoint_range: TextRange,
+    key_ref: Option<String>,
+    resolved_key_version: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -100,15 +107,23 @@ fn result_to_js(result: datafog_core::TransformResult) -> Result<JsValue, JsValu
             .transformations
             .into_iter()
             .map(|transformation| Transformation {
-                finding: finding_from_core(transformation.finding),
+                entity_type: transformation.entity_type,
+                source_byte_range: transformation.source_byte_range.into(),
+                source_codepoint_range: transformation.source_codepoint_range.into(),
+                confidence: transformation.confidence,
+                detector_name: transformation.detector_name,
+                detector_version: transformation.detector_version,
                 strategy: match transformation.strategy {
                     datafog_core::TransformationStrategy::Redact => "redact",
                     datafog_core::TransformationStrategy::Remove => "remove",
                     datafog_core::TransformationStrategy::Mask(_) => "mask",
+                    datafog_core::TransformationStrategy::Pseudonymize(_) => "pseudonymize",
                 },
                 replacement: transformation.replacement,
                 output_byte_range: transformation.output_byte_range.into(),
                 output_codepoint_range: transformation.output_codepoint_range.into(),
+                key_ref: transformation.key_ref,
+                resolved_key_version: transformation.resolved_key_version,
             })
             .collect(),
     };
@@ -142,6 +157,15 @@ pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsVal
         .collect::<Vec<_>>();
     let config = config_value(config)?;
     let config = datafog_core::parse_transformation_config(&config).map_err(privacy_error)?;
+    if let Some(selector) = datafog_core::required_key_selectors(text, &findings, &config)
+        .map_err(privacy_error)?
+        .into_iter()
+        .next()
+    {
+        return Err(privacy_error(
+            datafog_core::PrivacyError::unsupported_strategy(selector.path()),
+        ));
+    }
     let result = datafog_core::transform(text, &findings, &config).map_err(privacy_error)?;
     result_to_js(result)
 }
@@ -150,6 +174,20 @@ pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsVal
 pub fn scan_and_transform(text: &str, config: JsValue) -> Result<JsValue, JsValue> {
     let config = config_value(config)?;
     let config = datafog_core::parse_scan_and_transform_config(&config).map_err(privacy_error)?;
+    let findings = datafog_core::scan_with_config(text, config.scan_config());
+    if let Some(selector) =
+        datafog_core::required_key_selectors(text, &findings, config.transformation_config())
+            .map_err(privacy_error)?
+            .into_iter()
+            .next()
+    {
+        return Err(privacy_error(
+            datafog_core::PrivacyError::unsupported_strategy(format!(
+                "/transform{}",
+                selector.path()
+            )),
+        ));
+    }
     let result = datafog_core::scan_and_transform(text, &config).map_err(privacy_error)?;
     result_to_js(result)
 }

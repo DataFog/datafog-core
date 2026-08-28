@@ -1,7 +1,11 @@
 /** Canonical built-in values are uppercase, but custom detectors may add values. */
 export type EntityType = string;
 
-export type TransformationStrategy = "redact" | "mask" | "remove";
+export type TransformationStrategy =
+  | "redact"
+  | "mask"
+  | "remove"
+  | "pseudonymize";
 
 export interface MaskRevealConfig {
   readonly direction: "first" | "last";
@@ -11,6 +15,11 @@ export interface MaskRevealConfig {
 export type TransformationStrategyConfig =
   | { readonly strategy: "redact" }
   | { readonly strategy: "remove" }
+  | {
+      readonly strategy: "pseudonymize";
+      readonly key_ref: string;
+      readonly key_version?: string;
+    }
   | {
       readonly strategy: "mask";
       readonly character?: string;
@@ -46,6 +55,13 @@ export interface ScanAndTransformConfig {
 export type DataFogErrorCode =
   | "invalid_configuration"
   | "invalid_finding"
+  | "key_provider_required"
+  | "key_not_found"
+  | "key_access_denied"
+  | "key_provider_unavailable"
+  | "invalid_key_material"
+  | "key_provider_error"
+  | "unsupported_strategy"
   | "internal_error";
 
 export declare class DataFogError extends Error {
@@ -53,6 +69,33 @@ export declare class DataFogError extends Error {
   readonly reason?: string;
   readonly path?: string;
   readonly findingIndex?: number;
+}
+
+export interface KeyProviderRequest {
+  readonly keyRef: string;
+  readonly keyVersion?: string;
+}
+
+export interface KeyProviderResponse {
+  readonly key: Uint8Array;
+  readonly resolvedVersion: string;
+}
+
+export interface KeyProvider {
+  resolveKey(request: KeyProviderRequest): Promise<KeyProviderResponse>;
+}
+
+export declare class PrivacyManager {
+  constructor(provider: KeyProvider);
+  transform(
+    text: string,
+    findings: Finding[],
+    config: TransformationConfig,
+  ): Promise<TransformResult>;
+  scanAndTransform(
+    text: string,
+    config: ScanAndTransformConfig,
+  ): Promise<TransformResult>;
 }
 export interface Finding {
   readonly entityType: EntityType
@@ -62,6 +105,28 @@ export interface Finding {
   readonly confidence?: number
   readonly detectorName: string
   readonly detectorVersion?: string
+}
+
+export interface KeySelector {
+  readonly index: number
+  readonly keyRef: string
+  readonly keyVersion?: string
+  readonly path: string
+}
+
+export interface PreparedScanAndTransform {
+  readonly findings: Array<Finding>
+  readonly selectors: Array<KeySelector>
+}
+
+export declare function prepareScanAndTransform(text: string, config: ScanAndTransformConfig): PreparedScanAndTransform
+
+export declare function requiredKeySelectors(text: string, findings: Array<Finding>, config: TransformationConfig): Array<KeySelector>
+
+export interface ResolvedKeyInput {
+  selectorIndex: number
+  key: Uint8Array
+  resolvedVersion: string
 }
 
 /** Scan text for supported PII findings. */
@@ -79,14 +144,23 @@ export interface TextRange {
 export declare function transform(text: string, findings: Array<Finding>, config: TransformationConfig): TransformResult
 
 export interface Transformation {
-  readonly finding: Finding
+  readonly entityType: string
+  readonly sourceByteRange: TextRange
+  readonly sourceCodepointRange: TextRange
+  readonly confidence?: number
+  readonly detectorName: string
+  readonly detectorVersion?: string
   readonly strategy: TransformationStrategy
   readonly replacement: string
   readonly outputByteRange: TextRange
   readonly outputCodepointRange: TextRange
+  readonly keyRef?: string
+  readonly resolvedKeyVersion?: string
 }
 
 export interface TransformResult {
   readonly text: string
   readonly transformations: Array<Transformation>
 }
+
+export declare function transformWithResolvedKeys(text: string, findings: Array<Finding>, config: TransformationConfig, resolvedKeys: Array<ResolvedKeyInput>): TransformResult

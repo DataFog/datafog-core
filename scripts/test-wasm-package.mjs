@@ -306,6 +306,12 @@ try {
     ) {
       throw new Error("transformation records do not select their replacements");
     }
+    if (
+      "finding" in explicit.transformations[0] ||
+      "matchedText" in explicit.transformations[0]
+    ) {
+      throw new Error("transformation records must not echo original PII");
+    }
 
     if (
       scanAndTransform("Email jane@example.com", {
@@ -423,6 +429,23 @@ try {
       selected.transformations.length !== 1
     ) {
       throw new Error("selection, overrides, or allowlists failed");
+    }
+
+    try {
+      scanAndTransform("Email jane@example.com", {
+        transform: {
+          default: { strategy: "pseudonymize", key_ref: "customers/email" },
+        },
+      });
+      throw new Error("browser pseudonymization should be unsupported");
+    } catch (error) {
+      if (
+        !(error instanceof DataFogError) ||
+        error.code !== "unsupported_strategy" ||
+        error.path !== "/transform/default/key_ref"
+      ) {
+        throw error;
+      }
     }
 
     try {

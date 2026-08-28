@@ -1,8 +1,14 @@
 //! Core PII scanning API for DataFog.
+use base64::Engine;
+use hmac::{Hmac, Mac};
 use regex::{Regex, RegexSet, RegexSetBuilder};
+use sha2::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::pin::Pin;
 use std::sync::LazyLock;
+use zeroize::Zeroize;
 
 /// A zero-based, end-exclusive range in the coordinate system named by its
 /// containing field.
@@ -34,7 +40,7 @@ pub struct Finding {
 }
 
 /// A privacy transformation applied to a finding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransformationStrategy {
     /// Replace the finding with its unnumbered entity-type placeholder.
     Redact,
@@ -42,6 +48,68 @@ pub enum TransformationStrategy {
     Remove,
     /// Replace non-revealed code points with a configured character.
     Mask(MaskConfig),
+    /// Replace the exact finding value with a deterministic keyed pseudonym.
+    Pseudonymize(PseudonymizeConfig),
+}
+
+/// Key selector for deterministic one-way pseudonymization.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PseudonymizeConfig {
+    key_ref: String,
+    key_version: Option<String>,
+}
+
+/// Reason a pseudonymization configuration is invalid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PseudonymizeConfigError {
+    /// The key reference is empty or contains only whitespace.
+    EmptyKeyRef,
+    /// The supplied key version is empty or contains only whitespace.
+    EmptyKeyVersion,
+}
+
+impl std::fmt::Display for PseudonymizeConfigError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyKeyRef => formatter.write_str("key reference must not be empty"),
+            Self::EmptyKeyVersion => formatter.write_str("key version must not be empty"),
+        }
+    }
+}
+
+impl std::error::Error for PseudonymizeConfigError {}
+
+impl PseudonymizeConfig {
+    /// Create a validated pseudonymization key selector.
+    pub fn new(
+        key_ref: impl Into<String>,
+        key_version: Option<String>,
+    ) -> Result<Self, PseudonymizeConfigError> {
+        let key_ref = key_ref.into();
+        if key_ref.trim().is_empty() {
+            return Err(PseudonymizeConfigError::EmptyKeyRef);
+        }
+        if key_version
+            .as_ref()
+            .is_some_and(|version| version.trim().is_empty())
+        {
+            return Err(PseudonymizeConfigError::EmptyKeyVersion);
+        }
+        Ok(Self {
+            key_ref,
+            key_version,
+        })
+    }
+
+    /// Provider-specific key reference.
+    pub fn key_ref(&self) -> &str {
+        &self.key_ref
+    }
+
+    /// Requested key version or alias, when supplied.
+    pub fn key_version(&self) -> Option<&str> {
+        self.key_version.as_deref()
+    }
 }
 
 const MAX_REGEX_RULES: usize = 100;
@@ -241,11 +309,21 @@ impl TransformationConfig {
                 })
     }
 
-    fn strategy_for(&self, finding: &Finding) -> TransformationStrategy {
+    fn strategy_for(&self, finding: &Finding) -> &TransformationStrategy {
         self.overrides
             .get(&finding.entity_type)
-            .copied()
-            .unwrap_or(self.default)
+            .unwrap_or(&self.default)
+    }
+
+    fn strategy_path_for(&self, finding: &Finding) -> String {
+        if self.overrides.contains_key(&finding.entity_type) {
+            format!(
+                "/overrides/{}/key_ref",
+                json_pointer_segment(&finding.entity_type)
+            )
+        } else {
+            "/default/key_ref".to_owned()
+        }
     }
 
     fn compile_regex_allowlists(&mut self) -> Result<(), PrivacyError> {
@@ -655,10 +733,48 @@ fn parse_strategy_config(
                     )
                 })
         }
+        "pseudonymize" => {
+            reject_unknown_fields(object, &["strategy", "key_ref", "key_version"], path)?;
+            let key_ref_path = format!("{path}/key_ref");
+            let key_ref = object.get("key_ref").ok_or_else(|| {
+                PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::MissingField,
+                    &key_ref_path,
+                    "pseudonymization requires key_ref",
+                )
+            })?;
+            let key_ref = require_string(key_ref, &key_ref_path, "key_ref must be a string")?;
+            let key_version = object
+                .get("key_version")
+                .map(|value| {
+                    require_string(
+                        value,
+                        &format!("{path}/key_version"),
+                        "key_version must be a string",
+                    )
+                })
+                .transpose()?;
+            PseudonymizeConfig::new(key_ref, key_version)
+                .map(TransformationStrategy::Pseudonymize)
+                .map_err(|error| match error {
+                    PseudonymizeConfigError::EmptyKeyRef => PrivacyError::invalid_configuration(
+                        PrivacyErrorReason::EmptyValue,
+                        key_ref_path,
+                        "key_ref must not be empty or whitespace-only",
+                    ),
+                    PseudonymizeConfigError::EmptyKeyVersion => {
+                        PrivacyError::invalid_configuration(
+                            PrivacyErrorReason::EmptyValue,
+                            format!("{path}/key_version"),
+                            "key_version must not be empty or whitespace-only",
+                        )
+                    }
+                })
+        }
         _ => Err(PrivacyError::invalid_configuration(
             PrivacyErrorReason::InvalidValue,
             strategy_path,
-            "strategy must be redact, mask, or remove",
+            "strategy must be redact, mask, remove, or pseudonymize",
         )),
     }
 }
@@ -776,11 +892,151 @@ impl Default for MaskConfig {
     }
 }
 
+/// One provider key requested by a prepared transformation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct KeySelector {
+    config: PseudonymizeConfig,
+    path: String,
+}
+
+impl KeySelector {
+    /// Provider-specific key reference.
+    pub fn key_ref(&self) -> &str {
+        self.config.key_ref()
+    }
+
+    /// Requested key version or alias, when supplied.
+    pub fn key_version(&self) -> Option<&str> {
+        self.config.key_version()
+    }
+
+    /// Configuration path used for sanitized provider errors.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+/// Resolved provider response containing short-lived secret key material.
+pub struct ResolvedKey {
+    key: Vec<u8>,
+    resolved_version: String,
+}
+
+impl ResolvedKey {
+    /// Create a provider response. The manager validates its contents before
+    /// any transformation is applied.
+    pub fn new(key: Vec<u8>, resolved_version: impl Into<String>) -> Self {
+        Self {
+            key,
+            resolved_version: resolved_version.into(),
+        }
+    }
+
+    fn key(&self) -> &[u8] {
+        &self.key
+    }
+
+    /// Concrete provider version used for this response.
+    pub fn resolved_version(&self) -> &str {
+        &self.resolved_version
+    }
+}
+
+impl std::fmt::Debug for ResolvedKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ResolvedKey")
+            .field("key", &"[REDACTED]")
+            .field("resolved_version", &self.resolved_version)
+            .finish()
+    }
+}
+
+impl Drop for ResolvedKey {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
+}
+
+/// Provider failure category independent of any cloud SDK.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyProviderErrorKind {
+    NotFound,
+    AccessDenied,
+    Unavailable,
+    ProviderError,
+}
+
+/// Sanitized failure returned by a key provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyProviderError {
+    kind: KeyProviderErrorKind,
+}
+
+impl KeyProviderError {
+    /// Create a sanitized provider failure.
+    pub fn new(kind: KeyProviderErrorKind) -> Self {
+        Self { kind }
+    }
+
+    /// Stable provider failure category.
+    pub fn kind(self) -> KeyProviderErrorKind {
+        self.kind
+    }
+}
+
+impl std::fmt::Display for KeyProviderError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("key provider could not resolve the requested key")
+    }
+}
+
+impl std::error::Error for KeyProviderError {}
+
+/// Future returned by a vendor-neutral asynchronous key provider.
+pub type KeyProviderFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<ResolvedKey, KeyProviderError>> + Send + 'a>>;
+
+/// Runtime boundary for resolving pseudonymization key references.
+pub trait KeyProvider: Send + Sync {
+    /// Resolve one key selector. Provider implementations own retries,
+    /// timeouts, authentication, decoding, and optional caching.
+    fn resolve_key(&self, selector: KeySelector) -> KeyProviderFuture<'_>;
+}
+
+/// Provider-backed privacy operation manager.
+#[derive(Debug)]
+pub struct PrivacyManager<P> {
+    provider: P,
+}
+
+impl<P> PrivacyManager<P> {
+    /// Create a manager with one runtime provider.
+    pub fn new(provider: P) -> Self {
+        Self { provider }
+    }
+
+    /// Borrow the configured provider.
+    pub fn provider(&self) -> &P {
+        &self.provider
+    }
+}
+
 /// One transformation applied to the source text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Transformation {
-    /// The source finding that was transformed.
-    pub finding: Finding,
+    /// Canonical PII type of the source finding.
+    pub entity_type: String,
+    /// Source range in UTF-8 bytes.
+    pub source_byte_range: TextRange,
+    /// Source range in Unicode code points.
+    pub source_codepoint_range: TextRange,
+    /// Detector confidence, when available.
+    pub confidence: Option<f32>,
+    /// Stable detector name.
+    pub detector_name: String,
+    /// Detector implementation version, when available.
+    pub detector_version: Option<String>,
     /// Strategy applied to the finding.
     pub strategy: TransformationStrategy,
     /// Exact replacement inserted into the output text.
@@ -789,6 +1045,10 @@ pub struct Transformation {
     pub output_byte_range: TextRange,
     /// Range of the replacement in Unicode code points in the output text.
     pub output_codepoint_range: TextRange,
+    /// Provider-specific key reference for pseudonymization only.
+    pub key_ref: Option<String>,
+    /// Concrete provider version for pseudonymization only.
+    pub resolved_key_version: Option<String>,
 }
 
 /// Text and audit records produced by a transformation.
@@ -828,6 +1088,20 @@ pub enum PrivacyErrorCode {
     InvalidConfiguration,
     /// One caller-supplied finding is invalid.
     InvalidFinding,
+    /// Pseudonymization was selected without a runtime provider.
+    KeyProviderRequired,
+    /// The requested provider key does not exist.
+    KeyNotFound,
+    /// The provider denied access to the requested key.
+    KeyAccessDenied,
+    /// The provider is temporarily unavailable.
+    KeyProviderUnavailable,
+    /// The provider returned malformed or weak key material.
+    InvalidKeyMaterial,
+    /// The provider failed without a more specific safe category.
+    KeyProviderError,
+    /// The selected runtime intentionally cannot execute this strategy.
+    UnsupportedStrategy,
     /// An unexpected non-caller-correctable failure occurred.
     InternalError,
 }
@@ -838,6 +1112,13 @@ impl PrivacyErrorCode {
         match self {
             Self::InvalidConfiguration => "invalid_configuration",
             Self::InvalidFinding => "invalid_finding",
+            Self::KeyProviderRequired => "key_provider_required",
+            Self::KeyNotFound => "key_not_found",
+            Self::KeyAccessDenied => "key_access_denied",
+            Self::KeyProviderUnavailable => "key_provider_unavailable",
+            Self::InvalidKeyMaterial => "invalid_key_material",
+            Self::KeyProviderError => "key_provider_error",
+            Self::UnsupportedStrategy => "unsupported_strategy",
             Self::InternalError => "internal_error",
         }
     }
@@ -959,6 +1240,74 @@ impl PrivacyError {
         }
     }
 
+    fn key_error(code: PrivacyErrorCode, path: impl Into<String>, message: &'static str) -> Self {
+        Self {
+            code,
+            reason: None,
+            path: Some(path.into()),
+            finding_index: None,
+            message: message.to_owned(),
+        }
+    }
+
+    fn provider_required(path: impl Into<String>) -> Self {
+        Self::key_error(
+            PrivacyErrorCode::KeyProviderRequired,
+            path,
+            "pseudonymization requires a runtime key provider",
+        )
+    }
+
+    fn invalid_key_material(path: impl Into<String>) -> Self {
+        Self::key_error(
+            PrivacyErrorCode::InvalidKeyMaterial,
+            path,
+            "key provider returned invalid key material",
+        )
+    }
+
+    fn internal(message: &'static str) -> Self {
+        Self {
+            code: PrivacyErrorCode::InternalError,
+            reason: None,
+            path: None,
+            finding_index: None,
+            message: message.to_owned(),
+        }
+    }
+
+    fn from_provider_error(path: impl Into<String>, error: KeyProviderError) -> Self {
+        let (code, message) = match error.kind() {
+            KeyProviderErrorKind::NotFound => (
+                PrivacyErrorCode::KeyNotFound,
+                "key provider could not find the requested key",
+            ),
+            KeyProviderErrorKind::AccessDenied => (
+                PrivacyErrorCode::KeyAccessDenied,
+                "key provider denied access to the requested key",
+            ),
+            KeyProviderErrorKind::Unavailable => (
+                PrivacyErrorCode::KeyProviderUnavailable,
+                "key provider is temporarily unavailable",
+            ),
+            KeyProviderErrorKind::ProviderError => (
+                PrivacyErrorCode::KeyProviderError,
+                "key provider could not resolve the requested key",
+            ),
+        };
+        Self::key_error(code, path, message)
+    }
+
+    /// Create a structured unsupported-strategy error for a binding that
+    /// intentionally cannot execute a canonical strategy.
+    pub fn unsupported_strategy(path: impl Into<String>) -> Self {
+        Self::key_error(
+            PrivacyErrorCode::UnsupportedStrategy,
+            path,
+            "the selected runtime does not support pseudonymization",
+        )
+    }
+
     fn prefixed(mut self, prefix: &str) -> Self {
         if let Some(path) = &mut self.path {
             *path = format!("{prefix}{path}");
@@ -1064,6 +1413,66 @@ pub fn transform(
     findings: &[Finding],
     config: &TransformationConfig,
 ) -> Result<TransformResult, PrivacyError> {
+    let selected_findings = select_findings(text, findings, config)?;
+    if let Some(selector) = key_selectors(config, &selected_findings).into_iter().next() {
+        return Err(PrivacyError::provider_required(selector.path));
+    }
+    apply_transformations(text, &selected_findings, config, &BTreeMap::new())
+}
+
+/// Return the distinct provider keys required after validation, filtering,
+/// allowlists, duplicate handling, and overlap resolution.
+pub fn required_key_selectors(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) -> Result<Vec<KeySelector>, PrivacyError> {
+    let selected_findings = select_findings(text, findings, config)?;
+    Ok(key_selectors(config, &selected_findings))
+}
+
+/// One resolved key associated with the selector that requested it.
+pub struct ResolvedKeyBinding {
+    selector: KeySelector,
+    key: ResolvedKey,
+}
+
+impl ResolvedKeyBinding {
+    /// Associate one provider response with its original selector.
+    pub fn new(selector: KeySelector, key: ResolvedKey) -> Self {
+        Self { selector, key }
+    }
+}
+
+impl std::fmt::Debug for ResolvedKeyBinding {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ResolvedKeyBinding")
+            .field("selector", &self.selector)
+            .field("key", &self.key)
+            .finish()
+    }
+}
+
+/// Apply a transformation using provider responses already resolved by a thin
+/// language binding or another trusted orchestration layer.
+pub fn transform_with_resolved_keys(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+    resolved_keys: Vec<ResolvedKeyBinding>,
+) -> Result<TransformResult, PrivacyError> {
+    let selected_findings = select_findings(text, findings, config)?;
+    let selectors = key_selectors(config, &selected_findings);
+    let resolved_keys = validate_resolved_keys(selectors, resolved_keys)?;
+    apply_transformations(text, &selected_findings, config, &resolved_keys)
+}
+
+fn select_findings(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) -> Result<Vec<Finding>, PrivacyError> {
     for (finding_index, finding) in findings.iter().enumerate() {
         if let Err(kind) = validate_finding(text, finding) {
             return Err(PrivacyError::invalid_finding(finding_index, kind));
@@ -1093,17 +1502,77 @@ pub fn transform(
             finding.entity_type.clone(),
         )
     });
-    let selected_findings = resolve_overlaps(selected_findings);
+    Ok(resolve_overlaps(selected_findings))
+}
 
+fn key_selectors(config: &TransformationConfig, selected_findings: &[Finding]) -> Vec<KeySelector> {
+    let mut selectors = BTreeMap::new();
+    for finding in selected_findings {
+        if let TransformationStrategy::Pseudonymize(pseudonymize) = config.strategy_for(finding) {
+            selectors
+                .entry(pseudonymize.clone())
+                .or_insert_with(|| KeySelector {
+                    config: pseudonymize.clone(),
+                    path: config.strategy_path_for(finding),
+                });
+        }
+    }
+    selectors.into_values().collect()
+}
+
+fn validate_resolved_key(selector: &KeySelector, key: &ResolvedKey) -> Result<(), PrivacyError> {
+    if key.key().len() != 32 || key.resolved_version().trim().is_empty() {
+        return Err(PrivacyError::invalid_key_material(selector.path.clone()));
+    }
+    Ok(())
+}
+
+fn validate_resolved_keys(
+    selectors: Vec<KeySelector>,
+    bindings: Vec<ResolvedKeyBinding>,
+) -> Result<BTreeMap<PseudonymizeConfig, ResolvedKey>, PrivacyError> {
+    let expected = selectors
+        .iter()
+        .map(|selector| (selector.config.clone(), selector))
+        .collect::<BTreeMap<_, _>>();
+    let mut resolved = BTreeMap::new();
+    for binding in bindings {
+        let Some(selector) = expected.get(&binding.selector.config) else {
+            return Err(PrivacyError::invalid_key_material(binding.selector.path));
+        };
+        validate_resolved_key(selector, &binding.key)?;
+        if resolved
+            .insert(binding.selector.config, binding.key)
+            .is_some()
+        {
+            return Err(PrivacyError::invalid_key_material(selector.path.clone()));
+        }
+    }
+    for selector in selectors {
+        if !resolved.contains_key(&selector.config) {
+            return Err(PrivacyError::provider_required(selector.path));
+        }
+    }
+    Ok(resolved)
+}
+
+fn apply_transformations(
+    text: &str,
+    selected_findings: &[Finding],
+    config: &TransformationConfig,
+    resolved_keys: &BTreeMap<PseudonymizeConfig, ResolvedKey>,
+) -> Result<TransformResult, PrivacyError> {
     let mut output = String::with_capacity(text.len());
     let mut transformations = Vec::with_capacity(selected_findings.len());
     let mut source_byte_cursor = 0;
 
-    for finding in &selected_findings {
+    for finding in selected_findings {
         output.push_str(&text[source_byte_cursor..finding.byte_range.start]);
         let output_byte_start = output.len();
         let output_codepoint_start = output.chars().count();
         let strategy = config.strategy_for(finding);
+        let mut key_ref = None;
+        let mut resolved_key_version = None;
         let replacement = match strategy {
             TransformationStrategy::Redact => format!("[{}]", finding.entity_type),
             TransformationStrategy::Remove => String::new(),
@@ -1125,12 +1594,29 @@ pub fn transform(
                     })
                     .collect()
             }
+            TransformationStrategy::Pseudonymize(pseudonymize) => {
+                let selector_path = config.strategy_path_for(finding);
+                let resolved = resolved_keys
+                    .get(pseudonymize)
+                    .ok_or_else(|| PrivacyError::provider_required(selector_path))?;
+                let mut mac = Hmac::<Sha256>::new_from_slice(resolved.key())
+                    .map_err(|_| PrivacyError::internal("could not initialize HMAC-SHA-256"))?;
+                mac.update(finding.matched_text.as_bytes());
+                key_ref = Some(pseudonymize.key_ref.clone());
+                resolved_key_version = Some(resolved.resolved_version.clone());
+                base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
+            }
         };
         output.push_str(&replacement);
 
         transformations.push(Transformation {
-            finding: finding.clone(),
-            strategy,
+            entity_type: finding.entity_type.clone(),
+            source_byte_range: finding.byte_range,
+            source_codepoint_range: finding.codepoint_range,
+            confidence: finding.confidence,
+            detector_name: finding.detector_name.clone(),
+            detector_version: finding.detector_version.clone(),
+            strategy: strategy.clone(),
             replacement,
             output_byte_range: TextRange {
                 start: output_byte_start,
@@ -1140,6 +1626,8 @@ pub fn transform(
                 start: output_codepoint_start,
                 end: output.chars().count(),
             },
+            key_ref,
+            resolved_key_version,
         });
         source_byte_cursor = finding.byte_range.end;
     }
@@ -1149,6 +1637,46 @@ pub fn transform(
         text: output,
         transformations,
     })
+}
+
+impl<P: KeyProvider> PrivacyManager<P> {
+    /// Transform caller-supplied findings after atomically resolving every
+    /// distinct key selected by the request.
+    pub async fn transform(
+        &self,
+        text: &str,
+        findings: &[Finding],
+        config: &TransformationConfig,
+    ) -> Result<TransformResult, PrivacyError> {
+        let selected_findings = select_findings(text, findings, config)?;
+        let selectors = key_selectors(config, &selected_findings);
+        let mut resolved = BTreeMap::new();
+        for selector in selectors {
+            let key = self
+                .provider
+                .resolve_key(selector.clone())
+                .await
+                .map_err(|error| PrivacyError::from_provider_error(selector.path.clone(), error))?;
+            validate_resolved_key(&selector, &key)?;
+            resolved.insert(selector.config, key);
+        }
+        apply_transformations(text, &selected_findings, config, &resolved)
+    }
+
+    /// Scan and transform after atomically resolving every selected key.
+    pub async fn scan_and_transform(
+        &self,
+        text: &str,
+        config: &ScanAndTransformConfig,
+    ) -> Result<TransformResult, PrivacyError> {
+        self.transform(
+            text,
+            &scan_with_config(text, config.scan_config()),
+            config.transformation_config(),
+        )
+        .await
+        .map_err(|error| error.prefixed("/transform"))
+    }
 }
 
 /// Scan text and transform the resulting findings in one explicit convenience operation.
@@ -1161,6 +1689,7 @@ pub fn scan_and_transform(
         &scan_with_config(text, config.scan_config()),
         config.transformation_config(),
     )
+    .map_err(|error| error.prefixed("/transform"))
 }
 
 fn findings_are_duplicates(left: &Finding, right: &Finding) -> bool {
@@ -1941,16 +2470,86 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finding, FindingValidationError, MAX_REGEX_PATTERN_BYTES, MAX_REGEX_RULES, MaskConfig,
+        Finding, FindingValidationError, KeyProvider, KeyProviderError, KeyProviderErrorKind,
+        KeyProviderFuture, KeySelector, MAX_REGEX_PATTERN_BYTES, MAX_REGEX_RULES, MaskConfig,
         MaskConfigError, MaskReveal, PrivacyError, PrivacyErrorCode, PrivacyErrorReason,
-        RegexAllowRule, ScanAndTransformConfig, TextRange, TransformationConfig,
-        TransformationStrategy, parse_scan_and_transform_config, parse_transformation_config, scan,
-        scan_and_transform, transform,
+        PrivacyManager, RegexAllowRule, ResolvedKey, ScanAndTransformConfig, TextRange,
+        TransformationConfig, TransformationStrategy, parse_scan_and_transform_config,
+        parse_transformation_config, scan, scan_and_transform, transform,
     };
+    use futures::executor::block_on;
     use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct TestKeyProvider {
+        responses: BTreeMap<(String, Option<String>), (Vec<u8>, String)>,
+        failure: Option<KeyProviderErrorKind>,
+        calls: Mutex<Vec<(String, Option<String>)>>,
+    }
+
+    impl TestKeyProvider {
+        fn with_key(
+            mut self,
+            key_ref: &str,
+            requested_version: Option<&str>,
+            key: Vec<u8>,
+            resolved_version: &str,
+        ) -> Self {
+            self.responses.insert(
+                (key_ref.to_owned(), requested_version.map(str::to_owned)),
+                (key, resolved_version.to_owned()),
+            );
+            self
+        }
+
+        fn failing(kind: KeyProviderErrorKind) -> Self {
+            Self {
+                failure: Some(kind),
+                ..Self::default()
+            }
+        }
+
+        fn call_count(&self) -> usize {
+            self.calls.lock().unwrap().len()
+        }
+    }
+
+    impl KeyProvider for TestKeyProvider {
+        fn resolve_key(&self, selector: KeySelector) -> KeyProviderFuture<'_> {
+            let identity = (
+                selector.key_ref().to_owned(),
+                selector.key_version().map(str::to_owned),
+            );
+            self.calls.lock().unwrap().push(identity.clone());
+            let response = self.responses.get(&identity).cloned();
+            let failure = self.failure;
+            Box::pin(async move {
+                if let Some(kind) = failure {
+                    return Err(KeyProviderError::new(kind));
+                }
+                let (key, version) = response
+                    .ok_or_else(|| KeyProviderError::new(KeyProviderErrorKind::NotFound))?;
+                Ok(ResolvedKey::new(key, version))
+            })
+        }
+    }
 
     fn config(strategy: TransformationStrategy) -> TransformationConfig {
         TransformationConfig::new(strategy)
+    }
+
+    fn assert_transformation_source(transformation: &super::Transformation, finding: &Finding) {
+        assert_eq!(transformation.entity_type, finding.entity_type);
+        assert_eq!(transformation.source_byte_range, finding.byte_range);
+        assert_eq!(
+            transformation.source_codepoint_range,
+            finding.codepoint_range
+        );
+        assert_eq!(transformation.confidence, finding.confidence);
+        assert_eq!(transformation.detector_name, finding.detector_name);
+        assert_eq!(transformation.detector_version, finding.detector_version);
     }
 
     fn expected_finding(
@@ -2237,7 +2836,7 @@ mod tests {
         assert_eq!(result.text, "Contact [EMAIL]");
         assert_eq!(result.transformations.len(), 1);
         let transformation = &result.transformations[0];
-        assert_eq!(transformation.finding, findings[0]);
+        assert_transformation_source(transformation, &findings[0]);
         assert_eq!(transformation.strategy, TransformationStrategy::Redact);
         assert_eq!(transformation.replacement, "[EMAIL]");
         assert_eq!(
@@ -2248,6 +2847,223 @@ mod tests {
             transformation.output_codepoint_range,
             TextRange { start: 8, end: 15 }
         );
+    }
+
+    #[test]
+    fn parses_pseudonymization_and_requires_a_runtime_provider() {
+        let config = parse_transformation_config(&json!({
+            "default": {
+                "strategy": "pseudonymize",
+                "key_ref": "customers/email",
+                "key_version": "7"
+            }
+        }))
+        .unwrap();
+        let text = "Email jane@example.com";
+        let error = transform(text, &scan(text), &config).unwrap_err();
+
+        assert_eq!(error.code(), PrivacyErrorCode::KeyProviderRequired);
+        assert_eq!(error.path(), Some("/default/key_ref"));
+
+        for invalid in [
+            json!({"default": {"strategy": "pseudonymize"}}),
+            json!({"default": {"strategy": "pseudonymize", "key_ref": " "}}),
+            json!({
+                "default": {
+                    "strategy": "pseudonymize",
+                    "key_ref": "customers/email",
+                    "key_version": ""
+                }
+            }),
+            json!({
+                "default": {
+                    "strategy": "pseudonymize",
+                    "key_ref": "customers/email",
+                    "algorithm": "sha512"
+                }
+            }),
+        ] {
+            assert!(parse_transformation_config(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn pseudonymizes_exact_utf8_with_full_padded_base64_hmac_sha256() {
+        let config = parse_transformation_config(&json!({
+            "default": {
+                "strategy": "pseudonymize",
+                "key_ref": "customers/email",
+                "key_version": "7"
+            }
+        }))
+        .unwrap();
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "customers/email",
+            Some("7"),
+            (0_u8..32).collect(),
+            "7",
+        ));
+
+        let result = block_on(manager.transform(
+            "Email jane@example.com",
+            &scan("Email jane@example.com"),
+            &config,
+        ))
+        .unwrap();
+
+        assert_eq!(
+            result.text,
+            "Email lIdYiXR1nTA9XURAF5GmA62F/aknbUP3Q2B31wnZ2hA="
+        );
+        let record = &result.transformations[0];
+        assert_eq!(record.replacement.len(), 44);
+        assert_eq!(record.key_ref.as_deref(), Some("customers/email"));
+        assert_eq!(record.resolved_key_version.as_deref(), Some("7"));
+        assert_eq!(record.entity_type, "EMAIL");
+        assert_eq!(record.source_byte_range, TextRange { start: 6, end: 22 });
+        assert_eq!(manager.provider().call_count(), 1);
+    }
+
+    #[test]
+    fn the_key_alone_defines_linkage_scope_across_entity_types() {
+        let text = "jane@example.com jane@example.com";
+        let mut findings = scan(text);
+        findings[1].entity_type = "CUSTOM_IDENTIFIER".to_owned();
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "pseudonymize", "key_ref": "shared"}
+        }))
+        .unwrap();
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "shared",
+            None,
+            vec![42; 32],
+            "2026-08-27",
+        ));
+
+        let result = block_on(manager.transform(text, &findings, &config)).unwrap();
+
+        assert_eq!(result.transformations.len(), 2);
+        assert_eq!(
+            result.transformations[0].replacement,
+            result.transformations[1].replacement
+        );
+        assert_eq!(manager.provider().call_count(), 1);
+    }
+
+    #[test]
+    fn exact_input_and_key_material_changes_produce_different_pseudonyms() {
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "pseudonymize", "key_ref": "key"}
+        }))
+        .unwrap();
+        let lower = "jane@example.com";
+        let upper = "Jane@example.com";
+        let lower_finding = supplied_ascii_finding(lower, "EMAIL", 0, lower.len(), None, "test");
+        let upper_finding = supplied_ascii_finding(upper, "EMAIL", 0, upper.len(), None, "test");
+        let manager_a =
+            PrivacyManager::new(TestKeyProvider::default().with_key("key", None, vec![1; 32], "1"));
+        let manager_b =
+            PrivacyManager::new(TestKeyProvider::default().with_key("key", None, vec![2; 32], "2"));
+
+        let lower_a = block_on(manager_a.transform(lower, &[lower_finding], &config)).unwrap();
+        let upper_a =
+            block_on(manager_a.transform(upper, &[upper_finding.clone()], &config)).unwrap();
+        let upper_b = block_on(manager_b.transform(upper, &[upper_finding], &config)).unwrap();
+
+        assert_ne!(
+            lower_a.transformations[0].replacement,
+            upper_a.transformations[0].replacement
+        );
+        assert_ne!(
+            upper_a.transformations[0].replacement,
+            upper_b.transformations[0].replacement
+        );
+    }
+
+    #[test]
+    fn multiple_selected_keys_are_deduplicated_and_resolved_before_application() {
+        let text = "jane@example.com jane@example.com (212) 555-0100";
+        let findings = scan(text);
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "pseudonymize", "key_ref": "email-key"},
+            "overrides": {
+                "PHONE": {"strategy": "pseudonymize", "key_ref": "phone-key", "key_version": "9"}
+            }
+        }))
+        .unwrap();
+        let manager = PrivacyManager::new(
+            TestKeyProvider::default()
+                .with_key("email-key", None, vec![3; 32], "4")
+                .with_key("phone-key", Some("9"), vec![4; 32], "9"),
+        );
+
+        let result = block_on(manager.transform(text, &findings, &config)).unwrap();
+
+        assert_eq!(result.transformations.len(), 3);
+        assert_eq!(manager.provider().call_count(), 2);
+        assert_eq!(
+            result.transformations[0].resolved_key_version.as_deref(),
+            Some("4")
+        );
+        assert_eq!(
+            result.transformations[1].resolved_key_version.as_deref(),
+            Some("4")
+        );
+        assert_eq!(
+            result.transformations[2].resolved_key_version.as_deref(),
+            Some("9")
+        );
+    }
+
+    #[test]
+    fn invalid_or_unavailable_keys_fail_closed_without_provider_retries() {
+        let text = "Email jane@example.com";
+        let findings = scan(text);
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "pseudonymize", "key_ref": "key"}
+        }))
+        .unwrap();
+        let invalid_manager =
+            PrivacyManager::new(TestKeyProvider::default().with_key("key", None, vec![0; 31], "1"));
+        let unavailable_manager =
+            PrivacyManager::new(TestKeyProvider::failing(KeyProviderErrorKind::Unavailable));
+
+        let invalid = block_on(invalid_manager.transform(text, &findings, &config)).unwrap_err();
+        let unavailable =
+            block_on(unavailable_manager.transform(text, &findings, &config)).unwrap_err();
+
+        assert_eq!(invalid.code(), PrivacyErrorCode::InvalidKeyMaterial);
+        assert_eq!(unavailable.code(), PrivacyErrorCode::KeyProviderUnavailable);
+        assert_eq!(unavailable_manager.provider().call_count(), 1);
+    }
+
+    #[test]
+    fn unused_pseudonymization_keys_are_not_resolved() {
+        let text = "Email support@example.com";
+        let findings = scan(text);
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "pseudonymize", "key_ref": "key"},
+            "allow": {"exact": {"EMAIL": ["support@example.com"]}}
+        }))
+        .unwrap();
+        let manager = PrivacyManager::new(TestKeyProvider::failing(
+            KeyProviderErrorKind::ProviderError,
+        ));
+
+        let result = block_on(manager.transform(text, &findings, &config)).unwrap();
+
+        assert_eq!(result.text, text);
+        assert!(result.transformations.is_empty());
+        assert_eq!(manager.provider().call_count(), 0);
+    }
+
+    #[test]
+    fn resolved_key_debug_output_redacts_material() {
+        let key = ResolvedKey::new(vec![7; 32], "1");
+        let debug = format!("{key:?}");
+
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains("7, 7"));
     }
 
     #[test]
@@ -2286,7 +3102,7 @@ mod tests {
 
         assert_eq!(result.text, "Email jane@example.com or call [PHONE]");
         assert_eq!(result.transformations.len(), 1);
-        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+        assert_eq!(result.transformations[0].entity_type, "PHONE");
     }
 
     #[test]
@@ -2302,7 +3118,7 @@ mod tests {
 
         assert_eq!(result.text, "[PHONE]@example.com");
         assert_eq!(result.transformations.len(), 1);
-        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+        assert_eq!(result.transformations[0].entity_type, "PHONE");
     }
 
     #[test]
@@ -2394,7 +3210,7 @@ mod tests {
             "Email support@example.com or call **********0100"
         );
         assert_eq!(result.transformations.len(), 1);
-        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+        assert_eq!(result.transformations[0].entity_type, "PHONE");
         assert_eq!(convenience, result);
     }
 
@@ -2570,7 +3386,7 @@ mod tests {
         let findings = scan(text);
         let strategy = TransformationStrategy::Mask(MaskConfig::default());
 
-        let result = transform(text, &findings, &config(strategy)).unwrap();
+        let result = transform(text, &findings, &config(strategy.clone())).unwrap();
 
         assert_eq!(result.text, "Email ****************");
         assert_eq!(result.transformations[0].strategy, strategy);
@@ -2796,7 +3612,7 @@ mod tests {
 
         assert_eq!(result.text, "Email [EMAIL]");
         assert_eq!(result.transformations.len(), 1);
-        assert_eq!(result.transformations[0].finding, higher_confidence);
+        assert_transformation_source(&result.transformations[0], &higher_confidence);
     }
 
     #[test]
@@ -2821,7 +3637,7 @@ mod tests {
 
         assert_eq!(result.text, "[ORGANIZATION] announced");
         assert_eq!(result.transformations.len(), 1);
-        assert_eq!(result.transformations[0].finding, outer);
+        assert_transformation_source(&result.transformations[0], &outer);
     }
 
     #[test]
@@ -2864,7 +3680,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.text, "[ZETA]");
-        assert_eq!(result.transformations[0].finding, higher);
+        assert_transformation_source(&result.transformations[0], &higher);
     }
 
     #[test]
@@ -2881,7 +3697,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.text, "[ALPHA]");
-        assert_eq!(result.transformations[0].finding, unscored);
+        assert_transformation_source(&result.transformations[0], &unscored);
     }
 
     #[test]
@@ -2898,7 +3714,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.text, "[ZETA]ef");
-        assert_eq!(result.transformations[0].finding, earlier);
+        assert_transformation_source(&result.transformations[0], &earlier);
     }
 
     #[test]

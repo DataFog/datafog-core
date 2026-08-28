@@ -45,6 +45,13 @@ export interface ScanAndTransformConfig {
 export type DataFogErrorCode =
   | "invalid_configuration"
   | "invalid_finding"
+  | "key_provider_required"
+  | "key_not_found"
+  | "key_access_denied"
+  | "key_provider_unavailable"
+  | "invalid_key_material"
+  | "key_provider_error"
+  | "unsupported_strategy"
   | "internal_error";
 
 export declare class DataFogError extends Error {
@@ -70,11 +77,18 @@ export interface Finding {
 }
 
 export interface Transformation {
-  readonly finding: Finding;
+  readonly entityType: EntityType;
+  readonly sourceByteRange: TextRange;
+  readonly sourceCodepointRange: TextRange;
+  readonly confidence?: number;
+  readonly detectorName: string;
+  readonly detectorVersion?: string;
   readonly strategy: TransformationStrategy;
   readonly replacement: string;
   readonly outputByteRange: TextRange;
   readonly outputCodepointRange: TextRange;
+  readonly keyRef?: string;
+  readonly resolvedKeyVersion?: string;
 }
 
 export interface TransformResult {
