@@ -13,6 +13,13 @@ Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score.
 
+The initial transformation strategy is `redact`, which replaces each selected
+finding with an unnumbered `[ENTITY_TYPE]` placeholder. `transform` requires
+explicit findings; `scan_and_transform` (or `scanAndTransform` in JavaScript)
+is the explicit scan-then-transform convenience. Results include the transformed
+text and an ordered record for every applied replacement, including its output
+byte and code-point ranges.
+
 ## Packages
 
 | Runtime | Distribution | Import | Status |
@@ -31,12 +38,18 @@ cargo add datafog-core
 ```
 
 ```rust
-use datafog_core::scan;
+use datafog_core::{scan, scan_and_transform, TransformationStrategy};
 
 let findings = scan("Email jane@example.com");
 assert_eq!(findings[0].entity_type, "EMAIL");
 assert_eq!(findings[0].matched_text, "jane@example.com");
 assert_eq!(findings[0].byte_range.start, 6);
+
+let result = scan_and_transform(
+    "Email jane@example.com",
+    TransformationStrategy::Redact,
+).unwrap();
+assert_eq!(result.text, "Email [EMAIL]");
 ```
 
 ### Python
@@ -46,12 +59,15 @@ python -m pip install datafog-core
 ```
 
 ```python
-from datafog_core import scan
+from datafog_core import scan, scan_and_transform
 
 findings = scan("Email jane@example.com")
 print(findings[0].entity_type)       # EMAIL
 print(findings[0].matched_text)      # jane@example.com
 print(findings[0].byte_range.start)  # 6
+
+result = scan_and_transform("Email jane@example.com", "redact")
+assert result.text == "Email [EMAIL]"
 ```
 
 ### Node.js
@@ -59,9 +75,10 @@ print(findings[0].byte_range.start)  # 6
 `@datafog/node` will install as a native package once its npm release is published.
 
 ```js
-import { scan } from "@datafog/node";
+import { scan, scanAndTransform } from "@datafog/node";
 
 console.log(scan("Email jane@example.com"));
+console.log(scanAndTransform("Email jane@example.com", "redact").text);
 ```
 
 The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows x64.
@@ -71,10 +88,11 @@ The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linu
 `@datafog/wasm` will install from npm once its first release is published.
 
 ```js
-import { init, scan } from "@datafog/wasm";
+import { init, scan, scanAndTransform } from "@datafog/wasm";
 
 await init();
 console.log(scan("Email jane@example.com"));
+console.log(scanAndTransform("Email jane@example.com", "redact").text);
 ```
 
 ## Development

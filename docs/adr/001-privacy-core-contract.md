@@ -12,6 +12,7 @@ The engine is organized around three operations:
 ```text
 scan(text)       -> findings
 transform(...)   -> transformed text and transformation records
+scan_and_transform(...) -> explicit scan-then-transform convenience
 restore(...)     -> authorized restoration of reversible tokens
 ```
 
@@ -20,6 +21,9 @@ restore(...)     -> authorized restoration of reversible tokens
 ### Operation taxonomy
 
 Canonical core operations are `scan`, `transform`, and `restore`.
+`transform` always requires caller-supplied findings and never scans
+implicitly. `scan_and_transform` is the explicitly named convenience operation
+for callers that want Core to perform both steps.
 
 Canonical transformation strategies are:
 
@@ -92,20 +96,22 @@ construction.
 changes.
 
 Exact duplicates have the same entity type, source range, and matched text and
-collapse into one finding. If duplicate detector results differ, the result
-with higher confidence is retained; remaining ties use stable detector-name
-ordering.
+collapse into one finding. If both duplicate detector results have confidence,
+the result with higher confidence is retained; remaining ties use stable
+detector provenance ordering.
 
 Overlapping findings are ranked by:
 
-1. longer source span;
-2. higher entity-type priority;
-3. higher confidence;
-4. earlier source position; and
-5. stable lexical ordering.
+1. a containing span over a span contained within it;
+2. longer Unicode code-point span;
+3. higher confidence when both findings provide confidence;
+4. earlier source position;
+5. lexical entity-type ordering; and
+6. lexical detector-name and detector-version ordering.
 
 The selected non-overlapping findings are returned in document order. Entity
-priority has a core default and may later be made configurable.
+types have equal priority by default. A later transformation configuration may
+provide explicit domain-specific priorities.
 
 ### Transformation result
 
@@ -122,21 +128,25 @@ Transformation {
   finding
   strategy
   replacement
-  output_range
+  output_byte_range
+  output_codepoint_range
 }
 ```
 
 Transformation records are ordered by source document position and include
-only transformations that were actually applied. The finding already supplies
-the original value and source range, so the canonical payload does not contain
-a second original-to-replacement mapping.
+only transformations that were actually applied. Output ranges are zero-based,
+end-exclusive, refer to the transformed text, and select exactly `replacement`.
+The finding already supplies the original value and source ranges, so the
+canonical payload does not contain a second original-to-replacement mapping.
 
 A mapping view may be offered as an explicit convenience API. Sensitive
 original values are excluded from default debug and log output.
 
 ### Security meaning of strategies
 
-- `redact` creates typed, document-local placeholders.
+- `redact` replaces every selected finding with the unnumbered placeholder
+  `[ENTITY_TYPE]`. Repeated occurrences intentionally receive the same
+  type-only placeholder; this makes no identity or equality claim.
 - `mask` hides all or a configured part of a value.
 - `hash` is a compatibility fingerprint with explicitly documented leakage and
   must not be presented as secure pseudonymization.

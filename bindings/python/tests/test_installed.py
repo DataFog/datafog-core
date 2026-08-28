@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from datafog_core import scan
+from datafog_core import Finding, TextRange, scan, scan_and_transform, transform
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -59,7 +59,34 @@ def main() -> None:
     emoji_finding = scan("👋 jane@example.com")[0]
     assert (emoji_finding.byte_range.start, emoji_finding.byte_range.end) == (5, 21)
     assert (emoji_finding.codepoint_range.start, emoji_finding.codepoint_range.end) == (2, 18)
-    print("Installed datafog_core wheel matches fixtures and the Finding contract.")
+
+    text = "👋 jane@example.com and jane@example.com"
+    explicit = transform(text, scan(text), "redact")
+    convenience = scan_and_transform(text, "redact")
+    assert explicit == convenience
+    assert explicit.text == "👋 [EMAIL] and [EMAIL]"
+    assert len(explicit.transformations) == 2
+    first = explicit.transformations[0]
+    assert first.replacement == "[EMAIL]"
+    assert (first.output_byte_range.start, first.output_byte_range.end) == (5, 12)
+    assert (first.output_codepoint_range.start, first.output_codepoint_range.end) == (2, 9)
+
+    invalid = Finding(
+        "EMAIL",
+        "jane@example.com",
+        TextRange(5, 21),
+        TextRange(2, 18),
+        "test-detector",
+        confidence=2.0,
+    )
+    try:
+        transform(text, [invalid], "redact")
+    except ValueError as error:
+        assert "InvalidConfidence" in str(error)
+    else:
+        raise AssertionError("invalid caller-supplied finding was accepted")
+
+    print("Installed datafog_core wheel matches fixtures and transform contracts.")
 
 
 if __name__ == "__main__":
