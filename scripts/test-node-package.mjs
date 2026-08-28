@@ -30,7 +30,7 @@ function writeConsumerTest() {
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { scan, scanAndTransform, transform } from "@datafog/node";
+import { DataFogError, scan, scanAndTransform, transform } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 
@@ -82,10 +82,18 @@ for (const name of ["development.jsonl", "final.jsonl"]) {
 const emojiFinding = scan("👋 jane@example.com")[0];
 assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
 assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
+assert.deepEqual(
+  scan("Email jane@example.com", { locale: "en-US" }),
+  scan("Email jane@example.com"),
+);
 
 const transformText = "👋 jane@example.com and jane@example.com";
-const explicit = transform(transformText, scan(transformText), { strategy: "redact" });
-const convenience = scanAndTransform(transformText, { strategy: "redact" });
+const explicit = transform(transformText, scan(transformText), {
+  default: { strategy: "redact" },
+});
+const convenience = scanAndTransform(transformText, {
+  transform: { default: { strategy: "redact" } },
+});
 assert.deepEqual(explicit, convenience);
 assert.equal(explicit.text, "👋 [EMAIL] and [EMAIL]");
 assert.equal(explicit.transformations.length, 2);
@@ -93,13 +101,19 @@ assert.equal(explicit.transformations[0].replacement, "[EMAIL]");
 assert.deepEqual(explicit.transformations[0].outputByteRange, { start: 5, end: 12 });
 assert.deepEqual(explicit.transformations[0].outputCodepointRange, { start: 2, end: 9 });
 assert.equal(
-  scanAndTransform("Email jane@example.com", { strategy: "mask" }).text,
+  scanAndTransform("Email jane@example.com", {
+    transform: { default: { strategy: "mask" } },
+  }).text,
   "Email ****************",
 );
 const partialMask = scanAndTransform("Email jane@example.com", {
-  strategy: "mask",
-  character: "•",
-  reveal: { direction: "last", count: 4 },
+  transform: {
+    default: {
+      strategy: "mask",
+      character: "•",
+      reveal: { direction: "last", count: 4 },
+    },
+  },
 });
 assert.equal(partialMask.text, "Email ••••••••••••.com");
 assert.equal(partialMask.transformations[0].strategy, "mask");
@@ -108,13 +122,19 @@ assert.deepEqual(partialMask.transformations[0].outputByteRange, { start: 6, end
 
 assert.equal(
   scanAndTransform("Email jane@example.com", {
-    strategy: "mask",
-    reveal: { direction: "first", count: 99 },
+    transform: {
+      default: {
+        strategy: "mask",
+        reveal: { direction: "first", count: 99 },
+      },
+    },
   }).text,
   "Email jane@example.com",
 );
 
-const removed = scanAndTransform("Email jane@example.com today", { strategy: "remove" });
+const removed = scanAndTransform("Email jane@example.com today", {
+  transform: { default: { strategy: "remove" } },
+});
 assert.equal(removed.text, "Email  today");
 assert.equal(removed.transformations[0].strategy, "remove");
 assert.equal(removed.transformations[0].replacement, "");
@@ -130,17 +150,58 @@ for (const invalidConfig of [
   { strategy: "mask", reveal: { direction: "middle", count: 4 } },
 ]) {
   assert.throws(
-    () => scanAndTransform("Email jane@example.com", invalidConfig),
-    TypeError,
+    () => scanAndTransform("Email jane@example.com", {
+      transform: { default: invalidConfig },
+    }),
+    DataFogError,
   );
 }
 assert.throws(
   () => transform(
     transformText,
     [{ ...scan(transformText)[0], confidence: 2 }],
-    { strategy: "redact" },
+    { default: { strategy: "redact" } },
   ),
-  /InvalidConfidence/,
+  (error) =>
+    error instanceof DataFogError &&
+    error.code === "invalid_finding" &&
+    error.reason === "invalid_confidence" &&
+    error.path === "/findings/0/confidence" &&
+    error.findingIndex === 0,
+);
+
+const selected = scanAndTransform(
+  "Email support@example.com or call (212) 555-0100",
+  {
+    scan: { locale: "en-US" },
+    transform: {
+      default: { strategy: "redact" },
+      entities: ["EMAIL", "PHONE"],
+      overrides: {
+        PHONE: {
+          strategy: "mask",
+          reveal: { direction: "last", count: 4 },
+        },
+      },
+      allow: {
+        exact: { EMAIL: ["support@example.com"] },
+        regex: {},
+      },
+    },
+  },
+);
+assert.equal(selected.text, "Email support@example.com or call **********0100");
+assert.equal(selected.transformations.length, 1);
+
+assert.throws(
+  () => transform(transformText, scan(transformText), {
+    default: { strategy: "redact" },
+    overides: {},
+  }),
+  (error) =>
+    error instanceof DataFogError &&
+    error.reason === "unknown_field" &&
+    error.path === "/overides",
 );
 
 console.log("Installed @datafog/node package matches fixtures and transform contracts.");
@@ -157,6 +218,7 @@ import {
   type EntityType,
   type Finding,
   type MaskRevealConfig,
+  type ScanAndTransformConfig,
   type TextRange,
   type TransformationConfig,
   type TransformResult,
@@ -168,19 +230,22 @@ const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
 const explicit: TransformResult = transform(
   "Email jane@example.com",
   findings,
-  { strategy: "redact" },
+  { default: { strategy: "redact" } },
 );
 const convenience: TransformResult = scanAndTransform(
   "Email jane@example.com",
-  { strategy: "redact" },
+  { transform: { default: { strategy: "redact" } } },
 );
 const reveal: MaskRevealConfig = { direction: "last", count: 4 };
 const maskConfig: TransformationConfig = {
-  strategy: "mask",
-  character: "•",
-  reveal,
+  default: {
+    strategy: "mask",
+    character: "•",
+    reveal,
+  },
 };
-const masked: TransformResult = scanAndTransform("Email jane@example.com", maskConfig);
+const combined: ScanAndTransformConfig = { transform: maskConfig };
+const masked: TransformResult = scanAndTransform("Email jane@example.com", combined);
 
 void entityType;
 void range;

@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from datafog_core import Finding, TextRange, scan, scan_and_transform, transform
+from datafog_core import (
+    DataFogConfigurationError,
+    DataFogFindingError,
+    Finding,
+    TextRange,
+    scan,
+    scan_and_transform,
+    transform,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -59,10 +67,15 @@ def main() -> None:
     emoji_finding = scan("👋 jane@example.com")[0]
     assert (emoji_finding.byte_range.start, emoji_finding.byte_range.end) == (5, 21)
     assert (emoji_finding.codepoint_range.start, emoji_finding.codepoint_range.end) == (2, 18)
+    assert scan("Email jane@example.com", {"locale": "en-US"}) == scan(
+        "Email jane@example.com"
+    )
 
     text = "👋 jane@example.com and jane@example.com"
-    explicit = transform(text, scan(text), {"strategy": "redact"})
-    convenience = scan_and_transform(text, {"strategy": "redact"})
+    explicit = transform(text, scan(text), {"default": {"strategy": "redact"}})
+    convenience = scan_and_transform(
+        text, {"transform": {"default": {"strategy": "redact"}}}
+    )
     assert explicit == convenience
     assert explicit.text == "👋 [EMAIL] and [EMAIL]"
     assert len(explicit.transformations) == 2
@@ -73,16 +86,20 @@ def main() -> None:
 
     masked = scan_and_transform(
         "Email jane@example.com",
-        {"strategy": "mask"},
+        {"transform": {"default": {"strategy": "mask"}}},
     )
     assert masked.text == "Email ****************"
 
     partially_masked = scan_and_transform(
         "Email jane@example.com",
         {
-            "strategy": "mask",
-            "character": "•",
-            "reveal": {"direction": "last", "count": 4},
+            "transform": {
+                "default": {
+                    "strategy": "mask",
+                    "character": "•",
+                    "reveal": {"direction": "last", "count": 4},
+                }
+            }
         },
     )
     assert partially_masked.text == "Email ••••••••••••.com"
@@ -96,15 +113,19 @@ def main() -> None:
     unchanged = scan_and_transform(
         "Email jane@example.com",
         {
-            "strategy": "mask",
-            "reveal": {"direction": "first", "count": 99},
+            "transform": {
+                "default": {
+                    "strategy": "mask",
+                    "reveal": {"direction": "first", "count": 99},
+                }
+            }
         },
     )
     assert unchanged.text == "Email jane@example.com"
 
     removed = scan_and_transform(
         "Email jane@example.com today",
-        {"strategy": "remove"},
+        {"transform": {"default": {"strategy": "remove"}}},
     )
     assert removed.text == "Email  today"
     assert removed.transformations[0].strategy == "remove"
@@ -135,9 +156,13 @@ def main() -> None:
     ]
     for invalid_config in invalid_configs:
         try:
-            scan_and_transform("Email jane@example.com", invalid_config)
-        except ValueError:
-            pass
+            scan_and_transform(
+                "Email jane@example.com",
+                {"transform": {"default": invalid_config}},
+            )
+        except DataFogConfigurationError as error:
+            assert error.code == "invalid_configuration"
+            assert error.path.startswith("/transform/default")
         else:
             raise AssertionError(f"invalid configuration was accepted: {invalid_config}")
 
@@ -150,11 +175,58 @@ def main() -> None:
         confidence=2.0,
     )
     try:
-        transform(text, [invalid], {"strategy": "redact"})
-    except ValueError as error:
-        assert "InvalidConfidence" in str(error)
+        transform(text, [invalid], {"default": {"strategy": "redact"}})
+    except DataFogFindingError as error:
+        assert error.code == "invalid_finding"
+        assert error.reason == "invalid_confidence"
+        assert error.path == "/findings/0/confidence"
+        assert error.finding_index == 0
     else:
         raise AssertionError("invalid caller-supplied finding was accepted")
+
+    selected = scan_and_transform(
+        "Email support@example.com or call (212) 555-0100",
+        {
+            "scan": {"locale": "en-US"},
+            "transform": {
+                "default": {"strategy": "redact"},
+                "entities": ["EMAIL", "PHONE"],
+                "overrides": {
+                    "PHONE": {
+                        "strategy": "mask",
+                        "reveal": {"direction": "last", "count": 4},
+                    }
+                },
+                "allow": {
+                    "exact": {"EMAIL": ["support@example.com"]},
+                    "regex": {},
+                },
+            },
+        },
+    )
+    assert selected.text == "Email support@example.com or call **********0100"
+    assert len(selected.transformations) == 1
+
+    try:
+        transform(
+            text,
+            scan(text),
+            {"default": {"strategy": "redact"}, "overides": {}},
+        )
+    except DataFogConfigurationError as error:
+        assert error.reason == "unknown_field"
+        assert error.path == "/overides"
+    else:
+        raise AssertionError("unknown configuration field was accepted")
+
+    try:
+        transform(text, scan(text), {"default": object()})
+    except DataFogConfigurationError as error:
+        assert error.code == "invalid_configuration"
+        assert error.reason == "invalid_type"
+        assert error.path == "/default"
+    else:
+        raise AssertionError("non-JSON configuration value was accepted")
 
     print("Installed datafog_core wheel matches fixtures and transform contracts.")
 

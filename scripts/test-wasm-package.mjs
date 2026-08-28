@@ -86,6 +86,7 @@ import {
   type EntityType,
   type Finding,
   type MaskRevealConfig,
+  type ScanAndTransformConfig,
   type TextRange,
   type TransformationConfig,
   type TransformResult,
@@ -98,19 +99,22 @@ const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
 const transformed: TransformResult = transform(
   "Email jane@example.com",
   findings,
-  { strategy: "redact" },
+  { default: { strategy: "redact" } },
 );
 const scannedAndTransformed: TransformResult = scanAndTransform(
   "Email jane@example.com",
-  { strategy: "redact" },
+  { transform: { default: { strategy: "redact" } } },
 );
 const reveal: MaskRevealConfig = { direction: "last", count: 4 };
 const maskConfig: TransformationConfig = {
-  strategy: "mask",
-  character: "•",
-  reveal,
+  default: {
+    strategy: "mask",
+    character: "•",
+    reveal,
+  },
 };
-const masked: TransformResult = scanAndTransform("Email jane@example.com", maskConfig);
+const combined: ScanAndTransformConfig = { transform: maskConfig };
+const masked: TransformResult = scanAndTransform("Email jane@example.com", combined);
 
 void ready;
 void entityType;
@@ -191,7 +195,7 @@ try {
   await page.goto(serverInfo.url);
 
   await page.evaluate(async () => {
-    const { init, scan, scanAndTransform, transform } = await import(
+    const { DataFogError, init, scan, scanAndTransform, transform } = await import(
       "/node_modules/@datafog/wasm/index.js"
     );
 
@@ -268,11 +272,21 @@ try {
     ) {
       throw new Error("Unicode ranges do not use the documented coordinate systems");
     }
+    if (
+      JSON.stringify(scan("Email jane@example.com", { locale: "en-US" })) !==
+      JSON.stringify(scan("Email jane@example.com"))
+    ) {
+      throw new Error("standalone scan configuration changed detector output");
+    }
 
     const text = "👋 jane@example.com and jane@example.com";
     const findings = scan(text);
-    const explicit = transform(text, findings, { strategy: "redact" });
-    const convenient = scanAndTransform(text, { strategy: "redact" });
+    const explicit = transform(text, findings, {
+      default: { strategy: "redact" },
+    });
+    const convenient = scanAndTransform(text, {
+      transform: { default: { strategy: "redact" } },
+    });
     if (JSON.stringify(explicit) !== JSON.stringify(convenient)) {
       throw new Error("explicit and convenience transforms differ");
     }
@@ -294,16 +308,22 @@ try {
     }
 
     if (
-      scanAndTransform("Email jane@example.com", { strategy: "mask" }).text !==
+      scanAndTransform("Email jane@example.com", {
+        transform: { default: { strategy: "mask" } },
+      }).text !==
       "Email ****************"
     ) {
       throw new Error("full masking did not replace every code point");
     }
 
     const partialMask = scanAndTransform("Email jane@example.com", {
-      strategy: "mask",
-      character: "•",
-      reveal: { direction: "last", count: 4 },
+      transform: {
+        default: {
+          strategy: "mask",
+          character: "•",
+          reveal: { direction: "last", count: 4 },
+        },
+      },
     });
     if (
       partialMask.text !== "Email ••••••••••••.com" ||
@@ -317,15 +337,19 @@ try {
 
     if (
       scanAndTransform("Email jane@example.com", {
-        strategy: "mask",
-        reveal: { direction: "first", count: 99 },
+        transform: {
+          default: {
+            strategy: "mask",
+            reveal: { direction: "first", count: 99 },
+          },
+        },
       }).text !== "Email jane@example.com"
     ) {
       throw new Error("oversized reveal count should preserve the finding");
     }
 
     const removed = scanAndTransform("Email jane@example.com today", {
-      strategy: "remove",
+      transform: { default: { strategy: "remove" } },
     });
     if (
       removed.text !== "Email  today" ||
@@ -347,20 +371,76 @@ try {
       { strategy: "mask", reveal: { direction: "middle", count: 4 } },
     ]) {
       expectThrows(
-        () => scanAndTransform("Email jane@example.com", invalidConfig),
-        "TypeError",
+        () =>
+          scanAndTransform("Email jane@example.com", {
+            transform: { default: invalidConfig },
+          }),
+        "DataFogError",
       );
     }
 
-    expectThrows(
-      () =>
-        transform(
-          text,
-          [{ ...findings[0], confidence: 2 }],
-          { strategy: "redact" },
-        ),
-      "Error",
+    try {
+      transform(
+        text,
+        [{ ...findings[0], confidence: 2 }],
+        { default: { strategy: "redact" } },
+      );
+      throw new Error("invalid finding should fail");
+    } catch (error) {
+      if (
+        !(error instanceof DataFogError) ||
+        error.code !== "invalid_finding" ||
+        error.reason !== "invalid_confidence" ||
+        error.path !== "/findings/0/confidence" ||
+        error.findingIndex !== 0
+      ) {
+        throw error;
+      }
+    }
+
+    const selected = scanAndTransform(
+      "Email support@example.com or call (212) 555-0100",
+      {
+        scan: { locale: "en-US" },
+        transform: {
+          default: { strategy: "redact" },
+          entities: ["EMAIL", "PHONE"],
+          overrides: {
+            PHONE: {
+              strategy: "mask",
+              reveal: { direction: "last", count: 4 },
+            },
+          },
+          allow: {
+            exact: { EMAIL: ["support@example.com"] },
+            regex: {},
+          },
+        },
+      },
     );
+    if (
+      selected.text !== "Email support@example.com or call **********0100" ||
+      selected.transformations.length !== 1
+    ) {
+      throw new Error("selection, overrides, or allowlists failed");
+    }
+
+    try {
+      transform(text, findings, {
+        default: { strategy: "redact" },
+        overides: {},
+      });
+      throw new Error("unknown configuration field should fail");
+    } catch (error) {
+      if (
+        !(error instanceof DataFogError) ||
+        error.code !== "invalid_configuration" ||
+        error.reason !== "unknown_field" ||
+        error.path !== "/overides"
+      ) {
+        throw error;
+      }
+    }
   });
 
   console.log("Installed @datafog/wasm package matches fixtures and the Finding contract.");

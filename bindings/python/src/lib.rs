@@ -1,7 +1,12 @@
 use ::datafog_core as core;
+use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBool, PyDict};
+use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyTuple};
+
+create_exception!(datafog_core, DataFogConfigurationError, PyValueError);
+create_exception!(datafog_core, DataFogFindingError, PyValueError);
+create_exception!(datafog_core, DataFogInternalError, PyRuntimeError);
 
 /// A zero-based, end-exclusive text range.
 #[pyclass(frozen, skip_from_py_object)]
@@ -241,108 +246,123 @@ impl TransformResult {
     }
 }
 
-fn validate_config_keys(config: &Bound<'_, PyDict>, allowed: &[&str]) -> PyResult<()> {
-    for (key, _) in config.iter() {
-        let key = key
-            .extract::<String>()
-            .map_err(|_| PyValueError::new_err("configuration keys must be strings"))?;
-        if !allowed.contains(&key.as_str()) {
-            return Err(PyValueError::new_err(format!(
-                "unexpected configuration field: {key}"
-            )));
-        }
-    }
-    Ok(())
+fn configuration_conversion_error(py: Python<'_>, path: &str, message: &str) -> PyErr {
+    let exception = PyErr::new::<DataFogConfigurationError, _>(message.to_owned());
+    let value = exception.value(py);
+    let _ = value.setattr("code", "invalid_configuration");
+    let _ = value.setattr("reason", "invalid_type");
+    let _ = value.setattr("path", path);
+    let _ = value.setattr("finding_index", py.None());
+    exception
 }
 
-fn required_item<'py>(config: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    config
-        .get_item(key)?
-        .ok_or_else(|| PyValueError::new_err(format!("missing configuration field: {key}")))
+fn internal_error(py: Python<'_>, message: &str) -> PyErr {
+    let exception = PyErr::new::<DataFogInternalError, _>(message.to_owned());
+    let value = exception.value(py);
+    let _ = value.setattr("code", "internal_error");
+    let _ = value.setattr("reason", py.None());
+    let _ = value.setattr("path", py.None());
+    let _ = value.setattr("finding_index", py.None());
+    exception
 }
 
-fn parse_strategy(config: &Bound<'_, PyAny>) -> PyResult<core::TransformationStrategy> {
-    let config = config
-        .cast::<PyDict>()
-        .map_err(|_| PyValueError::new_err("strategy configuration must be a dict"))?;
-    let strategy = required_item(config, "strategy")?
-        .extract::<String>()
-        .map_err(|_| PyValueError::new_err("strategy must be a string"))?;
-
-    match strategy.as_str() {
-        "redact" => {
-            validate_config_keys(config, &["strategy"])?;
-            Ok(core::TransformationStrategy::Redact)
-        }
-        "remove" => {
-            validate_config_keys(config, &["strategy"])?;
-            Ok(core::TransformationStrategy::Remove)
-        }
-        "mask" => {
-            validate_config_keys(config, &["strategy", "character", "reveal"])?;
-            let character = config
-                .get_item("character")?
-                .map(|value| value.extract::<String>())
-                .transpose()
-                .map_err(|_| PyValueError::new_err("mask character must be a string"))?
-                .unwrap_or_else(|| "*".to_owned());
-            let mut characters = character.chars();
-            let character = characters
-                .next()
-                .filter(|_| characters.next().is_none())
-                .ok_or_else(|| {
-                    PyValueError::new_err("mask character must contain exactly one code point")
-                })?;
-
-            let reveal = match config.get_item("reveal")? {
-                None => core::MaskReveal::None,
-                Some(reveal) => {
-                    let reveal = reveal.cast::<PyDict>().map_err(|_| {
-                        PyValueError::new_err("mask reveal configuration must be a dict")
-                    })?;
-                    validate_config_keys(reveal, &["direction", "count"])?;
-                    let direction = required_item(reveal, "direction")?
-                        .extract::<String>()
-                        .map_err(|_| PyValueError::new_err("reveal direction must be a string"))?;
-                    let count = required_item(reveal, "count")?;
-                    if count.is_instance_of::<PyBool>() {
-                        return Err(PyValueError::new_err(
-                            "reveal count must be a non-negative integer",
-                        ));
-                    }
-                    let count = count.extract::<usize>().map_err(|_| {
-                        PyValueError::new_err("reveal count must be a non-negative integer")
-                    })?;
-                    match direction.as_str() {
-                        "first" => core::MaskReveal::First(count),
-                        "last" => core::MaskReveal::Last(count),
-                        _ => {
-                            return Err(PyValueError::new_err(
-                                "reveal direction must be 'first' or 'last'",
-                            ));
-                        }
-                    }
-                }
-            };
-            core::MaskConfig::new(character, reveal)
-                .map(core::TransformationStrategy::Mask)
-                .map_err(|_| {
-                    PyValueError::new_err(
-                        "mask character must not be whitespace or a control character",
-                    )
-                })
-        }
-        _ => Err(PyValueError::new_err(
-            "strategy must be 'redact', 'mask', or 'remove'",
-        )),
+fn py_to_json(py: Python<'_>, value: &Bound<'_, PyAny>, path: &str) -> PyResult<serde_json::Value> {
+    if value.is_none() {
+        return Ok(serde_json::Value::Null);
     }
+    if value.is_instance_of::<PyBool>() {
+        return value.extract::<bool>().map(serde_json::Value::Bool);
+    }
+    if let Ok(value) = value.extract::<String>() {
+        return Ok(serde_json::Value::String(value));
+    }
+    if let Ok(value) = value.extract::<i64>() {
+        return Ok(serde_json::Value::Number(value.into()));
+    }
+    if let Ok(value) = value.extract::<u64>() {
+        return Ok(serde_json::Value::Number(value.into()));
+    }
+    if let Ok(value) = value.extract::<f64>() {
+        return serde_json::Number::from_f64(value)
+            .map(serde_json::Value::Number)
+            .ok_or_else(|| {
+                configuration_conversion_error(py, path, "configuration number must be finite")
+            });
+    }
+    if let Ok(dictionary) = value.cast::<PyDict>() {
+        let mut object = serde_json::Map::new();
+        for (key, value) in dictionary.iter() {
+            let key = key.extract::<String>().map_err(|_| {
+                configuration_conversion_error(py, path, "configuration keys must be strings")
+            })?;
+            let child_path = format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"));
+            object.insert(key, py_to_json(py, &value, &child_path)?);
+        }
+        return Ok(serde_json::Value::Object(object));
+    }
+    if let Ok(list) = value.cast::<PyList>() {
+        return list
+            .iter()
+            .enumerate()
+            .map(|(index, value)| py_to_json(py, &value, &format!("{path}/{index}")))
+            .collect::<PyResult<Vec<_>>>()
+            .map(serde_json::Value::Array);
+    }
+    if let Ok(tuple) = value.cast::<PyTuple>() {
+        return tuple
+            .iter()
+            .enumerate()
+            .map(|(index, value)| py_to_json(py, &value, &format!("{path}/{index}")))
+            .collect::<PyResult<Vec<_>>>()
+            .map(serde_json::Value::Array);
+    }
+    Err(configuration_conversion_error(
+        py,
+        path,
+        "configuration values must be JSON-compatible",
+    ))
+}
+
+fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
+    let exception = match error.code() {
+        core::PrivacyErrorCode::InvalidConfiguration => {
+            PyErr::new::<DataFogConfigurationError, _>(error.to_string())
+        }
+        core::PrivacyErrorCode::InvalidFinding => {
+            PyErr::new::<DataFogFindingError, _>(error.to_string())
+        }
+        core::PrivacyErrorCode::InternalError => {
+            PyErr::new::<DataFogInternalError, _>(error.to_string())
+        }
+    };
+    let value = exception.value(py);
+    let _ = value.setattr("code", error.code().as_str());
+    let _ = value.setattr(
+        "reason",
+        error.reason().map(core::PrivacyErrorReason::as_str),
+    );
+    let _ = value.setattr("path", error.path());
+    let _ = value.setattr("finding_index", error.finding_index());
+    exception
 }
 
 /// Scan text for supported PII findings.
 #[pyfunction]
-fn scan(text: &str) -> PyResult<Vec<Finding>> {
-    std::panic::catch_unwind(|| core::scan(text).into_iter().map(Finding::from).collect())
-        .map_err(|_| PyRuntimeError::new_err("unexpected Rust scan failure"))
+#[pyo3(signature = (text, config=None))]
+fn scan(py: Python<'_>, text: &str, config: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Finding>> {
+    let config = if let Some(config) = config {
+        let config = py_to_json(py, config, "")?;
+        core::parse_scan_config(&config).map_err(|error| privacy_error(py, error))?
+    } else {
+        core::ScanConfig::default()
+    };
+    std::panic::catch_unwind(|| {
+        core::scan_with_config(text, &config)
+            .into_iter()
+            .map(Finding::from)
+            .collect()
+    })
+    .map_err(|_| internal_error(py, "unexpected Rust scan failure"))
 }
 
 /// Transform explicit findings without scanning implicitly.
@@ -353,26 +373,47 @@ fn transform(
     findings: Vec<Py<Finding>>,
     config: &Bound<'_, PyAny>,
 ) -> PyResult<TransformResult> {
-    let strategy = parse_strategy(config)?;
+    let config = py_to_json(py, config, "")?;
+    let config =
+        core::parse_transformation_config(&config).map_err(|error| privacy_error(py, error))?;
     let core_findings: Vec<core::Finding> = findings
         .iter()
         .map(|finding| finding.bind(py).borrow().to_core())
         .collect();
-    core::transform(text, &core_findings, strategy)
+    core::transform(text, &core_findings, &config)
         .map(TransformResult::from)
-        .map_err(|error| PyValueError::new_err(error.to_string()))
+        .map_err(|error| privacy_error(py, error))
 }
 
 /// Scan text and transform the detected findings.
 #[pyfunction]
-fn scan_and_transform(text: &str, config: &Bound<'_, PyAny>) -> PyResult<TransformResult> {
-    core::scan_and_transform(text, parse_strategy(config)?)
+fn scan_and_transform(
+    py: Python<'_>,
+    text: &str,
+    config: &Bound<'_, PyAny>,
+) -> PyResult<TransformResult> {
+    let config = py_to_json(py, config, "")?;
+    let config =
+        core::parse_scan_and_transform_config(&config).map_err(|error| privacy_error(py, error))?;
+    core::scan_and_transform(text, &config)
         .map(TransformResult::from)
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+        .map_err(|error| privacy_error(py, error))
 }
 
 #[pymodule]
 fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add(
+        "DataFogConfigurationError",
+        module.py().get_type::<DataFogConfigurationError>(),
+    )?;
+    module.add(
+        "DataFogFindingError",
+        module.py().get_type::<DataFogFindingError>(),
+    )?;
+    module.add(
+        "DataFogInternalError",
+        module.py().get_type::<DataFogInternalError>(),
+    )?;
     module.add_class::<TextRange>()?;
     module.add_class::<Finding>()?;
     module.add_class::<Transformation>()?;

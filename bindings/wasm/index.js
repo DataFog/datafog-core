@@ -24,7 +24,40 @@ export function init() {
   return initialization;
 }
 
-export function scan(text) {
+export class DataFogError extends Error {
+  constructor({ code, reason, message, path, findingIndex }) {
+    super(message);
+    this.name = "DataFogError";
+    this.code = code;
+    this.reason = reason;
+    this.path = path;
+    this.findingIndex = findingIndex;
+  }
+}
+
+function normalizeError(error, fallbackCode) {
+  if (error instanceof DataFogError) return error;
+  const source = error instanceof Error ? error.message : String(error);
+  try {
+    const details = JSON.parse(source);
+    if (typeof details.code === "string" && typeof details.message === "string") {
+      return new DataFogError(details);
+    }
+  } catch {
+    // Raw WASM conversion errors use the operation-specific fallback below.
+  }
+  return new DataFogError({
+    code: fallbackCode,
+    reason: fallbackCode === "invalid_configuration" ? "invalid_type" : undefined,
+    message:
+      fallbackCode === "invalid_configuration"
+        ? "request configuration could not be decoded"
+        : "the WASM operation failed unexpectedly",
+    path: fallbackCode === "invalid_configuration" ? "" : undefined,
+  });
+}
+
+export function scan(text, config) {
   if (typeof text !== "string") {
     throw new TypeError("scan text must be a string");
   }
@@ -33,71 +66,20 @@ export function scan(text) {
     throw new Error("Call and await init() before scan().");
   }
 
-  return scanWasm(text);
+  try {
+    return scanWasm(text, config);
+  } catch (error) {
+    throw normalizeError(
+      error,
+      config === undefined ? "internal_error" : "invalid_configuration",
+    );
+  }
 }
 
 function assertInitialized(operation) {
   if (!initialized) {
     throw new Error(`Call and await init() before ${operation}().`);
   }
-}
-
-function validateConfig(config) {
-  if (typeof config !== "object" || config === null || Array.isArray(config)) {
-    throw new TypeError("transformation configuration must be an object");
-  }
-  if (!["redact", "mask", "remove"].includes(config.strategy)) {
-    throw new TypeError("strategy must be 'redact', 'mask', or 'remove'");
-  }
-
-  const allowed =
-    config.strategy === "mask"
-      ? new Set(["strategy", "character", "reveal"])
-      : new Set(["strategy"]);
-  for (const key of Object.keys(config)) {
-    if (!allowed.has(key)) {
-      throw new TypeError(`unexpected configuration field: ${key}`);
-    }
-  }
-
-  if (config.strategy === "mask") {
-    if (config.character !== undefined) {
-      if (
-        typeof config.character !== "string" ||
-        Array.from(config.character).length !== 1 ||
-        /[\p{White_Space}\p{Cc}]/u.test(config.character)
-      ) {
-        throw new TypeError(
-          "mask character must be one non-whitespace, non-control code point",
-        );
-      }
-    }
-    if (config.reveal !== undefined) {
-      if (
-        typeof config.reveal !== "object" ||
-        config.reveal === null ||
-        Array.isArray(config.reveal)
-      ) {
-        throw new TypeError("mask reveal configuration must be an object");
-      }
-      for (const key of Object.keys(config.reveal)) {
-        if (key !== "direction" && key !== "count") {
-          throw new TypeError(`unexpected reveal field: ${key}`);
-        }
-      }
-      if (!["first", "last"].includes(config.reveal.direction)) {
-        throw new TypeError("reveal direction must be 'first' or 'last'");
-      }
-      if (
-        !Number.isSafeInteger(config.reveal.count) ||
-        config.reveal.count < 0
-      ) {
-        throw new TypeError("reveal count must be a non-negative safe integer");
-      }
-    }
-  }
-
-  return config;
 }
 
 export function transform(text, findings, config) {
@@ -110,9 +92,9 @@ export function transform(text, findings, config) {
   assertInitialized("transform");
 
   try {
-    return transformWasm(text, findings, validateConfig(config));
+    return transformWasm(text, findings, config);
   } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error));
+    throw normalizeError(error, "invalid_configuration");
   }
 }
 
@@ -123,8 +105,8 @@ export function scanAndTransform(text, config) {
   assertInitialized("scanAndTransform");
 
   try {
-    return scanAndTransformWasm(text, validateConfig(config));
+    return scanAndTransformWasm(text, config);
   } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error));
+    throw normalizeError(error, "invalid_configuration");
   }
 }
