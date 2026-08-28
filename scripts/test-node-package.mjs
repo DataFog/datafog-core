@@ -36,6 +36,32 @@ const fixturesDirectory = process.argv[2];
 
 assert.throws(() => scan(123), TypeError);
 
+function legacyProjection(finding) {
+  return {
+    label: finding.entityType,
+    text: finding.matchedText,
+    start: finding.codepointRange.start,
+    end: finding.codepointRange.end,
+  };
+}
+
+function verifyContract(text, finding) {
+  const bytes = Buffer.from(text, "utf8");
+  assert.equal(
+    bytes.subarray(finding.byteRange.start, finding.byteRange.end).toString("utf8"),
+    finding.matchedText,
+  );
+  assert.equal(
+    Array.from(text)
+      .slice(finding.codepointRange.start, finding.codepointRange.end)
+      .join(""),
+    finding.matchedText,
+  );
+  assert.equal(finding.confidence, undefined);
+  assert.ok(finding.detectorName.startsWith("datafog-core/"));
+  assert.ok(finding.detectorVersion);
+}
+
 for (const name of ["development.jsonl", "final.jsonl"]) {
   const records = readFileSync(path.join(fixturesDirectory, name), "utf8")
     .split("\\n")
@@ -43,23 +69,35 @@ for (const name of ["development.jsonl", "final.jsonl"]) {
     .map((line) => JSON.parse(line));
 
   for (const record of records) {
-    assert.deepEqual(scan(record.text), record.entities, \`\${name}: \${record.id}\`);
+    const findings = scan(record.text);
+    assert.deepEqual(
+      findings.map(legacyProjection),
+      record.entities,
+      \`\${name}: \${record.id}\`,
+    );
+    findings.forEach((finding) => verifyContract(record.text, finding));
   }
 }
 
-console.log("Installed @datafog/node package matches both fixtures.");
+const emojiFinding = scan("👋 jane@example.com")[0];
+assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
+assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
+
+console.log("Installed @datafog/node package matches fixtures and the Finding contract.");
 `.trimStart(),
   );
 
   writeFileSync(
     path.join(temporaryDirectory, "type-smoke.ts"),
     `
-import { scan, type Entity, type Label } from "@datafog/node";
+import { scan, type EntityType, type Finding, type TextRange } from "@datafog/node";
 
-const entities: Entity[] = scan("Email jane@example.com");
-const label: Label = entities[0]?.label ?? "EMAIL";
+const findings: Finding[] = scan("Email jane@example.com");
+const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
+const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
 
-void label;
+void entityType;
+void range;
 `.trimStart(),
   );
 

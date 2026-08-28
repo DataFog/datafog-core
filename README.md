@@ -2,13 +2,16 @@
 
 Fast structured PII detection, implemented in Rust and exposed for Rust, Python, Node.js, and browsers.
 
-It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. Every binding returns the same entity shape:
+It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. Every binding returns the same finding information:
 
 ```text
-label, text, start, end
+entity type, matched text, byte range, code-point range,
+optional confidence, detector name, optional detector version
 ```
 
-`start` and `end` are zero-based Unicode code-point offsets; `end` is exclusive.
+Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
+UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
+detectors currently report no confidence score.
 
 ## Packages
 
@@ -30,9 +33,10 @@ cargo add datafog-core
 ```rust
 use datafog_core::scan;
 
-let entities = scan("Email jane@example.com");
-assert_eq!(entities[0].label, "EMAIL");
-assert_eq!(entities[0].text, "jane@example.com");
+let findings = scan("Email jane@example.com");
+assert_eq!(findings[0].entity_type, "EMAIL");
+assert_eq!(findings[0].matched_text, "jane@example.com");
+assert_eq!(findings[0].byte_range.start, 6);
 ```
 
 ### Python
@@ -44,9 +48,10 @@ python -m pip install datafog-core
 ```python
 from datafog_core import scan
 
-entities = scan("Email jane@example.com")
-print(entities[0].label)  # EMAIL
-print(entities[0].text)   # jane@example.com
+findings = scan("Email jane@example.com")
+print(findings[0].entity_type)       # EMAIL
+print(findings[0].matched_text)      # jane@example.com
+print(findings[0].byte_range.start)  # 6
 ```
 
 ### Node.js
