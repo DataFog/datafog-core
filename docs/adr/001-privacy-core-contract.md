@@ -52,6 +52,7 @@ with typed enum variants; object-oriented bindings serialize it as:
   key_ref: "provider-specific-key-reference",
   key_version?: "provider-specific-version-or-alias"
 }
+{ strategy: "tokenize", token_ref: "provider-profile-reference" }
 ```
 
 Fields that do not belong to the selected strategy are rejected rather than
@@ -354,6 +355,8 @@ Transformation {
   output_codepoint_range
   key_ref?                 // pseudonymize only
   resolved_key_version?    // pseudonymize only
+  token_ref?               // tokenize only
+  resolved_token_version?  // tokenize only
 }
 ```
 
@@ -367,6 +370,8 @@ the source value already possess the input and can use the source ranges.
 Pseudonymization records include the configured key reference and the concrete
 version returned by the provider. They never include key material or a
 plaintext-to-token mapping. Non-pseudonymization records omit both key fields.
+Tokenization records include the configured token reference and concrete
+provider profile version; other strategies omit both token fields.
 
 ### Security meaning of strategies
 
@@ -401,9 +406,11 @@ plaintext-to-token mapping. Non-pseudonymization records omit both key fields.
   performs no trimming, case folding, Unicode normalization, semantic
   canonicalization, domain separation, digest truncation, or algorithm
   negotiation.
-- `tokenize` creates opaque reversible or vault-backed tokens.
-- `restore` accepts only explicitly reversible tokens and requires
-  authorization.
+- `tokenize` replaces each selected occurrence with an independently issued,
+  opaque reversible token. It makes no stability guarantee; callers needing
+  stable equality use `pseudonymize`.
+- `restore(text, context={scope})` restores every canonical token in the text
+  atomically. It has no entity, profile, partial, or ignore-failure filters.
 
 Pseudonymization is value pseudonymization, not identity resolution. The core
 does not infer that different identifiers belong to the same person.
@@ -453,6 +460,79 @@ memory. Core ships no cloud-vendor SDK adapter in this slice; AWS, Google, and
 other integrations belong in separate packages behind the same provider
 contract.
 
+### Reversible token contract
+
+Serializable tokenization configuration is exactly `{ strategy: "tokenize",
+token_ref }`. `token_ref` is a required, non-secret provider profile selector.
+The caller cannot choose algorithms, determinism, TTL, storage, or a concrete
+profile version. The provider chooses an active version during tokenization;
+Core embeds that returned version so restoration can address historical
+versions after rotation.
+
+Token operations use a separate request context `{ scope }`. Scope is required
+only when tokenization is selected and for every restore call. It is an exact,
+case-sensitive UTF-8 string; empty and whitespace-only values are rejected,
+while Core performs no trimming, case folding, or Unicode normalization. Scope
+is not embedded in tokens, returned in results, or placed in errors or debug
+output.
+
+The canonical envelope is:
+
+```text
+DFTOKENv1(<body-length>):<ref>.<version>.<payload>
+```
+
+Each body component is canonical unpadded Base64URL. `ref` and `version`
+decode to non-empty UTF-8 strings; payload decodes to non-empty opaque bytes.
+The decimal byte length uses checked arithmetic and must fit within the
+remaining input before decoding. Invalid separators, overflow, padding, empty
+components, invalid metadata UTF-8, and truncation reject the whole request.
+Unknown envelope versions return `unsupported_token_version`. Core imposes no
+arbitrary universal payload or token-count limit; providers may enforce
+profile-specific service limits before creating anything.
+
+The asynchronous `TokenProvider` accepts one tokenization batch per request as
+`(scope, [{ id, exact_value, token_ref }])`. Equal plaintext occurrences are
+not deduplicated. Each response supplies the matching request-local `id`,
+opaque payload bytes, and a non-empty concrete profile version. Missing,
+duplicate, unexpected, or malformed responses fail before text mutation. The
+provider must bind the exact scope, token reference, and resolved version to
+its stored record or authenticated cryptographic payload; envelope metadata is
+routing information, not authorization proof.
+
+Restoration strictly parses the complete text, deduplicates identical
+envelopes, and makes one provider call as `(scope, [{ id, token_ref,
+resolved_version, payload }])`. The provider returns `{ id, value }`. Core
+validates the complete response before replacing anything. Restoration is not
+recursive: restored plaintext that resembles a token remains plaintext for
+that call. Tokenization rejects selected findings overlapping an existing
+valid DataFog token.
+
+Provider failures use sanitized categories: `token_not_found`,
+`token_expired`, `token_access_denied` (including revocation and wrong scope),
+`token_provider_unavailable`, and `token_provider_error`. Core additionally
+uses `token_provider_required`, `invalid_token`, `unsupported_token_version`,
+and `invalid_token_material`. No category includes plaintext, scope, opaque
+payload, credentials, or raw provider exception text. Core does not retry,
+cache token or plaintext material, log, emit telemetry, or persist audit data.
+Providers own retries, idempotency, transaction or staging behavior, cleanup,
+lifecycle, and audit. Core guarantees atomic returned output, not rollback of
+external entries created before cancellation or failure.
+
+One `PrivacyManager` composes optional key-provider and token-provider
+capabilities. For mixed requests it resolves every pseudonymization key before
+stateful token creation and applies text only after all responses validate.
+Rust, Python, and Node expose this asynchronous flow. Browser WASM parses
+consistently but returns `unsupported_strategy` for selected tokenization and
+every restoration call. Core includes no built-in AWS, Google,
+database, vault, or cryptographic adapter.
+
+`RestoreResult` contains restored text and ordered restoration records. Each
+record carries token source and restored output byte/code-point ranges,
+`token_ref`, and the concrete token profile version. It does not duplicate
+restored plaintext or expose payload, scope, credentials, provider topology,
+or a token-to-plaintext mapping.
+
 ## Capability-continuity stance
 
 Python behavior is classified as preserved, redesigned, compatibility-only, or
@@ -478,6 +558,5 @@ and documented separately.
 
 This ADR does not choose:
 
-- reversible-token storage or cryptographic construction;
 - production audit storage; or
 - custom literal replacement or whitespace-normalizing removal.

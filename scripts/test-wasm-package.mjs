@@ -82,6 +82,7 @@ import {
   init,
   scan,
   scanAndTransform,
+  restore,
   transform,
   type EntityType,
   type Finding,
@@ -90,6 +91,7 @@ import {
   type TextRange,
   type TransformationConfig,
   type TransformResult,
+  type RestoreResult,
 } from "@datafog/wasm";
 
 const ready: Promise<void> = init();
@@ -115,6 +117,7 @@ const maskConfig: TransformationConfig = {
 };
 const combined: ScanAndTransformConfig = { transform: maskConfig };
 const masked: TransformResult = scanAndTransform("Email jane@example.com", combined);
+const unchanged: RestoreResult = restore("ordinary text", { scope: "tenant" });
 
 void ready;
 void entityType;
@@ -122,6 +125,7 @@ void range;
 void transformed;
 void scannedAndTransformed;
 void masked;
+void unchanged;
 `.trimStart(),
   );
 
@@ -195,7 +199,7 @@ try {
   await page.goto(serverInfo.url);
 
   await page.evaluate(async () => {
-    const { DataFogError, init, scan, scanAndTransform, transform } = await import(
+    const { DataFogError, init, restore, scan, scanAndTransform, transform } = await import(
       "/node_modules/@datafog/wasm/index.js"
     );
 
@@ -444,6 +448,35 @@ try {
         error.code !== "unsupported_strategy" ||
         error.path !== "/transform/default/key_ref"
       ) {
+        throw error;
+      }
+    }
+
+    try {
+      scanAndTransform("Email jane@example.com", {
+        transform: {
+          default: { strategy: "tokenize", token_ref: "customers/default" },
+        },
+      });
+      throw new Error("browser tokenization should be unsupported");
+    } catch (error) {
+      if (!(error instanceof DataFogError) || error.code !== "unsupported_strategy") {
+        throw error;
+      }
+    }
+    try {
+      restore("ordinary text", { scope: "tenant" });
+      throw new Error("browser restoration should be unsupported");
+    } catch (error) {
+      if (!(error instanceof DataFogError) || error.code !== "unsupported_strategy") {
+        throw error;
+      }
+    }
+    try {
+      restore("DFTOKENv1(8):YQ.Yg.Yw", { scope: "tenant" });
+      throw new Error("browser token restoration should be unsupported");
+    } catch (error) {
+      if (!(error instanceof DataFogError) || error.code !== "unsupported_strategy") {
         throw error;
       }
     }

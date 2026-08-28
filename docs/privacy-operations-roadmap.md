@@ -172,31 +172,55 @@ the original PII.
 
 ## Slice 7: Reversible tokenization and restoration
 
-- Define opaque token format and authorization context.
-- Introduce a vault or reviewed reversible cryptographic boundary.
-- Implement token creation and restoration as one end-to-end slice.
-- Reject unknown, expired, wrong-scope, and unauthorized tokens.
+**Status: complete**
 
-**Proof:** authorized round trips succeed and every unauthorized variant fails
-closed without revealing the original value.
+- Add `{ strategy: "tokenize", token_ref }` without algorithm, TTL,
+  determinism, storage, or caller-pinned version settings.
+- Require exact, case-sensitive, non-empty request-level `scope` only for
+  selected tokenization and every restoration request.
+- Keep the provider boundary asynchronous and batched. Tokenization preserves
+  repeated values as separate items; restoration deduplicates identical
+  envelopes before the provider call.
+- Use the canonical `DFTOKENv1(<body-length>):<ref>.<version>.<payload>`
+  envelope with unpadded Base64URL components and strict checked parsing.
+- Treat token payloads as opaque. Providers own storage or reversible crypto,
+  authentication, authorization, scope/profile binding, lifecycle, retries,
+  idempotency, cleanup, and audit logging.
+- Resolve every pseudonymization key before stateful token creation, validate
+  every provider response before mutation, and make Core output atomic.
+- Restore every canonical token in the supplied text or return no result. Do
+  not add filtering, partial restoration, ignore-failure, recursive restore,
+  or nested tokenization modes.
+- Return restoration source/output byte and code-point ranges plus token
+  reference and concrete profile version, without returning plaintext
+  mappings, scope, credentials, or opaque payloads.
+- Ship full Rust, Python, and Node support. Browser WASM parses the same
+  configuration and envelope but rejects selected tokenization and every
+  restoration call with `unsupported_strategy`.
+- Ship no built-in cloud, database, vault, or cryptographic provider.
+
+**Proof:** authorized Unicode and repeated-value round trips preserve exact
+ranges while producing independently issued tokens; unauthorized and malformed
+variants fail closed without partial Core output or plaintext leakage; nested
+tokenization and recursive restoration are absent; Rust, Python, and Node agree
+while browser WASM rejects provider-backed work.
 
 ## Slice 8: Binding completion and release hardening
 
-Python, Node, and WASM already expose Slices 1 through 4. New stateless
-operations should continue to ship through those bindings in the same vertical
-slice as their Rust implementation rather than waiting for a separate binding
-rollout.
+Rust, Python, and Node implement all capabilities through Slice 7. Browser
+WASM implements the stateless transformations through Slice 4 and explicitly
+rejects provider-backed pseudonymization. New stateless operations should
+continue to ship through the bindings in the same vertical slice as their Rust
+implementation rather than waiting for a separate binding rollout.
 
 Remaining binding work is:
 
 1. add explicitly named UTF-16 code-unit ranges for JavaScript consumers as
    required by ADR 001, without changing the existing byte or code-point
    fields;
-2. retain Rust, Python, and Node pseudonymization conformance coverage while
-   keeping browser WASM key handling explicitly unsupported;
-3. expose reversible tokenization and restoration only through runtimes with a
-   separately accepted key-custody, authorization, and storage boundary; and
-4. retain installed-package and cross-binding conformance tests as release
+2. retain Rust, Python, and Node provider-backed conformance coverage while
+   keeping browser WASM key and token providers explicitly unsupported; and
+3. retain installed-package and cross-binding conformance tests as release
    gates.
 
 Pseudonymization and reversible token storage are not promised in browser WASM

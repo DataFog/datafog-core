@@ -243,6 +243,55 @@ await assert.rejects(
     error.path === "/transform/default/key_ref",
 );
 
+const tokenRecords = new Map();
+let tokenCounter = 0;
+const tokenProvider = {
+  async tokenizeBatch(scope, items) {
+    return items.map((item) => {
+      const payload = Uint8Array.of(++tokenCounter);
+      tokenRecords.set(payload[0], {
+        scope,
+        tokenRef: item.tokenRef,
+        version: "active-1",
+        value: item.exactValue,
+      });
+      return { id: item.id, payload, resolvedVersion: "active-1" };
+    });
+  },
+  async restoreBatch(scope, items) {
+    return items.map((item) => {
+      const record = tokenRecords.get(item.payload[0]);
+      if (!record || record.scope !== scope || record.tokenRef !== item.tokenRef || record.version !== item.resolvedVersion) {
+        const error = new Error("denied");
+        error.code = "token_access_denied";
+        throw error;
+      }
+      return { id: item.id, value: record.value };
+    });
+  },
+};
+const tokenManager = new PrivacyManager({ tokenProvider });
+const tokenContext = { scope: "tenant/α" };
+const tokenized = await tokenManager.scanAndTransform(
+  "👋 jane@example.com jane@example.com",
+  { transform: { default: { strategy: "tokenize", token_ref: "customers/default" } } },
+  tokenContext,
+);
+assert.notEqual(tokenized.transformations[0].replacement, tokenized.transformations[1].replacement);
+assert.equal(tokenized.transformations[0].tokenRef, "customers/default");
+assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
+const restored = await tokenManager.restore(tokenized.text, tokenContext);
+assert.equal(restored.text, "👋 jane@example.com jane@example.com");
+assert.equal(restored.restorations.length, 2);
+await assert.rejects(
+  tokenManager.restore(tokenized.text, { scope: "tenant/b" }),
+  (error) => error instanceof DataFogError && error.code === "token_access_denied",
+);
+await assert.rejects(
+  tokenManager.restore("DFTOKENv2(3):abc", tokenContext),
+  (error) => error instanceof DataFogError && error.code === "unsupported_token_version",
+);
+
 assert.throws(
   () => transform(transformText, scan(transformText), {
     default: { strategy: "redact" },

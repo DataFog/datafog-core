@@ -13,12 +13,15 @@ Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score.
 
-The transformation strategies are `redact`, `mask`, `remove`, and
-`pseudonymize` in Rust, Python, and Node.js.
+The transformation strategies are `redact`, `mask`, `remove`, `pseudonymize`,
+and `tokenize` in Rust, Python, and Node.js.
 Redaction uses an unnumbered `[ENTITY_TYPE]` placeholder, masking supports full
 or leading/trailing reveal modes, and removal deletes only the exact finding
 span. Pseudonymization uses provider-resolved 256-bit keys and deterministic
-HMAC-SHA-256 tokens; it is deliberately unsupported in browser WASM.
+HMAC-SHA-256 tokens. Tokenization uses an application-supplied asynchronous
+provider to issue opaque `DFTOKENv1(...)` envelopes and restore them under an
+exact request-level scope. Both provider-backed strategies are deliberately
+unsupported in browser WASM.
 `transform` requires explicit findings; `scan_and_transform` (or
 `scanAndTransform` in JavaScript) is the explicit scan-then-transform
 convenience. Results include the transformed text and an ordered record for
@@ -134,6 +137,17 @@ async def pseudonymize():
     )
 
 pseudonymized = asyncio.run(pseudonymize())
+
+# A token provider implements tokenize_batch(scope, items) and
+# restore_batch(scope, items). It owns storage or reversible cryptography,
+# authorization, lifecycle, and audit.
+token_manager = PrivacyManager(None, token_provider=TokenProvider())
+tokenized = asyncio.run(token_manager.scan_and_transform(
+    "Email jane@example.com",
+    {"transform": {"default": {"strategy": "tokenize", "token_ref": "customers/default"}}},
+    {"scope": "tenant-a"},
+))
+restored = asyncio.run(token_manager.restore(tokenized.text, {"scope": "tenant-a"}))
 ```
 
 ### Node.js
@@ -160,6 +174,14 @@ const pseudonymized = await manager.scanAndTransform("Email jane@example.com", {
     default: { strategy: "pseudonymize", key_ref: "customers/email" },
   },
 });
+
+const tokenManager = new PrivacyManager({ tokenProvider });
+const tokenized = await tokenManager.scanAndTransform(
+  "Email jane@example.com",
+  { transform: { default: { strategy: "tokenize", token_ref: "customers/default" } } },
+  { scope: "tenant-a" },
+);
+const restored = await tokenManager.restore(tokenized.text, { scope: "tenant-a" });
 ```
 
 The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows x64.

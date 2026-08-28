@@ -1,6 +1,7 @@
 import initWasm, {
   scan as scanWasm,
   scan_and_transform as scanAndTransformWasm,
+  restore as restoreWasm,
   transform as transformWasm,
 } from "./dist/datafog_wasm.js";
 
@@ -106,6 +107,18 @@ export function scanAndTransform(text, config) {
 
   try {
     return scanAndTransformWasm(text, config);
+  } catch (error) {
+    throw normalizeError(error, "invalid_configuration");
+  }
+}
+
+export function restore(text, context) {
+  if (typeof text !== "string") {
+    throw new TypeError("restore text must be a string");
+  }
+  assertInitialized("restore");
+  try {
+    return restoreWasm(text, context);
   } catch (error) {
     throw normalizeError(error, "invalid_configuration");
   }

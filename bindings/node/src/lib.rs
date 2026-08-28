@@ -74,6 +74,12 @@ pub struct Transformation {
 
     #[napi(readonly)]
     pub resolved_key_version: Option<String>,
+
+    #[napi(readonly)]
+    pub token_ref: Option<String>,
+
+    #[napi(readonly)]
+    pub resolved_token_version: Option<String>,
 }
 
 #[napi(object, object_from_js = false)]
@@ -106,6 +112,66 @@ pub struct ResolvedKeyInput {
     #[napi(ts_type = "Uint8Array")]
     pub key: Buffer,
     pub resolved_version: String,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct TokenizeItem {
+    #[napi(readonly)]
+    pub id: String,
+    #[napi(readonly)]
+    pub exact_value: String,
+    #[napi(readonly)]
+    pub token_ref: String,
+}
+
+#[napi(object)]
+pub struct TokenizeResultInput {
+    pub id: String,
+    #[napi(ts_type = "Uint8Array")]
+    pub payload: Buffer,
+    pub resolved_version: String,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct RestoreItem {
+    #[napi(readonly)]
+    pub id: String,
+    #[napi(readonly)]
+    pub token_ref: String,
+    #[napi(readonly)]
+    pub resolved_version: String,
+    #[napi(readonly, ts_type = "Uint8Array")]
+    pub payload: Buffer,
+}
+
+#[napi(object)]
+pub struct RestoredValueInput {
+    pub id: String,
+    pub value: String,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct Restoration {
+    #[napi(readonly)]
+    pub source_byte_range: TextRange,
+    #[napi(readonly)]
+    pub source_codepoint_range: TextRange,
+    #[napi(readonly)]
+    pub output_byte_range: TextRange,
+    #[napi(readonly)]
+    pub output_codepoint_range: TextRange,
+    #[napi(readonly)]
+    pub token_ref: String,
+    #[napi(readonly)]
+    pub resolved_token_version: String,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct RestoreResult {
+    #[napi(readonly)]
+    pub text: String,
+    #[napi(readonly)]
+    pub restorations: Vec<Restoration>,
 }
 
 #[napi(object, object_from_js = false)]
@@ -201,12 +267,48 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
                         datafog_core::TransformationStrategy::Pseudonymize(_) => {
                             "pseudonymize".to_owned()
                         }
+                        datafog_core::TransformationStrategy::Tokenize(_) => "tokenize".to_owned(),
                     },
                     replacement: transformation.replacement,
                     output_byte_range: js_range(transformation.output_byte_range)?,
                     output_codepoint_range: js_range(transformation.output_codepoint_range)?,
                     key_ref: transformation.key_ref,
                     resolved_key_version: transformation.resolved_key_version,
+                    token_ref: transformation.token_ref,
+                    resolved_token_version: transformation.resolved_token_version,
+                })
+            })
+            .collect::<napi::Result<Vec<_>>>()?,
+    })
+}
+
+fn core_token_results(results: Vec<TokenizeResultInput>) -> Vec<datafog_core::TokenizeResult> {
+    results
+        .into_iter()
+        .map(|result| {
+            datafog_core::TokenizeResult::new(
+                result.id,
+                result.payload.to_vec(),
+                result.resolved_version,
+            )
+        })
+        .collect()
+}
+
+fn js_restore_result(result: datafog_core::RestoreResult) -> napi::Result<RestoreResult> {
+    Ok(RestoreResult {
+        text: result.text,
+        restorations: result
+            .restorations
+            .into_iter()
+            .map(|record| {
+                Ok(Restoration {
+                    source_byte_range: js_range(record.source_byte_range)?,
+                    source_codepoint_range: js_range(record.source_codepoint_range)?,
+                    output_byte_range: js_range(record.output_byte_range)?,
+                    output_codepoint_range: js_range(record.output_codepoint_range)?,
+                    token_ref: record.token_ref,
+                    resolved_token_version: record.resolved_token_version,
                 })
             })
             .collect::<napi::Result<Vec<_>>>()?,
@@ -353,4 +455,112 @@ pub fn prepare_scan_and_transform(
             .collect::<napi::Result<Vec<_>>>()?,
         selectors: js_key_selectors(&selectors)?,
     })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn required_tokenization_items(
+    env: Env,
+    text: String,
+    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+    #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
+) -> napi::Result<Vec<TokenizeItem>> {
+    let config_value: serde_json::Value = env.from_js_value(config)?;
+    let config =
+        datafog_core::parse_transformation_config(&config_value).map_err(js_privacy_error)?;
+    let context = context
+        .map(|value| -> napi::Result<serde_json::Value> { env.from_js_value(value) })
+        .transpose()?
+        .map(|value| datafog_core::parse_privacy_context(&value))
+        .transpose()
+        .map_err(js_privacy_error)?;
+    let findings = findings.into_iter().map(core_finding).collect::<Vec<_>>();
+    datafog_core::required_tokenization_items(&text, &findings, &config, context.as_ref())
+        .map_err(js_privacy_error)
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| TokenizeItem {
+                    id: item.id().to_owned(),
+                    exact_value: item.exact_value().to_owned(),
+                    token_ref: item.token_ref().to_owned(),
+                })
+                .collect()
+        })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn transform_with_provider_results(
+    env: Env,
+    text: String,
+    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+    #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
+    resolved_keys: Vec<ResolvedKeyInput>,
+    token_results: Vec<TokenizeResultInput>,
+) -> napi::Result<TransformResult> {
+    let config_value: serde_json::Value = env.from_js_value(config)?;
+    let config =
+        datafog_core::parse_transformation_config(&config_value).map_err(js_privacy_error)?;
+    let context = context
+        .map(|value| -> napi::Result<serde_json::Value> { env.from_js_value(value) })
+        .transpose()?
+        .map(|value| datafog_core::parse_privacy_context(&value))
+        .transpose()
+        .map_err(js_privacy_error)?;
+    let findings = findings.into_iter().map(core_finding).collect::<Vec<_>>();
+    let selectors = datafog_core::required_key_selectors(&text, &findings, &config)
+        .map_err(js_privacy_error)?;
+    let keys = core_key_bindings(selectors, resolved_keys)?;
+    datafog_core::transform_with_provider_results(
+        &text,
+        &findings,
+        &config,
+        context.as_ref(),
+        keys,
+        core_token_results(token_results),
+    )
+    .map_err(js_privacy_error)
+    .and_then(js_transform_result)
+}
+
+#[napi(strict, catch_unwind)]
+pub fn required_restore_items(
+    env: Env,
+    text: String,
+    #[napi(ts_arg_type = "PrivacyContext")] context: Unknown<'_>,
+) -> napi::Result<Vec<RestoreItem>> {
+    let value: serde_json::Value = env.from_js_value(context)?;
+    let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
+    datafog_core::required_restore_items(&text, &context)
+        .map_err(js_privacy_error)
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| RestoreItem {
+                    id: item.id().to_owned(),
+                    token_ref: item.token_ref().to_owned(),
+                    resolved_version: item.resolved_version().to_owned(),
+                    payload: Buffer::from(item.payload()),
+                })
+                .collect()
+        })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn restore_with_results(
+    env: Env,
+    text: String,
+    #[napi(ts_arg_type = "PrivacyContext")] context: Unknown<'_>,
+    results: Vec<RestoredValueInput>,
+) -> napi::Result<RestoreResult> {
+    let value: serde_json::Value = env.from_js_value(context)?;
+    let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
+    let results = results
+        .into_iter()
+        .map(|result| datafog_core::RestoredValue::new(result.id, result.value))
+        .collect();
+    datafog_core::restore_with_results(&text, &context, results)
+        .map_err(js_privacy_error)
+        .and_then(js_restore_result)
 }

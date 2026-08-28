@@ -63,6 +63,8 @@ struct Transformation {
     output_codepoint_range: TextRange,
     key_ref: Option<String>,
     resolved_key_version: Option<String>,
+    token_ref: Option<String>,
+    resolved_token_version: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -118,12 +120,15 @@ fn result_to_js(result: datafog_core::TransformResult) -> Result<JsValue, JsValu
                     datafog_core::TransformationStrategy::Remove => "remove",
                     datafog_core::TransformationStrategy::Mask(_) => "mask",
                     datafog_core::TransformationStrategy::Pseudonymize(_) => "pseudonymize",
+                    datafog_core::TransformationStrategy::Tokenize(_) => "tokenize",
                 },
                 replacement: transformation.replacement,
                 output_byte_range: transformation.output_byte_range.into(),
                 output_codepoint_range: transformation.output_codepoint_range.into(),
                 key_ref: transformation.key_ref,
                 resolved_key_version: transformation.resolved_key_version,
+                token_ref: transformation.token_ref,
+                resolved_token_version: transformation.resolved_token_version,
             })
             .collect(),
     };
@@ -166,6 +171,20 @@ pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsVal
             datafog_core::PrivacyError::unsupported_strategy(selector.path()),
         ));
     }
+    let placeholder_context = datafog_core::PrivacyContext::new("wasm").map_err(privacy_error)?;
+    if !datafog_core::required_tokenization_items(
+        text,
+        &findings,
+        &config,
+        Some(&placeholder_context),
+    )
+    .map_err(privacy_error)?
+    .is_empty()
+    {
+        return Err(privacy_error(
+            datafog_core::PrivacyError::unsupported_strategy("/default/token_ref"),
+        ));
+    }
     let result = datafog_core::transform(text, &findings, &config).map_err(privacy_error)?;
     result_to_js(result)
 }
@@ -188,6 +207,30 @@ pub fn scan_and_transform(text: &str, config: JsValue) -> Result<JsValue, JsValu
             )),
         ));
     }
+    let placeholder_context = datafog_core::PrivacyContext::new("wasm").map_err(privacy_error)?;
+    if !datafog_core::required_tokenization_items(
+        text,
+        &findings,
+        config.transformation_config(),
+        Some(&placeholder_context),
+    )
+    .map_err(privacy_error)?
+    .is_empty()
+    {
+        return Err(privacy_error(
+            datafog_core::PrivacyError::unsupported_strategy("/transform/default/token_ref"),
+        ));
+    }
     let result = datafog_core::scan_and_transform(text, &config).map_err(privacy_error)?;
     result_to_js(result)
+}
+
+#[wasm_bindgen]
+pub fn restore(text: &str, context: JsValue) -> Result<JsValue, JsValue> {
+    let context = config_value(context)?;
+    let context = datafog_core::parse_privacy_context(&context).map_err(privacy_error)?;
+    datafog_core::required_restore_items(text, &context).map_err(privacy_error)?;
+    Err(privacy_error(
+        datafog_core::PrivacyError::unsupported_strategy("/restore"),
+    ))
 }
