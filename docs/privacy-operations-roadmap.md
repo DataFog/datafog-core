@@ -68,12 +68,16 @@ and Unicode cases satisfy ADR 001.
 
 ## Slice 3: Mask and remove
 
-- Define full and partial masking direction and length semantics.
-- Support a validated masking character.
-- Add literal removal as a small transformation if a concrete use case remains.
+- Use a discriminated strategy configuration across public bindings.
+- Mask every non-revealed Unicode code point, including punctuation.
+- Support `first` and `last` reveal modes with a non-negative code-point count.
+- Default to `*` and accept exactly one non-whitespace, non-control Unicode
+  code point as a custom masking character.
+- Add parameterless exact removal with no implicit whitespace normalization.
 
 **Proof:** transformation records identify the exact input and output spans for
-full, partial, and zero-length replacements.
+full, partial, multibyte-mask-character, unchanged, and zero-length
+replacements. Invalid strategy fields and masking characters are rejected.
 
 ## Slice 4: Transformation selection
 

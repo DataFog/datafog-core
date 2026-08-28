@@ -36,6 +36,23 @@ pseudonymize
 tokenize
 ```
 
+Strategies use a discriminated configuration. Rust represents the same shape
+with typed enum variants; object-oriented bindings serialize it as:
+
+```text
+{ strategy: "redact" }
+{ strategy: "remove" }
+{ strategy: "mask", character: "*" }
+{
+  strategy: "mask",
+  character: "*",
+  reveal: { direction: "first" | "last", count: non_negative_integer }
+}
+```
+
+Fields that do not belong to the selected strategy are rejected rather than
+silently ignored.
+
 `allow`, `warn`, and `block` are governance decisions, not Core operations or
 transformation strategies. A separate governance layer may consume findings
 and transformation results to make those decisions. The calling application,
@@ -147,7 +164,19 @@ original values are excluded from default debug and log output.
 - `redact` replaces every selected finding with the unnumbered placeholder
   `[ENTITY_TYPE]`. Repeated occurrences intentionally receive the same
   type-only placeholder; this makes no identity or equality claim.
-- `mask` hides all or a configured part of a value.
+- `mask` replaces every non-revealed Unicode code point, including punctuation,
+  with one masking code point. The default masking character is `*`. A custom
+  masking character must be exactly one non-whitespace, non-control Unicode
+  code point. Omitting `reveal`, or setting its count to zero, masks the entire
+  finding. `first` preserves the requested number of leading code points;
+  `last` preserves the requested number of trailing code points. A reveal count
+  equal to or greater than the finding length preserves the whole finding
+  without error. Output byte ranges still reflect the encoded byte length of
+  the chosen masking character.
+- `remove` replaces the exact finding span with the empty string. It accepts no
+  configuration, does not consume surrounding whitespace, and does not
+  normalize the remaining text. Its transformation record uses an empty output
+  range at the deletion position.
 - `hash` is a compatibility fingerprint with explicitly documented leakage and
   must not be presented as secure pseudonymization.
 - `pseudonymize` is a new keyed, scoped, deterministic, one-way operation. It
@@ -183,8 +212,8 @@ and documented separately.
 
 This ADR does not choose:
 
-- mask length and direction options;
 - compatibility hash format;
 - HMAC token encoding, key provider, scope fields, or rotation procedure;
 - reversible-token storage or cryptographic construction;
 - production audit and mapping storage.
+- custom literal replacement or whitespace-normalizing removal.
