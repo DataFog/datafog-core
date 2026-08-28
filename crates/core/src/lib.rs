@@ -1,22 +1,37 @@
-//! Core PII scanning API for the DataFog Rust proof of concept.
+//! Core PII scanning API for DataFog.
 use regex::Regex;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
 
-/// A PII entity detected in an input string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Entity {
-    /// The detected PII label, such as `EMAIL` or `SSN`.
-    pub label: String,
-    /// The exact matched substring from the input text.
-    pub text: String,
-    /// Zero-based Unicode code-point offset where the entity starts.
+/// A zero-based, end-exclusive range in the coordinate system named by its
+/// containing field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextRange {
+    /// Inclusive start offset.
     pub start: usize,
-    /// Exclusive Unicode code-point offset where the entity ends.
+    /// Exclusive end offset.
     pub end: usize,
 }
 
-/// private enum
+/// A piece of potentially sensitive content detected in an input string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Finding {
+    /// Canonical PII type, such as `EMAIL` or `SSN`.
+    pub entity_type: String,
+    /// Exact substring matched in the original input.
+    pub matched_text: String,
+    /// Range in UTF-8 bytes.
+    pub byte_range: TextRange,
+    /// Range in Unicode code points.
+    pub codepoint_range: TextRange,
+    /// Detection confidence in `0.0..=1.0`, when the detector produces one.
+    pub confidence: Option<f32>,
+    /// Stable name of the detector that produced this finding.
+    pub detector_name: String,
+    /// Version of the detector implementation, when available.
+    pub detector_version: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
     Email,
@@ -41,6 +56,18 @@ impl Label {
             Label::ZipCode => "ZIP_CODE",
         }
     }
+
+    fn detector_name(self) -> &'static str {
+        match self {
+            Label::Email => "datafog-core/email",
+            Label::Phone => "datafog-core/phone",
+            Label::Ssn => "datafog-core/ssn",
+            Label::CreditCard => "datafog-core/credit-card",
+            Label::IpAddress => "datafog-core/ip-address",
+            Label::Date => "datafog-core/date",
+            Label::ZipCode => "datafog-core/zip-code",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,9 +77,8 @@ struct Candidate {
     end_byte: usize,
 }
 
-/// Scan text for supported PII entities.
-///
-pub fn scan(text: &str) -> Vec<Entity> {
+/// Scan text for supported PII findings.
+pub fn scan(text: &str) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
@@ -64,7 +90,7 @@ pub fn scan(text: &str) -> Vec<Entity> {
     finalize(text, candidates)
 }
 
-fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Entity> {
+fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Finding> {
     candidates.sort_by(|left, right| {
         left.start_byte
             .cmp(&right.start_byte)
@@ -98,11 +124,17 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Entity> {
                 code_point_offset(text, candidate.end_byte)
             };
 
-            Entity {
-                label: candidate.label.as_str().to_owned(),
-                text: text[candidate.start_byte..candidate.end_byte].to_owned(),
-                start,
-                end,
+            Finding {
+                entity_type: candidate.label.as_str().to_owned(),
+                matched_text: text[candidate.start_byte..candidate.end_byte].to_owned(),
+                byte_range: TextRange {
+                    start: candidate.start_byte,
+                    end: candidate.end_byte,
+                },
+                codepoint_range: TextRange { start, end },
+                confidence: None,
+                detector_name: candidate.label.detector_name().to_owned(),
+                detector_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             }
         })
         .collect()
@@ -703,7 +735,47 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Entity, scan};
+    use super::{Finding, TextRange, scan};
+
+    fn expected_finding(
+        entity_type: &str,
+        matched_text: &str,
+        byte_range: (usize, usize),
+        codepoint_range: (usize, usize),
+        detector_name: &str,
+    ) -> Finding {
+        Finding {
+            entity_type: entity_type.to_owned(),
+            matched_text: matched_text.to_owned(),
+            byte_range: TextRange {
+                start: byte_range.0,
+                end: byte_range.1,
+            },
+            codepoint_range: TextRange {
+                start: codepoint_range.0,
+                end: codepoint_range.1,
+            },
+            confidence: None,
+            detector_name: detector_name.to_owned(),
+            detector_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+        }
+    }
+
+    fn expected_ascii_finding(
+        entity_type: &str,
+        matched_text: &str,
+        start: usize,
+        end: usize,
+        detector_name: &str,
+    ) -> Finding {
+        expected_finding(
+            entity_type,
+            matched_text,
+            (start, end),
+            (start, end),
+            detector_name,
+        )
+    }
 
     #[test]
     fn empty_input_has_no_entities() {
@@ -714,25 +786,41 @@ mod tests {
     fn detects_email_without_trailing_punctuation() {
         assert_eq!(
             scan("Contact jane@example.com."),
-            vec![Entity {
-                label: "EMAIL".to_owned(),
-                text: "jane@example.com".to_owned(),
-                start: 8,
-                end: 24,
-            }]
+            vec![expected_ascii_finding(
+                "EMAIL",
+                "jane@example.com",
+                8,
+                24,
+                "datafog-core/email",
+            )]
         );
     }
 
     #[test]
-    fn reports_email_offsets_as_unicode_code_points() {
+    fn reports_email_byte_and_codepoint_ranges() {
+        let text = "👋 jane@example.com";
         assert_eq!(
-            scan("👋 jane@example.com"),
-            vec![Entity {
-                label: "EMAIL".to_owned(),
-                text: "jane@example.com".to_owned(),
-                start: 2,
-                end: 18,
-            }]
+            scan(text),
+            vec![expected_finding(
+                "EMAIL",
+                "jane@example.com",
+                (5, 21),
+                (2, 18),
+                "datafog-core/email",
+            )]
+        );
+
+        let finding = &scan(text)[0];
+        assert_eq!(
+            &text[finding.byte_range.start..finding.byte_range.end],
+            finding.matched_text
+        );
+        assert_eq!(
+            text.chars()
+                .skip(finding.codepoint_range.start)
+                .take(finding.codepoint_range.end - finding.codepoint_range.start)
+                .collect::<String>(),
+            finding.matched_text
         );
     }
 
@@ -740,12 +828,13 @@ mod tests {
     fn detects_north_american_phone_number() {
         assert_eq!(
             scan("Call (212) 555-0100."),
-            vec![Entity {
-                label: "PHONE".to_owned(),
-                text: "(212) 555-0100".to_owned(),
-                start: 5,
-                end: 19,
-            }]
+            vec![expected_ascii_finding(
+                "PHONE",
+                "(212) 555-0100",
+                5,
+                19,
+                "datafog-core/phone",
+            )]
         );
     }
 
@@ -753,12 +842,13 @@ mod tests {
     fn detects_international_phone_number() {
         assert_eq!(
             scan("Intl +44 20 7946 0958"),
-            vec![Entity {
-                label: "PHONE".to_owned(),
-                text: "+44 20 7946 0958".to_owned(),
-                start: 5,
-                end: 21,
-            }]
+            vec![expected_ascii_finding(
+                "PHONE",
+                "+44 20 7946 0958",
+                5,
+                21,
+                "datafog-core/phone",
+            )]
         );
     }
 
@@ -772,18 +862,19 @@ mod tests {
     fn detects_dashed_ssn() {
         assert_eq!(
             scan("SSN: 123-45-6789"),
-            vec![Entity {
-                label: "SSN".to_owned(),
-                text: "123-45-6789".to_owned(),
-                start: 5,
-                end: 16,
-            }]
+            vec![expected_ascii_finding(
+                "SSN",
+                "123-45-6789",
+                5,
+                16,
+                "datafog-core/ssn",
+            )]
         );
     }
 
     #[test]
     fn detects_undashed_ssn() {
-        assert_eq!(scan("123456789")[0].label, "SSN");
+        assert_eq!(scan("123456789")[0].entity_type, "SSN");
     }
 
     #[test]
@@ -800,20 +891,21 @@ mod tests {
     fn detects_formatted_credit_card() {
         assert_eq!(
             scan("Card: 4111-1111-1111-1111"),
-            vec![Entity {
-                label: "CREDIT_CARD".to_owned(),
-                text: "4111-1111-1111-1111".to_owned(),
-                start: 6,
-                end: 25,
-            }]
+            vec![expected_ascii_finding(
+                "CREDIT_CARD",
+                "4111-1111-1111-1111",
+                6,
+                25,
+                "datafog-core/credit-card",
+            )]
         );
     }
 
     #[test]
     fn detects_supported_card_issuers() {
-        assert_eq!(scan("5555 5555 5555 4444")[0].label, "CREDIT_CARD");
-        assert_eq!(scan("378282246310005")[0].label, "CREDIT_CARD");
-        assert_eq!(scan("6011111111111117")[0].label, "CREDIT_CARD");
+        assert_eq!(scan("5555 5555 5555 4444")[0].entity_type, "CREDIT_CARD");
+        assert_eq!(scan("378282246310005")[0].entity_type, "CREDIT_CARD");
+        assert_eq!(scan("6011111111111117")[0].entity_type, "CREDIT_CARD");
     }
 
     #[test]
@@ -827,16 +919,17 @@ mod tests {
     fn detects_numeric_and_named_dates() {
         assert_eq!(
             scan("Date: 2024-02-29"),
-            vec![Entity {
-                label: "DATE".to_owned(),
-                text: "2024-02-29".to_owned(),
-                start: 6,
-                end: 16,
-            }]
+            vec![expected_ascii_finding(
+                "DATE",
+                "2024-02-29",
+                6,
+                16,
+                "datafog-core/date",
+            )]
         );
 
-        assert_eq!(scan("12/27/1988")[0].label, "DATE");
-        assert_eq!(scan("Jan 15, 2024")[0].label, "DATE");
+        assert_eq!(scan("12/27/1988")[0].entity_type, "DATE");
+        assert_eq!(scan("Jan 15, 2024")[0].entity_type, "DATE");
     }
 
     #[test]
@@ -852,15 +945,16 @@ mod tests {
     fn detects_five_digit_and_plus_four_zip_codes() {
         assert_eq!(
             scan("ZIP: 94105-1234"),
-            vec![Entity {
-                label: "ZIP_CODE".to_owned(),
-                text: "94105-1234".to_owned(),
-                start: 5,
-                end: 15,
-            }]
+            vec![expected_ascii_finding(
+                "ZIP_CODE",
+                "94105-1234",
+                5,
+                15,
+                "datafog-core/zip-code",
+            )]
         );
 
-        assert_eq!(scan("94105")[0].label, "ZIP_CODE");
+        assert_eq!(scan("94105")[0].entity_type, "ZIP_CODE");
     }
 
     #[test]
@@ -876,17 +970,18 @@ mod tests {
     fn detects_ipv4_and_ipv6_addresses() {
         assert_eq!(
             scan("IPv4: 192.168.1.10"),
-            vec![Entity {
-                label: "IP_ADDRESS".to_owned(),
-                text: "192.168.1.10".to_owned(),
-                start: 6,
-                end: 18,
-            }]
+            vec![expected_ascii_finding(
+                "IP_ADDRESS",
+                "192.168.1.10",
+                6,
+                18,
+                "datafog-core/ip-address",
+            )]
         );
 
-        assert_eq!(scan("2001:db8::1")[0].label, "IP_ADDRESS");
-        assert_eq!(scan("[2001:db8::1]:443")[0].text, "2001:db8::1");
-        assert_eq!(scan("192.168.1.10:8080")[0].text, "192.168.1.10");
+        assert_eq!(scan("2001:db8::1")[0].entity_type, "IP_ADDRESS");
+        assert_eq!(scan("[2001:db8::1]:443")[0].matched_text, "2001:db8::1");
+        assert_eq!(scan("192.168.1.10:8080")[0].matched_text, "192.168.1.10");
     }
 
     #[test]

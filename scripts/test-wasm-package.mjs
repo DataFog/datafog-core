@@ -78,14 +78,16 @@ function writeConsumerFiles() {
   writeFileSync(
     path.join(temporaryDirectory, "type-smoke.ts"),
     `
-import { init, scan, type Entity, type Label } from "@datafog/wasm";
+import { init, scan, type EntityType, type Finding, type TextRange } from "@datafog/wasm";
 
 const ready: Promise<void> = init();
-const entities: Entity[] = scan("Email jane@example.com");
-const label: Label = entities[0]?.label ?? "EMAIL";
+const findings: Finding[] = scan("Email jane@example.com");
+const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
+const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
 
 void ready;
-void label;
+void entityType;
+void range;
 `.trimStart(),
   );
 
@@ -177,6 +179,37 @@ try {
     await Promise.all([init(), init()]);
     expectThrows(() => scan(123), "TypeError");
 
+    function legacyProjection(finding) {
+      return {
+        label: finding.entityType,
+        text: finding.matchedText,
+        start: finding.codepointRange.start,
+        end: finding.codepointRange.end,
+      };
+    }
+
+    function verifyContract(text, finding) {
+      const bytes = new TextEncoder().encode(text);
+      const matchedBytes = bytes.slice(finding.byteRange.start, finding.byteRange.end);
+      const matchedText = new TextDecoder().decode(matchedBytes);
+      if (matchedText !== finding.matchedText) {
+        throw new Error("byte range does not select matched text");
+      }
+
+      const matchedCodepoints = Array.from(text)
+        .slice(finding.codepointRange.start, finding.codepointRange.end)
+        .join("");
+      if (matchedCodepoints !== finding.matchedText) {
+        throw new Error("code-point range does not select matched text");
+      }
+      if (finding.confidence !== undefined) {
+        throw new Error("rule-based findings must omit confidence");
+      }
+      if (!finding.detectorName.startsWith("datafog-core/") || !finding.detectorVersion) {
+        throw new Error("detector provenance is missing");
+      }
+    }
+
     for (const fixture of ["development.jsonl", "final.jsonl"]) {
       const source = await fetch(`/${fixture}`).then((response) => response.text());
       const records = source
@@ -185,14 +218,27 @@ try {
         .map((line) => JSON.parse(line));
 
       for (const record of records) {
-        if (JSON.stringify(scan(record.text)) !== JSON.stringify(record.entities)) {
+        const findings = scan(record.text);
+        if (
+          JSON.stringify(findings.map(legacyProjection)) !==
+          JSON.stringify(record.entities)
+        ) {
           throw new Error(`${fixture}: ${record.id}`);
         }
+        findings.forEach((finding) => verifyContract(record.text, finding));
       }
+    }
+
+    const emojiFinding = scan("👋 jane@example.com")[0];
+    if (
+      JSON.stringify(emojiFinding.byteRange) !== JSON.stringify({ start: 5, end: 21 }) ||
+      JSON.stringify(emojiFinding.codepointRange) !== JSON.stringify({ start: 2, end: 18 })
+    ) {
+      throw new Error("Unicode ranges do not use the documented coordinate systems");
     }
   });
 
-  console.log("Installed @datafog/wasm package matches both fixtures.");
+  console.log("Installed @datafog/wasm package matches fixtures and the Finding contract.");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server?.close(resolve) ?? resolve());

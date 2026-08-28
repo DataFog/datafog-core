@@ -1,8 +1,2 @@
-export type Label =
-  | "EMAIL"
-  | "PHONE"
-  | "SSN"
-  | "CREDIT_CARD"
-  | "IP_ADDRESS"
-  | "DATE"
-  | "ZIP_CODE";
+/** Canonical built-in values are uppercase, but custom detectors may add values. */
+export type EntityType = string;

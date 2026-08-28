@@ -39,6 +39,8 @@ The decisions cover:
 
 ## Slice 1: Finding and scan contract
 
+**Status: complete**
+
 - Introduce the accepted `Finding` representation.
 - Preserve UTF-8 byte spans internally.
 - Return byte and Unicode code-point ranges publicly.
