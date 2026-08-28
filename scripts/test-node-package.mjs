@@ -30,7 +30,7 @@ function writeConsumerTest() {
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { scan } from "@datafog/node";
+import { scan, scanAndTransform, transform } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 
@@ -83,21 +83,47 @@ const emojiFinding = scan("👋 jane@example.com")[0];
 assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
 assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
 
-console.log("Installed @datafog/node package matches fixtures and the Finding contract.");
+const transformText = "👋 jane@example.com and jane@example.com";
+const explicit = transform(transformText, scan(transformText), "redact");
+const convenience = scanAndTransform(transformText, "redact");
+assert.deepEqual(explicit, convenience);
+assert.equal(explicit.text, "👋 [EMAIL] and [EMAIL]");
+assert.equal(explicit.transformations.length, 2);
+assert.equal(explicit.transformations[0].replacement, "[EMAIL]");
+assert.deepEqual(explicit.transformations[0].outputByteRange, { start: 5, end: 12 });
+assert.deepEqual(explicit.transformations[0].outputCodepointRange, { start: 2, end: 9 });
+assert.throws(
+  () => transform(transformText, [{ ...scan(transformText)[0], confidence: 2 }], "redact"),
+  /InvalidConfidence/,
+);
+
+console.log("Installed @datafog/node package matches fixtures and transform contracts.");
 `.trimStart(),
   );
 
   writeFileSync(
     path.join(temporaryDirectory, "type-smoke.ts"),
     `
-import { scan, type EntityType, type Finding, type TextRange } from "@datafog/node";
+import {
+  scan,
+  scanAndTransform,
+  transform,
+  type EntityType,
+  type Finding,
+  type TextRange,
+  type TransformResult,
+} from "@datafog/node";
 
 const findings: Finding[] = scan("Email jane@example.com");
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
+const explicit: TransformResult = transform("Email jane@example.com", findings, "redact");
+const convenience: TransformResult = scanAndTransform("Email jane@example.com", "redact");
 
 void entityType;
 void range;
+void explicit;
+void convenience;
 `.trimStart(),
   );
 

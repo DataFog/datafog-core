@@ -11,6 +11,7 @@ The target model is:
 ```text
 scan(text)       -> findings
 transform(...)   -> transformed text and transformation records
+scan_and_transform(...) -> explicit scan-then-transform convenience
 restore(...)     -> authorized restoration of reversible tokens
 ```
 
@@ -49,11 +50,18 @@ round-trip fixtures prove every public range selects the reported matched text.
 
 ## Slice 2: Transformation framework and redaction
 
+**Status: complete**
+
+- Require explicit findings in `transform`; never scan implicitly.
+- Provide `scan_and_transform` as the explicit convenience operation.
 - Validate caller-supplied findings strictly.
 - Deduplicate and resolve overlaps once in shared code.
 - Apply replacements without invalidating subsequent source ranges.
-- Implement typed, document-local redaction placeholders.
-- Return ordered transformation records and output ranges.
+- Implement unnumbered `[ENTITY_TYPE]` redaction placeholders.
+- Return ordered transformation records with explicit output byte and
+  code-point ranges.
+- Keep entity types equal by default and use deterministic structural,
+  confidence, position, and lexical tie-breaking.
 
 **Proof:** normal, repeated, duplicate, overlapping, nested, empty, malformed,
 and Unicode cases satisfy ADR 001.

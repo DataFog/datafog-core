@@ -78,16 +78,36 @@ function writeConsumerFiles() {
   writeFileSync(
     path.join(temporaryDirectory, "type-smoke.ts"),
     `
-import { init, scan, type EntityType, type Finding, type TextRange } from "@datafog/wasm";
+import {
+  init,
+  scan,
+  scanAndTransform,
+  transform,
+  type EntityType,
+  type Finding,
+  type TextRange,
+  type TransformResult,
+} from "@datafog/wasm";
 
 const ready: Promise<void> = init();
 const findings: Finding[] = scan("Email jane@example.com");
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
+const transformed: TransformResult = transform(
+  "Email jane@example.com",
+  findings,
+  "redact",
+);
+const scannedAndTransformed: TransformResult = scanAndTransform(
+  "Email jane@example.com",
+  "redact",
+);
 
 void ready;
 void entityType;
 void range;
+void transformed;
+void scannedAndTransformed;
 `.trimStart(),
   );
 
@@ -161,7 +181,9 @@ try {
   await page.goto(serverInfo.url);
 
   await page.evaluate(async () => {
-    const { init, scan } = await import("/node_modules/@datafog/wasm/index.js");
+    const { init, scan, scanAndTransform, transform } = await import(
+      "/node_modules/@datafog/wasm/index.js"
+    );
 
     function expectThrows(callback, name) {
       try {
@@ -236,6 +258,35 @@ try {
     ) {
       throw new Error("Unicode ranges do not use the documented coordinate systems");
     }
+
+    const text = "👋 jane@example.com and jane@example.com";
+    const findings = scan(text);
+    const explicit = transform(text, findings, "redact");
+    const convenient = scanAndTransform(text, "redact");
+    if (JSON.stringify(explicit) !== JSON.stringify(convenient)) {
+      throw new Error("explicit and convenience transforms differ");
+    }
+    if (explicit.text !== "👋 [EMAIL] and [EMAIL]") {
+      throw new Error(`unexpected transformed text: ${explicit.text}`);
+    }
+    if (
+      explicit.transformations.length !== 2 ||
+      explicit.transformations.some(
+        (record) =>
+          record.strategy !== "redact" ||
+          record.replacement !== "[EMAIL]" ||
+          Array.from(explicit.text)
+            .slice(record.outputCodepointRange.start, record.outputCodepointRange.end)
+            .join("") !== record.replacement,
+      )
+    ) {
+      throw new Error("transformation records do not select their replacements");
+    }
+
+    expectThrows(
+      () => transform(text, [{ ...findings[0], confidence: 2 }], "redact"),
+      "Error",
+    );
   });
 
   console.log("Installed @datafog/wasm package matches fixtures and the Finding contract.");
