@@ -83,14 +83,43 @@ replacements. Invalid strategy fields and masking characters are rejected.
 
 ## Slice 4: Transformation selection
 
-- Add entity-type selection.
-- Add exact, case-sensitive allowlists.
-- Add full-match regex allowlists with bounded behavior.
-- Add locale selection and per-entity strategy overrides.
-- Define transformation-configuration validation and precedence.
+- Replace the temporary single-strategy request with one canonical
+  transformation-configuration envelope. Do not retain the old shape as a
+  shorthand or add a second transformation operation.
+- Add an explicit default strategy with exact, case-sensitive per-entity
+  overrides.
+- Treat an omitted entity selection as all supplied findings, a non-empty
+  selection as an exact case-sensitive filter, and an empty selection as an
+  error.
+- Add entity-scoped exact, case-sensitive allowlists.
+- Add entity-scoped, full-match regex allowlists with case-sensitive matching
+  by default. Limit each configuration to 100 deduplicated rules, 1 KiB per
+  pattern, 10 KiB aggregate source, and 1 MiB per compiled pattern group;
+  reject invalid or over-limit configurations atomically.
+- Validate every supplied configuration entry, including entries for entity
+  types not selected by the current call. Valid but unselected overrides and
+  allowlists remain dormant rather than making the configuration invalid.
+- Accept empty structural objects and maps as omission, while rejecting empty
+  semantic values, explicit `null`, and unknown fields at every nesting level.
+- Apply configuration in this order: validate, select entities, apply
+  allowlists, resolve overlaps, choose the entity override or default strategy,
+  and transform in document order.
+- Keep locale in scanning configuration because it affects detection, not the
+  transformation of supplied findings.
+- Give `scan_and_transform` one divided request envelope with an optional
+  `scan` configuration and required `transform` configuration. Reuse those
+  configuration types in the standalone operations.
+- Retain equal entity-type priority during overlap resolution; configurable
+  entity priorities are deferred beyond Slice 4.
+- Standardize atomic structured errors across bindings using stable
+  `invalid_configuration`, `invalid_finding`, and `internal_error` codes,
+  machine-readable reasons, and RFC 6901 request paths. Never include sensitive
+  input values in errors.
 
-**Proof:** the same configuration retains the same findings whether it scans
-internally or receives precomputed findings.
+**Proof:** selection, exact and regex exemptions, overlap interactions,
+override fallback, dormant rules, malformed configuration, and Unicode cases
+produce the same result whether findings come directly from `scan` or are
+supplied to `transform`.
 
 ## Slice 5: Compatibility hash
 

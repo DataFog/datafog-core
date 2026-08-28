@@ -59,6 +59,7 @@ version = "0.1.0"
 dependencies = [
  "datafog-core",
  "pyo3",
+ "serde_json",
 ]
 
 [[package]]
@@ -69,6 +70,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "serde_json",
 ]
 
 [[package]]
@@ -78,6 +80,7 @@ dependencies = [
  "datafog-core",
  "serde",
  "serde-wasm-bindgen",
+ "serde_json",
  "wasm-bindgen",
 ]
 
@@ -228,6 +231,8 @@ dependencies = [
  "napi-sys",
  "nohash-hasher",
  "rustc-hash",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

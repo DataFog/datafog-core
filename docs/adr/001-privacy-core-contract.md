@@ -53,6 +53,185 @@ with typed enum variants; object-oriented bindings serialize it as:
 Fields that do not belong to the selected strategy are rejected rather than
 silently ignored.
 
+### Transformation selection
+
+Transformation configuration has one required default strategy and may add an
+entity selection, per-entity strategy overrides, and entity-scoped exact or
+regex allowlists. Entity names are matched exactly and case-sensitively. The
+public serialized shape is:
+
+```text
+{
+  default: { strategy: "redact" },
+  entities: ["EMAIL", "PHONE"],
+  overrides: {
+    PHONE: {
+      strategy: "mask",
+      reveal: { direction: "last", count: 4 }
+    }
+  },
+  allow: {
+    exact: { EMAIL: ["support@example.com"] },
+    regex: {
+      EMAIL: [
+        { pattern: ".*@example\\.com", case_sensitive: true }
+      ]
+    }
+  }
+}
+```
+
+This envelope replaces the temporary single-strategy input introduced while
+the transformation framework was built. The old `{ strategy: ... }` shape is
+not retained as a shorthand or exposed through a second operation. A caller
+that needs only one strategy supplies it as `default`. Rust accepts the typed
+transformation configuration, and Python, Node, and WASM accept the same
+serialized envelope. Transformation records continue to report the strategy
+actually applied to each finding rather than copying the request envelope.
+
+Omitting `entities` selects all supplied findings. A non-empty list selects
+only those entity types. An explicitly empty list is rejected, as are duplicate
+entity names. Entity types remain extensible and are not limited to built-in
+detectors.
+
+Exact allowlists compare against the complete `matched_text` and are
+case-sensitive. Regex allowlists use full-match semantics and are
+case-sensitive unless explicitly configured otherwise. Patterns are compiled
+once per configuration using a non-backtracking regex engine and are subject to
+the following limits:
+
+- at most 100 regex rules per transformation configuration after
+  deduplication;
+- at most 1 KiB of UTF-8 source per pattern;
+- at most 10 KiB of aggregate UTF-8 regex source; and
+- at most 1 MiB of compiled representation per compiled pattern group.
+
+Invalid patterns and limit violations reject the complete configuration. No
+pattern is silently dropped and transformation never proceeds with a partial
+allowlist. A runtime timeout is unnecessary because the selected regex engine
+does not use backtracking. Valid broad expressions such as `.*` are accepted as
+intentional caller policy rather than rejected based on inferred intent. Empty
+per-entity allowlists are rejected; repeated allow values and identical regex
+rules are deduplicated.
+
+Every supplied configuration entry is validated even when its entity type is
+not selected by the current invocation. Valid overrides and allowlists for
+unselected entity types are dormant: they have no effect, but do not make the
+configuration invalid. This permits one reusable privacy profile to define
+behavior for all relevant entity types while individual calls select a subset.
+Configuration is never validated against only the findings present in one
+document.
+
+Empty optional structural objects are accepted as equivalent to omission. This
+includes empty `overrides` and `allow` objects, empty `exact` and `regex` maps,
+and an empty `scan` object. `TransformationConfig` itself is not optional and
+still requires `default`. This supports configuration builders and serializers
+without giving an empty wrapper object a hidden policy meaning.
+
+Semantic empty values are rejected. These include an empty `entities` list,
+empty per-entity allowlist arrays, empty or whitespace-only entity names, empty
+exact allowlist values, and empty regex pattern source. Explicit `null` is not
+an alias for omission and is rejected for every optional field. Unknown fields
+are rejected recursively at every configuration level so misspelled or stale
+policy fields cannot be silently ignored.
+
+Processing order is:
+
+1. validate all supplied findings and the complete configuration;
+2. filter findings using `entities`;
+3. exempt exact and regex allowlist matches;
+4. resolve duplicates and overlaps among the remaining findings;
+5. choose an entity-specific override when present, otherwise `default`; and
+6. apply transformations in source document order.
+
+Allowlisted findings remain unchanged and produce no transformation record.
+Findings excluded by entity selection likewise remain unchanged and produce no
+record. Locale is scanning configuration because it affects detection; it is
+not part of transformation selection for caller-supplied findings.
+
+Configurable entity-type priority for overlap resolution is deferred. Slice 4
+retains the equal-priority deterministic ranking defined in this ADR.
+
+### Scan-and-transform configuration
+
+Scanning and transformation use separate reusable configuration types because
+they control different layers. `ScanConfig` controls detection concerns such as
+locale and future detector settings. `TransformationConfig` controls selection,
+exemptions, and replacement of supplied findings.
+
+`scan_and_transform` accepts one explicitly divided envelope:
+
+```text
+{
+  scan: {
+    locale: "en-US"
+  },
+  transform: {
+    default: { strategy: "redact" },
+    entities: ["EMAIL"]
+  }
+}
+```
+
+The `transform` member is required. The `scan` member may be omitted to use
+scanner defaults. Unknown scanning fields are rejected. Locale and other
+detection settings never appear in `TransformationConfig` and cannot affect
+the transformation of caller-supplied findings.
+
+The same transformation configuration can therefore be passed directly to
+`transform` or nested under `transform` in `scan_and_transform`. Entity
+selection remains a transformation rule. `scan_and_transform` may avoid
+unnecessary detector work when doing so is provably equivalent, but such an
+optimization must not change the findings retained or the transformation
+result.
+
+### Error contract
+
+Top-level operations expose one structured error contract across Rust, Python,
+Node, and WASM. The stable top-level error codes are:
+
+```text
+invalid_configuration
+invalid_finding
+internal_error
+```
+
+Caller-correctable errors also include a stable machine-readable `reason` and
+an RFC 6901 JSON Pointer `path` identifying the invalid request location.
+Finding errors additionally include `finding_index`. Initial reason values
+include:
+
+```text
+missing_field
+unknown_field
+invalid_type
+invalid_value
+empty_value
+duplicate_value
+invalid_regex
+limit_exceeded
+matched_text_mismatch
+inconsistent_ranges
+out_of_bounds
+invalid_boundary
+invalid_confidence
+```
+
+Codes, reasons, and paths are public API. Human-readable messages are intended
+for diagnostics and are not stable or suitable for programmatic parsing. Error
+details never contain source text, matched PII, or other sensitive input
+values. Validation is atomic and no partial transformation result accompanies
+an error.
+
+Rust represents the contract with a typed `PrivacyError`. Python exposes
+configuration and finding errors as `ValueError` subclasses and internal
+failures as a `RuntimeError` subclass. Node and WASM expose JavaScript
+`DataFogError` objects with `code`, `reason`, `path`, and optional
+`findingIndex`; WASM never rejects with a bare string. Each binding may use its
+native exception hierarchy, but the canonical fields retain the same meaning.
+Additional reason values may be introduced as validation expands without
+creating new top-level categories for every validation case.
+
 `allow`, `warn`, and `block` are governance decisions, not Core operations or
 transformation strategies. A separate governance layer may consume findings
 and transformation results to make those decisions. The calling application,

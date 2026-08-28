@@ -21,13 +21,26 @@ span. `transform` requires explicit findings; `scan_and_transform` (or
 convenience. Results include the transformed text and an ordered record for
 every applied replacement, including its output byte and code-point ranges.
 
-Object-oriented bindings use a discriminated configuration:
+Transformation calls require an envelope with a default strategy. It can also
+select entity types, override the strategy per entity, and exempt exact or
+full-match regex values:
 
-```text
-{ strategy: "redact" }
-{ strategy: "remove" }
-{ strategy: "mask", character: "*", reveal: { direction: "last", count: 4 } }
+```js
+{
+  default: { strategy: "redact" },
+  entities: ["EMAIL", "PHONE"],
+  overrides: {
+    PHONE: { strategy: "mask", reveal: { direction: "last", count: 4 } },
+  },
+  allow: {
+    exact: { EMAIL: ["support@example.com"] },
+    regex: { EMAIL: [{ pattern: ".+@example\\.org" }] },
+  },
+}
 ```
+
+`scan_and_transform` uses `{ scan?: { locale?: string }, transform: ... }` so
+detection settings remain separate from transformation policy.
 
 ## Packages
 
@@ -47,7 +60,10 @@ cargo add datafog-core
 ```
 
 ```rust
-use datafog_core::{scan, scan_and_transform, TransformationStrategy};
+use datafog_core::{
+    scan, scan_and_transform, ScanAndTransformConfig, TransformationConfig,
+    TransformationStrategy,
+};
 
 let findings = scan("Email jane@example.com");
 assert_eq!(findings[0].entity_type, "EMAIL");
@@ -56,7 +72,9 @@ assert_eq!(findings[0].byte_range.start, 6);
 
 let result = scan_and_transform(
     "Email jane@example.com",
-    TransformationStrategy::Redact,
+    &ScanAndTransformConfig::new(TransformationConfig::new(
+        TransformationStrategy::Redact,
+    )),
 ).unwrap();
 assert_eq!(result.text, "Email [EMAIL]");
 ```
@@ -75,12 +93,22 @@ print(findings[0].entity_type)       # EMAIL
 print(findings[0].matched_text)      # jane@example.com
 print(findings[0].byte_range.start)  # 6
 
-result = scan_and_transform("Email jane@example.com", {"strategy": "redact"})
+result = scan_and_transform(
+    "Email jane@example.com",
+    {"transform": {"default": {"strategy": "redact"}}},
+)
 assert result.text == "Email [EMAIL]"
 
 masked = scan_and_transform(
     "Email jane@example.com",
-    {"strategy": "mask", "reveal": {"direction": "last", "count": 4}},
+    {
+        "transform": {
+            "default": {
+                "strategy": "mask",
+                "reveal": {"direction": "last", "count": 4},
+            }
+        }
+    },
 )
 assert masked.text == "Email ************.com"
 ```
@@ -94,7 +122,9 @@ import { scan, scanAndTransform } from "@datafog/node";
 
 console.log(scan("Email jane@example.com"));
 console.log(
-  scanAndTransform("Email jane@example.com", { strategy: "redact" }).text,
+  scanAndTransform("Email jane@example.com", {
+    transform: { default: { strategy: "redact" } },
+  }).text,
 );
 ```
 
@@ -110,7 +140,9 @@ import { init, scan, scanAndTransform } from "@datafog/wasm";
 await init();
 console.log(scan("Email jane@example.com"));
 console.log(
-  scanAndTransform("Email jane@example.com", { strategy: "redact" }).text,
+  scanAndTransform("Email jane@example.com", {
+    transform: { default: { strategy: "redact" } },
+  }).text,
 );
 ```
 

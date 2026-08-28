@@ -1,5 +1,6 @@
 //! Core PII scanning API for DataFog.
-use regex::Regex;
+use regex::{Regex, RegexSet, RegexSetBuilder};
+use std::collections::{BTreeMap, BTreeSet};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
 
@@ -41,6 +42,672 @@ pub enum TransformationStrategy {
     Remove,
     /// Replace non-revealed code points with a configured character.
     Mask(MaskConfig),
+}
+
+const MAX_REGEX_RULES: usize = 100;
+const MAX_REGEX_PATTERN_BYTES: usize = 1024;
+const MAX_REGEX_SOURCE_BYTES: usize = 10 * 1024;
+const MAX_COMPILED_REGEX_GROUP_BYTES: usize = 1024 * 1024;
+
+/// One entity-scoped full-match regex allowlist rule.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RegexAllowRule {
+    pattern: String,
+    case_sensitive: bool,
+}
+
+impl RegexAllowRule {
+    /// Create a rule. Complete validation occurs when the rule is added to a
+    /// transformation configuration.
+    pub fn new(pattern: impl Into<String>, case_sensitive: bool) -> Self {
+        Self {
+            pattern: pattern.into(),
+            case_sensitive,
+        }
+    }
+
+    /// Regex source supplied by the caller.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    /// Whether matching preserves case distinctions.
+    pub fn case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CompiledRegexGroup {
+    patterns: RegexSet,
+}
+
+/// Validated configuration for transforming caller-supplied findings.
+#[derive(Debug, Clone)]
+pub struct TransformationConfig {
+    default: TransformationStrategy,
+    entities: Option<BTreeSet<String>>,
+    overrides: BTreeMap<String, TransformationStrategy>,
+    exact_allowlists: BTreeMap<String, BTreeSet<String>>,
+    regex_allowlists: BTreeMap<String, Vec<RegexAllowRule>>,
+    compiled_regex_allowlists: BTreeMap<String, Vec<CompiledRegexGroup>>,
+}
+
+impl TransformationConfig {
+    /// Create a configuration which applies one default strategy to all
+    /// supplied findings.
+    pub fn new(default: TransformationStrategy) -> Self {
+        Self {
+            default,
+            entities: None,
+            overrides: BTreeMap::new(),
+            exact_allowlists: BTreeMap::new(),
+            regex_allowlists: BTreeMap::new(),
+            compiled_regex_allowlists: BTreeMap::new(),
+        }
+    }
+
+    /// Restrict transformation to a non-empty set of exact entity types.
+    pub fn with_entities(mut self, entities: Vec<String>) -> Result<Self, PrivacyError> {
+        if entities.is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                "/entities",
+                "entities must contain at least one entity type",
+            ));
+        }
+        let mut selected = BTreeSet::new();
+        for (index, entity) in entities.into_iter().enumerate() {
+            validate_entity_name(&entity, &format!("/entities/{index}"))?;
+            if !selected.insert(entity) {
+                return Err(PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::DuplicateValue,
+                    format!("/entities/{index}"),
+                    "entity selection contains a duplicate entity type",
+                ));
+            }
+        }
+        self.entities = Some(selected);
+        Ok(self)
+    }
+
+    /// Add an exact, case-sensitive entity strategy override.
+    pub fn with_override(
+        mut self,
+        entity_type: impl Into<String>,
+        strategy: TransformationStrategy,
+    ) -> Result<Self, PrivacyError> {
+        let entity_type = entity_type.into();
+        let path = format!("/overrides/{}", json_pointer_segment(&entity_type));
+        validate_entity_name(&entity_type, &path)?;
+        if self.overrides.insert(entity_type, strategy).is_some() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::DuplicateValue,
+                path,
+                "entity type has more than one strategy override",
+            ));
+        }
+        Ok(self)
+    }
+
+    /// Add exact, case-sensitive allowlist values for one entity type.
+    pub fn with_exact_allowlist(
+        mut self,
+        entity_type: impl Into<String>,
+        values: Vec<String>,
+    ) -> Result<Self, PrivacyError> {
+        let entity_type = entity_type.into();
+        let path = format!("/allow/exact/{}", json_pointer_segment(&entity_type));
+        validate_entity_name(&entity_type, &path)?;
+        if values.is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                path,
+                "exact allowlist must contain at least one value",
+            ));
+        }
+        if self.exact_allowlists.contains_key(&entity_type) {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::DuplicateValue,
+                path,
+                "entity type has more than one exact allowlist",
+            ));
+        }
+        let mut deduplicated = BTreeSet::new();
+        for (index, value) in values.into_iter().enumerate() {
+            if value.is_empty() {
+                return Err(PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::EmptyValue,
+                    format!("{path}/{index}"),
+                    "exact allowlist values must not be empty",
+                ));
+            }
+            deduplicated.insert(value);
+        }
+        self.exact_allowlists.insert(entity_type, deduplicated);
+        Ok(self)
+    }
+
+    /// Add full-match regex allowlist rules for one entity type.
+    pub fn with_regex_allowlist(
+        mut self,
+        entity_type: impl Into<String>,
+        rules: Vec<RegexAllowRule>,
+    ) -> Result<Self, PrivacyError> {
+        let entity_type = entity_type.into();
+        let path = format!("/allow/regex/{}", json_pointer_segment(&entity_type));
+        validate_entity_name(&entity_type, &path)?;
+        if rules.is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                path,
+                "regex allowlist must contain at least one rule",
+            ));
+        }
+        if self.regex_allowlists.contains_key(&entity_type) {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::DuplicateValue,
+                path,
+                "entity type has more than one regex allowlist",
+            ));
+        }
+        let rules = rules
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        self.regex_allowlists.insert(entity_type, rules);
+        self.compile_regex_allowlists()?;
+        Ok(self)
+    }
+
+    fn includes(&self, finding: &Finding) -> bool {
+        self.entities
+            .as_ref()
+            .is_none_or(|entities| entities.contains(&finding.entity_type))
+    }
+
+    fn allows(&self, finding: &Finding) -> bool {
+        self.exact_allowlists
+            .get(&finding.entity_type)
+            .is_some_and(|values| values.contains(&finding.matched_text))
+            || self
+                .compiled_regex_allowlists
+                .get(&finding.entity_type)
+                .is_some_and(|groups| {
+                    groups
+                        .iter()
+                        .any(|group| group.patterns.is_match(&finding.matched_text))
+                })
+    }
+
+    fn strategy_for(&self, finding: &Finding) -> TransformationStrategy {
+        self.overrides
+            .get(&finding.entity_type)
+            .copied()
+            .unwrap_or(self.default)
+    }
+
+    fn compile_regex_allowlists(&mut self) -> Result<(), PrivacyError> {
+        let rule_count: usize = self.regex_allowlists.values().map(Vec::len).sum();
+        if rule_count > MAX_REGEX_RULES {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::LimitExceeded,
+                "/allow/regex",
+                "regex allowlists exceed the maximum of 100 deduplicated rules",
+            ));
+        }
+
+        let mut source_bytes = 0;
+        for (entity_type, rules) in &self.regex_allowlists {
+            let entity_path = format!("/allow/regex/{}", json_pointer_segment(entity_type));
+            for (index, rule) in rules.iter().enumerate() {
+                let pattern_path = format!("{entity_path}/{index}/pattern");
+                if rule.pattern.is_empty() {
+                    return Err(PrivacyError::invalid_configuration(
+                        PrivacyErrorReason::EmptyValue,
+                        pattern_path,
+                        "regex pattern must not be empty",
+                    ));
+                }
+                if rule.pattern.len() > MAX_REGEX_PATTERN_BYTES {
+                    return Err(PrivacyError::invalid_configuration(
+                        PrivacyErrorReason::LimitExceeded,
+                        pattern_path,
+                        "regex pattern exceeds the 1 KiB source limit",
+                    ));
+                }
+                source_bytes += rule.pattern.len();
+            }
+        }
+        if source_bytes > MAX_REGEX_SOURCE_BYTES {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::LimitExceeded,
+                "/allow/regex",
+                "regex allowlists exceed the 10 KiB aggregate source limit",
+            ));
+        }
+
+        let mut compiled = BTreeMap::new();
+        for (entity_type, rules) in &self.regex_allowlists {
+            let entity_path = format!("/allow/regex/{}", json_pointer_segment(entity_type));
+            let mut by_case = BTreeMap::<bool, Vec<String>>::new();
+            for rule in rules {
+                by_case
+                    .entry(rule.case_sensitive)
+                    .or_default()
+                    .push(format!(r"\A(?:{})\z", rule.pattern));
+            }
+
+            let mut groups = Vec::new();
+            for (case_sensitive, patterns) in by_case {
+                let set = RegexSetBuilder::new(patterns)
+                    .case_insensitive(!case_sensitive)
+                    .size_limit(MAX_COMPILED_REGEX_GROUP_BYTES)
+                    .dfa_size_limit(MAX_COMPILED_REGEX_GROUP_BYTES)
+                    .build()
+                    .map_err(|error| {
+                        let reason = match error {
+                            regex::Error::CompiledTooBig(_) => PrivacyErrorReason::LimitExceeded,
+                            _ => PrivacyErrorReason::InvalidRegex,
+                        };
+                        PrivacyError::invalid_configuration(
+                            reason,
+                            &entity_path,
+                            "regex allowlist contains an invalid or over-limit pattern",
+                        )
+                    })?;
+                groups.push(CompiledRegexGroup { patterns: set });
+            }
+            compiled.insert(entity_type.clone(), groups);
+        }
+        self.compiled_regex_allowlists = compiled;
+        Ok(())
+    }
+}
+
+fn validate_entity_name(entity_type: &str, path: &str) -> Result<(), PrivacyError> {
+    if entity_type.trim().is_empty() {
+        return Err(PrivacyError::invalid_configuration(
+            PrivacyErrorReason::EmptyValue,
+            path,
+            "entity type must not be empty or whitespace-only",
+        ));
+    }
+    Ok(())
+}
+
+fn json_pointer_segment(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
+}
+
+/// Scanner configuration. Current built-in detectors share the same execution
+/// path; locale is retained for detector-specific routing as coverage expands.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScanConfig {
+    locale: Option<String>,
+}
+
+impl ScanConfig {
+    /// Create scanner configuration using detector defaults.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set a non-empty locale identifier.
+    pub fn with_locale(mut self, locale: impl Into<String>) -> Result<Self, PrivacyError> {
+        let locale = locale.into();
+        if locale.trim().is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                "/locale",
+                "scan locale must not be empty or whitespace-only",
+            ));
+        }
+        self.locale = Some(locale);
+        Ok(self)
+    }
+
+    /// Configured locale, when explicitly supplied.
+    pub fn locale(&self) -> Option<&str> {
+        self.locale.as_deref()
+    }
+}
+
+/// Configuration for the explicit scan-then-transform convenience operation.
+#[derive(Debug, Clone)]
+pub struct ScanAndTransformConfig {
+    scan: ScanConfig,
+    transform: TransformationConfig,
+}
+
+impl ScanAndTransformConfig {
+    /// Use scanner defaults with a required transformation configuration.
+    pub fn new(transform: TransformationConfig) -> Self {
+        Self {
+            scan: ScanConfig::default(),
+            transform,
+        }
+    }
+
+    /// Supply scanner configuration.
+    pub fn with_scan(mut self, scan: ScanConfig) -> Self {
+        self.scan = scan;
+        self
+    }
+
+    /// Scanner settings.
+    pub fn scan_config(&self) -> &ScanConfig {
+        &self.scan
+    }
+
+    /// Transformation settings.
+    pub fn transformation_config(&self) -> &TransformationConfig {
+        &self.transform
+    }
+}
+
+/// Parse the canonical serialized transformation envelope.
+pub fn parse_transformation_config(
+    value: &serde_json::Value,
+) -> Result<TransformationConfig, PrivacyError> {
+    let object = require_object(value, "", "transformation configuration must be an object")?;
+    reject_unknown_fields(object, &["default", "entities", "overrides", "allow"], "")?;
+    let default = object.get("default").ok_or_else(|| {
+        PrivacyError::invalid_configuration(
+            PrivacyErrorReason::MissingField,
+            "/default",
+            "transformation configuration requires default",
+        )
+    })?;
+    let mut config = TransformationConfig::new(parse_strategy_config(default, "/default")?);
+
+    if let Some(entities) = object.get("entities") {
+        let entities = require_array(entities, "/entities", "entities must be an array")?;
+        let mut parsed = Vec::with_capacity(entities.len());
+        for (index, entity) in entities.iter().enumerate() {
+            parsed.push(require_string(
+                entity,
+                &format!("/entities/{index}"),
+                "entity type must be a string",
+            )?);
+        }
+        config = config.with_entities(parsed)?;
+    }
+
+    if let Some(overrides) = object.get("overrides") {
+        let overrides = require_object(
+            overrides,
+            "/overrides",
+            "strategy overrides must be an object",
+        )?;
+        for (entity_type, strategy) in overrides {
+            let path = format!("/overrides/{}", json_pointer_segment(entity_type));
+            config = config.with_override(entity_type, parse_strategy_config(strategy, &path)?)?;
+        }
+    }
+
+    if let Some(allow) = object.get("allow") {
+        let allow = require_object(allow, "/allow", "allow must be an object")?;
+        reject_unknown_fields(allow, &["exact", "regex"], "/allow")?;
+        if let Some(exact) = allow.get("exact") {
+            let exact =
+                require_object(exact, "/allow/exact", "exact allowlists must be an object")?;
+            for (entity_type, values) in exact {
+                let entity_path = format!("/allow/exact/{}", json_pointer_segment(entity_type));
+                let values =
+                    require_array(values, &entity_path, "exact allowlist must be an array")?;
+                let mut parsed = Vec::with_capacity(values.len());
+                for (index, value) in values.iter().enumerate() {
+                    parsed.push(require_string(
+                        value,
+                        &format!("{entity_path}/{index}"),
+                        "exact allowlist value must be a string",
+                    )?);
+                }
+                config = config.with_exact_allowlist(entity_type, parsed)?;
+            }
+        }
+        if let Some(regex) = allow.get("regex") {
+            let regex =
+                require_object(regex, "/allow/regex", "regex allowlists must be an object")?;
+            for (entity_type, rules) in regex {
+                let entity_path = format!("/allow/regex/{}", json_pointer_segment(entity_type));
+                let rules = require_array(rules, &entity_path, "regex allowlist must be an array")?;
+                let mut parsed = Vec::with_capacity(rules.len());
+                for (index, rule) in rules.iter().enumerate() {
+                    let path = format!("{entity_path}/{index}");
+                    let rule = require_object(rule, &path, "regex rule must be an object")?;
+                    reject_unknown_fields(rule, &["pattern", "case_sensitive"], &path)?;
+                    let pattern = rule.get("pattern").ok_or_else(|| {
+                        PrivacyError::invalid_configuration(
+                            PrivacyErrorReason::MissingField,
+                            format!("{path}/pattern"),
+                            "regex rule requires pattern",
+                        )
+                    })?;
+                    let pattern = require_string(
+                        pattern,
+                        &format!("{path}/pattern"),
+                        "regex pattern must be a string",
+                    )?;
+                    let case_sensitive = match rule.get("case_sensitive") {
+                        None => true,
+                        Some(serde_json::Value::Bool(value)) => *value,
+                        Some(_) => {
+                            return Err(PrivacyError::invalid_configuration(
+                                PrivacyErrorReason::InvalidType,
+                                format!("{path}/case_sensitive"),
+                                "case_sensitive must be a boolean",
+                            ));
+                        }
+                    };
+                    parsed.push(RegexAllowRule::new(pattern, case_sensitive));
+                }
+                config = config.with_regex_allowlist(entity_type, parsed)?;
+            }
+        }
+    }
+    Ok(config)
+}
+
+/// Parse the canonical divided scan-and-transform envelope.
+pub fn parse_scan_and_transform_config(
+    value: &serde_json::Value,
+) -> Result<ScanAndTransformConfig, PrivacyError> {
+    let object = require_object(
+        value,
+        "",
+        "scan-and-transform configuration must be an object",
+    )?;
+    reject_unknown_fields(object, &["scan", "transform"], "")?;
+    let transform = object.get("transform").ok_or_else(|| {
+        PrivacyError::invalid_configuration(
+            PrivacyErrorReason::MissingField,
+            "/transform",
+            "scan-and-transform configuration requires transform",
+        )
+    })?;
+    let transform =
+        parse_transformation_config(transform).map_err(|error| error.prefixed("/transform"))?;
+    let mut combined = ScanAndTransformConfig::new(transform);
+    if let Some(scan) = object.get("scan") {
+        let scan_config = parse_scan_config(scan).map_err(|error| error.prefixed("/scan"))?;
+        combined = combined.with_scan(scan_config);
+    }
+    Ok(combined)
+}
+
+/// Parse canonical scanner configuration.
+pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, PrivacyError> {
+    let object = require_object(value, "", "scan configuration must be an object")?;
+    reject_unknown_fields(object, &["locale"], "")?;
+    let mut config = ScanConfig::new();
+    if let Some(locale) = object.get("locale") {
+        let locale = require_string(locale, "/locale", "scan locale must be a string")?;
+        config = config.with_locale(locale)?;
+    }
+    Ok(config)
+}
+
+fn parse_strategy_config(
+    value: &serde_json::Value,
+    path: &str,
+) -> Result<TransformationStrategy, PrivacyError> {
+    let object = require_object(value, path, "strategy configuration must be an object")?;
+    let strategy_path = format!("{path}/strategy");
+    let strategy = object.get("strategy").ok_or_else(|| {
+        PrivacyError::invalid_configuration(
+            PrivacyErrorReason::MissingField,
+            &strategy_path,
+            "strategy configuration requires strategy",
+        )
+    })?;
+    let strategy = require_string(strategy, &strategy_path, "strategy must be a string")?;
+    match strategy.as_str() {
+        "redact" => {
+            reject_unknown_fields(object, &["strategy"], path)?;
+            Ok(TransformationStrategy::Redact)
+        }
+        "remove" => {
+            reject_unknown_fields(object, &["strategy"], path)?;
+            Ok(TransformationStrategy::Remove)
+        }
+        "mask" => {
+            reject_unknown_fields(object, &["strategy", "character", "reveal"], path)?;
+            let character = match object.get("character") {
+                None => '*',
+                Some(value) => {
+                    let value = require_string(
+                        value,
+                        &format!("{path}/character"),
+                        "mask character must be a string",
+                    )?;
+                    let mut characters = value.chars();
+                    characters
+                        .next()
+                        .filter(|_| characters.next().is_none())
+                        .ok_or_else(|| {
+                            PrivacyError::invalid_configuration(
+                                PrivacyErrorReason::InvalidValue,
+                                format!("{path}/character"),
+                                "mask character must contain exactly one code point",
+                            )
+                        })?
+                }
+            };
+            let reveal = match object.get("reveal") {
+                None => MaskReveal::None,
+                Some(value) => {
+                    let reveal_path = format!("{path}/reveal");
+                    let reveal =
+                        require_object(value, &reveal_path, "mask reveal must be an object")?;
+                    reject_unknown_fields(reveal, &["direction", "count"], &reveal_path)?;
+                    let direction = reveal.get("direction").ok_or_else(|| {
+                        PrivacyError::invalid_configuration(
+                            PrivacyErrorReason::MissingField,
+                            format!("{reveal_path}/direction"),
+                            "mask reveal requires direction",
+                        )
+                    })?;
+                    let direction = require_string(
+                        direction,
+                        &format!("{reveal_path}/direction"),
+                        "mask reveal direction must be a string",
+                    )?;
+                    let count = reveal.get("count").ok_or_else(|| {
+                        PrivacyError::invalid_configuration(
+                            PrivacyErrorReason::MissingField,
+                            format!("{reveal_path}/count"),
+                            "mask reveal requires count",
+                        )
+                    })?;
+                    let count = count
+                        .as_u64()
+                        .and_then(|count| usize::try_from(count).ok())
+                        .ok_or_else(|| {
+                            PrivacyError::invalid_configuration(
+                                PrivacyErrorReason::InvalidValue,
+                                format!("{reveal_path}/count"),
+                                "mask reveal count must be a non-negative integer",
+                            )
+                        })?;
+                    match direction.as_str() {
+                        "first" => MaskReveal::First(count),
+                        "last" => MaskReveal::Last(count),
+                        _ => {
+                            return Err(PrivacyError::invalid_configuration(
+                                PrivacyErrorReason::InvalidValue,
+                                format!("{reveal_path}/direction"),
+                                "mask reveal direction must be first or last",
+                            ));
+                        }
+                    }
+                }
+            };
+            MaskConfig::new(character, reveal)
+                .map(TransformationStrategy::Mask)
+                .map_err(|_| {
+                    PrivacyError::invalid_configuration(
+                        PrivacyErrorReason::InvalidValue,
+                        format!("{path}/character"),
+                        "mask character must not be whitespace or a control character",
+                    )
+                })
+        }
+        _ => Err(PrivacyError::invalid_configuration(
+            PrivacyErrorReason::InvalidValue,
+            strategy_path,
+            "strategy must be redact, mask, or remove",
+        )),
+    }
+}
+
+fn require_object<'a>(
+    value: &'a serde_json::Value,
+    path: &str,
+    message: &str,
+) -> Result<&'a serde_json::Map<String, serde_json::Value>, PrivacyError> {
+    value.as_object().ok_or_else(|| {
+        PrivacyError::invalid_configuration(PrivacyErrorReason::InvalidType, path, message)
+    })
+}
+
+fn require_array<'a>(
+    value: &'a serde_json::Value,
+    path: &str,
+    message: &str,
+) -> Result<&'a [serde_json::Value], PrivacyError> {
+    value.as_array().map(Vec::as_slice).ok_or_else(|| {
+        PrivacyError::invalid_configuration(PrivacyErrorReason::InvalidType, path, message)
+    })
+}
+
+fn require_string(
+    value: &serde_json::Value,
+    path: &str,
+    message: &str,
+) -> Result<String, PrivacyError> {
+    value.as_str().map(str::to_owned).ok_or_else(|| {
+        PrivacyError::invalid_configuration(PrivacyErrorReason::InvalidType, path, message)
+    })
+}
+
+fn reject_unknown_fields(
+    object: &serde_json::Map<String, serde_json::Value>,
+    allowed: &[&str],
+    path: &str,
+) -> Result<(), PrivacyError> {
+    for key in object.keys() {
+        if !allowed.contains(&key.as_str()) {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::UnknownField,
+                format!("{path}/{}", json_pointer_segment(key)),
+                "configuration contains an unknown field",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Configuration for character masking.
@@ -154,26 +821,179 @@ pub enum FindingValidationError {
     InvalidConfidence,
 }
 
-/// A transformation request could not be completed.
+/// Stable top-level category for a privacy-operation error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TransformError {
-    /// Index of the invalid finding in the caller-supplied slice.
-    pub finding_index: usize,
-    /// Validation failure.
-    pub kind: FindingValidationError,
+pub enum PrivacyErrorCode {
+    /// Transformation or scanning configuration is invalid.
+    InvalidConfiguration,
+    /// One caller-supplied finding is invalid.
+    InvalidFinding,
+    /// An unexpected non-caller-correctable failure occurred.
+    InternalError,
 }
 
-impl std::fmt::Display for TransformError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "invalid finding at index {}: {:?}",
-            self.finding_index, self.kind
-        )
+impl PrivacyErrorCode {
+    /// Stable serialized value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidConfiguration => "invalid_configuration",
+            Self::InvalidFinding => "invalid_finding",
+            Self::InternalError => "internal_error",
+        }
     }
 }
 
-impl std::error::Error for TransformError {}
+/// Stable machine-readable reason for a caller-correctable error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrivacyErrorReason {
+    MissingField,
+    UnknownField,
+    InvalidType,
+    InvalidValue,
+    EmptyValue,
+    DuplicateValue,
+    InvalidRegex,
+    LimitExceeded,
+    MatchedTextMismatch,
+    InconsistentRanges,
+    OutOfBounds,
+    InvalidBoundary,
+    InvalidConfidence,
+}
+
+impl PrivacyErrorReason {
+    /// Stable serialized value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MissingField => "missing_field",
+            Self::UnknownField => "unknown_field",
+            Self::InvalidType => "invalid_type",
+            Self::InvalidValue => "invalid_value",
+            Self::EmptyValue => "empty_value",
+            Self::DuplicateValue => "duplicate_value",
+            Self::InvalidRegex => "invalid_regex",
+            Self::LimitExceeded => "limit_exceeded",
+            Self::MatchedTextMismatch => "matched_text_mismatch",
+            Self::InconsistentRanges => "inconsistent_ranges",
+            Self::OutOfBounds => "out_of_bounds",
+            Self::InvalidBoundary => "invalid_boundary",
+            Self::InvalidConfidence => "invalid_confidence",
+        }
+    }
+}
+
+/// A privacy operation could not be completed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrivacyError {
+    code: PrivacyErrorCode,
+    reason: Option<PrivacyErrorReason>,
+    path: Option<String>,
+    finding_index: Option<usize>,
+    message: String,
+}
+
+impl PrivacyError {
+    fn invalid_configuration(
+        reason: PrivacyErrorReason,
+        path: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            code: PrivacyErrorCode::InvalidConfiguration,
+            reason: Some(reason),
+            path: Some(path.into()),
+            finding_index: None,
+            message: message.into(),
+        }
+    }
+
+    fn invalid_finding(finding_index: usize, kind: FindingValidationError) -> Self {
+        let (reason, suffix, message) = match kind {
+            FindingValidationError::EmptyOrReversedByteRange => (
+                PrivacyErrorReason::InvalidValue,
+                "byte_range",
+                "finding byte range must be non-empty and increasing",
+            ),
+            FindingValidationError::ByteRangeOutOfBounds => (
+                PrivacyErrorReason::OutOfBounds,
+                "byte_range",
+                "finding byte range is outside the source text",
+            ),
+            FindingValidationError::InvalidUtf8Boundary => (
+                PrivacyErrorReason::InvalidBoundary,
+                "byte_range",
+                "finding byte range does not use UTF-8 boundaries",
+            ),
+            FindingValidationError::EmptyOrReversedCodepointRange => (
+                PrivacyErrorReason::InvalidValue,
+                "codepoint_range",
+                "finding code-point range must be non-empty and increasing",
+            ),
+            FindingValidationError::CodepointRangeOutOfBounds => (
+                PrivacyErrorReason::OutOfBounds,
+                "codepoint_range",
+                "finding code-point range is outside the source text",
+            ),
+            FindingValidationError::InconsistentRanges => (
+                PrivacyErrorReason::InconsistentRanges,
+                "codepoint_range",
+                "finding byte and code-point ranges select different text",
+            ),
+            FindingValidationError::MatchedTextMismatch => (
+                PrivacyErrorReason::MatchedTextMismatch,
+                "matched_text",
+                "finding text does not match the selected source span",
+            ),
+            FindingValidationError::InvalidConfidence => (
+                PrivacyErrorReason::InvalidConfidence,
+                "confidence",
+                "finding confidence must be finite and in 0.0..=1.0",
+            ),
+        };
+        Self {
+            code: PrivacyErrorCode::InvalidFinding,
+            reason: Some(reason),
+            path: Some(format!("/findings/{finding_index}/{suffix}")),
+            finding_index: Some(finding_index),
+            message: message.to_owned(),
+        }
+    }
+
+    fn prefixed(mut self, prefix: &str) -> Self {
+        if let Some(path) = &mut self.path {
+            *path = format!("{prefix}{path}");
+        }
+        self
+    }
+
+    /// Stable top-level category.
+    pub fn code(&self) -> PrivacyErrorCode {
+        self.code
+    }
+
+    /// Stable caller-correctable reason, when applicable.
+    pub fn reason(&self) -> Option<PrivacyErrorReason> {
+        self.reason
+    }
+
+    /// RFC 6901 request path, when applicable.
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+
+    /// Invalid finding index, when applicable.
+    pub fn finding_index(&self) -> Option<usize> {
+        self.finding_index
+    }
+}
+
+impl std::fmt::Display for PrivacyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for PrivacyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
@@ -222,6 +1042,11 @@ struct Candidate {
 
 /// Scan text for supported PII findings.
 pub fn scan(text: &str) -> Vec<Finding> {
+    scan_with_config(text, &ScanConfig::default())
+}
+
+/// Scan text using explicit detector configuration.
+pub fn scan_with_config(text: &str, _config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
@@ -237,19 +1062,19 @@ pub fn scan(text: &str) -> Vec<Finding> {
 pub fn transform(
     text: &str,
     findings: &[Finding],
-    strategy: TransformationStrategy,
-) -> Result<TransformResult, TransformError> {
+    config: &TransformationConfig,
+) -> Result<TransformResult, PrivacyError> {
     for (finding_index, finding) in findings.iter().enumerate() {
         if let Err(kind) = validate_finding(text, finding) {
-            return Err(TransformError {
-                finding_index,
-                kind,
-            });
+            return Err(PrivacyError::invalid_finding(finding_index, kind));
         }
     }
 
     let mut selected_findings: Vec<Finding> = Vec::with_capacity(findings.len());
-    for finding in findings {
+    for finding in findings
+        .iter()
+        .filter(|finding| config.includes(finding) && !config.allows(finding))
+    {
         if let Some(existing) = selected_findings
             .iter_mut()
             .find(|existing| findings_are_duplicates(existing, finding))
@@ -278,6 +1103,7 @@ pub fn transform(
         output.push_str(&text[source_byte_cursor..finding.byte_range.start]);
         let output_byte_start = output.len();
         let output_codepoint_start = output.chars().count();
+        let strategy = config.strategy_for(finding);
         let replacement = match strategy {
             TransformationStrategy::Redact => format!("[{}]", finding.entity_type),
             TransformationStrategy::Remove => String::new(),
@@ -328,9 +1154,13 @@ pub fn transform(
 /// Scan text and transform the resulting findings in one explicit convenience operation.
 pub fn scan_and_transform(
     text: &str,
-    strategy: TransformationStrategy,
-) -> Result<TransformResult, TransformError> {
-    transform(text, &scan(text), strategy)
+    config: &ScanAndTransformConfig,
+) -> Result<TransformResult, PrivacyError> {
+    transform(
+        text,
+        &scan_with_config(text, config.scan_config()),
+        config.transformation_config(),
+    )
 }
 
 fn findings_are_duplicates(left: &Finding, right: &Finding) -> bool {
@@ -1111,9 +1941,17 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finding, FindingValidationError, MaskConfig, MaskConfigError, MaskReveal, TextRange,
-        TransformError, TransformationStrategy, scan, scan_and_transform, transform,
+        Finding, FindingValidationError, MAX_REGEX_PATTERN_BYTES, MAX_REGEX_RULES, MaskConfig,
+        MaskConfigError, MaskReveal, PrivacyError, PrivacyErrorCode, PrivacyErrorReason,
+        RegexAllowRule, ScanAndTransformConfig, TextRange, TransformationConfig,
+        TransformationStrategy, parse_scan_and_transform_config, parse_transformation_config, scan,
+        scan_and_transform, transform,
     };
+    use serde_json::json;
+
+    fn config(strategy: TransformationStrategy) -> TransformationConfig {
+        TransformationConfig::new(strategy)
+    }
 
     fn expected_finding(
         entity_type: &str,
@@ -1394,7 +2232,7 @@ mod tests {
         let text = "Contact jane@example.com";
         let findings = scan(text);
 
-        let result = transform(text, &findings, TransformationStrategy::Redact).unwrap();
+        let result = transform(text, &findings, &config(TransformationStrategy::Redact)).unwrap();
 
         assert_eq!(result.text, "Contact [EMAIL]");
         assert_eq!(result.transformations.len(), 1);
@@ -1413,12 +2251,326 @@ mod tests {
     }
 
     #[test]
+    fn entity_override_replaces_the_default_strategy() {
+        let text = "Email jane@example.com or call (212) 555-0100";
+        let findings = scan(text);
+        let config = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_override(
+                "PHONE",
+                TransformationStrategy::Mask(MaskConfig::new('*', MaskReveal::Last(4)).unwrap()),
+            )
+            .unwrap();
+
+        let result = transform(text, &findings, &config).unwrap();
+
+        assert_eq!(result.text, "Email [EMAIL] or call **********0100");
+        assert_eq!(
+            result.transformations[0].strategy,
+            TransformationStrategy::Redact
+        );
+        assert!(matches!(
+            result.transformations[1].strategy,
+            TransformationStrategy::Mask(_)
+        ));
+    }
+
+    #[test]
+    fn entity_selection_transforms_only_exact_selected_types() {
+        let text = "Email jane@example.com or call (212) 555-0100";
+        let findings = scan(text);
+        let config = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_entities(vec!["PHONE".to_owned()])
+            .unwrap();
+
+        let result = transform(text, &findings, &config).unwrap();
+
+        assert_eq!(result.text, "Email jane@example.com or call [PHONE]");
+        assert_eq!(result.transformations.len(), 1);
+        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+    }
+
+    #[test]
+    fn exact_allowlist_is_entity_scoped_and_applied_before_overlap_resolution() {
+        let text = "212-555-0100@example.com";
+        let email = supplied_ascii_finding(text, "EMAIL", 0, text.len(), Some(0.9), "email");
+        let phone = supplied_ascii_finding(text, "PHONE", 0, 12, Some(0.8), "phone");
+        let config = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_exact_allowlist("EMAIL", vec![text.to_owned(), text.to_owned()])
+            .unwrap();
+
+        let result = transform(text, &[email, phone], &config).unwrap();
+
+        assert_eq!(result.text, "[PHONE]@example.com");
+        assert_eq!(result.transformations.len(), 1);
+        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+    }
+
+    #[test]
+    fn entity_selection_happens_before_overlap_resolution() {
+        let text = "Acme Corporation";
+        let unselected_outer = supplied_ascii_finding(
+            text,
+            "ORGANIZATION",
+            0,
+            text.len(),
+            Some(0.9),
+            "organization",
+        );
+        let selected_inner = supplied_ascii_finding(text, "PERSON", 0, 4, Some(0.8), "person");
+        let config = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_entities(vec!["PERSON".to_owned()])
+            .unwrap();
+
+        let result = transform(text, &[unselected_outer, selected_inner], &config).unwrap();
+
+        assert_eq!(result.text, "[PERSON] Corporation");
+    }
+
+    #[test]
+    fn regex_allowlists_use_full_match_and_explicit_case_sensitivity() {
+        let text = "allowed@example.com ADMIN@EXAMPLE.COM";
+        let lower = supplied_ascii_finding(text, "EMAIL", 0, 19, None, "test");
+        let upper = supplied_ascii_finding(text, "EMAIL", 20, text.len(), None, "test");
+        let sensitive = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist("EMAIL", vec![RegexAllowRule::new(r".*@example\.com", true)])
+            .unwrap();
+
+        let result = transform(text, &[lower.clone(), upper.clone()], &sensitive).unwrap();
+        assert_eq!(result.text, "allowed@example.com [EMAIL]");
+
+        let insensitive = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist(
+                "EMAIL",
+                vec![
+                    RegexAllowRule::new(r".*@example\.com", false),
+                    RegexAllowRule::new(r".*@example\.com", false),
+                ],
+            )
+            .unwrap();
+        let explicit = transform(text, &[lower, upper], &insensitive).unwrap();
+        let convenience =
+            scan_and_transform(text, &ScanAndTransformConfig::new(insensitive)).unwrap();
+        assert_eq!(explicit.text, text);
+        assert_eq!(convenience, explicit);
+    }
+
+    #[test]
+    fn configuration_errors_expose_stable_machine_readable_fields() {
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_entities(Vec::new())
+            .unwrap_err();
+
+        assert_eq!(error.code(), PrivacyErrorCode::InvalidConfiguration);
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::EmptyValue));
+        assert_eq!(error.path(), Some("/entities"));
+        assert_eq!(error.finding_index(), None);
+    }
+
+    #[test]
+    fn canonical_serialized_envelope_drives_selection_overrides_and_allowlists() {
+        let text = "Email support@example.com or call (212) 555-0100";
+        let findings = scan(text);
+        let config = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "entities": ["EMAIL", "PHONE"],
+            "overrides": {
+                "PHONE": {
+                    "strategy": "mask",
+                    "reveal": { "direction": "last", "count": 4 }
+                }
+            },
+            "allow": {
+                "exact": { "EMAIL": ["support@example.com"] },
+                "regex": {}
+            }
+        }))
+        .unwrap();
+
+        let result = transform(text, &findings, &config).unwrap();
+        let convenience = scan_and_transform(text, &ScanAndTransformConfig::new(config)).unwrap();
+
+        assert_eq!(
+            result.text,
+            "Email support@example.com or call **********0100"
+        );
+        assert_eq!(result.transformations.len(), 1);
+        assert_eq!(result.transformations[0].finding.entity_type, "PHONE");
+        assert_eq!(convenience, result);
+    }
+
+    #[test]
+    fn serialized_configuration_rejects_unknown_fields_and_null() {
+        let unknown = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "overides": {}
+        }))
+        .unwrap_err();
+        assert_eq!(unknown.reason(), Some(PrivacyErrorReason::UnknownField));
+        assert_eq!(unknown.path(), Some("/overides"));
+
+        let explicit_null = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "allow": null
+        }))
+        .unwrap_err();
+        assert_eq!(
+            explicit_null.reason(),
+            Some(PrivacyErrorReason::InvalidType)
+        );
+        assert_eq!(explicit_null.path(), Some("/allow"));
+    }
+
+    #[test]
+    fn serialized_configuration_distinguishes_empty_structure_from_empty_semantics() {
+        let accepted = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "overrides": {},
+            "allow": { "exact": {}, "regex": {} }
+        }));
+        assert!(accepted.is_ok());
+
+        let duplicate_entity = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "entities": ["EMAIL", "EMAIL"]
+        }))
+        .unwrap_err();
+        assert_eq!(
+            duplicate_entity.reason(),
+            Some(PrivacyErrorReason::DuplicateValue)
+        );
+        assert_eq!(duplicate_entity.path(), Some("/entities/1"));
+
+        let empty_allowlist = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "allow": { "exact": { "EMAIL": [] } }
+        }))
+        .unwrap_err();
+        assert_eq!(
+            empty_allowlist.reason(),
+            Some(PrivacyErrorReason::EmptyValue)
+        );
+        assert_eq!(empty_allowlist.path(), Some("/allow/exact/EMAIL"));
+    }
+
+    #[test]
+    fn exact_allowlists_compare_unicode_values_without_normalizing_them() {
+        let text = "Name José";
+        let finding = Finding {
+            entity_type: "PERSON".to_owned(),
+            matched_text: "José".to_owned(),
+            byte_range: TextRange { start: 5, end: 10 },
+            codepoint_range: TextRange { start: 5, end: 9 },
+            confidence: None,
+            detector_name: "test".to_owned(),
+            detector_version: None,
+        };
+        let config = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_exact_allowlist("PERSON", vec!["José".to_owned()])
+            .unwrap();
+
+        let result = transform(text, &[finding], &config).unwrap();
+
+        assert_eq!(result.text, text);
+        assert!(result.transformations.is_empty());
+    }
+
+    #[test]
+    fn scan_and_transform_uses_the_divided_configuration_envelope() {
+        let config = parse_scan_and_transform_config(&json!({
+            "scan": { "locale": "en-US" },
+            "transform": {
+                "default": { "strategy": "redact" },
+                "entities": ["EMAIL"]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(config.scan_config().locale(), Some("en-US"));
+        assert_eq!(
+            scan_and_transform("Email jane@example.com", &config)
+                .unwrap()
+                .text,
+            "Email [EMAIL]"
+        );
+
+        let error = parse_scan_and_transform_config(&json!({
+            "transform": { "default": { "strategy": "redact", "extra": true } }
+        }))
+        .unwrap_err();
+        assert_eq!(error.path(), Some("/transform/default/extra"));
+    }
+
+    #[test]
+    fn valid_configuration_for_unselected_entities_remains_dormant() {
+        let config = parse_transformation_config(&json!({
+            "default": { "strategy": "redact" },
+            "entities": ["EMAIL"],
+            "overrides": { "PHONE": { "strategy": "remove" } },
+            "allow": {
+                "exact": { "PERSON": ["Jane Example"] },
+                "regex": {
+                    "CUSTOM": [{ "pattern": "value-[0-9]+" }]
+                }
+            }
+        }))
+        .unwrap();
+
+        let text = "Email jane@example.com or call (212) 555-0100";
+        let result = transform(text, &scan(text), &config).unwrap();
+
+        assert_eq!(result.text, "Email [EMAIL] or call (212) 555-0100");
+        assert_eq!(result.transformations.len(), 1);
+    }
+
+    #[test]
+    fn regex_allowlist_limits_reject_the_complete_configuration() {
+        let too_many = (0..=MAX_REGEX_RULES)
+            .map(|index| RegexAllowRule::new(format!("value-{index}"), true))
+            .collect();
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist("CUSTOM", too_many)
+            .unwrap_err();
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::LimitExceeded));
+        assert_eq!(error.path(), Some("/allow/regex"));
+
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist(
+                "CUSTOM",
+                vec![RegexAllowRule::new(
+                    "x".repeat(MAX_REGEX_PATTERN_BYTES + 1),
+                    true,
+                )],
+            )
+            .unwrap_err();
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::LimitExceeded));
+
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist("CUSTOM", vec![RegexAllowRule::new("(", true)])
+            .unwrap_err();
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::InvalidRegex));
+
+        let aggregate = (0..11)
+            .map(|index| RegexAllowRule::new(format!("{}-{index}", "x".repeat(950)), true))
+            .collect();
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist("CUSTOM", aggregate)
+            .unwrap_err();
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::LimitExceeded));
+        assert_eq!(error.path(), Some("/allow/regex"));
+
+        let error = TransformationConfig::new(TransformationStrategy::Redact)
+            .with_regex_allowlist("CUSTOM", vec![RegexAllowRule::new(r"\w{1000}", true)])
+            .unwrap_err();
+        assert_eq!(error.reason(), Some(PrivacyErrorReason::LimitExceeded));
+    }
+
+    #[test]
     fn fully_masks_every_codepoint_including_punctuation() {
         let text = "Email jane@example.com";
         let findings = scan(text);
         let strategy = TransformationStrategy::Mask(MaskConfig::default());
 
-        let result = transform(text, &findings, strategy).unwrap();
+        let result = transform(text, &findings, &config(strategy)).unwrap();
 
         assert_eq!(result.text, "Email ****************");
         assert_eq!(result.transformations[0].strategy, strategy);
@@ -1436,11 +2588,15 @@ mod tests {
             TransformationStrategy::Mask(MaskConfig::new('*', MaskReveal::Last(4)).unwrap());
 
         assert_eq!(
-            transform(text, &findings, reveal_first).unwrap().text,
+            transform(text, &findings, &config(reveal_first))
+                .unwrap()
+                .text,
             "Email jane************"
         );
         assert_eq!(
-            transform(text, &findings, reveal_last).unwrap().text,
+            transform(text, &findings, &config(reveal_last))
+                .unwrap()
+                .text,
             "Email ************.com"
         );
     }
@@ -1456,10 +2612,17 @@ mod tests {
         );
 
         assert_eq!(
-            transform(text, &findings, reveal_none).unwrap().text,
+            transform(text, &findings, &config(reveal_none))
+                .unwrap()
+                .text,
             "Email ****************"
         );
-        assert_eq!(transform(text, &findings, reveal_all).unwrap().text, text);
+        assert_eq!(
+            transform(text, &findings, &config(reveal_all))
+                .unwrap()
+                .text,
+            text
+        );
     }
 
     #[test]
@@ -1488,7 +2651,7 @@ mod tests {
         let strategy =
             TransformationStrategy::Mask(MaskConfig::new('•', MaskReveal::None).unwrap());
 
-        let result = transform(text, &[finding], strategy).unwrap();
+        let result = transform(text, &[finding], &config(strategy)).unwrap();
 
         assert_eq!(result.text, "A •• Z");
         assert_eq!(
@@ -1506,7 +2669,7 @@ mod tests {
         let text = "Email jane@example.com today";
         let findings = scan(text);
 
-        let result = transform(text, &findings, TransformationStrategy::Remove).unwrap();
+        let result = transform(text, &findings, &config(TransformationStrategy::Remove)).unwrap();
 
         assert_eq!(result.text, "Email  today");
         assert_eq!(result.transformations[0].replacement, "");
@@ -1527,11 +2690,11 @@ mod tests {
         findings[0].matched_text = "other@example.com".to_owned();
 
         assert_eq!(
-            transform(text, &findings, TransformationStrategy::Redact),
-            Err(TransformError {
-                finding_index: 0,
-                kind: FindingValidationError::MatchedTextMismatch,
-            })
+            transform(text, &findings, &config(TransformationStrategy::Redact)),
+            Err(PrivacyError::invalid_finding(
+                0,
+                FindingValidationError::MatchedTextMismatch,
+            ))
         );
     }
 
@@ -1608,11 +2771,8 @@ mod tests {
 
         for (finding, expected_kind) in cases {
             assert_eq!(
-                transform(text, &[finding], TransformationStrategy::Redact),
-                Err(TransformError {
-                    finding_index: 0,
-                    kind: expected_kind,
-                })
+                transform(text, &[finding], &config(TransformationStrategy::Redact)),
+                Err(PrivacyError::invalid_finding(0, expected_kind))
             );
         }
     }
@@ -1630,7 +2790,7 @@ mod tests {
         let result = transform(
             text,
             &[lower_confidence, higher_confidence.clone()],
-            TransformationStrategy::Redact,
+            &config(TransformationStrategy::Redact),
         )
         .unwrap();
 
@@ -1655,7 +2815,7 @@ mod tests {
         let result = transform(
             text,
             &[inner, outer.clone()],
-            TransformationStrategy::Redact,
+            &config(TransformationStrategy::Redact),
         )
         .unwrap();
 
@@ -1668,7 +2828,8 @@ mod tests {
     fn scan_and_transform_redacts_unicode_input_with_exact_output_ranges() {
         let text = "👋 jane@example.com and jane@example.com";
 
-        let result = scan_and_transform(text, TransformationStrategy::Redact).unwrap();
+        let config = ScanAndTransformConfig::new(config(TransformationStrategy::Redact));
+        let result = scan_and_transform(text, &config).unwrap();
 
         assert_eq!(result.text, "👋 [EMAIL] and [EMAIL]");
         assert_eq!(result.transformations.len(), 2);
@@ -1698,7 +2859,7 @@ mod tests {
         let result = transform(
             text,
             &[lower, higher.clone()],
-            TransformationStrategy::Redact,
+            &config(TransformationStrategy::Redact),
         )
         .unwrap();
 
@@ -1715,7 +2876,7 @@ mod tests {
         let result = transform(
             text,
             &[scored, unscored.clone()],
-            TransformationStrategy::Redact,
+            &config(TransformationStrategy::Redact),
         )
         .unwrap();
 
@@ -1732,7 +2893,7 @@ mod tests {
         let result = transform(
             text,
             &[later, earlier.clone()],
-            TransformationStrategy::Redact,
+            &config(TransformationStrategy::Redact),
         )
         .unwrap();
 
@@ -1742,7 +2903,7 @@ mod tests {
 
     #[test]
     fn empty_findings_leave_text_unchanged() {
-        let result = transform("plain text", &[], TransformationStrategy::Redact).unwrap();
+        let result = transform("plain text", &[], &config(TransformationStrategy::Redact)).unwrap();
 
         assert_eq!(result.text, "plain text");
         assert!(result.transformations.is_empty());

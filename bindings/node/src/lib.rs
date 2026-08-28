@@ -1,6 +1,6 @@
 //! Node binding for datafog-core.
 
-use napi::{Error, Status};
+use napi::{Env, Error, Status, Unknown};
 use napi_derive::napi;
 
 #[napi(object)]
@@ -34,20 +34,6 @@ pub struct Finding {
 
     #[napi(readonly)]
     pub detector_version: Option<String>,
-}
-
-#[napi(object)]
-pub struct NativeMaskRevealConfig {
-    pub direction: String,
-    pub count: f64,
-}
-
-#[napi(object)]
-pub struct NativeTransformationConfig {
-    #[napi(ts_type = "TransformationStrategy")]
-    pub strategy: String,
-    pub character: Option<String>,
-    pub reveal: Option<NativeMaskRevealConfig>,
 }
 
 #[napi(object, object_from_js = false)]
@@ -123,72 +109,19 @@ fn core_finding(finding: Finding) -> datafog_core::Finding {
     }
 }
 
-fn core_strategy(
-    config: NativeTransformationConfig,
-) -> napi::Result<datafog_core::TransformationStrategy> {
-    match config.strategy.as_str() {
-        "redact" if config.character.is_none() && config.reveal.is_none() => {
-            Ok(datafog_core::TransformationStrategy::Redact)
-        }
-        "remove" if config.character.is_none() && config.reveal.is_none() => {
-            Ok(datafog_core::TransformationStrategy::Remove)
-        }
-        "mask" => {
-            let character = config.character.unwrap_or_else(|| "*".to_owned());
-            let mut characters = character.chars();
-            let character = characters
-                .next()
-                .filter(|_| characters.next().is_none())
-                .ok_or_else(|| {
-                    Error::new(
-                        Status::InvalidArg,
-                        "mask character must contain exactly one code point",
-                    )
-                })?;
-            let reveal = match config.reveal {
-                None => datafog_core::MaskReveal::None,
-                Some(reveal) => {
-                    if !reveal.count.is_finite()
-                        || reveal.count < 0.0
-                        || reveal.count.fract() != 0.0
-                        || reveal.count > 9_007_199_254_740_991.0
-                    {
-                        return Err(Error::new(
-                            Status::InvalidArg,
-                            "reveal count must be a non-negative safe integer",
-                        ));
-                    }
-                    let count = reveal.count as usize;
-                    match reveal.direction.as_str() {
-                        "first" => datafog_core::MaskReveal::First(count),
-                        "last" => datafog_core::MaskReveal::Last(count),
-                        _ => {
-                            return Err(Error::new(
-                                Status::InvalidArg,
-                                "reveal direction must be 'first' or 'last'",
-                            ));
-                        }
-                    }
-                }
-            };
-            datafog_core::MaskConfig::new(character, reveal)
-                .map(datafog_core::TransformationStrategy::Mask)
-                .map_err(|_| {
-                    Error::new(
-                        Status::InvalidArg,
-                        "mask character must not be whitespace or a control character",
-                    )
-                })
-        }
-        "redact" | "remove" => Err(Error::new(
-            Status::InvalidArg,
-            "redact and remove do not accept mask configuration",
-        )),
-        _ => Err(Error::new(
-            Status::InvalidArg,
-            "strategy must be 'redact', 'mask', or 'remove'",
-        )),
-    }
+fn js_privacy_error(error: datafog_core::PrivacyError) -> Error {
+    let payload = serde_json::json!({
+        "code": error.code().as_str(),
+        "reason": error.reason().map(datafog_core::PrivacyErrorReason::as_str),
+        "message": error.to_string(),
+        "path": error.path(),
+        "findingIndex": error.finding_index(),
+    });
+    let status = match error.code() {
+        datafog_core::PrivacyErrorCode::InternalError => Status::GenericFailure,
+        _ => Status::InvalidArg,
+    };
+    Error::new(status, payload.to_string())
 }
 
 fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<TransformResult> {
@@ -216,8 +149,18 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
 
 /// Scan text for supported PII findings.
 #[napi(strict, catch_unwind)]
-pub fn scan(text: String) -> napi::Result<Vec<Finding>> {
-    datafog_core::scan(&text)
+pub fn scan(
+    env: Env,
+    text: String,
+    #[napi(ts_arg_type = "ScanConfig | undefined")] config: Option<Unknown<'_>>,
+) -> napi::Result<Vec<Finding>> {
+    let config = if let Some(config) = config {
+        let config: serde_json::Value = env.from_js_value(config)?;
+        datafog_core::parse_scan_config(&config).map_err(js_privacy_error)?
+    } else {
+        datafog_core::ScanConfig::default()
+    };
+    datafog_core::scan_with_config(&text, &config)
         .into_iter()
         .map(js_finding)
         .collect()
@@ -226,23 +169,30 @@ pub fn scan(text: String) -> napi::Result<Vec<Finding>> {
 /// Transform explicit findings without scanning implicitly.
 #[napi(strict, catch_unwind)]
 pub fn transform(
+    env: Env,
     text: String,
     findings: Vec<Finding>,
-    #[napi(ts_arg_type = "TransformationConfig")] config: NativeTransformationConfig,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
 ) -> napi::Result<TransformResult> {
+    let config: serde_json::Value = env.from_js_value(config)?;
+    let config = datafog_core::parse_transformation_config(&config).map_err(js_privacy_error)?;
     let findings = findings.into_iter().map(core_finding).collect::<Vec<_>>();
-    datafog_core::transform(&text, &findings, core_strategy(config)?)
-        .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
+    datafog_core::transform(&text, &findings, &config)
+        .map_err(js_privacy_error)
         .and_then(js_transform_result)
 }
 
 /// Scan text and transform the detected findings.
 #[napi(strict, catch_unwind)]
 pub fn scan_and_transform(
+    env: Env,
     text: String,
-    #[napi(ts_arg_type = "TransformationConfig")] config: NativeTransformationConfig,
+    #[napi(ts_arg_type = "ScanAndTransformConfig")] config: Unknown<'_>,
 ) -> napi::Result<TransformResult> {
-    datafog_core::scan_and_transform(&text, core_strategy(config)?)
-        .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
+    let config: serde_json::Value = env.from_js_value(config)?;
+    let config =
+        datafog_core::parse_scan_and_transform_config(&config).map_err(js_privacy_error)?;
+    datafog_core::scan_and_transform(&text, &config)
+        .map_err(js_privacy_error)
         .and_then(js_transform_result)
 }
