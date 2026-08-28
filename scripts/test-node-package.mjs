@@ -84,16 +84,62 @@ assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
 assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
 
 const transformText = "👋 jane@example.com and jane@example.com";
-const explicit = transform(transformText, scan(transformText), "redact");
-const convenience = scanAndTransform(transformText, "redact");
+const explicit = transform(transformText, scan(transformText), { strategy: "redact" });
+const convenience = scanAndTransform(transformText, { strategy: "redact" });
 assert.deepEqual(explicit, convenience);
 assert.equal(explicit.text, "👋 [EMAIL] and [EMAIL]");
 assert.equal(explicit.transformations.length, 2);
 assert.equal(explicit.transformations[0].replacement, "[EMAIL]");
 assert.deepEqual(explicit.transformations[0].outputByteRange, { start: 5, end: 12 });
 assert.deepEqual(explicit.transformations[0].outputCodepointRange, { start: 2, end: 9 });
+assert.equal(
+  scanAndTransform("Email jane@example.com", { strategy: "mask" }).text,
+  "Email ****************",
+);
+const partialMask = scanAndTransform("Email jane@example.com", {
+  strategy: "mask",
+  character: "•",
+  reveal: { direction: "last", count: 4 },
+});
+assert.equal(partialMask.text, "Email ••••••••••••.com");
+assert.equal(partialMask.transformations[0].strategy, "mask");
+assert.equal(partialMask.transformations[0].replacement, "••••••••••••.com");
+assert.deepEqual(partialMask.transformations[0].outputByteRange, { start: 6, end: 46 });
+
+assert.equal(
+  scanAndTransform("Email jane@example.com", {
+    strategy: "mask",
+    reveal: { direction: "first", count: 99 },
+  }).text,
+  "Email jane@example.com",
+);
+
+const removed = scanAndTransform("Email jane@example.com today", { strategy: "remove" });
+assert.equal(removed.text, "Email  today");
+assert.equal(removed.transformations[0].strategy, "remove");
+assert.equal(removed.transformations[0].replacement, "");
+assert.deepEqual(removed.transformations[0].outputCodepointRange, { start: 6, end: 6 });
+
+for (const invalidConfig of [
+  { strategy: "mask", character: "" },
+  { strategy: "mask", character: "**" },
+  { strategy: "mask", character: " " },
+  { strategy: "mask", unexpected: true },
+  { strategy: "remove", character: "*" },
+  { strategy: "mask", reveal: { direction: "last", count: -1 } },
+  { strategy: "mask", reveal: { direction: "middle", count: 4 } },
+]) {
+  assert.throws(
+    () => scanAndTransform("Email jane@example.com", invalidConfig),
+    TypeError,
+  );
+}
 assert.throws(
-  () => transform(transformText, [{ ...scan(transformText)[0], confidence: 2 }], "redact"),
+  () => transform(
+    transformText,
+    [{ ...scan(transformText)[0], confidence: 2 }],
+    { strategy: "redact" },
+  ),
   /InvalidConfidence/,
 );
 
@@ -110,20 +156,37 @@ import {
   transform,
   type EntityType,
   type Finding,
+  type MaskRevealConfig,
   type TextRange,
+  type TransformationConfig,
   type TransformResult,
 } from "@datafog/node";
 
 const findings: Finding[] = scan("Email jane@example.com");
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
-const explicit: TransformResult = transform("Email jane@example.com", findings, "redact");
-const convenience: TransformResult = scanAndTransform("Email jane@example.com", "redact");
+const explicit: TransformResult = transform(
+  "Email jane@example.com",
+  findings,
+  { strategy: "redact" },
+);
+const convenience: TransformResult = scanAndTransform(
+  "Email jane@example.com",
+  { strategy: "redact" },
+);
+const reveal: MaskRevealConfig = { direction: "last", count: 4 };
+const maskConfig: TransformationConfig = {
+  strategy: "mask",
+  character: "•",
+  reveal,
+};
+const masked: TransformResult = scanAndTransform("Email jane@example.com", maskConfig);
 
 void entityType;
 void range;
 void explicit;
 void convenience;
+void masked;
 `.trimStart(),
   );
 

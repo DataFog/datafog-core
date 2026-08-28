@@ -8,7 +8,7 @@ for a PII detection and transformation engine.
 | --- | --- | --- |
 | PII scanning | Preserve | Return validated findings with explicit byte and code-point ranges, optional confidence, and detector provenance. |
 | Typed redaction | Preserve | Replace findings with typed, document-local placeholders after deterministic overlap resolution. |
-| Character masking | Preserve | Support configurable masking with explicit direction and length semantics. |
+| Character masking | Preserve | Mask Unicode code points with a validated character and explicit leading- or trailing-reveal semantics. |
 | Entity-type selection | Preserve | Select canonical entity types through transformation configuration. |
 | Exact allowlists | Preserve | Exempt exact values using documented, case-sensitive matching. |
 | Regex allowlists | Preserve | Use full-match semantics, validated patterns, and bounded execution. |

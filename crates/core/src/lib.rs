@@ -37,6 +37,76 @@ pub struct Finding {
 pub enum TransformationStrategy {
     /// Replace the finding with its unnumbered entity-type placeholder.
     Redact,
+    /// Delete the exact finding span.
+    Remove,
+    /// Replace non-revealed code points with a configured character.
+    Mask(MaskConfig),
+}
+
+/// Configuration for character masking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MaskConfig {
+    character: char,
+    reveal: MaskReveal,
+}
+
+/// Portion of a finding preserved by character masking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaskReveal {
+    /// Reveal no source code points.
+    None,
+    /// Reveal the requested number of leading code points.
+    First(usize),
+    /// Reveal the requested number of trailing code points.
+    Last(usize),
+}
+
+/// Reason a masking configuration is invalid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaskConfigError {
+    /// The masking character is whitespace or a control character.
+    InvalidCharacter,
+}
+
+impl std::fmt::Display for MaskConfigError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCharacter => {
+                formatter.write_str("mask character must not be whitespace or a control character")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MaskConfigError {}
+
+impl MaskConfig {
+    /// Create a validated masking configuration.
+    pub fn new(character: char, reveal: MaskReveal) -> Result<Self, MaskConfigError> {
+        if character.is_whitespace() || character.is_control() {
+            return Err(MaskConfigError::InvalidCharacter);
+        }
+        Ok(Self { character, reveal })
+    }
+
+    /// Character used to replace hidden source code points.
+    pub fn character(self) -> char {
+        self.character
+    }
+
+    /// Portion of the source finding that remains visible.
+    pub fn reveal(self) -> MaskReveal {
+        self.reveal
+    }
+}
+
+impl Default for MaskConfig {
+    fn default() -> Self {
+        Self {
+            character: '*',
+            reveal: MaskReveal::None,
+        }
+    }
 }
 
 /// One transformation applied to the source text.
@@ -210,6 +280,25 @@ pub fn transform(
         let output_codepoint_start = output.chars().count();
         let replacement = match strategy {
             TransformationStrategy::Redact => format!("[{}]", finding.entity_type),
+            TransformationStrategy::Remove => String::new(),
+            TransformationStrategy::Mask(config) => {
+                let codepoint_count = finding.matched_text.chars().count();
+                finding
+                    .matched_text
+                    .chars()
+                    .enumerate()
+                    .map(|(index, source)| {
+                        let revealed = match config.reveal {
+                            MaskReveal::None => false,
+                            MaskReveal::First(count) => index < count,
+                            MaskReveal::Last(count) => {
+                                index >= codepoint_count.saturating_sub(count)
+                            }
+                        };
+                        if revealed { source } else { config.character }
+                    })
+                    .collect()
+            }
         };
         output.push_str(&replacement);
 
@@ -1022,8 +1111,8 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finding, FindingValidationError, TextRange, TransformError, TransformationStrategy, scan,
-        scan_and_transform, transform,
+        Finding, FindingValidationError, MaskConfig, MaskConfigError, MaskReveal, TextRange,
+        TransformError, TransformationStrategy, scan, scan_and_transform, transform,
     };
 
     fn expected_finding(
@@ -1320,6 +1409,114 @@ mod tests {
         assert_eq!(
             transformation.output_codepoint_range,
             TextRange { start: 8, end: 15 }
+        );
+    }
+
+    #[test]
+    fn fully_masks_every_codepoint_including_punctuation() {
+        let text = "Email jane@example.com";
+        let findings = scan(text);
+        let strategy = TransformationStrategy::Mask(MaskConfig::default());
+
+        let result = transform(text, &findings, strategy).unwrap();
+
+        assert_eq!(result.text, "Email ****************");
+        assert_eq!(result.transformations[0].strategy, strategy);
+        assert_eq!(result.transformations[0].replacement, "****************");
+    }
+
+    #[test]
+    fn partial_masking_reveals_the_requested_edge() {
+        let text = "Email jane@example.com";
+        let findings = scan(text);
+
+        let reveal_first =
+            TransformationStrategy::Mask(MaskConfig::new('*', MaskReveal::First(4)).unwrap());
+        let reveal_last =
+            TransformationStrategy::Mask(MaskConfig::new('*', MaskReveal::Last(4)).unwrap());
+
+        assert_eq!(
+            transform(text, &findings, reveal_first).unwrap().text,
+            "Email jane************"
+        );
+        assert_eq!(
+            transform(text, &findings, reveal_last).unwrap().text,
+            "Email ************.com"
+        );
+    }
+
+    #[test]
+    fn reveal_counts_handle_zero_and_the_finding_length() {
+        let text = "Email jane@example.com";
+        let findings = scan(text);
+        let reveal_none =
+            TransformationStrategy::Mask(MaskConfig::new('*', MaskReveal::First(0)).unwrap());
+        let reveal_all = TransformationStrategy::Mask(
+            MaskConfig::new('*', MaskReveal::Last(usize::MAX)).unwrap(),
+        );
+
+        assert_eq!(
+            transform(text, &findings, reveal_none).unwrap().text,
+            "Email ****************"
+        );
+        assert_eq!(transform(text, &findings, reveal_all).unwrap().text, text);
+    }
+
+    #[test]
+    fn masking_rejects_whitespace_and_control_characters() {
+        for character in [' ', '\n', '\0'] {
+            assert_eq!(
+                MaskConfig::new(character, MaskReveal::None),
+                Err(MaskConfigError::InvalidCharacter)
+            );
+        }
+        assert!(MaskConfig::new('•', MaskReveal::None).is_ok());
+    }
+
+    #[test]
+    fn multibyte_mask_character_reports_exact_output_ranges() {
+        let text = "A é👋 Z";
+        let finding = Finding {
+            entity_type: "CUSTOM".to_owned(),
+            matched_text: "é👋".to_owned(),
+            byte_range: TextRange { start: 2, end: 8 },
+            codepoint_range: TextRange { start: 2, end: 4 },
+            confidence: None,
+            detector_name: "test".to_owned(),
+            detector_version: None,
+        };
+        let strategy =
+            TransformationStrategy::Mask(MaskConfig::new('•', MaskReveal::None).unwrap());
+
+        let result = transform(text, &[finding], strategy).unwrap();
+
+        assert_eq!(result.text, "A •• Z");
+        assert_eq!(
+            result.transformations[0].output_byte_range,
+            TextRange { start: 2, end: 8 }
+        );
+        assert_eq!(
+            result.transformations[0].output_codepoint_range,
+            TextRange { start: 2, end: 4 }
+        );
+    }
+
+    #[test]
+    fn removal_deletes_only_the_finding_and_records_the_deletion_point() {
+        let text = "Email jane@example.com today";
+        let findings = scan(text);
+
+        let result = transform(text, &findings, TransformationStrategy::Remove).unwrap();
+
+        assert_eq!(result.text, "Email  today");
+        assert_eq!(result.transformations[0].replacement, "");
+        assert_eq!(
+            result.transformations[0].output_byte_range,
+            TextRange { start: 6, end: 6 }
+        );
+        assert_eq!(
+            result.transformations[0].output_codepoint_range,
+            TextRange { start: 6, end: 6 }
         );
     }
 

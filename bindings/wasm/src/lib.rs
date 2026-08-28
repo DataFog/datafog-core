@@ -64,6 +64,31 @@ struct TransformResult {
     transformations: Vec<Transformation>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum RevealDirection {
+    First,
+    Last,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MaskRevealConfig {
+    direction: RevealDirection,
+    count: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "strategy", rename_all = "lowercase", deny_unknown_fields)]
+enum TransformationConfig {
+    Redact,
+    Remove,
+    Mask {
+        character: Option<String>,
+        reveal: Option<MaskRevealConfig>,
+    },
+}
+
 fn finding_from_core(finding: datafog_core::Finding) -> Finding {
     Finding {
         entity_type: finding.entity_type,
@@ -76,10 +101,40 @@ fn finding_from_core(finding: datafog_core::Finding) -> Finding {
     }
 }
 
-fn strategy_from_js(strategy: &str) -> Result<datafog_core::TransformationStrategy, JsValue> {
-    match strategy {
-        "redact" => Ok(datafog_core::TransformationStrategy::Redact),
-        _ => Err(JsValue::from_str("strategy must be 'redact'")),
+fn strategy_from_js(config: JsValue) -> Result<datafog_core::TransformationStrategy, JsValue> {
+    let config: TransformationConfig = serde_wasm_bindgen::from_value(config)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    match config {
+        TransformationConfig::Redact => Ok(datafog_core::TransformationStrategy::Redact),
+        TransformationConfig::Remove => Ok(datafog_core::TransformationStrategy::Remove),
+        TransformationConfig::Mask { character, reveal } => {
+            let character = character.unwrap_or_else(|| "*".to_owned());
+            let mut characters = character.chars();
+            let character = characters
+                .next()
+                .filter(|_| characters.next().is_none())
+                .ok_or_else(|| {
+                    JsValue::from_str("mask character must contain exactly one code point")
+                })?;
+            let reveal = match reveal {
+                None => datafog_core::MaskReveal::None,
+                Some(MaskRevealConfig {
+                    direction: RevealDirection::First,
+                    count,
+                }) => datafog_core::MaskReveal::First(count),
+                Some(MaskRevealConfig {
+                    direction: RevealDirection::Last,
+                    count,
+                }) => datafog_core::MaskReveal::Last(count),
+            };
+            datafog_core::MaskConfig::new(character, reveal)
+                .map(datafog_core::TransformationStrategy::Mask)
+                .map_err(|_| {
+                    JsValue::from_str(
+                        "mask character must not be whitespace or a control character",
+                    )
+                })
+        }
     }
 }
 
@@ -93,6 +148,8 @@ fn result_to_js(result: datafog_core::TransformResult) -> Result<JsValue, JsValu
                 finding: finding_from_core(transformation.finding),
                 strategy: match transformation.strategy {
                     datafog_core::TransformationStrategy::Redact => "redact",
+                    datafog_core::TransformationStrategy::Remove => "remove",
+                    datafog_core::TransformationStrategy::Mask(_) => "mask",
                 },
                 replacement: transformation.replacement,
                 output_byte_range: transformation.output_byte_range.into(),
@@ -115,21 +172,21 @@ pub fn scan(text: &str) -> Result<JsValue, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn transform(text: &str, findings: JsValue, strategy: &str) -> Result<JsValue, JsValue> {
+pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsValue, JsValue> {
     let findings: Vec<Finding> = serde_wasm_bindgen::from_value(findings)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let findings = findings
         .into_iter()
         .map(datafog_core::Finding::from)
         .collect::<Vec<_>>();
-    let result = datafog_core::transform(text, &findings, strategy_from_js(strategy)?)
+    let result = datafog_core::transform(text, &findings, strategy_from_js(config)?)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     result_to_js(result)
 }
 
 #[wasm_bindgen]
-pub fn scan_and_transform(text: &str, strategy: &str) -> Result<JsValue, JsValue> {
-    let result = datafog_core::scan_and_transform(text, strategy_from_js(strategy)?)
+pub fn scan_and_transform(text: &str, config: JsValue) -> Result<JsValue, JsValue> {
+    let result = datafog_core::scan_and_transform(text, strategy_from_js(config)?)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     result_to_js(result)
 }

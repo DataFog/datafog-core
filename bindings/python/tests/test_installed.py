@@ -61,8 +61,8 @@ def main() -> None:
     assert (emoji_finding.codepoint_range.start, emoji_finding.codepoint_range.end) == (2, 18)
 
     text = "👋 jane@example.com and jane@example.com"
-    explicit = transform(text, scan(text), "redact")
-    convenience = scan_and_transform(text, "redact")
+    explicit = transform(text, scan(text), {"strategy": "redact"})
+    convenience = scan_and_transform(text, {"strategy": "redact"})
     assert explicit == convenience
     assert explicit.text == "👋 [EMAIL] and [EMAIL]"
     assert len(explicit.transformations) == 2
@@ -70,6 +70,76 @@ def main() -> None:
     assert first.replacement == "[EMAIL]"
     assert (first.output_byte_range.start, first.output_byte_range.end) == (5, 12)
     assert (first.output_codepoint_range.start, first.output_codepoint_range.end) == (2, 9)
+
+    masked = scan_and_transform(
+        "Email jane@example.com",
+        {"strategy": "mask"},
+    )
+    assert masked.text == "Email ****************"
+
+    partially_masked = scan_and_transform(
+        "Email jane@example.com",
+        {
+            "strategy": "mask",
+            "character": "•",
+            "reveal": {"direction": "last", "count": 4},
+        },
+    )
+    assert partially_masked.text == "Email ••••••••••••.com"
+    assert partially_masked.transformations[0].strategy == "mask"
+    assert partially_masked.transformations[0].replacement == "••••••••••••.com"
+    assert (
+        partially_masked.transformations[0].output_byte_range.start,
+        partially_masked.transformations[0].output_byte_range.end,
+    ) == (6, 46)
+
+    unchanged = scan_and_transform(
+        "Email jane@example.com",
+        {
+            "strategy": "mask",
+            "reveal": {"direction": "first", "count": 99},
+        },
+    )
+    assert unchanged.text == "Email jane@example.com"
+
+    removed = scan_and_transform(
+        "Email jane@example.com today",
+        {"strategy": "remove"},
+    )
+    assert removed.text == "Email  today"
+    assert removed.transformations[0].strategy == "remove"
+    assert removed.transformations[0].replacement == ""
+    assert (
+        removed.transformations[0].output_codepoint_range.start,
+        removed.transformations[0].output_codepoint_range.end,
+    ) == (6, 6)
+
+    invalid_configs = [
+        {"strategy": "mask", "character": ""},
+        {"strategy": "mask", "character": "**"},
+        {"strategy": "mask", "character": " "},
+        {"strategy": "mask", "unexpected": True},
+        {"strategy": "remove", "character": "*"},
+        {
+            "strategy": "mask",
+            "reveal": {"direction": "last", "count": -1},
+        },
+        {
+            "strategy": "mask",
+            "reveal": {"direction": "last", "count": True},
+        },
+        {
+            "strategy": "mask",
+            "reveal": {"direction": "middle", "count": 4},
+        },
+    ]
+    for invalid_config in invalid_configs:
+        try:
+            scan_and_transform("Email jane@example.com", invalid_config)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid configuration was accepted: {invalid_config}")
 
     invalid = Finding(
         "EMAIL",
@@ -80,7 +150,7 @@ def main() -> None:
         confidence=2.0,
     )
     try:
-        transform(text, [invalid], "redact")
+        transform(text, [invalid], {"strategy": "redact"})
     except ValueError as error:
         assert "InvalidConfidence" in str(error)
     else:
