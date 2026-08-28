@@ -30,7 +30,7 @@ function writeConsumerTest() {
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { DataFogError, scan, scanAndTransform, transform } from "@datafog/node";
+import { DataFogError, PrivacyManager, scan, scanAndTransform, transform } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 
@@ -100,6 +100,9 @@ assert.equal(explicit.transformations.length, 2);
 assert.equal(explicit.transformations[0].replacement, "[EMAIL]");
 assert.deepEqual(explicit.transformations[0].outputByteRange, { start: 5, end: 12 });
 assert.deepEqual(explicit.transformations[0].outputCodepointRange, { start: 2, end: 9 });
+assert.equal("finding" in explicit.transformations[0], false);
+assert.equal("matchedText" in explicit.transformations[0], false);
+assert.equal(explicit.transformations[0].entityType, "EMAIL");
 assert.equal(
   scanAndTransform("Email jane@example.com", {
     transform: { default: { strategy: "mask" } },
@@ -193,6 +196,53 @@ const selected = scanAndTransform(
 assert.equal(selected.text, "Email support@example.com or call **********0100");
 assert.equal(selected.transformations.length, 1);
 
+const pseudonymConfig = {
+  default: {
+    strategy: "pseudonymize",
+    key_ref: "customers/email",
+    key_version: "7",
+  },
+};
+assert.throws(
+  () => transform(transformText, scan(transformText), pseudonymConfig),
+  (error) =>
+    error instanceof DataFogError &&
+    error.code === "key_provider_required" &&
+    error.path === "/default/key_ref",
+);
+const providerCalls = [];
+const manager = new PrivacyManager({
+  async resolveKey(request) {
+    providerCalls.push(request);
+    return { key: Uint8Array.from({ length: 32 }, (_, index) => index), resolvedVersion: "7" };
+  },
+});
+const pseudonymized = await manager.scanAndTransform(
+  "jane@example.com jane@example.com",
+  { transform: pseudonymConfig },
+);
+const expectedToken = "lIdYiXR1nTA9XURAF5GmA62F/aknbUP3Q2B31wnZ2hA=";
+assert.equal(pseudonymized.text, expectedToken + " " + expectedToken);
+assert.deepEqual(providerCalls, [{ keyRef: "customers/email", keyVersion: "7" }]);
+for (const record of pseudonymized.transformations) {
+  assert.equal(record.replacement, expectedToken);
+  assert.equal(record.keyRef, "customers/email");
+  assert.equal(record.resolvedKeyVersion, "7");
+  assert.equal("finding" in record, false);
+  assert.equal("matchedText" in record, false);
+}
+await assert.rejects(
+  new PrivacyManager({
+    async resolveKey() {
+      return { key: new Uint8Array(31), resolvedVersion: "7" };
+    },
+  }).scanAndTransform("Email jane@example.com", { transform: pseudonymConfig }),
+  (error) =>
+    error instanceof DataFogError &&
+    error.code === "invalid_key_material" &&
+    error.path === "/transform/default/key_ref",
+);
+
 assert.throws(
   () => transform(transformText, scan(transformText), {
     default: { strategy: "redact" },
@@ -215,9 +265,11 @@ import {
   scan,
   scanAndTransform,
   transform,
+  PrivacyManager,
   type EntityType,
   type Finding,
   type MaskRevealConfig,
+  type KeyProvider,
   type ScanAndTransformConfig,
   type TextRange,
   type TransformationConfig,
@@ -246,12 +298,23 @@ const maskConfig: TransformationConfig = {
 };
 const combined: ScanAndTransformConfig = { transform: maskConfig };
 const masked: TransformResult = scanAndTransform("Email jane@example.com", combined);
+const provider: KeyProvider = {
+  async resolveKey() {
+    return { key: new Uint8Array(32), resolvedVersion: "1" };
+  },
+};
+const pseudonymized: Promise<TransformResult> = new PrivacyManager(provider).transform(
+  "Email jane@example.com",
+  findings,
+  { default: { strategy: "pseudonymize", key_ref: "customer/email" } },
+);
 
 void entityType;
 void range;
 void explicit;
 void convenience;
 void masked;
+void pseudonymized;
 `.trimStart(),
   );
 

@@ -1,12 +1,13 @@
 use ::datafog_core as core;
 use pyo3::create_exception;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyTuple};
 
 create_exception!(datafog_core, DataFogConfigurationError, PyValueError);
 create_exception!(datafog_core, DataFogFindingError, PyValueError);
 create_exception!(datafog_core, DataFogInternalError, PyRuntimeError);
+create_exception!(datafog_core, DataFogKeyProviderError, PyRuntimeError);
 
 /// A zero-based, end-exclusive text range.
 #[pyclass(frozen, skip_from_py_object)]
@@ -167,7 +168,22 @@ impl Finding {
 #[derive(Clone, PartialEq)]
 struct Transformation {
     #[pyo3(get)]
-    finding: Finding,
+    entity_type: String,
+
+    #[pyo3(get)]
+    source_byte_range: TextRange,
+
+    #[pyo3(get)]
+    source_codepoint_range: TextRange,
+
+    #[pyo3(get)]
+    confidence: Option<f32>,
+
+    #[pyo3(get)]
+    detector_name: String,
+
+    #[pyo3(get)]
+    detector_version: Option<String>,
 
     #[pyo3(get)]
     strategy: String,
@@ -180,20 +196,34 @@ struct Transformation {
 
     #[pyo3(get)]
     output_codepoint_range: TextRange,
+
+    #[pyo3(get)]
+    key_ref: Option<String>,
+
+    #[pyo3(get)]
+    resolved_key_version: Option<String>,
 }
 
 impl From<core::Transformation> for Transformation {
     fn from(transformation: core::Transformation) -> Self {
         Self {
-            finding: transformation.finding.into(),
+            entity_type: transformation.entity_type,
+            source_byte_range: transformation.source_byte_range.into(),
+            source_codepoint_range: transformation.source_codepoint_range.into(),
+            confidence: transformation.confidence,
+            detector_name: transformation.detector_name,
+            detector_version: transformation.detector_version,
             strategy: match transformation.strategy {
                 core::TransformationStrategy::Redact => "redact".to_owned(),
                 core::TransformationStrategy::Remove => "remove".to_owned(),
                 core::TransformationStrategy::Mask(_) => "mask".to_owned(),
+                core::TransformationStrategy::Pseudonymize(_) => "pseudonymize".to_owned(),
             },
             replacement: transformation.replacement,
             output_byte_range: transformation.output_byte_range.into(),
             output_codepoint_range: transformation.output_codepoint_range.into(),
+            key_ref: transformation.key_ref,
+            resolved_key_version: transformation.resolved_key_version,
         }
     }
 }
@@ -201,17 +231,18 @@ impl From<core::Transformation> for Transformation {
 #[pymethods]
 impl Transformation {
     fn __eq__(&self, other: PyRef<'_, Transformation>) -> bool {
-        self.finding.entity_type == other.finding.entity_type
-            && self.finding.matched_text == other.finding.matched_text
-            && self.finding.byte_range == other.finding.byte_range
-            && self.finding.codepoint_range == other.finding.codepoint_range
-            && self.finding.confidence == other.finding.confidence
-            && self.finding.detector_name == other.finding.detector_name
-            && self.finding.detector_version == other.finding.detector_version
+        self.entity_type == other.entity_type
+            && self.source_byte_range == other.source_byte_range
+            && self.source_codepoint_range == other.source_codepoint_range
+            && self.confidence == other.confidence
+            && self.detector_name == other.detector_name
+            && self.detector_version == other.detector_version
             && self.strategy == other.strategy
             && self.replacement == other.replacement
             && self.output_byte_range == other.output_byte_range
             && self.output_codepoint_range == other.output_codepoint_range
+            && self.key_ref == other.key_ref
+            && self.resolved_key_version == other.resolved_key_version
     }
 }
 
@@ -243,6 +274,139 @@ impl From<core::TransformResult> for TransformResult {
 impl TransformResult {
     fn __eq__(&self, other: PyRef<'_, TransformResult>) -> bool {
         self.text == other.text && self.transformations == other.transformations
+    }
+}
+
+struct PythonKeyProvider {
+    provider: Py<PyAny>,
+}
+
+fn provider_error_kind(error: &PyErr) -> core::KeyProviderErrorKind {
+    Python::attach(|py| {
+        let code = error
+            .value(py)
+            .getattr("code")
+            .and_then(|value| value.extract::<String>())
+            .ok();
+        match code.as_deref() {
+            Some("key_not_found") => core::KeyProviderErrorKind::NotFound,
+            Some("key_access_denied") => core::KeyProviderErrorKind::AccessDenied,
+            Some("key_provider_unavailable") => core::KeyProviderErrorKind::Unavailable,
+            _ => core::KeyProviderErrorKind::ProviderError,
+        }
+    })
+}
+
+fn provider_field<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if let Ok(dictionary) = value.cast::<PyDict>() {
+        dictionary.get_item(name)
+    } else {
+        value.getattr(name).map(Some)
+    }
+}
+
+fn resolved_key_from_python(value: &Bound<'_, PyAny>) -> core::ResolvedKey {
+    let key = provider_field(value, "key")
+        .ok()
+        .flatten()
+        .and_then(|value| value.extract::<Vec<u8>>().ok())
+        .unwrap_or_default();
+    let resolved_version = provider_field(value, "resolved_version")
+        .ok()
+        .flatten()
+        .and_then(|value| value.extract::<String>().ok())
+        .unwrap_or_default();
+    core::ResolvedKey::new(key, resolved_version)
+}
+
+impl core::KeyProvider for PythonKeyProvider {
+    fn resolve_key(&self, selector: core::KeySelector) -> core::KeyProviderFuture<'_> {
+        let provider = Python::attach(|py| self.provider.clone_ref(py));
+        Box::pin(async move {
+            let future = Python::attach(|py| {
+                let awaitable = provider
+                    .bind(py)
+                    .call_method1("resolve_key", (selector.key_ref(), selector.key_version()))?;
+                pyo3_async_runtimes::tokio::into_future(awaitable)
+            })
+            .map_err(|error| core::KeyProviderError::new(provider_error_kind(&error)))?;
+            let response = future
+                .await
+                .map_err(|error| core::KeyProviderError::new(provider_error_kind(&error)))?;
+            Ok(Python::attach(|py| {
+                resolved_key_from_python(response.bind(py))
+            }))
+        })
+    }
+}
+
+/// Provider-backed asynchronous privacy manager.
+#[pyclass(frozen, skip_from_py_object)]
+struct PrivacyManager {
+    provider: Py<PyAny>,
+}
+
+#[pymethods]
+impl PrivacyManager {
+    #[new]
+    fn new(py: Python<'_>, provider: Py<PyAny>) -> PyResult<Self> {
+        let resolve_key = provider.bind(py).getattr("resolve_key").map_err(|_| {
+            PyErr::new::<PyTypeError, _>("provider must define resolve_key(key_ref, key_version)")
+        })?;
+        if !resolve_key.is_callable() {
+            return Err(PyErr::new::<PyTypeError, _>(
+                "provider resolve_key attribute must be callable",
+            ));
+        }
+        Ok(Self { provider })
+    }
+
+    fn transform<'py>(
+        &self,
+        py: Python<'py>,
+        text: String,
+        findings: Vec<Py<Finding>>,
+        config: Py<PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let config_value = py_to_json(py, config.bind(py), "")?;
+        let config = core::parse_transformation_config(&config_value)
+            .map_err(|error| privacy_error(py, error))?;
+        let findings = findings
+            .iter()
+            .map(|finding| finding.bind(py).borrow().to_core())
+            .collect::<Vec<_>>();
+        let provider = self.provider.clone_ref(py);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider { provider });
+            let result = manager
+                .transform(&text, &findings, &config)
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, TransformResult::from(result)))
+        })
+    }
+
+    fn scan_and_transform<'py>(
+        &self,
+        py: Python<'py>,
+        text: String,
+        config: Py<PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let config_value = py_to_json(py, config.bind(py), "")?;
+        let config = core::parse_scan_and_transform_config(&config_value)
+            .map_err(|error| privacy_error(py, error))?;
+        let provider = self.provider.clone_ref(py);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider { provider });
+            let result = manager
+                .scan_and_transform(&text, &config)
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, TransformResult::from(result)))
+        })
     }
 }
 
@@ -331,6 +495,15 @@ fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
         core::PrivacyErrorCode::InvalidFinding => {
             PyErr::new::<DataFogFindingError, _>(error.to_string())
         }
+        core::PrivacyErrorCode::KeyProviderRequired
+        | core::PrivacyErrorCode::KeyNotFound
+        | core::PrivacyErrorCode::KeyAccessDenied
+        | core::PrivacyErrorCode::KeyProviderUnavailable
+        | core::PrivacyErrorCode::InvalidKeyMaterial
+        | core::PrivacyErrorCode::KeyProviderError
+        | core::PrivacyErrorCode::UnsupportedStrategy => {
+            PyErr::new::<DataFogKeyProviderError, _>(error.to_string())
+        }
         core::PrivacyErrorCode::InternalError => {
             PyErr::new::<DataFogInternalError, _>(error.to_string())
         }
@@ -414,10 +587,15 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "DataFogInternalError",
         module.py().get_type::<DataFogInternalError>(),
     )?;
+    module.add(
+        "DataFogKeyProviderError",
+        module.py().get_type::<DataFogKeyProviderError>(),
+    )?;
     module.add_class::<TextRange>()?;
     module.add_class::<Finding>()?;
     module.add_class::<Transformation>()?;
     module.add_class::<TransformResult>()?;
+    module.add_class::<PrivacyManager>()?;
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;

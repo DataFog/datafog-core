@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from pathlib import Path
 
 from datafog_core import (
     DataFogConfigurationError,
     DataFogFindingError,
+    DataFogKeyProviderError,
     Finding,
+    PrivacyManager,
     TextRange,
     scan,
     scan_and_transform,
@@ -80,6 +83,10 @@ def main() -> None:
     assert explicit.text == "👋 [EMAIL] and [EMAIL]"
     assert len(explicit.transformations) == 2
     first = explicit.transformations[0]
+    assert not hasattr(first, "finding")
+    assert not hasattr(first, "matched_text")
+    assert first.entity_type == "EMAIL"
+    assert first.detector_name.startswith("datafog-core/")
     assert first.replacement == "[EMAIL]"
     assert (first.output_byte_range.start, first.output_byte_range.end) == (5, 12)
     assert (first.output_codepoint_range.start, first.output_codepoint_range.end) == (2, 9)
@@ -206,6 +213,59 @@ def main() -> None:
     )
     assert selected.text == "Email support@example.com or call **********0100"
     assert len(selected.transformations) == 1
+
+    pseudonym_config = {
+        "default": {
+            "strategy": "pseudonymize",
+            "key_ref": "customers/email",
+            "key_version": "7",
+        }
+    }
+    try:
+        transform(text, scan(text), pseudonym_config)
+    except DataFogKeyProviderError as error:
+        assert error.code == "key_provider_required"
+        assert error.path == "/default/key_ref"
+    else:
+        raise AssertionError("providerless pseudonymization was accepted")
+
+    class Provider:
+        def __init__(self, key: bytes = bytes(range(32))) -> None:
+            self.key = key
+            self.calls: list[tuple[str, str | None]] = []
+
+        async def resolve_key(
+            self, key_ref: str, key_version: str | None
+        ) -> dict[str, object]:
+            self.calls.append((key_ref, key_version))
+            return {"key": self.key, "resolved_version": "7"}
+
+    provider = Provider()
+    async def provider_transform(active_provider: Provider):
+        return await PrivacyManager(active_provider).scan_and_transform(
+            "jane@example.com jane@example.com",
+            {"transform": pseudonym_config},
+        )
+
+    pseudonymized = asyncio.run(provider_transform(provider))
+    expected_token = "lIdYiXR1nTA9XURAF5GmA62F/aknbUP3Q2B31wnZ2hA="
+    assert pseudonymized.text == f"{expected_token} {expected_token}"
+    assert provider.calls == [("customers/email", "7")]
+    for record in pseudonymized.transformations:
+        assert record.strategy == "pseudonymize"
+        assert record.replacement == expected_token
+        assert record.key_ref == "customers/email"
+        assert record.resolved_key_version == "7"
+        assert not hasattr(record, "finding")
+        assert not hasattr(record, "matched_text")
+
+    try:
+        asyncio.run(provider_transform(Provider(b"short")))
+    except DataFogKeyProviderError as error:
+        assert error.code == "invalid_key_material"
+        assert error.path == "/transform/default/key_ref"
+    else:
+        raise AssertionError("invalid provider key material was accepted")
 
     try:
         transform(

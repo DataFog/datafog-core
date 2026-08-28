@@ -13,13 +13,18 @@ Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score.
 
-The initial transformation strategies are `redact`, `mask`, and `remove`.
+The transformation strategies are `redact`, `mask`, `remove`, and
+`pseudonymize` in Rust, Python, and Node.js.
 Redaction uses an unnumbered `[ENTITY_TYPE]` placeholder, masking supports full
 or leading/trailing reveal modes, and removal deletes only the exact finding
-span. `transform` requires explicit findings; `scan_and_transform` (or
+span. Pseudonymization uses provider-resolved 256-bit keys and deterministic
+HMAC-SHA-256 tokens; it is deliberately unsupported in browser WASM.
+`transform` requires explicit findings; `scan_and_transform` (or
 `scanAndTransform` in JavaScript) is the explicit scan-then-transform
 convenience. Results include the transformed text and an ordered record for
-every applied replacement, including its output byte and code-point ranges.
+every applied replacement, including its source metadata and output byte and
+code-point ranges. Transformation records never include the original matched
+text.
 
 Transformation calls require an envelope with a default strategy. It can also
 select entity types, override the strategy per entity, and exempt exact or
@@ -86,7 +91,9 @@ python -m pip install datafog-core
 ```
 
 ```python
-from datafog_core import scan, scan_and_transform
+import asyncio
+
+from datafog_core import PrivacyManager, scan, scan_and_transform
 
 findings = scan("Email jane@example.com")
 print(findings[0].entity_type)       # EMAIL
@@ -111,6 +118,22 @@ masked = scan_and_transform(
     },
 )
 assert masked.text == "Email ************.com"
+
+class KeyProvider:
+    async def resolve_key(self, key_ref, key_version):
+        return {"key": load_32_byte_key(key_ref, key_version), "resolved_version": "7"}
+
+async def pseudonymize():
+    return await PrivacyManager(KeyProvider()).scan_and_transform(
+        "Email jane@example.com",
+        {
+            "transform": {
+                "default": {"strategy": "pseudonymize", "key_ref": "customers/email"}
+            }
+        },
+    )
+
+pseudonymized = asyncio.run(pseudonymize())
 ```
 
 ### Node.js
@@ -118,7 +141,7 @@ assert masked.text == "Email ************.com"
 `@datafog/node` will install as a native package once its npm release is published.
 
 ```js
-import { scan, scanAndTransform } from "@datafog/node";
+import { PrivacyManager, scan, scanAndTransform } from "@datafog/node";
 
 console.log(scan("Email jane@example.com"));
 console.log(
@@ -126,6 +149,17 @@ console.log(
     transform: { default: { strategy: "redact" } },
   }).text,
 );
+
+const manager = new PrivacyManager({
+  async resolveKey({ keyRef, keyVersion }) {
+    return { key: await load32ByteKey(keyRef, keyVersion), resolvedVersion: "7" };
+  },
+});
+const pseudonymized = await manager.scanAndTransform("Email jane@example.com", {
+  transform: {
+    default: { strategy: "pseudonymize", key_ref: "customers/email" },
+  },
+});
 ```
 
 The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows x64.

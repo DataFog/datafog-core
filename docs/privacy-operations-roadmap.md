@@ -142,7 +142,7 @@ keyed pseudonymization.
 
 ## Slice 6: One-way pseudonymization
 
-**Status: contract accepted; implementation pending**
+**Status: complete**
 
 - Add `pseudonymize` with required `key_ref` and optional `key_version`.
 - Use fixed HMAC-SHA-256 over the exact UTF-8 matched value and encode the full
