@@ -16,10 +16,10 @@ for a PII detection and transformation engine.
 | Precomputed findings | Preserve | Permit transformations over caller-supplied findings after strict validation. |
 | Prompt/output guardrails | Out of scope | A governance layer may consume Core findings and results to make and enforce `allow`, `warn`, or `block` decisions. |
 | Hash replacement | Compatibility only | Exclude unkeyed hashing from canonical Core transformations; consider a plainly named fingerprint in a separate compatibility layer only for an accepted migration requirement. |
-| Pseudonymization | Redesign | Implement a new keyed, scoped, deterministic, one-way value pseudonym. Do not copy numbered Python placeholders. |
+| Pseudonymization | Redesign | Use HMAC-SHA-256 over exact UTF-8 input with a provider-resolved 256-bit key and full padded-Base64 output. The key defines linkage scope; do not copy numbered Python placeholders. |
 | Reversible tokenization | New | Add opaque, authorized, reversible tokens through a key or vault boundary. |
 | Restoration | New | Restore only known reversible tokens under explicit authorization and scope checks. |
-| Transformation mappings | Redesign | Return ordered transformation records; make any mapping view explicit and sensitive. |
+| Transformation mappings | Redesign | Return ordered transformation records without `matched_text` or a plaintext-to-token mapping. Preserve source ranges and non-sensitive audit metadata. |
 | Duplicate handling | Redesign | Collapse exact duplicates deterministically. |
 | Overlap handling | Redesign | Resolve overlaps once in the transformation framework using documented precedence. |
 | Malformed finding handling | Redesign | Reject the whole transformation instead of silently leaving possible PII unchanged. |

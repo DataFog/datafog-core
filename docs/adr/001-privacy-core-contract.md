@@ -47,6 +47,11 @@ with typed enum variants; object-oriented bindings serialize it as:
   character: "*",
   reveal: { direction: "first" | "last", count: non_negative_integer }
 }
+{
+  strategy: "pseudonymize",
+  key_ref: "provider-specific-key-reference",
+  key_version?: "provider-specific-version-or-alias"
+}
 ```
 
 Fields that do not belong to the selected strategy are rejected rather than
@@ -193,6 +198,13 @@ Node, and WASM. The stable top-level error codes are:
 invalid_configuration
 invalid_finding
 internal_error
+key_provider_required
+key_not_found
+key_access_denied
+key_provider_unavailable
+invalid_key_material
+key_provider_error
+unsupported_strategy
 ```
 
 Caller-correctable errors also include a stable machine-readable `reason` and
@@ -230,6 +242,16 @@ failures as a `RuntimeError` subclass. Node and WASM expose JavaScript
 native exception hierarchy, but the canonical fields retain the same meaning.
 Additional reason values may be introduced as validation expands without
 creating new top-level categories for every validation case.
+
+Key-provider errors never contain key bytes, source text, credentials, or the
+key reference. Their path identifies the pseudonymization selector that could
+not be resolved. `key_provider_required` means a synchronous providerless call
+selected pseudonymization. `key_provider_unavailable` indicates that retrying
+the entire transformation may succeed; no other provider error is
+automatically retryable. `unsupported_strategy` identifies a strategy that a
+binding intentionally cannot execute, including pseudonymization in browser
+WASM. Core does not add retries or backoff around a provider. Provider
+implementations own network timeouts and any SDK-level retry policy.
 
 `allow`, `warn`, and `block` are governance decisions, not Core operations or
 transformation strategies. A separate governance layer may consume findings
@@ -320,22 +342,31 @@ TransformResult {
 }
 
 Transformation {
-  finding
+  entity_type
+  source_byte_range
+  source_codepoint_range
+  confidence?
+  detector_name
+  detector_version?
   strategy
   replacement
   output_byte_range
   output_codepoint_range
+  key_ref?                 // pseudonymize only
+  resolved_key_version?    // pseudonymize only
 }
 ```
 
 Transformation records are ordered by source document position and include
 only transformations that were actually applied. Output ranges are zero-based,
 end-exclusive, refer to the transformed text, and select exactly `replacement`.
-The finding already supplies the original value and source ranges, so the
-canonical payload does not contain a second original-to-replacement mapping.
+Source metadata deliberately excludes `matched_text`; Core does not echo the
+original PII or offer an include-originals switch. Callers that explicitly need
+the source value already possess the input and can use the source ranges.
 
-A mapping view may be offered as an explicit convenience API. Sensitive
-original values are excluded from default debug and log output.
+Pseudonymization records include the configured key reference and the concrete
+version returned by the provider. They never include key material or a
+plaintext-to-token mapping. Non-pseudonymization records omit both key fields.
 
 ### Security meaning of strategies
 
@@ -363,14 +394,64 @@ original values are excluded from default debug and log output.
   pseudonymization design. A separately scoped compatibility adapter may offer
   a plainly named fingerprint only when a concrete migration requirement
   justifies it.
-- `pseudonymize` is a new keyed, scoped, deterministic, one-way operation. It
-  is not based on the Python numbered-placeholder behavior.
+- `pseudonymize` is a new keyed, deterministic, one-way operation. It is not
+  based on the Python numbered-placeholder behavior. It computes HMAC-SHA-256
+  over the exact UTF-8 bytes of `matched_text` and encodes the complete 32-byte
+  digest as standard padded Base64. The result is always 44 characters. Core
+  performs no trimming, case folding, Unicode normalization, semantic
+  canonicalization, domain separation, digest truncation, or algorithm
+  negotiation.
 - `tokenize` creates opaque reversible or vault-backed tokens.
 - `restore` accepts only explicitly reversible tokens and requires
   authorization.
 
 Pseudonymization is value pseudonymization, not identity resolution. The core
 does not infer that different identifiers belong to the same person.
+
+### Pseudonymization key contract
+
+The key defines the linkage scope. The same exact value and key material
+produce the same pseudonym, including across different entity types. Separate
+tenants, datasets, or purposes use separate keys or key versions; those
+concepts are not additional Core configuration fields.
+
+Serializable pseudonymization configuration contains a required `key_ref` and
+an optional `key_version`. A runtime `KeyProvider` receives those identifiers
+and returns exactly 32 cryptographically random key bytes plus a non-empty
+concrete resolved version. Core rejects every other key length and never pads,
+hashes, or derives arbitrary input into a key. Base64 decoding, secret-store
+formats, password-based derivation, and provider authentication remain outside
+Core.
+
+Key resolution is separated from the synchronous transformation kernel. An
+asynchronous `PrivacyManager` owns the provider, resolves every distinct key
+selector required by the selected findings exactly once, and freezes all
+resolved versions for the request. It resolves no keys for findings removed by
+entity selection, allowlists, duplicate handling, or overlap resolution. All
+keys must resolve and validate before text mutation begins; one failure returns
+no text or transformation records. An explicitly requested version never
+falls back to another version. Omitting a version permits provider-defined
+latest-version behavior, so a later whole-operation retry may observe a
+rotation and produce different pseudonyms.
+
+Default and entity-specific strategies may refer to different keys. Distinct
+selectors are deduplicated within one request, and each applied record reports
+the key reference and concrete resolved version it used.
+
+Core holds resolved material in a non-clonable, non-serializable,
+redacted-debug container for one call, never caches it across calls, and
+best-effort zeroizes it on every exit path. A provider may implement explicit
+caching but owns its TTL and rotation behavior. Core never logs key material or
+places it in an error.
+
+Rust, Python, and Node expose the provider-backed manager. The existing
+synchronous operations remain available for `remove`, `redact`, and `mask`;
+attempting to apply `pseudonymize` without a manager fails with a structured
+provider-required error. Browser WASM pseudonymization is deferred because the
+chosen provider model would place raw key bytes in browser-accessible linear
+memory. Core ships no cloud-vendor SDK adapter in this slice; AWS, Google, and
+other integrations belong in separate packages behind the same provider
+contract.
 
 ## Capability-continuity stance
 
@@ -385,10 +466,11 @@ and documented separately.
   portable.
 - Strict finding validation may intentionally differ from permissive legacy
   behavior.
-- Consumers receive auditable transformation records without a redundant
-  mapping dictionary.
-- Secure pseudonymization and tokenization require explicit key and scope
-  contracts in later ADRs.
+- Consumers receive auditable transformation records without echoing original
+  PII or returning a mapping dictionary.
+- Secure pseudonymization requires an explicit key-provider contract;
+  reversible tokenization requires a separately accepted key, authorization,
+  and storage boundary.
 - Pseudonymized data remains sensitive and must not be described as anonymous.
 - Governance decisions and payload enforcement remain outside DataFog Core.
 
@@ -396,7 +478,6 @@ and documented separately.
 
 This ADR does not choose:
 
-- HMAC token encoding, key provider, scope fields, or rotation procedure;
 - reversible-token storage or cryptographic construction;
-- production audit and mapping storage.
+- production audit storage; or
 - custom literal replacement or whitespace-normalizing removal.

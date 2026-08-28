@@ -142,14 +142,33 @@ keyed pseudonymization.
 
 ## Slice 6: One-way pseudonymization
 
-- Define the key-provider boundary.
-- Define required tenant, dataset, purpose, and scope-version context.
-- Use a reviewed keyed construction with domain separation.
-- Define token encoding and key rotation behavior.
-- Suppress sensitive source mappings by default.
+**Status: contract accepted; implementation pending**
 
-**Proof:** identical values are stable within the same entity type and scope;
-changing any scope component, entity type, or key version changes the output.
+- Add `pseudonymize` with required `key_ref` and optional `key_version`.
+- Use fixed HMAC-SHA-256 over the exact UTF-8 matched value and encode the full
+  digest as 44-character standard padded Base64.
+- Let the key define linkage scope. Do not add tenant, dataset, purpose,
+  entity-type, domain-separation, normalization, or algorithm-selection fields.
+- Resolve provider keys asynchronously before entering the synchronous
+  transformation kernel. Require exactly 32 random bytes and a concrete
+  resolved version.
+- Resolve each distinct selector used by selected findings once, freeze all
+  versions for the request, and fail atomically if any resolution fails.
+- Keep key material out of serialized configuration, logs, debug output,
+  errors, and results; retain it for one call only and best-effort zeroize it.
+- Permit provider-owned caching and retries without adding either to Core.
+- Remove `matched_text` from every transformation record. Preserve source
+  ranges and detector metadata, and report `key_ref` plus concrete key version
+  only for pseudonymization records.
+- Ship the provider-backed manager through Rust, Python, and Node. Defer
+  browser WASM pseudonymization and cloud-specific provider adapters.
+
+**Proof:** exact input and the same key produce the same full HMAC token across
+Rust, Python, and Node; changing exact input or resolved key material changes
+the token; different entity types do not alter it; multiple selectors resolve
+once and apply atomically; provider failures, invalid key material, and
+providerless or browser-WASM calls fail closed; no transformation record echoes
+the original PII.
 
 ## Slice 7: Reversible tokenization and restoration
 
@@ -173,15 +192,15 @@ Remaining binding work is:
 1. add explicitly named UTF-16 code-unit ranges for JavaScript consumers as
    required by ADR 001, without changing the existing byte or code-point
    fields;
-2. carry one-way pseudonymization through Python, Node, and WASM when that
-   slice is implemented;
+2. retain Rust, Python, and Node pseudonymization conformance coverage while
+   keeping browser WASM key handling explicitly unsupported;
 3. expose reversible tokenization and restoration only through runtimes with a
    separately accepted key-custody, authorization, and storage boundary; and
 4. retain installed-package and cross-binding conformance tests as release
    gates.
 
-Reversible token storage is not promised in WASM without that separate
-key-custody and storage design.
+Pseudonymization and reversible token storage are not promised in browser WASM
+without a separately accepted host-managed key-custody boundary.
 
 ## Acceptance bar
 
