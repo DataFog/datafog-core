@@ -1,6 +1,6 @@
 /** Canonical built-in values are uppercase, but custom detectors may add values. */
 export type EntityType = string;
-export type TransformationStrategy = "redact" | "mask" | "remove";
+export type TransformationStrategy = "redact" | "mask" | "remove" | "tokenize";
 
 export interface MaskRevealConfig {
   readonly direction: "first" | "last";
@@ -10,6 +10,7 @@ export interface MaskRevealConfig {
 export type TransformationStrategyConfig =
   | { readonly strategy: "redact" }
   | { readonly strategy: "remove" }
+  | { readonly strategy: "tokenize"; readonly token_ref: string }
   | {
       readonly strategy: "mask";
       readonly character?: string;
@@ -51,6 +52,15 @@ export type DataFogErrorCode =
   | "key_provider_unavailable"
   | "invalid_key_material"
   | "key_provider_error"
+  | "token_provider_required"
+  | "invalid_token"
+  | "unsupported_token_version"
+  | "token_not_found"
+  | "token_expired"
+  | "token_access_denied"
+  | "invalid_token_material"
+  | "token_provider_unavailable"
+  | "token_provider_error"
   | "unsupported_strategy"
   | "internal_error";
 
@@ -89,6 +99,8 @@ export interface Transformation {
   readonly outputCodepointRange: TextRange;
   readonly keyRef?: string;
   readonly resolvedKeyVersion?: string;
+  readonly tokenRef?: string;
+  readonly resolvedTokenVersion?: string;
 }
 
 export interface TransformResult {
@@ -107,3 +119,14 @@ export function scanAndTransform(
   text: string,
   config: ScanAndTransformConfig,
 ): TransformResult;
+export interface PrivacyContext { readonly scope: string; }
+export interface Restoration {
+  readonly sourceByteRange: TextRange;
+  readonly sourceCodepointRange: TextRange;
+  readonly outputByteRange: TextRange;
+  readonly outputCodepointRange: TextRange;
+  readonly tokenRef: string;
+  readonly resolvedTokenVersion: string;
+}
+export interface RestoreResult { readonly text: string; readonly restorations: Restoration[]; }
+export function restore(text: string, context: PrivacyContext): RestoreResult;

@@ -267,6 +267,76 @@ def main() -> None:
     else:
         raise AssertionError("invalid provider key material was accepted")
 
+    class TokenProvider:
+        def __init__(self) -> None:
+            self.next_payload = 0
+            self.records: dict[bytes, tuple[str, str, str, str]] = {}
+
+        async def tokenize_batch(self, scope: str, items: list[dict[str, object]]):
+            results = []
+            for item in items:
+                self.next_payload += 1
+                payload = bytes([self.next_payload])
+                self.records[payload] = (
+                    scope,
+                    str(item["token_ref"]),
+                    "active-1",
+                    str(item["exact_value"]),
+                )
+                results.append(
+                    {
+                        "id": item["id"],
+                        "payload": payload,
+                        "resolved_version": "active-1",
+                    }
+                )
+            return results
+
+        async def restore_batch(self, scope: str, items: list[dict[str, object]]):
+            results = []
+            for item in items:
+                record = self.records.get(bytes(item["payload"]))
+                if record is None or record[:3] != (
+                    scope,
+                    item["token_ref"],
+                    item["resolved_version"],
+                ):
+                    error = RuntimeError("denied")
+                    error.code = "token_access_denied"
+                    raise error
+                results.append({"id": item["id"], "value": record[3]})
+            return results
+
+    async def token_round_trip():
+        manager = PrivacyManager(None, TokenProvider())
+        context = {"scope": "tenant/α"}
+        tokenized = await manager.scan_and_transform(
+            "👋 jane@example.com jane@example.com",
+            {
+                "transform": {
+                    "default": {
+                        "strategy": "tokenize",
+                        "token_ref": "customers/default",
+                    }
+                }
+            },
+            context,
+        )
+        assert tokenized.transformations[0].replacement != tokenized.transformations[1].replacement
+        assert tokenized.transformations[0].token_ref == "customers/default"
+        assert tokenized.transformations[0].resolved_token_version == "active-1"
+        restored = await manager.restore(tokenized.text, context)
+        assert restored.text == "👋 jane@example.com jane@example.com"
+        assert len(restored.restorations) == 2
+        try:
+            await manager.restore(tokenized.text, {"scope": "tenant/b"})
+        except DataFogKeyProviderError as error:
+            assert error.code == "token_access_denied"
+        else:
+            raise AssertionError("wrong-scope restoration was accepted")
+
+    asyncio.run(token_round_trip())
+
     try:
         transform(
             text,

@@ -202,6 +202,12 @@ struct Transformation {
 
     #[pyo3(get)]
     resolved_key_version: Option<String>,
+
+    #[pyo3(get)]
+    token_ref: Option<String>,
+
+    #[pyo3(get)]
+    resolved_token_version: Option<String>,
 }
 
 impl From<core::Transformation> for Transformation {
@@ -218,12 +224,15 @@ impl From<core::Transformation> for Transformation {
                 core::TransformationStrategy::Remove => "remove".to_owned(),
                 core::TransformationStrategy::Mask(_) => "mask".to_owned(),
                 core::TransformationStrategy::Pseudonymize(_) => "pseudonymize".to_owned(),
+                core::TransformationStrategy::Tokenize(_) => "tokenize".to_owned(),
             },
             replacement: transformation.replacement,
             output_byte_range: transformation.output_byte_range.into(),
             output_codepoint_range: transformation.output_codepoint_range.into(),
             key_ref: transformation.key_ref,
             resolved_key_version: transformation.resolved_key_version,
+            token_ref: transformation.token_ref,
+            resolved_token_version: transformation.resolved_token_version,
         }
     }
 }
@@ -243,6 +252,8 @@ impl Transformation {
             && self.output_codepoint_range == other.output_codepoint_range
             && self.key_ref == other.key_ref
             && self.resolved_key_version == other.resolved_key_version
+            && self.token_ref == other.token_ref
+            && self.resolved_token_version == other.resolved_token_version
     }
 }
 
@@ -277,8 +288,53 @@ impl TransformResult {
     }
 }
 
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+struct Restoration {
+    #[pyo3(get)]
+    source_byte_range: TextRange,
+    #[pyo3(get)]
+    source_codepoint_range: TextRange,
+    #[pyo3(get)]
+    output_byte_range: TextRange,
+    #[pyo3(get)]
+    output_codepoint_range: TextRange,
+    #[pyo3(get)]
+    token_ref: String,
+    #[pyo3(get)]
+    resolved_token_version: String,
+}
+
+#[pyclass(frozen, skip_from_py_object)]
+struct RestoreResult {
+    #[pyo3(get)]
+    text: String,
+    #[pyo3(get)]
+    restorations: Vec<Restoration>,
+}
+
+impl From<core::RestoreResult> for RestoreResult {
+    fn from(result: core::RestoreResult) -> Self {
+        Self {
+            text: result.text,
+            restorations: result
+                .restorations
+                .into_iter()
+                .map(|record| Restoration {
+                    source_byte_range: record.source_byte_range.into(),
+                    source_codepoint_range: record.source_codepoint_range.into(),
+                    output_byte_range: record.output_byte_range.into(),
+                    output_codepoint_range: record.output_codepoint_range.into(),
+                    token_ref: record.token_ref,
+                    resolved_token_version: record.resolved_token_version,
+                })
+                .collect(),
+        }
+    }
+}
+
 struct PythonKeyProvider {
-    provider: Py<PyAny>,
+    provider: Option<Py<PyAny>>,
 }
 
 fn provider_error_kind(error: &PyErr) -> core::KeyProviderErrorKind {
@@ -308,6 +364,18 @@ fn provider_field<'py>(
     }
 }
 
+fn required_provider_string(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+    provider_field(value, name)?
+        .ok_or_else(|| PyErr::new::<PyTypeError, _>(format!("provider response requires {name}")))?
+        .extract()
+}
+
+fn required_provider_bytes(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<u8>> {
+    provider_field(value, name)?
+        .ok_or_else(|| PyErr::new::<PyTypeError, _>(format!("provider response requires {name}")))?
+        .extract()
+}
+
 fn resolved_key_from_python(value: &Bound<'_, PyAny>) -> core::ResolvedKey {
     let key = provider_field(value, "key")
         .ok()
@@ -323,11 +391,21 @@ fn resolved_key_from_python(value: &Bound<'_, PyAny>) -> core::ResolvedKey {
 }
 
 impl core::KeyProvider for PythonKeyProvider {
+    fn is_configured(&self) -> bool {
+        self.provider.is_some()
+    }
+
     fn resolve_key(&self, selector: core::KeySelector) -> core::KeyProviderFuture<'_> {
-        let provider = Python::attach(|py| self.provider.clone_ref(py));
+        let provider = Python::attach(|py| {
+            self.provider
+                .as_ref()
+                .map(|provider| provider.clone_ref(py))
+        });
         Box::pin(async move {
             let future = Python::attach(|py| {
                 let awaitable = provider
+                    .as_ref()
+                    .ok_or_else(|| PyErr::new::<PyRuntimeError, _>("key provider is required"))?
                     .bind(py)
                     .call_method1("resolve_key", (selector.key_ref(), selector.key_version()))?;
                 pyo3_async_runtimes::tokio::into_future(awaitable)
@@ -343,33 +421,202 @@ impl core::KeyProvider for PythonKeyProvider {
     }
 }
 
+struct PythonTokenProvider {
+    provider: Option<Py<PyAny>>,
+}
+
+fn token_provider_error_kind(error: &PyErr) -> core::TokenProviderErrorKind {
+    Python::attach(|py| {
+        let code = error
+            .value(py)
+            .getattr("code")
+            .and_then(|value| value.extract::<String>())
+            .ok();
+        match code.as_deref() {
+            Some("token_not_found") => core::TokenProviderErrorKind::NotFound,
+            Some("token_expired") => core::TokenProviderErrorKind::Expired,
+            Some("token_access_denied") => core::TokenProviderErrorKind::AccessDenied,
+            Some("token_provider_unavailable") => core::TokenProviderErrorKind::Unavailable,
+            _ => core::TokenProviderErrorKind::ProviderError,
+        }
+    })
+}
+
+impl core::TokenProvider for PythonTokenProvider {
+    fn is_configured(&self) -> bool {
+        self.provider.is_some()
+    }
+
+    fn tokenize_batch(
+        &self,
+        scope: &str,
+        items: Vec<core::TokenizeItem>,
+    ) -> core::TokenizeProviderFuture<'_> {
+        let provider = Python::attach(|py| {
+            self.provider
+                .as_ref()
+                .map(|provider| provider.clone_ref(py))
+        });
+        let scope = scope.to_owned();
+        Box::pin(async move {
+            let future = Python::attach(|py| -> PyResult<_> {
+                let provider = provider
+                    .as_ref()
+                    .ok_or_else(|| PyErr::new::<PyRuntimeError, _>("token provider is required"))?;
+                let requests = PyList::empty(py);
+                for item in items {
+                    let request = PyDict::new(py);
+                    request.set_item("id", item.id())?;
+                    request.set_item("exact_value", item.exact_value())?;
+                    request.set_item("token_ref", item.token_ref())?;
+                    requests.append(request)?;
+                }
+                let awaitable = provider
+                    .bind(py)
+                    .call_method1("tokenize_batch", (scope, requests))?;
+                pyo3_async_runtimes::tokio::into_future(awaitable)
+            })
+            .map_err(|error| core::TokenProviderError::new(token_provider_error_kind(&error)))?;
+            let response = future.await.map_err(|error| {
+                core::TokenProviderError::new(token_provider_error_kind(&error))
+            })?;
+            Ok(Python::attach(|py| {
+                let Ok(values) = response.bind(py).try_iter() else {
+                    return vec![core::TokenizeResult::new("", Vec::new(), "")];
+                };
+                let mut parsed = Vec::new();
+                for value in values {
+                    let Ok(value) = value else {
+                        return vec![core::TokenizeResult::new("", Vec::new(), "")];
+                    };
+                    let parsed_fields = (
+                        required_provider_string(&value, "id"),
+                        required_provider_bytes(&value, "payload"),
+                        required_provider_string(&value, "resolved_version"),
+                    );
+                    let (Ok(id), Ok(payload), Ok(version)) = parsed_fields else {
+                        return vec![core::TokenizeResult::new("", Vec::new(), "")];
+                    };
+                    parsed.push(core::TokenizeResult::new(id, payload, version));
+                }
+                parsed
+            }))
+        })
+    }
+
+    fn restore_batch(
+        &self,
+        scope: &str,
+        items: Vec<core::RestoreItem>,
+    ) -> core::RestoreProviderFuture<'_> {
+        let provider = Python::attach(|py| {
+            self.provider
+                .as_ref()
+                .map(|provider| provider.clone_ref(py))
+        });
+        let scope = scope.to_owned();
+        Box::pin(async move {
+            let future = Python::attach(|py| -> PyResult<_> {
+                let provider = provider
+                    .as_ref()
+                    .ok_or_else(|| PyErr::new::<PyRuntimeError, _>("token provider is required"))?;
+                let requests = PyList::empty(py);
+                for item in items {
+                    let request = PyDict::new(py);
+                    request.set_item("id", item.id())?;
+                    request.set_item("token_ref", item.token_ref())?;
+                    request.set_item("resolved_version", item.resolved_version())?;
+                    request.set_item("payload", item.payload())?;
+                    requests.append(request)?;
+                }
+                let awaitable = provider
+                    .bind(py)
+                    .call_method1("restore_batch", (scope, requests))?;
+                pyo3_async_runtimes::tokio::into_future(awaitable)
+            })
+            .map_err(|error| core::TokenProviderError::new(token_provider_error_kind(&error)))?;
+            let response = future.await.map_err(|error| {
+                core::TokenProviderError::new(token_provider_error_kind(&error))
+            })?;
+            Ok(Python::attach(|py| {
+                let Ok(values) = response.bind(py).try_iter() else {
+                    return vec![core::RestoredValue::new("", "")];
+                };
+                let mut parsed = Vec::new();
+                for value in values {
+                    let Ok(value) = value else {
+                        return vec![core::RestoredValue::new("", "")];
+                    };
+                    let parsed_fields = (
+                        required_provider_string(&value, "id"),
+                        required_provider_string(&value, "value"),
+                    );
+                    let (Ok(id), Ok(restored)) = parsed_fields else {
+                        return vec![core::RestoredValue::new("", "")];
+                    };
+                    parsed.push(core::RestoredValue::new(id, restored));
+                }
+                parsed
+            }))
+        })
+    }
+}
+
 /// Provider-backed asynchronous privacy manager.
 #[pyclass(frozen, skip_from_py_object)]
 struct PrivacyManager {
-    provider: Py<PyAny>,
+    key_provider: Option<Py<PyAny>>,
+    token_provider: Option<Py<PyAny>>,
 }
 
 #[pymethods]
 impl PrivacyManager {
     #[new]
-    fn new(py: Python<'_>, provider: Py<PyAny>) -> PyResult<Self> {
-        let resolve_key = provider.bind(py).getattr("resolve_key").map_err(|_| {
-            PyErr::new::<PyTypeError, _>("provider must define resolve_key(key_ref, key_version)")
-        })?;
-        if !resolve_key.is_callable() {
-            return Err(PyErr::new::<PyTypeError, _>(
-                "provider resolve_key attribute must be callable",
-            ));
+    #[pyo3(signature = (provider=None, token_provider=None))]
+    fn new(
+        py: Python<'_>,
+        provider: Option<Py<PyAny>>,
+        token_provider: Option<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        if let Some(provider) = &provider {
+            let resolve_key = provider.bind(py).getattr("resolve_key").map_err(|_| {
+                PyErr::new::<PyTypeError, _>(
+                    "key provider must define resolve_key(key_ref, key_version)",
+                )
+            })?;
+            if !resolve_key.is_callable() {
+                return Err(PyErr::new::<PyTypeError, _>(
+                    "provider resolve_key attribute must be callable",
+                ));
+            }
         }
-        Ok(Self { provider })
+        if let Some(provider) = &token_provider {
+            for method in ["tokenize_batch", "restore_batch"] {
+                if !provider
+                    .bind(py)
+                    .getattr(method)
+                    .is_ok_and(|value| value.is_callable())
+                {
+                    return Err(PyErr::new::<PyTypeError, _>(
+                        "token provider must define tokenize_batch and restore_batch",
+                    ));
+                }
+            }
+        }
+        Ok(Self {
+            key_provider: provider,
+            token_provider,
+        })
     }
 
+    #[pyo3(signature = (text, findings, config, context=None))]
     fn transform<'py>(
         &self,
         py: Python<'py>,
         text: String,
         findings: Vec<Py<Finding>>,
         config: Py<PyAny>,
+        context: Option<Py<PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let config_value = py_to_json(py, config.bind(py), "")?;
         let config = core::parse_transformation_config(&config_value)
@@ -378,34 +625,104 @@ impl PrivacyManager {
             .iter()
             .map(|finding| finding.bind(py).borrow().to_core())
             .collect::<Vec<_>>();
-        let provider = self.provider.clone_ref(py);
+        let context = context
+            .map(|context| py_to_json(py, context.bind(py), ""))
+            .transpose()?
+            .map(|value| core::parse_privacy_context(&value))
+            .transpose()
+            .map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let manager = core::PrivacyManager::new(PythonKeyProvider { provider });
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
             let result = manager
-                .transform(&text, &findings, &config)
+                .transform_with_context(&text, &findings, &config, context.as_ref())
                 .await
                 .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
             Python::attach(|py| Py::new(py, TransformResult::from(result)))
         })
     }
 
+    #[pyo3(signature = (text, config, context=None))]
     fn scan_and_transform<'py>(
         &self,
         py: Python<'py>,
         text: String,
         config: Py<PyAny>,
+        context: Option<Py<PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let config_value = py_to_json(py, config.bind(py), "")?;
         let config = core::parse_scan_and_transform_config(&config_value)
             .map_err(|error| privacy_error(py, error))?;
-        let provider = self.provider.clone_ref(py);
+        let context = context
+            .map(|context| py_to_json(py, context.bind(py), ""))
+            .transpose()?
+            .map(|value| core::parse_privacy_context(&value))
+            .transpose()
+            .map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let manager = core::PrivacyManager::new(PythonKeyProvider { provider });
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
             let result = manager
-                .scan_and_transform(&text, &config)
+                .scan_and_transform_with_context(&text, &config, context.as_ref())
                 .await
                 .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
             Python::attach(|py| Py::new(py, TransformResult::from(result)))
+        })
+    }
+
+    fn restore<'py>(
+        &self,
+        py: Python<'py>,
+        text: String,
+        context: Py<PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let context = py_to_json(py, context.bind(py), "")?;
+        let context =
+            core::parse_privacy_context(&context).map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
+            let result = manager
+                .restore(&text, &context)
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, RestoreResult::from(result)))
         })
     }
 }
@@ -501,6 +818,15 @@ fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
         | core::PrivacyErrorCode::KeyProviderUnavailable
         | core::PrivacyErrorCode::InvalidKeyMaterial
         | core::PrivacyErrorCode::KeyProviderError
+        | core::PrivacyErrorCode::TokenProviderRequired
+        | core::PrivacyErrorCode::InvalidToken
+        | core::PrivacyErrorCode::UnsupportedTokenVersion
+        | core::PrivacyErrorCode::TokenNotFound
+        | core::PrivacyErrorCode::TokenExpired
+        | core::PrivacyErrorCode::TokenAccessDenied
+        | core::PrivacyErrorCode::InvalidTokenMaterial
+        | core::PrivacyErrorCode::TokenProviderUnavailable
+        | core::PrivacyErrorCode::TokenProviderError
         | core::PrivacyErrorCode::UnsupportedStrategy => {
             PyErr::new::<DataFogKeyProviderError, _>(error.to_string())
         }
@@ -595,6 +921,8 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Finding>()?;
     module.add_class::<Transformation>()?;
     module.add_class::<TransformResult>()?;
+    module.add_class::<Restoration>()?;
+    module.add_class::<RestoreResult>()?;
     module.add_class::<PrivacyManager>()?;
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;

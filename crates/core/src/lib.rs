@@ -50,6 +50,69 @@ pub enum TransformationStrategy {
     Mask(MaskConfig),
     /// Replace the exact finding value with a deterministic keyed pseudonym.
     Pseudonymize(PseudonymizeConfig),
+    /// Replace the exact finding value with an opaque reversible token.
+    Tokenize(TokenizeConfig),
+}
+
+/// Provider-owned token profile selected by a tokenization request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TokenizeConfig {
+    token_ref: String,
+}
+
+impl TokenizeConfig {
+    /// Create a validated token profile selector.
+    pub fn new(token_ref: impl Into<String>) -> Result<Self, PrivacyError> {
+        let token_ref = token_ref.into();
+        if token_ref.trim().is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                "/token_ref",
+                "token_ref must not be empty or whitespace-only",
+            ));
+        }
+        Ok(Self { token_ref })
+    }
+
+    /// Provider-defined token profile reference.
+    pub fn token_ref(&self) -> &str {
+        &self.token_ref
+    }
+}
+
+/// Non-secret request context used for authorization by token providers.
+#[derive(Clone, PartialEq, Eq)]
+pub struct PrivacyContext {
+    scope: String,
+}
+
+impl std::fmt::Debug for PrivacyContext {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PrivacyContext")
+            .field("scope", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl PrivacyContext {
+    /// Create exact, case-sensitive request context without normalization.
+    pub fn new(scope: impl Into<String>) -> Result<Self, PrivacyError> {
+        let scope = scope.into();
+        if scope.trim().is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                "/context/scope",
+                "scope must not be empty or whitespace-only",
+            ));
+        }
+        Ok(Self { scope })
+    }
+
+    /// Exact provider authorization scope.
+    pub fn scope(&self) -> &str {
+        &self.scope
+    }
 }
 
 /// Key selector for deterministic one-way pseudonymization.
@@ -628,6 +691,21 @@ pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, Privac
     Ok(config)
 }
 
+/// Parse the canonical request-level authorization context.
+pub fn parse_privacy_context(value: &serde_json::Value) -> Result<PrivacyContext, PrivacyError> {
+    let object = require_object(value, "/context", "context must be an object")?;
+    reject_unknown_fields(object, &["scope"], "/context")?;
+    let scope = object.get("scope").ok_or_else(|| {
+        PrivacyError::invalid_configuration(
+            PrivacyErrorReason::MissingField,
+            "/context/scope",
+            "token operations require scope",
+        )
+    })?;
+    let scope = require_string(scope, "/context/scope", "scope must be a string")?;
+    PrivacyContext::new(scope)
+}
+
 fn parse_strategy_config(
     value: &serde_json::Value,
     path: &str,
@@ -771,10 +849,32 @@ fn parse_strategy_config(
                     }
                 })
         }
+        "tokenize" => {
+            reject_unknown_fields(object, &["strategy", "token_ref"], path)?;
+            let token_ref_path = format!("{path}/token_ref");
+            let token_ref = object.get("token_ref").ok_or_else(|| {
+                PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::MissingField,
+                    &token_ref_path,
+                    "tokenization requires token_ref",
+                )
+            })?;
+            let token_ref =
+                require_string(token_ref, &token_ref_path, "token_ref must be a string")?;
+            TokenizeConfig::new(token_ref)
+                .map(TransformationStrategy::Tokenize)
+                .map_err(|_| {
+                    PrivacyError::invalid_configuration(
+                        PrivacyErrorReason::EmptyValue,
+                        token_ref_path,
+                        "token_ref must not be empty or whitespace-only",
+                    )
+                })
+        }
         _ => Err(PrivacyError::invalid_configuration(
             PrivacyErrorReason::InvalidValue,
             strategy_path,
-            "strategy must be redact, mask, remove, or pseudonymize",
+            "strategy must be redact, mask, remove, pseudonymize, or tokenize",
         )),
     }
 }
@@ -999,26 +1099,290 @@ pub type KeyProviderFuture<'a> =
 
 /// Runtime boundary for resolving pseudonymization key references.
 pub trait KeyProvider: Send + Sync {
+    /// Whether this value represents an available provider capability.
+    fn is_configured(&self) -> bool {
+        true
+    }
+
     /// Resolve one key selector. Provider implementations own retries,
     /// timeouts, authentication, decoding, and optional caching.
     fn resolve_key(&self, selector: KeySelector) -> KeyProviderFuture<'_>;
 }
 
+/// One source value submitted to a token provider. Equal values remain
+/// separate items so providers may issue fresh tokens.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TokenizeItem {
+    id: String,
+    exact_value: String,
+    token_ref: String,
+}
+
+impl TokenizeItem {
+    /// Request-local correlation identifier.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Exact selected source value.
+    pub fn exact_value(&self) -> &str {
+        &self.exact_value
+    }
+
+    /// Provider-defined profile reference.
+    pub fn token_ref(&self) -> &str {
+        &self.token_ref
+    }
+}
+
+impl std::fmt::Debug for TokenizeItem {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TokenizeItem")
+            .field("id", &self.id)
+            .field("exact_value", &"[REDACTED]")
+            .field("token_ref", &self.token_ref)
+            .finish()
+    }
+}
+
+/// Opaque token material returned for one tokenization item.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TokenizeResult {
+    id: String,
+    payload: Vec<u8>,
+    resolved_version: String,
+}
+
+impl TokenizeResult {
+    /// Construct an untrusted provider response for validation by the core.
+    pub fn new(
+        id: impl Into<String>,
+        payload: Vec<u8>,
+        resolved_version: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            payload,
+            resolved_version: resolved_version.into(),
+        }
+    }
+
+    /// Request-local correlation identifier.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl std::fmt::Debug for TokenizeResult {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TokenizeResult")
+            .field("id", &self.id)
+            .field("payload", &"[REDACTED]")
+            .field("resolved_version", &self.resolved_version)
+            .finish()
+    }
+}
+
+/// One deduplicated canonical token submitted for restoration.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RestoreItem {
+    id: String,
+    token_ref: String,
+    resolved_version: String,
+    payload: Vec<u8>,
+}
+
+impl RestoreItem {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn token_ref(&self) -> &str {
+        &self.token_ref
+    }
+    pub fn resolved_version(&self) -> &str {
+        &self.resolved_version
+    }
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
+impl std::fmt::Debug for RestoreItem {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RestoreItem")
+            .field("id", &self.id)
+            .field("token_ref", &self.token_ref)
+            .field("resolved_version", &self.resolved_version)
+            .field("payload", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Restored plaintext returned for one provider request item.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RestoredValue {
+    id: String,
+    value: String,
+}
+
+impl RestoredValue {
+    pub fn new(id: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            value: value.into(),
+        }
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl std::fmt::Debug for RestoredValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RestoredValue")
+            .field("id", &self.id)
+            .field("value", &"[REDACTED]")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenProviderErrorKind {
+    NotFound,
+    Expired,
+    AccessDenied,
+    Unavailable,
+    ProviderError,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenProviderError {
+    kind: TokenProviderErrorKind,
+}
+
+impl TokenProviderError {
+    pub fn new(kind: TokenProviderErrorKind) -> Self {
+        Self { kind }
+    }
+    pub fn kind(self) -> TokenProviderErrorKind {
+        self.kind
+    }
+}
+
+impl std::fmt::Display for TokenProviderError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("token provider could not complete the request")
+    }
+}
+
+impl std::error::Error for TokenProviderError {}
+
+pub type TokenizeProviderFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<TokenizeResult>, TokenProviderError>> + Send + 'a>>;
+pub type RestoreProviderFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<RestoredValue>, TokenProviderError>> + Send + 'a>>;
+
+/// Vendor-neutral asynchronous boundary for reversible token operations.
+pub trait TokenProvider: Send + Sync {
+    /// Whether this value represents an available provider capability.
+    fn is_configured(&self) -> bool {
+        true
+    }
+
+    fn tokenize_batch(&self, scope: &str, items: Vec<TokenizeItem>) -> TokenizeProviderFuture<'_>;
+    fn restore_batch(&self, scope: &str, items: Vec<RestoreItem>) -> RestoreProviderFuture<'_>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoTokenProvider;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoKeyProvider;
+
+impl KeyProvider for NoKeyProvider {
+    fn is_configured(&self) -> bool {
+        false
+    }
+
+    fn resolve_key(&self, _selector: KeySelector) -> KeyProviderFuture<'_> {
+        Box::pin(async { Err(KeyProviderError::new(KeyProviderErrorKind::ProviderError)) })
+    }
+}
+
+impl TokenProvider for NoTokenProvider {
+    fn is_configured(&self) -> bool {
+        false
+    }
+
+    fn tokenize_batch(
+        &self,
+        _scope: &str,
+        _items: Vec<TokenizeItem>,
+    ) -> TokenizeProviderFuture<'_> {
+        Box::pin(async {
+            Err(TokenProviderError::new(
+                TokenProviderErrorKind::ProviderError,
+            ))
+        })
+    }
+
+    fn restore_batch(&self, _scope: &str, _items: Vec<RestoreItem>) -> RestoreProviderFuture<'_> {
+        Box::pin(async {
+            Err(TokenProviderError::new(
+                TokenProviderErrorKind::ProviderError,
+            ))
+        })
+    }
+}
+
 /// Provider-backed privacy operation manager.
 #[derive(Debug)]
-pub struct PrivacyManager<P> {
+pub struct PrivacyManager<P, T = NoTokenProvider> {
     provider: P,
+    token_provider: T,
 }
 
 impl<P> PrivacyManager<P> {
     /// Create a manager with one runtime provider.
     pub fn new(provider: P) -> Self {
-        Self { provider }
+        Self {
+            provider,
+            token_provider: NoTokenProvider,
+        }
     }
 
     /// Borrow the configured provider.
     pub fn provider(&self) -> &P {
         &self.provider
+    }
+
+    /// Add reversible token capability without changing the key provider.
+    pub fn with_token_provider<T>(self, token_provider: T) -> PrivacyManager<P, T> {
+        PrivacyManager {
+            provider: self.provider,
+            token_provider,
+        }
+    }
+}
+
+impl<T> PrivacyManager<NoKeyProvider, T> {
+    /// Create a manager that supports token operations but no pseudonymization.
+    pub fn token_provider_only(token_provider: T) -> Self {
+        Self {
+            provider: NoKeyProvider,
+            token_provider,
+        }
+    }
+}
+
+impl<P, T> PrivacyManager<P, T> {
+    /// Borrow the configured token provider or marker capability.
+    pub fn token_provider(&self) -> &T {
+        &self.token_provider
     }
 }
 
@@ -1049,6 +1413,10 @@ pub struct Transformation {
     pub key_ref: Option<String>,
     /// Concrete provider version for pseudonymization only.
     pub resolved_key_version: Option<String>,
+    /// Provider profile reference for tokenization only.
+    pub token_ref: Option<String>,
+    /// Concrete provider profile version for tokenization only.
+    pub resolved_token_version: Option<String>,
 }
 
 /// Text and audit records produced by a transformation.
@@ -1058,6 +1426,34 @@ pub struct TransformResult {
     pub text: String,
     /// Applied transformations in source document order.
     pub transformations: Vec<Transformation>,
+}
+
+/// One token replacement applied while restoring a document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Restoration {
+    pub source_byte_range: TextRange,
+    pub source_codepoint_range: TextRange,
+    pub output_byte_range: TextRange,
+    pub output_codepoint_range: TextRange,
+    pub token_ref: String,
+    pub resolved_token_version: String,
+}
+
+/// Restored text and non-secret range metadata.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RestoreResult {
+    pub text: String,
+    pub restorations: Vec<Restoration>,
+}
+
+impl std::fmt::Debug for RestoreResult {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RestoreResult")
+            .field("text", &"[REDACTED]")
+            .field("restorations", &self.restorations)
+            .finish()
+    }
 }
 
 /// Reason a caller-supplied finding is invalid.
@@ -1100,6 +1496,24 @@ pub enum PrivacyErrorCode {
     InvalidKeyMaterial,
     /// The provider failed without a more specific safe category.
     KeyProviderError,
+    /// Tokenization was selected without a runtime token provider.
+    TokenProviderRequired,
+    /// Input contains a malformed canonical token.
+    InvalidToken,
+    /// Input uses a canonical token version this core does not support.
+    UnsupportedTokenVersion,
+    /// The requested token does not exist.
+    TokenNotFound,
+    /// The requested token has expired.
+    TokenExpired,
+    /// The token provider denied restoration.
+    TokenAccessDenied,
+    /// The token provider returned malformed material.
+    InvalidTokenMaterial,
+    /// The token provider is temporarily unavailable.
+    TokenProviderUnavailable,
+    /// The token provider failed without a more specific safe category.
+    TokenProviderError,
     /// The selected runtime intentionally cannot execute this strategy.
     UnsupportedStrategy,
     /// An unexpected non-caller-correctable failure occurred.
@@ -1118,6 +1532,15 @@ impl PrivacyErrorCode {
             Self::KeyProviderUnavailable => "key_provider_unavailable",
             Self::InvalidKeyMaterial => "invalid_key_material",
             Self::KeyProviderError => "key_provider_error",
+            Self::TokenProviderRequired => "token_provider_required",
+            Self::InvalidToken => "invalid_token",
+            Self::UnsupportedTokenVersion => "unsupported_token_version",
+            Self::TokenNotFound => "token_not_found",
+            Self::TokenExpired => "token_expired",
+            Self::TokenAccessDenied => "token_access_denied",
+            Self::InvalidTokenMaterial => "invalid_token_material",
+            Self::TokenProviderUnavailable => "token_provider_unavailable",
+            Self::TokenProviderError => "token_provider_error",
             Self::UnsupportedStrategy => "unsupported_strategy",
             Self::InternalError => "internal_error",
         }
@@ -1266,6 +1689,69 @@ impl PrivacyError {
         )
     }
 
+    fn token_error(code: PrivacyErrorCode, message: &'static str) -> Self {
+        Self {
+            code,
+            reason: None,
+            path: None,
+            finding_index: None,
+            message: message.to_owned(),
+        }
+    }
+
+    fn token_provider_required(path: impl Into<String>) -> Self {
+        Self::key_error(
+            PrivacyErrorCode::TokenProviderRequired,
+            path,
+            "tokenization requires a runtime token provider and request scope",
+        )
+    }
+
+    fn invalid_token() -> Self {
+        Self::token_error(
+            PrivacyErrorCode::InvalidToken,
+            "input contains an invalid token",
+        )
+    }
+
+    fn unsupported_token_version() -> Self {
+        Self::token_error(
+            PrivacyErrorCode::UnsupportedTokenVersion,
+            "input contains an unsupported token version",
+        )
+    }
+
+    fn invalid_token_material() -> Self {
+        Self::token_error(
+            PrivacyErrorCode::InvalidTokenMaterial,
+            "token provider returned invalid token material",
+        )
+    }
+
+    fn from_token_provider_error(error: TokenProviderError) -> Self {
+        let (code, message) = match error.kind() {
+            TokenProviderErrorKind::NotFound => {
+                (PrivacyErrorCode::TokenNotFound, "token was not found")
+            }
+            TokenProviderErrorKind::Expired => {
+                (PrivacyErrorCode::TokenExpired, "token has expired")
+            }
+            TokenProviderErrorKind::AccessDenied => (
+                PrivacyErrorCode::TokenAccessDenied,
+                "token access was denied",
+            ),
+            TokenProviderErrorKind::Unavailable => (
+                PrivacyErrorCode::TokenProviderUnavailable,
+                "token provider is temporarily unavailable",
+            ),
+            TokenProviderErrorKind::ProviderError => (
+                PrivacyErrorCode::TokenProviderError,
+                "token provider could not complete the request",
+            ),
+        };
+        Self::token_error(code, message)
+    }
+
     fn internal(message: &'static str) -> Self {
         Self {
             code: PrivacyErrorCode::InternalError,
@@ -1304,7 +1790,7 @@ impl PrivacyError {
         Self::key_error(
             PrivacyErrorCode::UnsupportedStrategy,
             path,
-            "the selected runtime does not support pseudonymization",
+            "the selected runtime does not support this provider-backed strategy",
         )
     }
 
@@ -1417,7 +1903,19 @@ pub fn transform(
     if let Some(selector) = key_selectors(config, &selected_findings).into_iter().next() {
         return Err(PrivacyError::provider_required(selector.path));
     }
-    apply_transformations(text, &selected_findings, config, &BTreeMap::new())
+    if let Some((_, path)) = tokenization_selections(config, &selected_findings)
+        .into_iter()
+        .next()
+    {
+        return Err(PrivacyError::token_provider_required(path));
+    }
+    apply_transformations(
+        text,
+        &selected_findings,
+        config,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    )
 }
 
 /// Return the distinct provider keys required after validation, filtering,
@@ -1465,7 +1963,348 @@ pub fn transform_with_resolved_keys(
     let selected_findings = select_findings(text, findings, config)?;
     let selectors = key_selectors(config, &selected_findings);
     let resolved_keys = validate_resolved_keys(selectors, resolved_keys)?;
-    apply_transformations(text, &selected_findings, config, &resolved_keys)
+    if let Some((_, path)) = tokenization_selections(config, &selected_findings)
+        .into_iter()
+        .next()
+    {
+        return Err(PrivacyError::token_provider_required(path));
+    }
+    apply_transformations(
+        text,
+        &selected_findings,
+        config,
+        &resolved_keys,
+        &BTreeMap::new(),
+    )
+}
+
+fn tokenization_selections(
+    config: &TransformationConfig,
+    selected_findings: &[Finding],
+) -> Vec<(usize, String)> {
+    selected_findings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, finding)| match config.strategy_for(finding) {
+            TransformationStrategy::Tokenize(_) => Some((index, config.strategy_path_for(finding))),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Return the stateful provider items required by a validated transformation.
+pub fn required_tokenization_items(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+    context: Option<&PrivacyContext>,
+) -> Result<Vec<TokenizeItem>, PrivacyError> {
+    let selected = select_findings(text, findings, config)?;
+    let selections = tokenization_selections(config, &selected);
+    if selections.is_empty() {
+        return Ok(Vec::new());
+    }
+    if context.is_none() {
+        return Err(PrivacyError::token_provider_required(
+            selections[0].1.clone(),
+        ));
+    }
+    let existing_tokens = parse_tokens_lenient(text);
+    let mut items = Vec::with_capacity(selections.len());
+    for (index, path) in selections {
+        let finding = &selected[index];
+        if existing_tokens.iter().any(|token| {
+            finding.byte_range.start < token.end && token.start < finding.byte_range.end
+        }) {
+            return Err(PrivacyError::key_error(
+                PrivacyErrorCode::InvalidToken,
+                path,
+                "tokenization cannot select an existing canonical token",
+            ));
+        }
+        let TransformationStrategy::Tokenize(tokenize) = config.strategy_for(finding) else {
+            return Err(PrivacyError::internal(
+                "tokenization selection changed unexpectedly",
+            ));
+        };
+        items.push(TokenizeItem {
+            id: index.to_string(),
+            exact_value: finding.matched_text.clone(),
+            token_ref: tokenize.token_ref.clone(),
+        });
+    }
+    Ok(items)
+}
+
+fn validate_tokenize_results(
+    items: &[TokenizeItem],
+    results: Vec<TokenizeResult>,
+) -> Result<BTreeMap<String, (String, String)>, PrivacyError> {
+    let expected = items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<BTreeSet<_>>();
+    let mut validated = BTreeMap::new();
+    for result in results {
+        if !expected.contains(&result.id)
+            || result.payload.is_empty()
+            || result.resolved_version.trim().is_empty()
+        {
+            return Err(PrivacyError::invalid_token_material());
+        }
+        let item = items
+            .iter()
+            .find(|item| item.id == result.id)
+            .ok_or_else(PrivacyError::invalid_token_material)?;
+        let envelope = encode_token(&item.token_ref, &result.resolved_version, &result.payload);
+        if validated
+            .insert(result.id, (envelope, result.resolved_version))
+            .is_some()
+        {
+            return Err(PrivacyError::invalid_token_material());
+        }
+    }
+    if validated.len() != expected.len() {
+        return Err(PrivacyError::invalid_token_material());
+    }
+    Ok(validated)
+}
+
+/// Complete a transformation using already resolved provider responses.
+pub fn transform_with_provider_results(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+    context: Option<&PrivacyContext>,
+    resolved_keys: Vec<ResolvedKeyBinding>,
+    token_results: Vec<TokenizeResult>,
+) -> Result<TransformResult, PrivacyError> {
+    let selected = select_findings(text, findings, config)?;
+    let keys = validate_resolved_keys(key_selectors(config, &selected), resolved_keys)?;
+    let items = required_tokenization_items(text, findings, config, context)?;
+    let tokens = validate_tokenize_results(&items, token_results)?;
+    apply_transformations(text, &selected, config, &keys, &tokens)
+}
+
+const TOKEN_PREFIX: &str = "DFTOKENv";
+
+#[derive(Clone)]
+struct ParsedToken {
+    start: usize,
+    end: usize,
+    token_ref: String,
+    resolved_version: String,
+    payload: Vec<u8>,
+    envelope: String,
+}
+
+fn encode_token(token_ref: &str, version: &str, payload: &[u8]) -> String {
+    let encoder = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let body = format!(
+        "{}.{}.{}",
+        encoder.encode(token_ref.as_bytes()),
+        encoder.encode(version.as_bytes()),
+        encoder.encode(payload)
+    );
+    format!("DFTOKENv1({}):{body}", body.len())
+}
+
+fn decode_canonical_component(value: &str) -> Result<Vec<u8>, PrivacyError> {
+    if value.is_empty() {
+        return Err(PrivacyError::invalid_token());
+    }
+    let decoder = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let decoded = decoder
+        .decode(value)
+        .map_err(|_| PrivacyError::invalid_token())?;
+    if decoded.is_empty() || decoder.encode(&decoded) != value {
+        return Err(PrivacyError::invalid_token());
+    }
+    Ok(decoded)
+}
+
+fn parse_token_at(text: &str, start: usize) -> Result<ParsedToken, PrivacyError> {
+    let tail = &text[start + TOKEN_PREFIX.len()..];
+    let open = tail.find('(').ok_or_else(PrivacyError::invalid_token)?;
+    let version_text = &tail[..open];
+    if version_text.is_empty() || !version_text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(PrivacyError::invalid_token());
+    }
+    if version_text != "1" {
+        return Err(PrivacyError::unsupported_token_version());
+    }
+    let after_open = &tail[open + 1..];
+    let close = after_open
+        .find("):")
+        .ok_or_else(PrivacyError::invalid_token)?;
+    let length_text = &after_open[..close];
+    if length_text.is_empty() || !length_text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(PrivacyError::invalid_token());
+    }
+    if length_text.len() > 1 && length_text.starts_with('0') {
+        return Err(PrivacyError::invalid_token());
+    }
+    let body_length = length_text
+        .bytes()
+        .try_fold(0usize, |length, digit| {
+            length
+                .checked_mul(10)?
+                .checked_add(usize::from(digit - b'0'))
+        })
+        .ok_or_else(PrivacyError::invalid_token)?;
+    let body_start = start + TOKEN_PREFIX.len() + open + 1 + close + 2;
+    let body_end = body_start
+        .checked_add(body_length)
+        .ok_or_else(PrivacyError::invalid_token)?;
+    if body_end > text.len() || !text.is_char_boundary(body_end) {
+        return Err(PrivacyError::invalid_token());
+    }
+    let body = &text[body_start..body_end];
+    let mut components = body.split('.');
+    let token_ref_bytes = decode_canonical_component(components.next().unwrap_or_default())?;
+    let version_bytes = decode_canonical_component(components.next().unwrap_or_default())?;
+    let payload = decode_canonical_component(components.next().unwrap_or_default())?;
+    if components.next().is_some() {
+        return Err(PrivacyError::invalid_token());
+    }
+    let token_ref =
+        String::from_utf8(token_ref_bytes).map_err(|_| PrivacyError::invalid_token())?;
+    let resolved_version =
+        String::from_utf8(version_bytes).map_err(|_| PrivacyError::invalid_token())?;
+    if token_ref.trim().is_empty() || resolved_version.trim().is_empty() {
+        return Err(PrivacyError::invalid_token());
+    }
+    Ok(ParsedToken {
+        start,
+        end: body_end,
+        token_ref,
+        resolved_version,
+        payload,
+        envelope: text[start..body_end].to_owned(),
+    })
+}
+
+fn parse_tokens(text: &str) -> Result<Vec<ParsedToken>, PrivacyError> {
+    let mut tokens = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = text[cursor..].find(TOKEN_PREFIX) {
+        let start = cursor + relative;
+        let token = parse_token_at(text, start)?;
+        cursor = token.end;
+        tokens.push(token);
+    }
+    Ok(tokens)
+}
+
+fn parse_tokens_lenient(text: &str) -> Vec<ParsedToken> {
+    let mut tokens = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = text[cursor..].find("DFTOKENv1(") {
+        let start = cursor + relative;
+        match parse_token_at(text, start) {
+            Ok(token) => {
+                cursor = token.end;
+                tokens.push(token);
+            }
+            Err(_) => cursor = start + "DFTOKENv1(".len(),
+        }
+    }
+    tokens
+}
+
+/// Parse and deduplicate all canonical tokens before a provider restore call.
+pub fn required_restore_items(
+    text: &str,
+    _context: &PrivacyContext,
+) -> Result<Vec<RestoreItem>, PrivacyError> {
+    let tokens = parse_tokens(text)?;
+    let mut ids = BTreeMap::<String, String>::new();
+    let mut items = Vec::new();
+    for token in tokens {
+        if ids.contains_key(&token.envelope) {
+            continue;
+        }
+        let id = items.len().to_string();
+        ids.insert(token.envelope, id.clone());
+        items.push(RestoreItem {
+            id,
+            token_ref: token.token_ref,
+            resolved_version: token.resolved_version,
+            payload: token.payload,
+        });
+    }
+    Ok(items)
+}
+
+/// Apply complete, validated provider restoration results atomically.
+pub fn restore_with_results(
+    text: &str,
+    context: &PrivacyContext,
+    results: Vec<RestoredValue>,
+) -> Result<RestoreResult, PrivacyError> {
+    let tokens = parse_tokens(text)?;
+    let items = required_restore_items(text, context)?;
+    let expected = items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<BTreeSet<_>>();
+    let mut values = BTreeMap::new();
+    for result in results {
+        if !expected.contains(&result.id) || values.insert(result.id, result.value).is_some() {
+            return Err(PrivacyError::invalid_token_material());
+        }
+    }
+    if values.len() != expected.len() {
+        return Err(PrivacyError::invalid_token_material());
+    }
+    let mut envelope_ids = BTreeMap::new();
+    for token in &tokens {
+        if !envelope_ids.contains_key(&token.envelope) {
+            let id = envelope_ids.len().to_string();
+            envelope_ids.insert(token.envelope.clone(), id);
+        }
+    }
+    let mut output = String::with_capacity(text.len());
+    let mut restorations = Vec::with_capacity(tokens.len());
+    let mut cursor = 0;
+    for token in tokens {
+        output.push_str(&text[cursor..token.start]);
+        let output_byte_start = output.len();
+        let output_codepoint_start = output.chars().count();
+        let id = envelope_ids
+            .get(&token.envelope)
+            .ok_or_else(PrivacyError::invalid_token_material)?;
+        let value = values
+            .get(id)
+            .ok_or_else(PrivacyError::invalid_token_material)?;
+        output.push_str(value);
+        restorations.push(Restoration {
+            source_byte_range: TextRange {
+                start: token.start,
+                end: token.end,
+            },
+            source_codepoint_range: TextRange {
+                start: text[..token.start].chars().count(),
+                end: text[..token.end].chars().count(),
+            },
+            output_byte_range: TextRange {
+                start: output_byte_start,
+                end: output.len(),
+            },
+            output_codepoint_range: TextRange {
+                start: output_codepoint_start,
+                end: output.chars().count(),
+            },
+            token_ref: token.token_ref,
+            resolved_token_version: token.resolved_version,
+        });
+        cursor = token.end;
+    }
+    output.push_str(&text[cursor..]);
+    Ok(RestoreResult {
+        text: output,
+        restorations,
+    })
 }
 
 fn select_findings(
@@ -1561,18 +2400,21 @@ fn apply_transformations(
     selected_findings: &[Finding],
     config: &TransformationConfig,
     resolved_keys: &BTreeMap<PseudonymizeConfig, ResolvedKey>,
+    tokens: &BTreeMap<String, (String, String)>,
 ) -> Result<TransformResult, PrivacyError> {
     let mut output = String::with_capacity(text.len());
     let mut transformations = Vec::with_capacity(selected_findings.len());
     let mut source_byte_cursor = 0;
 
-    for finding in selected_findings {
+    for (finding_index, finding) in selected_findings.iter().enumerate() {
         output.push_str(&text[source_byte_cursor..finding.byte_range.start]);
         let output_byte_start = output.len();
         let output_codepoint_start = output.chars().count();
         let strategy = config.strategy_for(finding);
         let mut key_ref = None;
         let mut resolved_key_version = None;
+        let mut token_ref = None;
+        let mut resolved_token_version = None;
         let replacement = match strategy {
             TransformationStrategy::Redact => format!("[{}]", finding.entity_type),
             TransformationStrategy::Remove => String::new(),
@@ -1606,6 +2448,15 @@ fn apply_transformations(
                 resolved_key_version = Some(resolved.resolved_version.clone());
                 base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
             }
+            TransformationStrategy::Tokenize(tokenize) => {
+                let (envelope, version) =
+                    tokens.get(&finding_index.to_string()).ok_or_else(|| {
+                        PrivacyError::token_provider_required(config.strategy_path_for(finding))
+                    })?;
+                token_ref = Some(tokenize.token_ref.clone());
+                resolved_token_version = Some(version.clone());
+                envelope.clone()
+            }
         };
         output.push_str(&replacement);
 
@@ -1628,6 +2479,8 @@ fn apply_transformations(
             },
             key_ref,
             resolved_key_version,
+            token_ref,
+            resolved_token_version,
         });
         source_byte_cursor = finding.byte_range.end;
     }
@@ -1639,7 +2492,7 @@ fn apply_transformations(
     })
 }
 
-impl<P: KeyProvider> PrivacyManager<P> {
+impl<P: KeyProvider, T> PrivacyManager<P, T> {
     /// Transform caller-supplied findings after atomically resolving every
     /// distinct key selected by the request.
     pub async fn transform(
@@ -1652,6 +2505,9 @@ impl<P: KeyProvider> PrivacyManager<P> {
         let selectors = key_selectors(config, &selected_findings);
         let mut resolved = BTreeMap::new();
         for selector in selectors {
+            if !self.provider.is_configured() {
+                return Err(PrivacyError::provider_required(selector.path));
+            }
             let key = self
                 .provider
                 .resolve_key(selector.clone())
@@ -1660,7 +2516,17 @@ impl<P: KeyProvider> PrivacyManager<P> {
             validate_resolved_key(&selector, &key)?;
             resolved.insert(selector.config, key);
         }
-        apply_transformations(text, &selected_findings, config, &resolved)
+        let selections = tokenization_selections(config, &selected_findings);
+        if let Some((_, path)) = selections.into_iter().next() {
+            return Err(PrivacyError::token_provider_required(path));
+        }
+        apply_transformations(
+            text,
+            &selected_findings,
+            config,
+            &resolved,
+            &BTreeMap::new(),
+        )
     }
 
     /// Scan and transform after atomically resolving every selected key.
@@ -1676,6 +2542,94 @@ impl<P: KeyProvider> PrivacyManager<P> {
         )
         .await
         .map_err(|error| error.prefixed("/transform"))
+    }
+}
+
+impl<P: KeyProvider, T: TokenProvider> PrivacyManager<P, T> {
+    /// Transform after resolving keys, then atomically creating every token.
+    pub async fn transform_with_context(
+        &self,
+        text: &str,
+        findings: &[Finding],
+        config: &TransformationConfig,
+        context: Option<&PrivacyContext>,
+    ) -> Result<TransformResult, PrivacyError> {
+        let selected = select_findings(text, findings, config)?;
+        let mut keys = Vec::new();
+        for selector in key_selectors(config, &selected) {
+            if !self.provider.is_configured() {
+                return Err(PrivacyError::provider_required(selector.path));
+            }
+            let key = self
+                .provider
+                .resolve_key(selector.clone())
+                .await
+                .map_err(|error| PrivacyError::from_provider_error(selector.path.clone(), error))?;
+            validate_resolved_key(&selector, &key)?;
+            keys.push(ResolvedKeyBinding::new(selector, key));
+        }
+        let items = required_tokenization_items(text, findings, config, context)?;
+        let token_results = if items.is_empty() {
+            Vec::new()
+        } else {
+            if !self.token_provider.is_configured() {
+                let path = tokenization_selections(config, &selected)
+                    .into_iter()
+                    .next()
+                    .map(|(_, path)| path)
+                    .unwrap_or_else(|| "/context/scope".to_owned());
+                return Err(PrivacyError::token_provider_required(path));
+            }
+            let scope = context
+                .ok_or_else(|| PrivacyError::token_provider_required("/context/scope"))?
+                .scope();
+            self.token_provider
+                .tokenize_batch(scope, items.clone())
+                .await
+                .map_err(PrivacyError::from_token_provider_error)?
+        };
+        transform_with_provider_results(text, findings, config, context, keys, token_results)
+    }
+
+    /// Scan and transform with request-level provider authorization context.
+    pub async fn scan_and_transform_with_context(
+        &self,
+        text: &str,
+        config: &ScanAndTransformConfig,
+        context: Option<&PrivacyContext>,
+    ) -> Result<TransformResult, PrivacyError> {
+        self.transform_with_context(
+            text,
+            &scan_with_config(text, config.scan_config()),
+            config.transformation_config(),
+            context,
+        )
+        .await
+        .map_err(|error| error.prefixed("/transform"))
+    }
+
+    /// Restore every canonical token in a document as one atomic operation.
+    pub async fn restore(
+        &self,
+        text: &str,
+        context: &PrivacyContext,
+    ) -> Result<RestoreResult, PrivacyError> {
+        let items = required_restore_items(text, context)?;
+        if items.is_empty() {
+            return Ok(RestoreResult {
+                text: text.to_owned(),
+                restorations: Vec::new(),
+            });
+        }
+        if !self.token_provider.is_configured() {
+            return Err(PrivacyError::token_provider_required("/restore"));
+        }
+        let results = self
+            .token_provider
+            .restore_batch(context.scope(), items)
+            .await
+            .map_err(PrivacyError::from_token_provider_error)?;
+        restore_with_results(text, context, results)
     }
 }
 
@@ -2472,21 +3426,25 @@ mod tests {
     use super::{
         Finding, FindingValidationError, KeyProvider, KeyProviderError, KeyProviderErrorKind,
         KeyProviderFuture, KeySelector, MAX_REGEX_PATTERN_BYTES, MAX_REGEX_RULES, MaskConfig,
-        MaskConfigError, MaskReveal, PrivacyError, PrivacyErrorCode, PrivacyErrorReason,
-        PrivacyManager, RegexAllowRule, ResolvedKey, ScanAndTransformConfig, TextRange,
-        TransformationConfig, TransformationStrategy, parse_scan_and_transform_config,
-        parse_transformation_config, scan, scan_and_transform, transform,
+        MaskConfigError, MaskReveal, NoKeyProvider, PrivacyContext, PrivacyError, PrivacyErrorCode,
+        PrivacyErrorReason, PrivacyManager, RegexAllowRule, ResolvedKey, RestoreProviderFuture,
+        RestoredValue, ScanAndTransformConfig, TextRange, TokenProvider, TokenProviderError,
+        TokenProviderErrorKind, TokenizeProviderFuture, TokenizeResult, TransformationConfig,
+        TransformationStrategy, parse_scan_and_transform_config, parse_transformation_config,
+        required_restore_items, restore_with_results, scan, scan_and_transform, transform,
     };
     use futures::executor::block_on;
     use serde_json::json;
     use std::collections::BTreeMap;
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
     struct TestKeyProvider {
         responses: BTreeMap<(String, Option<String>), (Vec<u8>, String)>,
         failure: Option<KeyProviderErrorKind>,
         calls: Mutex<Vec<(String, Option<String>)>>,
+        order: Option<Arc<Mutex<Vec<&'static str>>>>,
     }
 
     impl TestKeyProvider {
@@ -2514,10 +3472,18 @@ mod tests {
         fn call_count(&self) -> usize {
             self.calls.lock().unwrap().len()
         }
+
+        fn with_order(mut self, order: Arc<Mutex<Vec<&'static str>>>) -> Self {
+            self.order = Some(order);
+            self
+        }
     }
 
     impl KeyProvider for TestKeyProvider {
         fn resolve_key(&self, selector: KeySelector) -> KeyProviderFuture<'_> {
+            if let Some(order) = &self.order {
+                order.lock().unwrap().push("key");
+            }
             let identity = (
                 selector.key_ref().to_owned(),
                 selector.key_version().map(str::to_owned),
@@ -2533,6 +3499,91 @@ mod tests {
                     .ok_or_else(|| KeyProviderError::new(KeyProviderErrorKind::NotFound))?;
                 Ok(ResolvedKey::new(key, version))
             })
+        }
+    }
+
+    type TokenRecord = (String, String, String, String);
+
+    #[derive(Clone, Default)]
+    struct TestTokenProvider {
+        next: Arc<AtomicUsize>,
+        records: Arc<Mutex<BTreeMap<Vec<u8>, TokenRecord>>>,
+        tokenize_calls: Arc<Mutex<Vec<(String, usize)>>>,
+        order: Option<Arc<Mutex<Vec<&'static str>>>>,
+    }
+
+    impl TokenProvider for TestTokenProvider {
+        fn tokenize_batch(
+            &self,
+            scope: &str,
+            items: Vec<super::TokenizeItem>,
+        ) -> TokenizeProviderFuture<'_> {
+            if let Some(order) = &self.order {
+                order.lock().unwrap().push("token");
+            }
+            let scope = scope.to_owned();
+            let records = Arc::clone(&self.records);
+            let next = Arc::clone(&self.next);
+            self.tokenize_calls
+                .lock()
+                .unwrap()
+                .push((scope.clone(), items.len()));
+            Box::pin(async move {
+                Ok(items
+                    .into_iter()
+                    .map(|item| {
+                        let payload = next.fetch_add(1, Ordering::SeqCst).to_be_bytes().to_vec();
+                        records.lock().unwrap().insert(
+                            payload.clone(),
+                            (
+                                scope.clone(),
+                                item.token_ref().to_owned(),
+                                "active-7".to_owned(),
+                                item.exact_value().to_owned(),
+                            ),
+                        );
+                        TokenizeResult::new(item.id(), payload, "active-7")
+                    })
+                    .collect())
+            })
+        }
+
+        fn restore_batch(
+            &self,
+            scope: &str,
+            items: Vec<super::RestoreItem>,
+        ) -> RestoreProviderFuture<'_> {
+            let scope = scope.to_owned();
+            let records = Arc::clone(&self.records);
+            Box::pin(async move {
+                let records = records.lock().unwrap();
+                items
+                    .into_iter()
+                    .map(|item| {
+                        let Some((bound_scope, token_ref, version, value)) =
+                            records.get(item.payload())
+                        else {
+                            return Err(TokenProviderError::new(TokenProviderErrorKind::NotFound));
+                        };
+                        if bound_scope != &scope
+                            || token_ref != item.token_ref()
+                            || version != item.resolved_version()
+                        {
+                            return Err(TokenProviderError::new(
+                                TokenProviderErrorKind::AccessDenied,
+                            ));
+                        }
+                        Ok(RestoredValue::new(item.id(), value))
+                    })
+                    .collect()
+            })
+        }
+    }
+
+    impl TestTokenProvider {
+        fn with_order(mut self, order: Arc<Mutex<Vec<&'static str>>>) -> Self {
+            self.order = Some(order);
+            self
         }
     }
 
@@ -3723,5 +4774,310 @@ mod tests {
 
         assert_eq!(result.text, "plain text");
         assert!(result.transformations.is_empty());
+    }
+
+    #[test]
+    fn tokenization_round_trips_unicode_with_fresh_tokens_and_exact_ranges() {
+        let text = "👋 jane@example.com jane@example.com";
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "customers/default"}
+        }))
+        .unwrap();
+        let context = PrivacyContext::new("tenant/α").unwrap();
+        let provider = TestTokenProvider::default();
+        let manager = PrivacyManager::<NoKeyProvider, _>::token_provider_only(provider.clone());
+
+        let transformed =
+            block_on(manager.transform_with_context(text, &scan(text), &config, Some(&context)))
+                .unwrap();
+
+        assert_eq!(transformed.transformations.len(), 2);
+        assert_ne!(
+            transformed.transformations[0].replacement,
+            transformed.transformations[1].replacement,
+        );
+        assert!(transformed.transformations.iter().all(|record| {
+            record.strategy
+                == TransformationStrategy::Tokenize(
+                    super::TokenizeConfig::new("customers/default").unwrap(),
+                )
+                && record.token_ref.as_deref() == Some("customers/default")
+                && record.resolved_token_version.as_deref() == Some("active-7")
+                && record.key_ref.is_none()
+        }));
+        assert_eq!(
+            provider.tokenize_calls.lock().unwrap().as_slice(),
+            &[("tenant/α".to_owned(), 2)]
+        );
+
+        let restored = block_on(manager.restore(&transformed.text, &context)).unwrap();
+        assert_eq!(restored.text, text);
+        assert_eq!(restored.restorations.len(), 2);
+        for record in &restored.restorations {
+            assert!(
+                transformed.text[record.source_byte_range.start..record.source_byte_range.end]
+                    .starts_with("DFTOKENv1(")
+            );
+            assert_eq!(
+                &restored.text[record.output_byte_range.start..record.output_byte_range.end],
+                "jane@example.com",
+            );
+            assert_eq!(record.token_ref, "customers/default");
+            assert_eq!(record.resolved_token_version, "active-7");
+        }
+    }
+
+    #[test]
+    fn restoration_is_atomic_and_scope_bound() {
+        let text = "jane@example.com";
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "customers/default"}
+        }))
+        .unwrap();
+        let context = PrivacyContext::new("tenant-a").unwrap();
+        let manager =
+            PrivacyManager::<NoKeyProvider, _>::token_provider_only(TestTokenProvider::default());
+        let transformed =
+            block_on(manager.transform_with_context(text, &scan(text), &config, Some(&context)))
+                .unwrap();
+
+        let error =
+            block_on(manager.restore(&transformed.text, &PrivacyContext::new("tenant-b").unwrap()))
+                .unwrap_err();
+        assert_eq!(error.code(), PrivacyErrorCode::TokenAccessDenied);
+
+        let mut tampered = transformed.text.clone();
+        let payload_start = tampered.rfind('.').unwrap() + 1;
+        let replacement = if &tampered[payload_start..payload_start + 1] == "A" {
+            "B"
+        } else {
+            "A"
+        };
+        tampered.replace_range(payload_start..payload_start + 1, replacement);
+        let error = block_on(manager.restore(&tampered, &context)).unwrap_err();
+        assert!(matches!(
+            error.code(),
+            PrivacyErrorCode::TokenNotFound | PrivacyErrorCode::InvalidToken
+        ));
+    }
+
+    #[test]
+    fn restore_rejects_malformed_versions_and_incomplete_provider_results() {
+        let context = PrivacyContext::new("tenant").unwrap();
+        assert_eq!(
+            required_restore_items("DFTOKENv1(999):abc", &context)
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::InvalidToken
+        );
+        assert_eq!(
+            required_restore_items("DFTOKENv1(008):YQ.Yg.Yw", &context)
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::InvalidToken
+        );
+        assert_eq!(
+            required_restore_items("DFTOKENv2(3):abc", &context)
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::UnsupportedTokenVersion
+        );
+        let token = super::encode_token("profile", "1", b"payload");
+        let error = restore_with_results(&token, &context, Vec::new()).unwrap_err();
+        assert_eq!(error.code(), PrivacyErrorCode::InvalidTokenMaterial);
+        let ordinary = restore_with_results("ordinary text", &context, Vec::new()).unwrap();
+        assert_eq!(ordinary.text, "ordinary text");
+        assert!(ordinary.restorations.is_empty());
+    }
+
+    #[test]
+    fn token_provider_responses_require_complete_unique_ids_but_allow_reordering() {
+        let text = "jane@example.com jane@example.com";
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "profile"}
+        }))
+        .unwrap();
+        let findings = scan(text);
+        let context = PrivacyContext::new("tenant").unwrap();
+
+        for invalid in [
+            Vec::new(),
+            vec![TokenizeResult::new("unexpected", vec![1], "1")],
+            vec![
+                TokenizeResult::new("0", vec![1], "1"),
+                TokenizeResult::new("0", vec![2], "1"),
+            ],
+        ] {
+            let error = super::transform_with_provider_results(
+                text,
+                &findings,
+                &config,
+                Some(&context),
+                Vec::new(),
+                invalid,
+            )
+            .unwrap_err();
+            assert_eq!(error.code(), PrivacyErrorCode::InvalidTokenMaterial);
+        }
+
+        let result = super::transform_with_provider_results(
+            text,
+            &findings,
+            &config,
+            Some(&context),
+            Vec::new(),
+            vec![
+                TokenizeResult::new("1", vec![2], "1"),
+                TokenizeResult::new("0", vec![1], "1"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(result.transformations.len(), 2);
+    }
+
+    #[test]
+    fn token_provider_failures_have_sanitized_stable_categories() {
+        for (kind, expected) in [
+            (
+                TokenProviderErrorKind::NotFound,
+                PrivacyErrorCode::TokenNotFound,
+            ),
+            (
+                TokenProviderErrorKind::Expired,
+                PrivacyErrorCode::TokenExpired,
+            ),
+            (
+                TokenProviderErrorKind::AccessDenied,
+                PrivacyErrorCode::TokenAccessDenied,
+            ),
+            (
+                TokenProviderErrorKind::Unavailable,
+                PrivacyErrorCode::TokenProviderUnavailable,
+            ),
+            (
+                TokenProviderErrorKind::ProviderError,
+                PrivacyErrorCode::TokenProviderError,
+            ),
+        ] {
+            let error =
+                super::PrivacyError::from_token_provider_error(TokenProviderError::new(kind));
+            assert_eq!(error.code(), expected);
+            assert!(error.path().is_none());
+        }
+    }
+
+    #[test]
+    fn mixed_requests_resolve_keys_before_creating_tokens() {
+        let text = "jane@example.com 2125550100";
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "profile"},
+            "overrides": {
+                "EMAIL": {"strategy": "pseudonymize", "key_ref": "email-key"}
+            }
+        }))
+        .unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let key_provider = TestKeyProvider::default()
+            .with_key("email-key", None, vec![7; 32], "1")
+            .with_order(Arc::clone(&order));
+        let token_provider = TestTokenProvider::default().with_order(Arc::clone(&order));
+        let manager = PrivacyManager::new(key_provider).with_token_provider(token_provider);
+        let result = block_on(manager.transform_with_context(
+            text,
+            &scan(text),
+            &config,
+            Some(&PrivacyContext::new("tenant").unwrap()),
+        ))
+        .unwrap();
+
+        assert_eq!(order.lock().unwrap().as_slice(), &["key", "token"]);
+        assert_eq!(result.transformations.len(), 2);
+    }
+
+    #[test]
+    fn token_requests_and_results_redact_sensitive_debug_values() {
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "profile"}
+        }))
+        .unwrap();
+        let context = PrivacyContext::new("secret-scope").unwrap();
+        let items = super::required_tokenization_items(
+            "jane@example.com",
+            &scan("jane@example.com"),
+            &config,
+            Some(&context),
+        )
+        .unwrap();
+        assert!(!format!("{context:?}").contains("secret-scope"));
+        assert!(!format!("{:?}", items[0]).contains("jane@example.com"));
+        assert!(
+            !format!("{:?}", TokenizeResult::new("0", b"secret".to_vec(), "1")).contains("secret")
+        );
+    }
+
+    #[test]
+    fn token_configuration_is_strict_and_dormant_when_unselected() {
+        for invalid in [
+            json!({"default": {"strategy": "tokenize"}}),
+            json!({"default": {"strategy": "tokenize", "token_ref": " "}}),
+            json!({"default": {"strategy": "tokenize", "token_ref": "profile", "ttl": 30}}),
+        ] {
+            assert!(parse_transformation_config(&invalid).is_err());
+        }
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "redact"},
+            "overrides": {"PHONE": {"strategy": "tokenize", "token_ref": "profile"}}
+        }))
+        .unwrap();
+        let result = transform("jane@example.com", &scan("jane@example.com"), &config).unwrap();
+        assert_eq!(result.text, "[EMAIL]");
+    }
+
+    #[test]
+    fn optional_manager_capabilities_fail_only_when_selected() {
+        let context = PrivacyContext::new("tenant").unwrap();
+        let manager = PrivacyManager::new(NoKeyProvider);
+        let ordinary = block_on(manager.restore("ordinary text", &context)).unwrap();
+        assert_eq!(ordinary.text, "ordinary text");
+
+        let config = parse_transformation_config(&json!({
+            "default": {"strategy": "tokenize", "token_ref": "profile"}
+        }))
+        .unwrap();
+        let error = block_on(manager.transform_with_context(
+            "jane@example.com",
+            &scan("jane@example.com"),
+            &config,
+            Some(&context),
+        ))
+        .unwrap_err();
+        assert_eq!(error.code(), PrivacyErrorCode::TokenProviderRequired);
+
+        let token = super::encode_token("profile", "1", b"payload");
+        let error = block_on(manager.restore(&token, &context)).unwrap_err();
+        assert_eq!(error.code(), PrivacyErrorCode::TokenProviderRequired);
+    }
+
+    #[test]
+    fn tokenization_rejects_nested_tokens_and_restoration_is_not_recursive() {
+        let context = PrivacyContext::new("tenant").unwrap();
+        let inner = super::encode_token("profile", "1", b"inner");
+        let finding = supplied_ascii_finding(&inner, "CUSTOM", 0, inner.len(), None, "custom");
+        let config = TransformationConfig::new(TransformationStrategy::Tokenize(
+            super::TokenizeConfig::new("profile").unwrap(),
+        ));
+        let error = super::required_tokenization_items(&inner, &[finding], &config, Some(&context))
+            .unwrap_err();
+        assert_eq!(error.code(), PrivacyErrorCode::InvalidToken);
+
+        let outer = super::encode_token("profile", "1", b"outer");
+        let restored = restore_with_results(
+            &outer,
+            &context,
+            vec![RestoredValue::new("0", inner.clone())],
+        )
+        .unwrap();
+        assert_eq!(restored.text, inner);
+        assert_eq!(restored.restorations.len(), 1);
     }
 }
