@@ -6,7 +6,7 @@ for a PII detection and transformation engine.
 
 | Capability | Treatment | Core direction |
 | --- | --- | --- |
-| PII scanning | Preserve | Return validated findings with explicit byte and code-point ranges, optional confidence, and detector provenance. |
+| PII scanning | Preserve | Return validated findings with explicit byte and code-point ranges, optional confidence, and detector provenance; JavaScript bindings also expose explicit UTF-16 ranges. |
 | Typed redaction | Preserve | Replace findings with typed, document-local placeholders after deterministic overlap resolution. |
 | Character masking | Preserve | Mask Unicode code points with a validated character and explicit leading- or trailing-reveal semantics. |
 | Entity-type selection | Preserve | Select canonical entity types through transformation configuration. |

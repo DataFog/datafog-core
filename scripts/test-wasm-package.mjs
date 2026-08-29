@@ -86,6 +86,7 @@ import {
   transform,
   type EntityType,
   type Finding,
+  type FindingInput,
   type MaskRevealConfig,
   type ScanAndTransformConfig,
   type TextRange,
@@ -96,8 +97,10 @@ import {
 
 const ready: Promise<void> = init();
 const findings: Finding[] = scan("Email jane@example.com");
+const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
+const utf16Range: TextRange = findings[0]?.utf16Range ?? { start: 0, end: 0 };
 const transformed: TransformResult = transform(
   "Email jane@example.com",
   findings,
@@ -121,7 +124,9 @@ const unchanged: RestoreResult = restore("ordinary text", { scope: "tenant" });
 
 void ready;
 void entityType;
+void suppliedFinding;
 void range;
+void utf16Range;
 void transformed;
 void scannedAndTransformed;
 void masked;
@@ -242,6 +247,12 @@ try {
       if (matchedCodepoints !== finding.matchedText) {
         throw new Error("code-point range does not select matched text");
       }
+      if (
+        text.slice(finding.utf16Range.start, finding.utf16Range.end) !==
+        finding.matchedText
+      ) {
+        throw new Error("UTF-16 range does not select matched text");
+      }
       if (finding.confidence !== undefined) {
         throw new Error("rule-based findings must omit confidence");
       }
@@ -272,9 +283,22 @@ try {
     const emojiFinding = scan("👋 jane@example.com")[0];
     if (
       JSON.stringify(emojiFinding.byteRange) !== JSON.stringify({ start: 5, end: 21 }) ||
-      JSON.stringify(emojiFinding.codepointRange) !== JSON.stringify({ start: 2, end: 18 })
+      JSON.stringify(emojiFinding.codepointRange) !== JSON.stringify({ start: 2, end: 18 }) ||
+      JSON.stringify(emojiFinding.utf16Range) !== JSON.stringify({ start: 3, end: 19 }) ||
+      "👋 jane@example.com".slice(
+        emojiFinding.utf16Range.start,
+        emojiFinding.utf16Range.end,
+      ) !== emojiFinding.matchedText
     ) {
       throw new Error("Unicode ranges do not use the documented coordinate systems");
+    }
+    const { utf16Range: _derivedRange, ...preSliceEightFinding } = emojiFinding;
+    if (
+      transform("👋 jane@example.com", [preSliceEightFinding], {
+        default: { strategy: "redact" },
+      }).text !== "👋 [EMAIL]"
+    ) {
+      throw new Error("UTF-16 output fields changed the accepted finding input shape");
     }
     if (
       JSON.stringify(scan("Email jane@example.com", { locale: "en-US" })) !==
@@ -303,6 +327,10 @@ try {
         (record) =>
           record.strategy !== "redact" ||
           record.replacement !== "[EMAIL]" ||
+          text.slice(record.sourceUtf16Range.start, record.sourceUtf16Range.end) !==
+            "jane@example.com" ||
+          explicit.text.slice(record.outputUtf16Range.start, record.outputUtf16Range.end) !==
+            record.replacement ||
           Array.from(explicit.text)
             .slice(record.outputCodepointRange.start, record.outputCodepointRange.end)
             .join("") !== record.replacement,

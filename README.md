@@ -11,7 +11,9 @@ optional confidence, detector name, optional detector version
 
 Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
-detectors currently report no confidence score.
+detectors currently report no confidence score. Node.js and browser WASM also
+return an explicitly named UTF-16 code-unit range that can be passed directly
+to JavaScript `String.prototype.slice`.
 
 The transformation strategies are `redact`, `mask`, `remove`, `pseudonymize`,
 and `tokenize` in Rust, Python, and Node.js.
@@ -26,8 +28,9 @@ unsupported in browser WASM.
 `scanAndTransform` in JavaScript) is the explicit scan-then-transform
 convenience. Results include the transformed text and an ordered record for
 every applied replacement, including its source metadata and output byte and
-code-point ranges. Transformation records never include the original matched
-text.
+code-point ranges. Node.js and browser WASM additionally return source and
+output UTF-16 ranges. Transformation records never include the original
+matched text.
 
 Transformation calls require an envelope with a default strategy. It can also
 select entity types, override the strategy per entity, and exempt exact or
