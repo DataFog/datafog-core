@@ -1,0 +1,69 @@
+---
+title: "DataFog Core"
+description: "Detect PII and apply explicit privacy transformations from Rust, Python, Node.js, and browsers."
+icon: "shield-halved"
+---
+
+DataFog Core is a multi-runtime engine for detecting sensitive text and applying
+privacy transformations. The implementation lives in Rust, with thin bindings
+for Python, Node.js, and browser WebAssembly.
+
+<Note>
+  DataFog Core is distributed as `datafog-core`. It is separate from the
+  established `datafog` Python package and does not reproduce its legacy API.
+</Note>
+
+## What it does
+
+<Columns cols={2}>
+  <Card title="Detect PII" icon="magnifying-glass" href="/concepts/findings-and-ranges">
+    Scan text for structured findings with explicit ranges and detector provenance.
+  </Card>
+  <Card title="Transform text" icon="wand-magic-sparkles" href="/concepts/privacy-transformations">
+    Redact, mask, remove, pseudonymize, or tokenize selected findings.
+  </Card>
+  <Card title="Control selection" icon="sliders" href="/guides/configuration">
+    Select entity types, apply per-entity overrides, and exempt approved values.
+  </Card>
+  <Card title="Restore tokens" icon="rotate-left" href="/guides/tokenization-and-restoration">
+    Restore provider-issued tokens atomically under an exact authorization scope.
+  </Card>
+</Columns>
+
+## Supported entities
+
+The built-in detector recognizes:
+
+- `EMAIL`
+- `PHONE`
+- `SSN`
+- `CREDIT_CARD`
+- `IP_ADDRESS`
+- `DATE`
+- `ZIP_CODE`
+
+Built-in entity names are uppercase. The finding contract remains extensible so
+custom detectors can introduce additional entity names in the future.
+
+## Operation model
+
+```text
+scan(text)                    -> findings
+transform(text, findings, …) -> transformed text + records
+scan_and_transform(text, …)  -> scan, then transform
+restore(text, context)       -> restored text + records
+```
+
+`transform` never scans implicitly. Use `scan_and_transform` when you want the
+explicit scan-then-transform convenience operation.
+
+## Start here
+
+<Columns cols={2}>
+  <Card title="Install a package" icon="download" href="/get-started/installation">
+    Choose the distribution for your runtime.
+  </Card>
+  <Card title="Run the quickstart" icon="play" href="/get-started/quickstart">
+    Detect and redact an email address in a few lines.
+  </Card>
+</Columns>

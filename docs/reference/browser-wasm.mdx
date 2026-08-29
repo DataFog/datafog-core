@@ -1,0 +1,55 @@
+---
+title: "Browser / WASM"
+description: "Browser WebAssembly initialization, stateless operations, and provider-backed limitations."
+icon: "globe"
+---
+
+<Note>
+  The first `@datafog/wasm` npm release is pending. The API documented here is
+  implemented and tested in a real browser from the repository.
+</Note>
+
+## Initialize the module
+
+Call `init` once before using another operation.
+
+```javascript
+import { init, scan, scanAndTransform, transform } from "@datafog/wasm";
+
+await init();
+```
+
+## Operations
+
+```typescript
+scan(text: string, config?: ScanConfig): Finding[]
+transform(
+  text: string,
+  findings: FindingInput[],
+  config: TransformationConfig,
+): TransformResult
+scanAndTransform(text: string, config: ScanAndTransformConfig): TransformResult
+```
+
+The browser binding supports the stateless `redact`, `mask`, and `remove`
+strategies.
+
+## JavaScript-native ranges
+
+Findings contain `utf16Range`. Transformation records contain
+`sourceUtf16Range` and `outputUtf16Range`. These zero-based, end-exclusive
+ranges work directly with `String.prototype.slice`.
+
+## Unsupported provider operations
+
+Browser/WASM does not accept key or token providers. It returns
+`unsupported_strategy` when pseudonymization or tokenization is selected and
+for every restoration call.
+
+This is an intentional security boundary, not a missing fallback. Provider
+credentials and key custody require a separately designed host integration.
+
+## Errors
+
+The JavaScript wrapper throws `DataFogError` with the same stable fields as the
+Node.js binding. See [Errors](/reference/errors).

@@ -1,0 +1,79 @@
+---
+title: "Privacy transformations"
+description: "Choose between redaction, masking, removal, pseudonymization, and tokenization."
+icon: "wand-magic-sparkles"
+---
+
+DataFog Core exposes concrete transformation strategies rather than claiming
+that every output is anonymous.
+
+| Strategy | Output | Reversible | Provider required | Browser/WASM |
+| --- | --- | --- | --- | --- |
+| `redact` | `[ENTITY_TYPE]` | No | No | Supported |
+| `mask` | Configured mask characters | No | No | Supported |
+| `remove` | Empty replacement | No | No | Supported |
+| `pseudonymize` | Keyed HMAC-SHA-256 pseudonym | No | Key provider | Unsupported |
+| `tokenize` | Opaque `DFTOKENv1(...)` envelope | Yes | Token provider | Unsupported |
+
+## Redact
+
+Redaction replaces each selected finding with an unnumbered entity placeholder.
+
+```json
+{ "default": { "strategy": "redact" } }
+```
+
+`jane@example.com` becomes `[EMAIL]`.
+
+## Mask
+
+Masking replaces every non-revealed Unicode code point. The default character
+is `*`. A custom character must be exactly one non-whitespace, non-control
+Unicode code point.
+
+```json
+{
+  "default": {
+    "strategy": "mask",
+    "character": "•",
+    "reveal": { "direction": "last", "count": 4 }
+  }
+}
+```
+
+## Remove
+
+Removal deletes only the exact finding span. It does not normalize adjacent
+whitespace.
+
+```json
+{ "default": { "strategy": "remove" } }
+```
+
+## Pseudonymize
+
+Pseudonymization computes deterministic HMAC-SHA-256 over the exact UTF-8
+matched value using a provider-resolved 32-byte key. Use it when stable equality
+under an intentionally scoped secret key is required.
+
+See [Pseudonymization](/guides/pseudonymization).
+
+## Tokenize
+
+Tokenization asks an application-owned provider to issue opaque token payloads.
+The resulting envelope can later be restored under the same exact request
+scope.
+
+See [Tokenization and restoration](/guides/tokenization-and-restoration).
+
+## Transformation records
+
+Each applied replacement produces a record with:
+
+- source ranges and detector provenance;
+- the strategy and exact replacement;
+- output ranges that select the replacement;
+- resolved key metadata for pseudonymization; or
+- resolved token metadata for tokenization.
+
+The record does not include `matched_text` or a plaintext-to-token mapping.

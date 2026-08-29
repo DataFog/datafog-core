@@ -1,0 +1,81 @@
+---
+title: "Errors"
+description: "Handle stable error codes, machine-readable reasons, request paths, and provider failures."
+icon: "triangle-exclamation"
+---
+
+Transformation and restoration failures are atomic: DataFog Core returns no
+partially transformed result.
+
+## Error fields
+
+| Field | Meaning |
+| --- | --- |
+| `code` | Stable top-level error category |
+| `reason` | Optional machine-readable detail |
+| `message` | Sanitized human-readable explanation |
+| `path` | Optional RFC 6901 request path |
+| `finding_index` / `findingIndex` | Optional index of an invalid supplied finding |
+
+Error messages and metadata do not include matched PII, key material,
+credentials, token payloads, or restored plaintext.
+
+## Error codes
+
+### Request validation
+
+- `invalid_configuration`
+- `invalid_finding`
+
+### Key providers
+
+- `key_provider_required`
+- `key_not_found`
+- `key_access_denied`
+- `key_provider_unavailable`
+- `invalid_key_material`
+- `key_provider_error`
+
+### Token providers and envelopes
+
+- `token_provider_required`
+- `invalid_token`
+- `unsupported_token_version`
+- `token_not_found`
+- `token_expired`
+- `token_access_denied`
+- `invalid_token_material`
+- `token_provider_unavailable`
+- `token_provider_error`
+
+### Capability and engine failures
+
+- `unsupported_strategy`
+- `internal_error`
+
+## JavaScript example
+
+```javascript
+try {
+  scanAndTransform(text, config);
+} catch (error) {
+  if (error instanceof DataFogError) {
+    console.error(error.code, error.path);
+  }
+}
+```
+
+## Python example
+
+```python
+from datafog_core import DataFogConfigurationError
+
+try:
+    scan_and_transform(text, config)
+except DataFogConfigurationError as error:
+    print(error.code, error.reason, error.path)
+```
+
+<Tip>
+  Branch on `code` and `reason`, not on the human-readable message.
+</Tip>

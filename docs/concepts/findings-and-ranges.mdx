@@ -1,0 +1,75 @@
+---
+title: "Findings and text ranges"
+description: "Understand finding metadata and the byte, code-point, and UTF-16 coordinate systems."
+icon: "location-crosshairs"
+---
+
+`scan` returns an ordered list of findings. Each finding identifies what was
+detected, the exact source text, its location, and the detector that produced
+the result.
+
+## Finding fields
+
+| Field | Meaning |
+| --- | --- |
+| `entity_type` / `entityType` | Canonical entity name, such as `EMAIL` |
+| `matched_text` / `matchedText` | Exact substring selected from the input |
+| `byte_range` / `byteRange` | Range in UTF-8 bytes |
+| `codepoint_range` / `codepointRange` | Range in Unicode code points |
+| `utf16Range` | Range in UTF-16 code units; Node.js and browser/WASM only |
+| `confidence` | Optional detector confidence in `0.0..=1.0` |
+| `detector_name` / `detectorName` | Stable detector identifier |
+| `detector_version` / `detectorVersion` | Optional detector implementation version |
+
+Rule-based built-in detectors currently omit confidence.
+
+## Range semantics
+
+Every range is:
+
+- zero-based;
+- end-exclusive;
+- explicitly named for its coordinate system;
+- relative to the exact input text, without implicit Unicode normalization.
+
+For the text `👋 jane@example.com`, the email begins after an emoji and a space.
+The same span has different offsets in each coordinate system:
+
+| Coordinate system | Email range |
+| --- | --- |
+| UTF-8 bytes | `5..21` |
+| Unicode code points | `2..18` |
+| UTF-16 code units | `3..19` |
+
+JavaScript strings use UTF-16 indexing, so Node.js and browser/WASM expose a
+range that works directly with `String.prototype.slice`:
+
+```javascript
+const text = "👋 jane@example.com";
+const finding = scan(text)[0];
+
+const selected = text.slice(
+  finding.utf16Range.start,
+  finding.utf16Range.end,
+);
+
+console.assert(selected === finding.matchedText);
+```
+
+## Supplied findings
+
+`transform` accepts caller-supplied findings but validates them before changing
+text. The entire request fails when a finding is empty, reversed, out of bounds,
+misaligned with a character boundary, inconsistent across coordinate systems,
+or does not select its declared `matched_text`.
+
+JavaScript callers do not need to provide the derived `utf16Range` field when
+supplying a finding to `transform`.
+
+## Duplicates and overlaps
+
+Exact duplicate findings collapse into one result before transformation.
+Overlapping findings are resolved deterministically using structural span,
+length, confidence when both values are present, source position, entity type,
+and detector provenance. Selected transformations are returned in source
+document order.

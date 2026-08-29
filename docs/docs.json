@@ -1,0 +1,61 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "DataFog Core",
+  "description": "PII detection and privacy transformations for Rust, Python, Node.js, and browsers",
+  "colors": {
+    "primary": "#0F766E",
+    "light": "#0F766E",
+    "dark": "#2DD4BF"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "index",
+          "get-started/installation",
+          "get-started/quickstart"
+        ]
+      },
+      {
+        "group": "Core concepts",
+        "pages": [
+          "concepts/findings-and-ranges",
+          "concepts/privacy-transformations"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/configuration",
+          "guides/pseudonymization",
+          "guides/tokenization-and-restoration"
+        ]
+      },
+      {
+        "group": "SDK reference",
+        "pages": [
+          "reference/rust",
+          "reference/python",
+          "reference/node",
+          "reference/browser-wasm",
+          "reference/errors"
+        ]
+      },
+      {
+        "group": "Contributing",
+        "pages": ["development"]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/DataFog/datafog-core",
+          "icon": "github"
+        }
+      ]
+    }
+  }
+}
