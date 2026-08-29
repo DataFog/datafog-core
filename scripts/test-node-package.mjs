@@ -57,6 +57,10 @@ function verifyContract(text, finding) {
       .join(""),
     finding.matchedText,
   );
+  assert.equal(
+    text.slice(finding.utf16Range.start, finding.utf16Range.end),
+    finding.matchedText,
+  );
   assert.equal(finding.confidence, undefined);
   assert.ok(finding.detectorName.startsWith("datafog-core/"));
   assert.ok(finding.detectorVersion);
@@ -82,6 +86,14 @@ for (const name of ["development.jsonl", "final.jsonl"]) {
 const emojiFinding = scan("👋 jane@example.com")[0];
 assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
 assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
+assert.deepEqual(emojiFinding.utf16Range, { start: 3, end: 19 });
+const { utf16Range: _derivedRange, ...preSliceEightFinding } = emojiFinding;
+assert.equal(
+  transform("👋 jane@example.com", [preSliceEightFinding], {
+    default: { strategy: "redact" },
+  }).text,
+  "👋 [EMAIL]",
+);
 assert.deepEqual(
   scan("Email jane@example.com", { locale: "en-US" }),
   scan("Email jane@example.com"),
@@ -100,6 +112,18 @@ assert.equal(explicit.transformations.length, 2);
 assert.equal(explicit.transformations[0].replacement, "[EMAIL]");
 assert.deepEqual(explicit.transformations[0].outputByteRange, { start: 5, end: 12 });
 assert.deepEqual(explicit.transformations[0].outputCodepointRange, { start: 2, end: 9 });
+assert.deepEqual(explicit.transformations[0].sourceUtf16Range, { start: 3, end: 19 });
+assert.deepEqual(explicit.transformations[0].outputUtf16Range, { start: 3, end: 10 });
+for (const record of explicit.transformations) {
+  assert.equal(
+    transformText.slice(record.sourceUtf16Range.start, record.sourceUtf16Range.end),
+    "jane@example.com",
+  );
+  assert.equal(
+    explicit.text.slice(record.outputUtf16Range.start, record.outputUtf16Range.end),
+    record.replacement,
+  );
+}
 assert.equal("finding" in explicit.transformations[0], false);
 assert.equal("matchedText" in explicit.transformations[0], false);
 assert.equal(explicit.transformations[0].entityType, "EMAIL");
@@ -283,6 +307,17 @@ assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 const restored = await tokenManager.restore(tokenized.text, tokenContext);
 assert.equal(restored.text, "👋 jane@example.com jane@example.com");
 assert.equal(restored.restorations.length, 2);
+for (const record of restored.restorations) {
+  assert.ok(
+    tokenized.text
+      .slice(record.sourceUtf16Range.start, record.sourceUtf16Range.end)
+      .startsWith("DFTOKENv1("),
+  );
+  assert.equal(
+    restored.text.slice(record.outputUtf16Range.start, record.outputUtf16Range.end),
+    "jane@example.com",
+  );
+}
 await assert.rejects(
   tokenManager.restore(tokenized.text, { scope: "tenant/b" }),
   (error) => error instanceof DataFogError && error.code === "token_access_denied",
@@ -317,6 +352,7 @@ import {
   PrivacyManager,
   type EntityType,
   type Finding,
+  type FindingInput,
   type MaskRevealConfig,
   type KeyProvider,
   type ScanAndTransformConfig,
@@ -326,8 +362,10 @@ import {
 } from "@datafog/node";
 
 const findings: Finding[] = scan("Email jane@example.com");
+const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
+const utf16Range: TextRange = findings[0]?.utf16Range ?? { start: 0, end: 0 };
 const explicit: TransformResult = transform(
   "Email jane@example.com",
   findings,
@@ -359,7 +397,9 @@ const pseudonymized: Promise<TransformResult> = new PrivacyManager(provider).tra
 );
 
 void entityType;
+void suppliedFinding;
 void range;
+void utf16Range;
 void explicit;
 void convenience;
 void masked;

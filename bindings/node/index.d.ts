@@ -141,7 +141,7 @@ export declare class PrivacyManager {
   constructor(provider: KeyProvider | PrivacyManagerProviders, tokenProvider?: TokenProvider);
   transform(
     text: string,
-    findings: Finding[],
+    findings: FindingInput[],
     config: TransformationConfig,
     context?: PrivacyContext,
   ): Promise<TransformResult>;
@@ -157,9 +157,20 @@ export interface Finding {
   readonly matchedText: string
   readonly byteRange: TextRange
   readonly codepointRange: TextRange
+  readonly utf16Range: TextRange
   readonly confidence?: number
   readonly detectorName: string
   readonly detectorVersion?: string
+}
+
+export interface FindingInput {
+  entityType: EntityType
+  matchedText: string
+  byteRange: TextRange
+  codepointRange: TextRange
+  confidence?: number
+  detectorName: string
+  detectorVersion?: string
 }
 
 export interface KeySelector {
@@ -176,11 +187,11 @@ export interface PreparedScanAndTransform {
 
 export declare function prepareScanAndTransform(text: string, config: ScanAndTransformConfig): PreparedScanAndTransform
 
-export declare function requiredKeySelectors(text: string, findings: Array<Finding>, config: TransformationConfig): Array<KeySelector>
+export declare function requiredKeySelectors(text: string, findings: FindingInput[], config: TransformationConfig): Array<KeySelector>
 
 export declare function requiredRestoreItems(text: string, context: PrivacyContext): Array<RestoreItem>
 
-export declare function requiredTokenizationItems(text: string, findings: Array<Finding>, config: TransformationConfig, context?: PrivacyContext | undefined): Array<TokenizeItem>
+export declare function requiredTokenizationItems(text: string, findings: FindingInput[], config: TransformationConfig, context?: PrivacyContext | undefined): Array<TokenizeItem>
 
 export interface ResolvedKeyInput {
   selectorIndex: number
@@ -191,8 +202,10 @@ export interface ResolvedKeyInput {
 export interface Restoration {
   readonly sourceByteRange: TextRange
   readonly sourceCodepointRange: TextRange
+  readonly sourceUtf16Range: TextRange
   readonly outputByteRange: TextRange
   readonly outputCodepointRange: TextRange
+  readonly outputUtf16Range: TextRange
   readonly tokenRef: string
   readonly resolvedTokenVersion: string
 }
@@ -240,12 +253,13 @@ export interface TokenizeResultInput {
 }
 
 /** Transform explicit findings without scanning implicitly. */
-export declare function transform(text: string, findings: Array<Finding>, config: TransformationConfig): TransformResult
+export declare function transform(text: string, findings: FindingInput[], config: TransformationConfig): TransformResult
 
 export interface Transformation {
   readonly entityType: string
   readonly sourceByteRange: TextRange
   readonly sourceCodepointRange: TextRange
+  readonly sourceUtf16Range: TextRange
   readonly confidence?: number
   readonly detectorName: string
   readonly detectorVersion?: string
@@ -253,6 +267,7 @@ export interface Transformation {
   readonly replacement: string
   readonly outputByteRange: TextRange
   readonly outputCodepointRange: TextRange
+  readonly outputUtf16Range: TextRange
   readonly keyRef?: string
   readonly resolvedKeyVersion?: string
   readonly tokenRef?: string
@@ -264,6 +279,6 @@ export interface TransformResult {
   readonly transformations: Array<Transformation>
 }
 
-export declare function transformWithProviderResults(text: string, findings: Array<Finding>, config: TransformationConfig, context: PrivacyContext | undefined, resolvedKeys: Array<ResolvedKeyInput>, tokenResults: Array<TokenizeResultInput>): TransformResult
+export declare function transformWithProviderResults(text: string, findings: FindingInput[], config: TransformationConfig, context: PrivacyContext | undefined, resolvedKeys: Array<ResolvedKeyInput>, tokenResults: Array<TokenizeResultInput>): TransformResult
 
-export declare function transformWithResolvedKeys(text: string, findings: Array<Finding>, config: TransformationConfig, resolvedKeys: Array<ResolvedKeyInput>): TransformResult
+export declare function transformWithResolvedKeys(text: string, findings: FindingInput[], config: TransformationConfig, resolvedKeys: Array<ResolvedKeyInput>): TransformResult

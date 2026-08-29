@@ -76,7 +76,7 @@ export interface TextRange {
   readonly end: number;
 }
 
-export interface Finding {
+export interface FindingInput {
   readonly entityType: EntityType;
   readonly matchedText: string;
   readonly byteRange: TextRange;
@@ -86,10 +86,15 @@ export interface Finding {
   readonly detectorVersion?: string;
 }
 
+export interface Finding extends FindingInput {
+  readonly utf16Range: TextRange;
+}
+
 export interface Transformation {
   readonly entityType: EntityType;
   readonly sourceByteRange: TextRange;
   readonly sourceCodepointRange: TextRange;
+  readonly sourceUtf16Range: TextRange;
   readonly confidence?: number;
   readonly detectorName: string;
   readonly detectorVersion?: string;
@@ -97,6 +102,7 @@ export interface Transformation {
   readonly replacement: string;
   readonly outputByteRange: TextRange;
   readonly outputCodepointRange: TextRange;
+  readonly outputUtf16Range: TextRange;
   readonly keyRef?: string;
   readonly resolvedKeyVersion?: string;
   readonly tokenRef?: string;
@@ -112,7 +118,7 @@ export function init(): Promise<void>;
 export function scan(text: string, config?: ScanConfig): Finding[];
 export function transform(
   text: string,
-  findings: Finding[],
+  findings: FindingInput[],
   config: TransformationConfig,
 ): TransformResult;
 export function scanAndTransform(
@@ -123,8 +129,10 @@ export interface PrivacyContext { readonly scope: string; }
 export interface Restoration {
   readonly sourceByteRange: TextRange;
   readonly sourceCodepointRange: TextRange;
+  readonly sourceUtf16Range: TextRange;
   readonly outputByteRange: TextRange;
   readonly outputCodepointRange: TextRange;
+  readonly outputUtf16Range: TextRange;
   readonly tokenRef: string;
   readonly resolvedTokenVersion: string;
 }

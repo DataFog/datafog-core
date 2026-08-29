@@ -207,21 +207,24 @@ while browser WASM rejects provider-backed work.
 
 ## Slice 8: Binding completion and release hardening
 
+**Status: complete.**
+
 Rust, Python, and Node implement all capabilities through Slice 7. Browser
 WASM implements the stateless transformations through Slice 4 and explicitly
 rejects provider-backed pseudonymization. New stateless operations should
 continue to ship through the bindings in the same vertical slice as their Rust
 implementation rather than waiting for a separate binding rollout.
 
-Remaining binding work is:
+Node.js and browser WASM findings expose `utf16Range`; their transformation
+records expose `sourceUtf16Range` and `outputUtf16Range`; Node restoration
+records expose the same source/output names. All are zero-based, end-exclusive
+UTF-16 code-unit ranges. One validated Core helper derives them from canonical
+byte ranges, while existing byte and code-point fields remain unchanged.
 
-1. add explicitly named UTF-16 code-unit ranges for JavaScript consumers as
-   required by ADR 001, without changing the existing byte or code-point
-   fields;
-2. retain Rust, Python, and Node provider-backed conformance coverage while
-   keeping browser WASM key and token providers explicitly unsupported; and
-3. retain installed-package and cross-binding conformance tests as release
-   gates.
+Installed-package tests prove emoji-prefixed findings and transformation or
+restoration records select the exact spans with JavaScript `slice`. Existing
+Rust, Python, and Node provider-backed conformance coverage remains in place,
+and browser WASM continues to reject key- and token-provider work explicitly.
 
 Pseudonymization and reversible token storage are not promised in browser WASM
 without a separately accepted host-managed key-custody boundary.

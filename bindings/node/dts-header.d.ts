@@ -141,7 +141,7 @@ export declare class PrivacyManager {
   constructor(provider: KeyProvider | PrivacyManagerProviders, tokenProvider?: TokenProvider);
   transform(
     text: string,
-    findings: Finding[],
+    findings: FindingInput[],
     config: TransformationConfig,
     context?: PrivacyContext,
   ): Promise<TransformResult>;

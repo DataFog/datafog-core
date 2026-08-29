@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 struct TextRange {
     start: usize,
     end: usize,
@@ -23,6 +23,8 @@ struct Finding {
     matched_text: String,
     byte_range: TextRange,
     codepoint_range: TextRange,
+    #[serde(default, skip_deserializing)]
+    utf16_range: TextRange,
     confidence: Option<f32>,
     detector_name: String,
     detector_version: Option<String>,
@@ -54,6 +56,7 @@ struct Transformation {
     entity_type: String,
     source_byte_range: TextRange,
     source_codepoint_range: TextRange,
+    source_utf16_range: TextRange,
     confidence: Option<f32>,
     detector_name: String,
     detector_version: Option<String>,
@@ -61,6 +64,7 @@ struct Transformation {
     replacement: String,
     output_byte_range: TextRange,
     output_codepoint_range: TextRange,
+    output_utf16_range: TextRange,
     key_ref: Option<String>,
     resolved_key_version: Option<String>,
     token_ref: Option<String>,
@@ -73,16 +77,23 @@ struct TransformResult {
     transformations: Vec<Transformation>,
 }
 
-fn finding_from_core(finding: datafog_core::Finding) -> Finding {
-    Finding {
+fn utf16_range(text: &str, range: datafog_core::TextRange) -> Result<TextRange, JsValue> {
+    datafog_core::utf16_range(text, range)
+        .map(TextRange::from)
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+fn finding_from_core(text: &str, finding: datafog_core::Finding) -> Result<Finding, JsValue> {
+    Ok(Finding {
         entity_type: finding.entity_type,
         matched_text: finding.matched_text,
         byte_range: finding.byte_range.into(),
         codepoint_range: finding.codepoint_range.into(),
+        utf16_range: utf16_range(text, finding.byte_range)?,
         confidence: finding.confidence,
         detector_name: finding.detector_name,
         detector_version: finding.detector_version,
-    }
+    })
 }
 
 fn privacy_error(error: datafog_core::PrivacyError) -> JsValue {
@@ -102,35 +113,43 @@ fn config_value(config: JsValue) -> Result<serde_json::Value, JsValue> {
     serde_wasm_bindgen::from_value(config).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
-fn result_to_js(result: datafog_core::TransformResult) -> Result<JsValue, JsValue> {
+fn result_to_js(
+    source_text: &str,
+    result: datafog_core::TransformResult,
+) -> Result<JsValue, JsValue> {
+    let output_text = &result.text;
     let result = TransformResult {
-        text: result.text,
         transformations: result
             .transformations
             .into_iter()
-            .map(|transformation| Transformation {
-                entity_type: transformation.entity_type,
-                source_byte_range: transformation.source_byte_range.into(),
-                source_codepoint_range: transformation.source_codepoint_range.into(),
-                confidence: transformation.confidence,
-                detector_name: transformation.detector_name,
-                detector_version: transformation.detector_version,
-                strategy: match transformation.strategy {
-                    datafog_core::TransformationStrategy::Redact => "redact",
-                    datafog_core::TransformationStrategy::Remove => "remove",
-                    datafog_core::TransformationStrategy::Mask(_) => "mask",
-                    datafog_core::TransformationStrategy::Pseudonymize(_) => "pseudonymize",
-                    datafog_core::TransformationStrategy::Tokenize(_) => "tokenize",
-                },
-                replacement: transformation.replacement,
-                output_byte_range: transformation.output_byte_range.into(),
-                output_codepoint_range: transformation.output_codepoint_range.into(),
-                key_ref: transformation.key_ref,
-                resolved_key_version: transformation.resolved_key_version,
-                token_ref: transformation.token_ref,
-                resolved_token_version: transformation.resolved_token_version,
+            .map(|transformation| {
+                Ok(Transformation {
+                    entity_type: transformation.entity_type,
+                    source_byte_range: transformation.source_byte_range.into(),
+                    source_codepoint_range: transformation.source_codepoint_range.into(),
+                    source_utf16_range: utf16_range(source_text, transformation.source_byte_range)?,
+                    confidence: transformation.confidence,
+                    detector_name: transformation.detector_name,
+                    detector_version: transformation.detector_version,
+                    strategy: match transformation.strategy {
+                        datafog_core::TransformationStrategy::Redact => "redact",
+                        datafog_core::TransformationStrategy::Remove => "remove",
+                        datafog_core::TransformationStrategy::Mask(_) => "mask",
+                        datafog_core::TransformationStrategy::Pseudonymize(_) => "pseudonymize",
+                        datafog_core::TransformationStrategy::Tokenize(_) => "tokenize",
+                    },
+                    replacement: transformation.replacement,
+                    output_byte_range: transformation.output_byte_range.into(),
+                    output_codepoint_range: transformation.output_codepoint_range.into(),
+                    output_utf16_range: utf16_range(output_text, transformation.output_byte_range)?,
+                    key_ref: transformation.key_ref,
+                    resolved_key_version: transformation.resolved_key_version,
+                    token_ref: transformation.token_ref,
+                    resolved_token_version: transformation.resolved_token_version,
+                })
             })
-            .collect(),
+            .collect::<Result<Vec<_>, JsValue>>()?,
+        text: result.text,
     };
 
     serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -146,8 +165,8 @@ pub fn scan(text: &str, config: Option<JsValue>) -> Result<JsValue, JsValue> {
     };
     let findings: Vec<Finding> = datafog_core::scan_with_config(text, &config)
         .into_iter()
-        .map(finding_from_core)
-        .collect();
+        .map(|finding| finding_from_core(text, finding))
+        .collect::<Result<_, _>>()?;
 
     serde_wasm_bindgen::to_value(&findings).map_err(|error| JsValue::from_str(&error.to_string()))
 }
@@ -186,7 +205,7 @@ pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsVal
         ));
     }
     let result = datafog_core::transform(text, &findings, &config).map_err(privacy_error)?;
-    result_to_js(result)
+    result_to_js(text, result)
 }
 
 #[wasm_bindgen]
@@ -222,7 +241,7 @@ pub fn scan_and_transform(text: &str, config: JsValue) -> Result<JsValue, JsValu
         ));
     }
     let result = datafog_core::scan_and_transform(text, &config).map_err(privacy_error)?;
-    result_to_js(result)
+    result_to_js(text, result)
 }
 
 #[wasm_bindgen]

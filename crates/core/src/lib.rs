@@ -20,6 +20,37 @@ pub struct TextRange {
     pub end: usize,
 }
 
+/// Returned when a UTF-8 byte range is invalid for the supplied text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Utf16RangeError;
+
+impl std::fmt::Display for Utf16RangeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("UTF-8 byte range is invalid for the supplied text")
+    }
+}
+
+impl std::error::Error for Utf16RangeError {}
+
+/// Convert a UTF-8 byte range into zero-based, end-exclusive UTF-16 code-unit
+/// offsets for JavaScript consumers.
+pub fn utf16_range(text: &str, byte_range: TextRange) -> Result<TextRange, Utf16RangeError> {
+    if byte_range.start > byte_range.end {
+        return Err(Utf16RangeError);
+    }
+    if byte_range.end > text.len() {
+        return Err(Utf16RangeError);
+    }
+    if !text.is_char_boundary(byte_range.start) || !text.is_char_boundary(byte_range.end) {
+        return Err(Utf16RangeError);
+    }
+
+    Ok(TextRange {
+        start: text[..byte_range.start].encode_utf16().count(),
+        end: text[..byte_range.end].encode_utf16().count(),
+    })
+}
+
 /// A piece of potentially sensitive content detected in an input string.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
@@ -3432,12 +3463,28 @@ mod tests {
         TokenProviderErrorKind, TokenizeProviderFuture, TokenizeResult, TransformationConfig,
         TransformationStrategy, parse_scan_and_transform_config, parse_transformation_config,
         required_restore_items, restore_with_results, scan, scan_and_transform, transform,
+        utf16_range,
     };
     use futures::executor::block_on;
     use serde_json::json;
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn utf16_ranges_match_javascript_string_offsets() {
+        let text = "👋 jane@example.com";
+
+        assert_eq!(
+            utf16_range(text, TextRange { start: 5, end: 21 }),
+            Ok(TextRange { start: 3, end: 19 })
+        );
+    }
+
+    #[test]
+    fn utf16_ranges_reject_invalid_byte_boundaries() {
+        assert!(utf16_range("👋", TextRange { start: 1, end: 4 }).is_err());
+    }
 
     #[derive(Default)]
     struct TestKeyProvider {

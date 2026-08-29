@@ -28,12 +28,27 @@ pub struct Finding {
     pub codepoint_range: TextRange,
 
     #[napi(readonly)]
+    pub utf16_range: TextRange,
+
+    #[napi(readonly)]
     pub confidence: Option<f64>,
 
     #[napi(readonly)]
     pub detector_name: String,
 
     #[napi(readonly)]
+    pub detector_version: Option<String>,
+}
+
+#[napi(object, object_to_js = false)]
+pub struct FindingInput {
+    #[napi(ts_type = "EntityType")]
+    pub entity_type: String,
+    pub matched_text: String,
+    pub byte_range: TextRange,
+    pub codepoint_range: TextRange,
+    pub confidence: Option<f64>,
+    pub detector_name: String,
     pub detector_version: Option<String>,
 }
 
@@ -47,6 +62,9 @@ pub struct Transformation {
 
     #[napi(readonly)]
     pub source_codepoint_range: TextRange,
+
+    #[napi(readonly)]
+    pub source_utf16_range: TextRange,
 
     #[napi(readonly)]
     pub confidence: Option<f64>,
@@ -68,6 +86,9 @@ pub struct Transformation {
 
     #[napi(readonly)]
     pub output_codepoint_range: TextRange,
+
+    #[napi(readonly)]
+    pub output_utf16_range: TextRange,
 
     #[napi(readonly)]
     pub key_ref: Option<String>,
@@ -157,9 +178,13 @@ pub struct Restoration {
     #[napi(readonly)]
     pub source_codepoint_range: TextRange,
     #[napi(readonly)]
+    pub source_utf16_range: TextRange,
+    #[napi(readonly)]
     pub output_byte_range: TextRange,
     #[napi(readonly)]
     pub output_codepoint_range: TextRange,
+    #[napi(readonly)]
+    pub output_utf16_range: TextRange,
     #[napi(readonly)]
     pub token_ref: String,
     #[napi(readonly)]
@@ -199,19 +224,26 @@ fn js_range(range: datafog_core::TextRange) -> napi::Result<TextRange> {
     })
 }
 
-fn js_finding(finding: datafog_core::Finding) -> napi::Result<Finding> {
+fn js_utf16_range(text: &str, range: datafog_core::TextRange) -> napi::Result<TextRange> {
+    datafog_core::utf16_range(text, range)
+        .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
+        .and_then(js_range)
+}
+
+fn js_finding(text: &str, finding: datafog_core::Finding) -> napi::Result<Finding> {
     Ok(Finding {
         entity_type: finding.entity_type,
         matched_text: finding.matched_text,
         byte_range: js_range(finding.byte_range)?,
         codepoint_range: js_range(finding.codepoint_range)?,
+        utf16_range: js_utf16_range(text, finding.byte_range)?,
         confidence: finding.confidence.map(f64::from),
         detector_name: finding.detector_name,
         detector_version: finding.detector_version,
     })
 }
 
-fn core_finding(finding: Finding) -> datafog_core::Finding {
+fn core_finding(finding: FindingInput) -> datafog_core::Finding {
     datafog_core::Finding {
         entity_type: finding.entity_type,
         matched_text: finding.matched_text,
@@ -246,9 +278,12 @@ fn js_privacy_error(error: datafog_core::PrivacyError) -> Error {
     Error::new(status, payload.to_string())
 }
 
-fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<TransformResult> {
+fn js_transform_result(
+    source_text: &str,
+    result: datafog_core::TransformResult,
+) -> napi::Result<TransformResult> {
+    let output_text = &result.text;
     Ok(TransformResult {
-        text: result.text,
         transformations: result
             .transformations
             .into_iter()
@@ -257,6 +292,10 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
                     entity_type: transformation.entity_type,
                     source_byte_range: js_range(transformation.source_byte_range)?,
                     source_codepoint_range: js_range(transformation.source_codepoint_range)?,
+                    source_utf16_range: js_utf16_range(
+                        source_text,
+                        transformation.source_byte_range,
+                    )?,
                     confidence: transformation.confidence.map(f64::from),
                     detector_name: transformation.detector_name,
                     detector_version: transformation.detector_version,
@@ -272,6 +311,10 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
                     replacement: transformation.replacement,
                     output_byte_range: js_range(transformation.output_byte_range)?,
                     output_codepoint_range: js_range(transformation.output_codepoint_range)?,
+                    output_utf16_range: js_utf16_range(
+                        output_text,
+                        transformation.output_byte_range,
+                    )?,
                     key_ref: transformation.key_ref,
                     resolved_key_version: transformation.resolved_key_version,
                     token_ref: transformation.token_ref,
@@ -279,6 +322,7 @@ fn js_transform_result(result: datafog_core::TransformResult) -> napi::Result<Tr
                 })
             })
             .collect::<napi::Result<Vec<_>>>()?,
+        text: result.text,
     })
 }
 
@@ -295,9 +339,12 @@ fn core_token_results(results: Vec<TokenizeResultInput>) -> Vec<datafog_core::To
         .collect()
 }
 
-fn js_restore_result(result: datafog_core::RestoreResult) -> napi::Result<RestoreResult> {
+fn js_restore_result(
+    source_text: &str,
+    result: datafog_core::RestoreResult,
+) -> napi::Result<RestoreResult> {
+    let output_text = &result.text;
     Ok(RestoreResult {
-        text: result.text,
         restorations: result
             .restorations
             .into_iter()
@@ -305,13 +352,16 @@ fn js_restore_result(result: datafog_core::RestoreResult) -> napi::Result<Restor
                 Ok(Restoration {
                     source_byte_range: js_range(record.source_byte_range)?,
                     source_codepoint_range: js_range(record.source_codepoint_range)?,
+                    source_utf16_range: js_utf16_range(source_text, record.source_byte_range)?,
                     output_byte_range: js_range(record.output_byte_range)?,
                     output_codepoint_range: js_range(record.output_codepoint_range)?,
+                    output_utf16_range: js_utf16_range(output_text, record.output_byte_range)?,
                     token_ref: record.token_ref,
                     resolved_token_version: record.resolved_token_version,
                 })
             })
             .collect::<napi::Result<Vec<_>>>()?,
+        text: result.text,
     })
 }
 
@@ -366,7 +416,7 @@ pub fn scan(
     };
     datafog_core::scan_with_config(&text, &config)
         .into_iter()
-        .map(js_finding)
+        .map(|finding| js_finding(&text, finding))
         .collect()
 }
 
@@ -375,7 +425,7 @@ pub fn scan(
 pub fn transform(
     env: Env,
     text: String,
-    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "FindingInput[]")] findings: Vec<FindingInput>,
     #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
 ) -> napi::Result<TransformResult> {
     let config: serde_json::Value = env.from_js_value(config)?;
@@ -383,7 +433,7 @@ pub fn transform(
     let findings = findings.into_iter().map(core_finding).collect::<Vec<_>>();
     datafog_core::transform(&text, &findings, &config)
         .map_err(js_privacy_error)
-        .and_then(js_transform_result)
+        .and_then(|result| js_transform_result(&text, result))
 }
 
 /// Scan text and transform the detected findings.
@@ -398,14 +448,14 @@ pub fn scan_and_transform(
         datafog_core::parse_scan_and_transform_config(&config).map_err(js_privacy_error)?;
     datafog_core::scan_and_transform(&text, &config)
         .map_err(js_privacy_error)
-        .and_then(js_transform_result)
+        .and_then(|result| js_transform_result(&text, result))
 }
 
 #[napi(strict, catch_unwind)]
 pub fn required_key_selectors(
     env: Env,
     text: String,
-    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "FindingInput[]")] findings: Vec<FindingInput>,
     #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
 ) -> napi::Result<Vec<KeySelector>> {
     let config: serde_json::Value = env.from_js_value(config)?;
@@ -420,7 +470,7 @@ pub fn required_key_selectors(
 pub fn transform_with_resolved_keys(
     env: Env,
     text: String,
-    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "FindingInput[]")] findings: Vec<FindingInput>,
     #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
     resolved_keys: Vec<ResolvedKeyInput>,
 ) -> napi::Result<TransformResult> {
@@ -432,7 +482,7 @@ pub fn transform_with_resolved_keys(
     let bindings = core_key_bindings(selectors, resolved_keys)?;
     datafog_core::transform_with_resolved_keys(&text, &findings, &config, bindings)
         .map_err(js_privacy_error)
-        .and_then(js_transform_result)
+        .and_then(|result| js_transform_result(&text, result))
 }
 
 #[napi(strict, catch_unwind)]
@@ -451,7 +501,7 @@ pub fn prepare_scan_and_transform(
     Ok(PreparedScanAndTransform {
         findings: findings
             .into_iter()
-            .map(js_finding)
+            .map(|finding| js_finding(&text, finding))
             .collect::<napi::Result<Vec<_>>>()?,
         selectors: js_key_selectors(&selectors)?,
     })
@@ -461,7 +511,7 @@ pub fn prepare_scan_and_transform(
 pub fn required_tokenization_items(
     env: Env,
     text: String,
-    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "FindingInput[]")] findings: Vec<FindingInput>,
     #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
     #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
 ) -> napi::Result<Vec<TokenizeItem>> {
@@ -493,7 +543,7 @@ pub fn required_tokenization_items(
 pub fn transform_with_provider_results(
     env: Env,
     text: String,
-    findings: Vec<Finding>,
+    #[napi(ts_arg_type = "FindingInput[]")] findings: Vec<FindingInput>,
     #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
     #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
     resolved_keys: Vec<ResolvedKeyInput>,
@@ -521,7 +571,7 @@ pub fn transform_with_provider_results(
         core_token_results(token_results),
     )
     .map_err(js_privacy_error)
-    .and_then(js_transform_result)
+    .and_then(|result| js_transform_result(&text, result))
 }
 
 #[napi(strict, catch_unwind)]
@@ -562,5 +612,5 @@ pub fn restore_with_results(
         .collect();
     datafog_core::restore_with_results(&text, &context, results)
         .map_err(js_privacy_error)
-        .and_then(js_restore_result)
+        .and_then(|result| js_restore_result(&text, result))
 }

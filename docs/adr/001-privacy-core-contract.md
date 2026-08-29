@@ -266,7 +266,11 @@ All ranges are zero-based and end-exclusive.
 - The Rust implementation uses UTF-8 byte ranges internally.
 - The canonical public default is Unicode code-point ranges.
 - Every public range states its coordinate unit explicitly.
-- UTF-16 code-unit ranges are supported for JavaScript consumers.
+- Node.js and browser WASM findings always include `utf16Range`. Their
+  transformation records always include `sourceUtf16Range` and
+  `outputUtf16Range`; Node restoration records use the same source/output
+  names. These ranges select the same spans with JavaScript string operations.
+  Caller-supplied findings do not require the derived `utf16Range` field.
 - Findings expose both UTF-8 byte and Unicode code-point ranges. Bindings may
   derive additional native ranges without silently changing the meaning of a
   field.
@@ -366,6 +370,8 @@ end-exclusive, refer to the transformed text, and select exactly `replacement`.
 Source metadata deliberately excludes `matched_text`; Core does not echo the
 original PII or offer an include-originals switch. Callers that explicitly need
 the source value already possess the input and can use the source ranges.
+JavaScript binding records add the UTF-16 source/output fields defined under
+Text ranges without changing the byte or code-point fields.
 
 Pseudonymization records include the configured key reference and the concrete
 version returned by the provider. They never include key material or a
@@ -531,7 +537,8 @@ database, vault, or cryptographic adapter.
 record carries token source and restored output byte/code-point ranges,
 `token_ref`, and the concrete token profile version. It does not duplicate
 restored plaintext or expose payload, scope, credentials, provider topology,
-or a token-to-plaintext mapping.
+or a token-to-plaintext mapping. Node restoration records additionally carry
+`sourceUtf16Range` and `outputUtf16Range`.
 
 ## Capability-continuity stance
 
