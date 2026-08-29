@@ -1,0 +1,101 @@
+---
+title: "Quickstart"
+description: "Scan text for PII and redact the detected value."
+icon: "play"
+---
+
+This example detects an email address and replaces it with `[EMAIL]`.
+
+<CodeGroup>
+
+```rust Rust
+use datafog_core::{
+    scan, scan_and_transform, ScanAndTransformConfig,
+    TransformationConfig, TransformationStrategy,
+};
+
+let text = "Email jane@example.com";
+let findings = scan(text);
+
+assert_eq!(findings[0].entity_type, "EMAIL");
+assert_eq!(findings[0].matched_text, "jane@example.com");
+
+let config = ScanAndTransformConfig::new(TransformationConfig::new(
+    TransformationStrategy::Redact,
+));
+let result = scan_and_transform(text, &config).unwrap();
+
+assert_eq!(result.text, "Email [EMAIL]");
+```
+
+```python Python
+from datafog_core import scan, scan_and_transform
+
+text = "Email jane@example.com"
+findings = scan(text)
+
+assert findings[0].entity_type == "EMAIL"
+assert findings[0].matched_text == "jane@example.com"
+
+result = scan_and_transform(
+    text,
+    {"transform": {"default": {"strategy": "redact"}}},
+)
+
+assert result.text == "Email [EMAIL]"
+```
+
+```javascript Node.js
+import { scan, scanAndTransform } from "@datafog/node";
+
+const text = "Email jane@example.com";
+const findings = scan(text);
+
+console.assert(findings[0].entityType === "EMAIL");
+console.assert(findings[0].matchedText === "jane@example.com");
+
+const result = scanAndTransform(text, {
+  transform: { default: { strategy: "redact" } },
+});
+
+console.assert(result.text === "Email [EMAIL]");
+```
+
+```javascript Browser/WASM
+import { init, scan, scanAndTransform } from "@datafog/wasm";
+
+await init();
+
+const text = "Email jane@example.com";
+const findings = scan(text);
+const result = scanAndTransform(text, {
+  transform: { default: { strategy: "redact" } },
+});
+
+console.assert(findings[0].entityType === "EMAIL");
+console.assert(result.text === "Email [EMAIL]");
+```
+
+</CodeGroup>
+
+<Note>
+  The Node.js and browser/WASM examples target packages whose first npm release
+  is still pending. Rust and Python packages are currently published.
+</Note>
+
+## Inspect the result
+
+A transformation result contains:
+
+- `text`: the transformed text;
+- `transformations`: one ordered record for each applied replacement.
+
+Transformation records contain ranges, detector provenance, the selected
+strategy, and the exact replacement. They intentionally do not repeat the
+original matched PII.
+
+## Next steps
+
+- Learn how [findings and text ranges](/concepts/findings-and-ranges) work.
+- Compare the available [privacy transformations](/concepts/privacy-transformations).
+- Configure [entity selection, overrides, and allowlists](/guides/configuration).

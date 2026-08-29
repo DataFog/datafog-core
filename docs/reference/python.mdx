@@ -1,0 +1,86 @@
+---
+title: "Python"
+description: "Python functions, result objects, exceptions, and the asynchronous PrivacyManager."
+icon: "python"
+---
+
+```bash
+python -m pip install datafog-core
+```
+
+```python
+import datafog_core
+```
+
+## Synchronous functions
+
+```python
+scan(text: str, config: dict | None = None) -> list[Finding]
+transform(text: str, findings: list[Finding], config: dict) -> TransformResult
+scan_and_transform(text: str, config: dict) -> TransformResult
+```
+
+`transform` uses explicit findings. `scan_and_transform` accepts the divided
+configuration envelope with `scan` and `transform` sections.
+
+## Result objects
+
+Python exposes immutable objects with snake_case attributes:
+
+- `TextRange(start, end)`
+- `Finding`
+- `Transformation`
+- `TransformResult`
+- `Restoration`
+- `RestoreResult`
+
+```python
+finding.entity_type
+finding.matched_text
+finding.byte_range.start
+finding.codepoint_range.end
+
+result.text
+result.transformations
+```
+
+## Asynchronous manager
+
+```python
+PrivacyManager(provider=None, token_provider=None)
+```
+
+The manager exposes awaitable methods:
+
+```python
+await manager.transform(text, findings, config, context=None)
+await manager.scan_and_transform(text, config, context=None)
+await manager.restore(text, context)
+```
+
+The key provider must implement:
+
+```python
+async def resolve_key(key_ref: str, key_version: str | None) -> dict:
+    ...
+```
+
+The token provider must implement:
+
+```python
+async def tokenize_batch(scope: str, items: list[dict]) -> list[dict]:
+    ...
+
+async def restore_batch(scope: str, items: list[dict]) -> list[dict]:
+    ...
+```
+
+## Exceptions
+
+- `DataFogConfigurationError`
+- `DataFogFindingError`
+- `DataFogKeyProviderError`
+- `DataFogInternalError`
+
+Exceptions expose stable `code`, optional `reason`, optional `path`, and
+optional `finding_index` attributes. See [Errors](/reference/errors).

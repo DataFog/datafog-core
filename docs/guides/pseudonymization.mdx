@@ -1,0 +1,105 @@
+---
+title: "Pseudonymization"
+description: "Create deterministic one-way pseudonyms with application-managed keys."
+icon: "key"
+---
+
+Pseudonymization replaces a finding with a deterministic keyed digest. DataFog
+Core uses HMAC-SHA-256 over the exact UTF-8 matched value and returns the full
+digest as standard padded Base64.
+
+<Warning>
+  Pseudonymization is not encryption and is not reversible. Its privacy and
+  linkage boundary depend on how your application scopes and protects keys.
+</Warning>
+
+## Configure the strategy
+
+```json
+{
+  "default": {
+    "strategy": "pseudonymize",
+    "key_ref": "customers/email",
+    "key_version": "7"
+  }
+}
+```
+
+- `key_ref` is required and selects provider-owned key material.
+- `key_version` is optional and requests a provider version.
+- The provider must return exactly 32 key bytes and a non-empty concrete
+  resolved version.
+
+The key reference and resolved version appear in transformation records. Key
+material never appears in serialized configuration, results, errors, or debug
+output.
+
+## Python provider
+
+```python
+import asyncio
+
+from datafog_core import PrivacyManager
+
+
+class KeyProvider:
+    async def resolve_key(self, key_ref, key_version):
+        key = await load_key_from_your_kms(key_ref, key_version)
+        return {"key": key, "resolved_version": "7"}
+
+
+async def main():
+    manager = PrivacyManager(KeyProvider())
+    return await manager.scan_and_transform(
+        "Email jane@example.com",
+        {
+            "transform": {
+                "default": {
+                    "strategy": "pseudonymize",
+                    "key_ref": "customers/email",
+                }
+            }
+        },
+    )
+
+
+result = asyncio.run(main())
+```
+
+## Node.js provider
+
+```javascript
+import { PrivacyManager } from "@datafog/node";
+
+const manager = new PrivacyManager({
+  async resolveKey({ keyRef, keyVersion }) {
+    return {
+      key: await loadKeyFromYourKms(keyRef, keyVersion),
+      resolvedVersion: "7",
+    };
+  },
+});
+
+const result = await manager.scanAndTransform("Email jane@example.com", {
+  transform: {
+    default: {
+      strategy: "pseudonymize",
+      key_ref: "customers/email",
+    },
+  },
+});
+```
+
+The example `loadKeyFromYourKms` functions are application code. DataFog Core
+does not ship cloud-specific key-provider adapters.
+
+## Request behavior
+
+- Every distinct selected key reference/version is resolved once per request.
+- All keys resolve and validate before text is changed.
+- Provider failures return no partial transformation result.
+- The same exact value and key produce the same pseudonym.
+- Changing the value or key changes the pseudonym.
+
+Browser/WASM deliberately returns `unsupported_strategy` for pseudonymization
+because it has no accepted host-managed key-custody boundary.

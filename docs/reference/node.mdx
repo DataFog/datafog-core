@@ -1,0 +1,75 @@
+---
+title: "Node.js"
+description: "Node.js functions, TypeScript types, JavaScript ranges, and the asynchronous PrivacyManager."
+icon: "node-js"
+---
+
+<Note>
+  The first `@datafog/node` npm release is pending. The API documented here is
+  implemented and tested in the repository.
+</Note>
+
+```javascript
+import {
+  DataFogError,
+  PrivacyManager,
+  scan,
+  scanAndTransform,
+  transform,
+} from "@datafog/node";
+```
+
+## Synchronous functions
+
+```typescript
+scan(text: string, config?: ScanConfig): Finding[]
+transform(
+  text: string,
+  findings: FindingInput[],
+  config: TransformationConfig,
+): TransformResult
+scanAndTransform(text: string, config: ScanAndTransformConfig): TransformResult
+```
+
+## Findings and ranges
+
+Node.js uses camelCase fields. Findings include `byteRange`, `codepointRange`,
+and `utf16Range`. Use the UTF-16 range with native JavaScript string slicing.
+
+```javascript
+const finding = scan("👋 jane@example.com")[0];
+console.assert(finding.utf16Range.start === 3);
+```
+
+Caller-supplied `FindingInput` objects do not require `utf16Range`.
+
+## Asynchronous manager
+
+Use `PrivacyManager` for provider-backed pseudonymization, tokenization, and
+restoration:
+
+```typescript
+new PrivacyManager(
+  provider: KeyProvider | PrivacyManagerProviders,
+  tokenProvider?: TokenProvider,
+)
+```
+
+```typescript
+await manager.transform(text, findings, config, context?)
+await manager.scanAndTransform(text, config, context?)
+await manager.restore(text, context)
+```
+
+## Native distribution targets
+
+The package build is configured for:
+
+- macOS x64 and Apple Silicon;
+- Linux x64 and ARM64;
+- Windows x64.
+
+## Errors
+
+JavaScript operations throw `DataFogError` with stable `code`, optional
+`reason`, optional RFC 6901 `path`, and optional `findingIndex` properties.

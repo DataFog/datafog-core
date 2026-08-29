@@ -1,0 +1,111 @@
+---
+title: "Configure transformations"
+description: "Select entities, override strategies, add allowlists, and keep scan settings separate."
+icon: "sliders"
+---
+
+Every transformation configuration requires a `default` strategy.
+
+```json
+{
+  "default": { "strategy": "redact" }
+}
+```
+
+`scan_and_transform` wraps this configuration under `transform` and keeps
+detection settings under `scan`:
+
+```json
+{
+  "scan": { "locale": "en-US" },
+  "transform": {
+    "default": { "strategy": "redact" }
+  }
+}
+```
+
+## Select entity types
+
+Omitting `entities` selects all supplied findings. A non-empty list selects only
+exact, case-sensitive entity names.
+
+```json
+{
+  "default": { "strategy": "redact" },
+  "entities": ["EMAIL", "PHONE"]
+}
+```
+
+An empty `entities` list is invalid.
+
+## Override a strategy
+
+Overrides are exact and case-sensitive. Findings without an override use the
+default strategy.
+
+```json
+{
+  "default": { "strategy": "redact" },
+  "overrides": {
+    "PHONE": {
+      "strategy": "mask",
+      "reveal": { "direction": "last", "count": 4 }
+    }
+  }
+}
+```
+
+## Exempt exact values
+
+Exact allowlists are scoped to an entity type and compare exact Unicode values
+without normalization.
+
+```json
+{
+  "default": { "strategy": "redact" },
+  "allow": {
+    "exact": {
+      "EMAIL": ["support@example.com"]
+    }
+  }
+}
+```
+
+## Exempt values with regular expressions
+
+Regex allowlist patterns must match the full finding value. Matching is
+case-sensitive by default.
+
+```json
+{
+  "default": { "strategy": "redact" },
+  "allow": {
+    "regex": {
+      "EMAIL": [
+        { "pattern": ".+@example\\.org" },
+        { "pattern": ".+@example\\.com", "case_sensitive": false }
+      ]
+    }
+  }
+}
+```
+
+## Evaluation order
+
+DataFog Core processes a request in this order:
+
+1. Validate the complete configuration.
+2. Select entity types.
+3. Apply exact and regex allowlists.
+4. Resolve duplicates and overlaps.
+5. Choose the per-entity override or default strategy.
+6. Transform selected findings in document order.
+
+Valid configuration for an unselected entity remains dormant. Invalid fields
+are rejected even when their entity is not selected.
+
+## Strict input
+
+Unknown fields and explicit `null` values are rejected. Empty structural maps
+are treated as omission, but empty semantic values such as an empty entity
+selection, key reference, or token reference are invalid.

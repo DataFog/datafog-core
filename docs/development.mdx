@@ -1,0 +1,72 @@
+---
+title: "Development"
+description: "Build DataFog Core and run the Rust and installed-package verification suites."
+icon: "code"
+---
+
+## Clone the repository
+
+```bash
+git clone https://github.com/DataFog/datafog-core.git
+cd datafog-core
+```
+
+## Rust quality gates
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+```
+
+## Node.js installed-package test
+
+```bash
+npm ci --prefix bindings/node
+npm run test:package --prefix bindings/node
+```
+
+## Browser/WASM installed-package test
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.127 --locked
+npm ci --prefix bindings/wasm
+npx --prefix bindings/wasm playwright install chromium
+npm run test:package --prefix bindings/wasm
+```
+
+## Python installed-package test
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install maturin
+.venv/bin/maturin build --manifest-path bindings/python/Cargo.toml --release
+.venv/bin/python -m pip install --force-reinstall target/wheels/*.whl
+.venv/bin/python bindings/python/tests/test_installed.py
+```
+
+## Documentation preview
+
+The Mintlify content root is `docs/`.
+
+```bash
+npm install --global mint
+cd docs
+mint validate
+mint broken-links --check-anchors
+mint dev --no-open
+```
+
+`mint dev --no-open` starts a local preview without opening a browser.
+
+## Repository structure
+
+```text
+crates/core/        Rust scanning and transformation engine
+bindings/python/    Python extension
+bindings/node/      Node.js native binding
+bindings/wasm/      Browser WebAssembly binding
+fixtures/           Shared conformance fixtures
+docs/               Architecture records and Mintlify documentation
+```

@@ -1,0 +1,95 @@
+---
+title: "Rust"
+description: "Rust functions, configuration types, results, and provider-backed operations."
+icon: "gear"
+---
+
+```bash
+cargo add datafog-core
+```
+
+```rust
+use datafog_core::*;
+```
+
+## Stateless operations
+
+### `scan`
+
+```rust
+pub fn scan(text: &str) -> Vec<Finding>
+```
+
+Scan text with the default scan configuration.
+
+### `scan_with_config`
+
+```rust
+pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding>
+```
+
+### `transform`
+
+```rust
+pub fn transform(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) -> Result<TransformResult, PrivacyError>
+```
+
+Transform caller-supplied findings without scanning implicitly. Provider-backed
+strategies return a provider-required error from this stateless function.
+
+### `scan_and_transform`
+
+```rust
+pub fn scan_and_transform(
+    text: &str,
+    config: &ScanAndTransformConfig,
+) -> Result<TransformResult, PrivacyError>
+```
+
+## Primary configuration types
+
+- `ScanConfig`
+- `ScanAndTransformConfig`
+- `TransformationConfig`
+- `TransformationStrategy`
+- `MaskConfig` and `MaskReveal`
+- `PseudonymizeConfig`
+- `TokenizeConfig`
+- `PrivacyContext`
+
+Rust constructors validate semantic values and return typed errors where
+configuration can be invalid.
+
+## Results
+
+`Finding` exposes entity metadata, matched text, byte and code-point ranges,
+optional confidence, and detector provenance.
+
+`TransformResult` contains transformed `text` and ordered `transformations`.
+`RestoreResult` contains restored `text` and ordered `restorations`.
+
+## Provider-backed manager
+
+`PrivacyManager<P, T>` composes key and token provider capabilities.
+
+```rust
+let manager = PrivacyManager::new(key_provider)
+    .with_token_provider(token_provider);
+```
+
+Use:
+
+- `transform` or `scan_and_transform` for key-backed pseudonymization;
+- `transform_with_context` or `scan_and_transform_with_context` when
+  tokenization may be selected;
+- `restore` for authorized token restoration.
+
+Implement the `KeyProvider` and `TokenProvider` traits in application code.
+DataFog Core ships no cloud-, vault-, or database-specific provider.
+
+For exact public definitions, see the
+[crate source](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/lib.rs).

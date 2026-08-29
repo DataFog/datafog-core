@@ -1,0 +1,117 @@
+---
+title: "Tokenization and restoration"
+description: "Issue opaque reversible tokens through an application-owned provider and restore them atomically."
+icon: "rotate"
+---
+
+Tokenization is the reversible privacy operation. DataFog Core defines request
+validation, provider batching, a canonical token envelope, and atomic text
+mutation. Your provider owns storage or reversible cryptography, authorization,
+lifecycle, retries, and audit logging.
+
+## Configure tokenization
+
+```json
+{
+  "default": {
+    "strategy": "tokenize",
+    "token_ref": "customers/default"
+  }
+}
+```
+
+Selected tokenization and every restoration request require an exact,
+case-sensitive request scope:
+
+```json
+{ "scope": "tenant-a" }
+```
+
+## Provider contract
+
+A token provider implements two asynchronous batch methods:
+
+- `tokenize_batch(scope, items)` / `tokenizeBatch(scope, items)`
+- `restore_batch(scope, items)` / `restoreBatch(scope, items)`
+
+Each tokenization item contains an opaque request `id`, the `exact_value`, and
+the configured `token_ref`. Return the same `id`, opaque payload bytes, and a
+concrete resolved profile version.
+
+Each restoration item contains an `id`, `token_ref`, resolved version, and
+opaque payload. Return the same `id` and restored value.
+
+## Python round trip
+
+```python
+import asyncio
+
+from datafog_core import PrivacyManager
+
+
+async def round_trip(token_provider):
+    manager = PrivacyManager(None, token_provider=token_provider)
+    context = {"scope": "tenant-a"}
+
+    tokenized = await manager.scan_and_transform(
+        "Email jane@example.com",
+        {
+            "transform": {
+                "default": {
+                    "strategy": "tokenize",
+                    "token_ref": "customers/default",
+                }
+            }
+        },
+        context,
+    )
+
+    return await manager.restore(tokenized.text, context)
+
+
+restored = asyncio.run(round_trip(token_provider))
+assert restored.text == "Email jane@example.com"
+```
+
+## Node.js round trip
+
+```javascript
+import { PrivacyManager } from "@datafog/node";
+
+const manager = new PrivacyManager({ tokenProvider });
+const context = { scope: "tenant-a" };
+
+const tokenized = await manager.scanAndTransform(
+  "Email jane@example.com",
+  {
+    transform: {
+      default: {
+        strategy: "tokenize",
+        token_ref: "customers/default",
+      },
+    },
+  },
+  context,
+);
+
+const restored = await manager.restore(tokenized.text, context);
+console.assert(restored.text === "Email jane@example.com");
+```
+
+## Atomic and non-recursive behavior
+
+- Repeated source values are separate tokenization items and may receive
+  different tokens.
+- Identical envelopes are deduplicated before restoration provider calls.
+- Every canonical token in the supplied text is restored, or no result is
+  returned.
+- Nested tokenization and recursive restoration are rejected.
+- Partial restoration and ignore-failure modes are not available.
+
+Token envelopes use the canonical
+`DFTOKENv1(<body-length>):<ref>.<version>.<payload>` form with unpadded
+Base64URL components. Treat the envelope as opaque application data; do not
+parse or construct it yourself.
+
+Browser/WASM rejects selected tokenization and every restoration call with
+`unsupported_strategy`.

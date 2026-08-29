@@ -1,0 +1,55 @@
+---
+title: "Installation"
+description: "Install DataFog Core for Rust or Python and review Node.js and browser package availability."
+icon: "download"
+---
+
+## Package availability
+
+| Runtime | Distribution | Import | Availability |
+| --- | --- | --- | --- |
+| Rust | `datafog-core` | `datafog_core` | Published on crates.io |
+| Python | `datafog-core` | `datafog_core` | Published on PyPI |
+| Node.js | `@datafog/node` | `@datafog/node` | npm release pending |
+| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | npm release pending |
+
+<CodeGroup>
+
+```bash Rust
+cargo add datafog-core
+```
+
+```bash Python
+python -m pip install datafog-core
+```
+
+</CodeGroup>
+
+<Warning>
+  Do not use `pip install datafog` when following these pages. That command
+  installs the established DataFog Python library, not DataFog Core.
+</Warning>
+
+## Runtime requirements
+
+- Rust `1.88` or newer
+- Python `3.10` or newer
+- Node.js `24.x` for the native Node package
+- A browser with WebAssembly support for the browser package
+
+## Work with unpublished JavaScript packages
+
+Until the npm releases are available, build and test the Node.js and browser
+packages from the repository instead of adding them to a production project.
+
+```bash
+git clone https://github.com/DataFog/datafog-core.git
+cd datafog-core
+```
+
+See [Development](/development) for the package build and installed-package test
+commands.
+
+## Next step
+
+Continue to the [Quickstart](/get-started/quickstart) to scan and redact text.
