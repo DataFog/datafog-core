@@ -59,8 +59,8 @@ detection settings remain separate from transformation policy.
 | --- | --- | --- | --- |
 | Rust | [`datafog-core`](https://crates.io/crates/datafog-core) | `datafog_core` | Published |
 | Python | [`datafog-core`](https://pypi.org/project/datafog-core/) | `datafog_core` | Published |
-| Node.js | `@datafog/node` | `@datafog/node` | npm release pending |
-| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | npm release pending |
+| Node.js | `@datafog/node` | `@datafog/node` | Published |
+| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | Published |
 
 ## Quick start
 
@@ -155,7 +155,11 @@ restored = asyncio.run(token_manager.restore(tokenized.text, {"scope": "tenant-a
 
 ### Node.js
 
-`@datafog/node` will install as a native package once its npm release is published.
+Install the native Node.js package:
+
+```bash
+npm install @datafog/node
+```
 
 ```js
 import { PrivacyManager, scan, scanAndTransform } from "@datafog/node";
@@ -191,7 +195,11 @@ The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linu
 
 ### Browser / WASM
 
-`@datafog/wasm` will install from npm once its first release is published.
+Install the browser/WASM package:
+
+```bash
+npm install @datafog/wasm
+```
 
 ```js
 import { init, scan, scanAndTransform } from "@datafog/wasm";

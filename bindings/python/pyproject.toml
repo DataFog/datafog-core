@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "datafog-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fast structured PII detection implemented in Rust"
 readme = "../../README.md"
 license = "MIT"
