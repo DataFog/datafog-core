@@ -31,7 +31,8 @@
           "guides/migrating-from-datafog-python",
           "guides/configuration",
           "guides/pseudonymization",
-          "guides/tokenization-and-restoration"
+          "guides/tokenization-and-restoration",
+          "guides/person-discovery"
         ]
       },
       {

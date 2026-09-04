@@ -138,6 +138,10 @@ export interface PrivacyManagerProviders {
 }
 
 export declare class PrivacyManager {
+  transformStructured(data: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context?: PrivacyContext): Promise<StructuredTransformResult>;
+  scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig, context?: PrivacyContext): Promise<StructuredTransformResult>;
+  restoreStructured(data: JsonDocument, context: PrivacyContext): Promise<StructuredRestoreResult>;
+
   constructor(provider: KeyProvider | PrivacyManagerProviders, tokenProvider?: TokenProvider);
   transform(
     text: string,
@@ -152,6 +156,35 @@ export declare class PrivacyManager {
   ): Promise<TransformResult>;
   restore(text: string, context: PrivacyContext): Promise<RestoreResult>;
 }
+
+/** JSON input uses finite numbers; integer values must be JavaScript-safe. */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
+export interface StructuredScanConfig {
+  readonly locale?: string;
+  readonly discover_person?: boolean;
+  readonly mappings?: Readonly<Record<string, "PERSON">>;
+  readonly exclude?: readonly string[];
+}
+
+export interface StructuredScanAndTransformConfig {
+  readonly scan?: StructuredScanConfig;
+  readonly transform: TransformationConfig;
+}
+export declare function transformStructured(data: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): StructuredTransformResult;
+export declare function scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig): StructuredTransformResult;
+
+export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
+export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }
+export declare function discoverFields(dataJson: JsonDocument, config?: StructuredScanConfig | undefined): Array<FieldMapping>
+
+export interface FieldMapping {
+  path: string
+  entityType: string
+  source: string
+  rule: string
+}
+
 export interface Finding {
   readonly entityType: EntityType
   readonly matchedText: string
@@ -180,12 +213,29 @@ export interface KeySelector {
   readonly path: string
 }
 
+export interface NativeStructuredRestoreResult {
+  dataJson: string
+  restorations: Array<StructuredRestoration>
+}
+
+export interface NativeStructuredTransformResult {
+  dataJson: string
+  transformations: Array<StructuredTransformation>
+}
+
 export interface PreparedScanAndTransform {
   readonly findings: Array<Finding>
   readonly selectors: Array<KeySelector>
 }
 
+export interface PreparedStructuredScan {
+  findings: Array<StructuredFinding>
+  selectors: Array<KeySelector>
+}
+
 export declare function prepareScanAndTransform(text: string, config: ScanAndTransformConfig): PreparedScanAndTransform
+
+export declare function prepareStructuredScanAndTransform(text: string, config: unknown): PreparedStructuredScan
 
 export declare function requiredKeySelectors(text: string, findings: FindingInput[], config: TransformationConfig): Array<KeySelector>
 
@@ -234,6 +284,48 @@ export declare function scan(text: string, config?: ScanConfig | undefined): Arr
 
 /** Scan text and transform the detected findings. */
 export declare function scanAndTransform(text: string, config: ScanAndTransformConfig): TransformResult
+
+export declare function scanStructured(dataJson: JsonDocument, config?: StructuredScanConfig | undefined): StructuredScanResult
+
+export interface StructuredFinding {
+  path: string
+  finding: Finding
+}
+
+export interface StructuredFindingInput {
+  path: string
+  finding: FindingInput
+}
+
+/** Scan text and transform the detected findings. */
+export declare function structuredRequiredKeySelectors(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): Array<KeySelector>
+
+export declare function structuredRequiredRestoreItems(text: JsonDocument, context: PrivacyContext): Array<RestoreItem>
+
+export declare function structuredRequiredTokenizationItems(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context?: PrivacyContext | undefined): Array<TokenizeItem>
+
+export interface StructuredRestoration {
+  path: string
+  restoration: Restoration
+}
+
+export declare function structuredRestoreWithResults(text: JsonDocument, context: PrivacyContext, results: Array<RestoredValueInput>): NativeStructuredRestoreResult
+
+export declare function structuredScanAndTransform(text: JsonDocument, config: StructuredScanAndTransformConfig): NativeStructuredTransformResult
+
+export interface StructuredScanResult {
+  mappings: Array<FieldMapping>
+  findings: Array<StructuredFinding>
+}
+
+export declare function structuredTransform(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): NativeStructuredTransformResult
+
+export interface StructuredTransformation {
+  path: string
+  transformation: Transformation
+}
+
+export declare function structuredTransformWithProviderResults(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context: PrivacyContext | undefined, resolvedKeys: Array<ResolvedKeyInput>, tokenResults: Array<TokenizeResultInput>): NativeStructuredTransformResult
 
 export interface TextRange {
   readonly start: number

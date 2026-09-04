@@ -1,4 +1,5 @@
 //! Core PII scanning API for DataFog.
+pub mod structured;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use regex::{Regex, RegexSet, RegexSetBuilder};

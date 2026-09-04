@@ -1,4 +1,9 @@
 import initWasm, {
+  transform_structured as nativeTransformStructured,
+  scan_and_transform_structured as nativeScanAndTransformStructured,
+  restore_structured as nativeRestoreStructured,
+  discover_fields as nativeDiscoverFields,
+  scan_structured as nativeScanStructured,
   scan as scanWasm,
   scan_and_transform as scanAndTransformWasm,
   restore as restoreWasm,
@@ -121,5 +126,74 @@ export function restore(text, context) {
     return restoreWasm(text, context);
   } catch (error) {
     throw normalizeError(error, "invalid_configuration");
+  }
+}
+
+function structuredJson(data, omitUndefinedOptions = false) {
+  try {
+    if (data === null || typeof data !== "object") throw new TypeError();
+    const pending = [data];
+    const seen = new Set();
+    while (pending.length) {
+      const value = pending.pop();
+      if (value === null || typeof value === "string" || typeof value === "boolean") continue;
+      if (typeof value === "number") {
+        if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) throw new TypeError();
+        continue;
+      }
+      if (typeof value !== "object") throw new TypeError();
+      if (seen.has(value)) continue;
+      seen.add(value);
+      const array = Array.isArray(value);
+      if (!array && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new TypeError();
+      if (array && Object.keys(value).length !== value.length) throw new TypeError();
+      for (const key of Reflect.ownKeys(value)) {
+        if (array && key === "length") continue;
+        if (typeof key !== "string") throw new TypeError();
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor.enumerable || !("value" in descriptor)) throw new TypeError();
+        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)) throw new TypeError();
+        if (omitUndefinedOptions && !array && descriptor.value === undefined) continue;
+        pending.push(descriptor.value);
+      }
+    }
+    return JSON.stringify(data);
+  } catch {
+    throw new DataFogError({code:"invalid_configuration", reason:"invalid_type", path:"/data", message:"data must be a JSON object or array with finite numbers and safe integers"});
+  }
+}
+
+export function discoverFields(data, config) {
+  assertInitialized("discoverFields");
+  const json = structuredJson(data);
+  try { return nativeDiscoverFields(json, structuredOptions(config)); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+export function scanStructured(data, config) {
+  assertInitialized("scanStructured");
+  const json = structuredJson(data);
+  try { return nativeScanStructured(json, structuredOptions(config)); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+export function transformStructured(data, findings, config) {
+  assertInitialized("transformStructured");
+  const json = structuredJson(data);
+  try { const {dataJson, transformations} = nativeTransformStructured(json, structuredOptions(findings), structuredOptions(config)); return {data:JSON.parse(dataJson), transformations}; } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+export function scanAndTransformStructured(data, config) {
+  assertInitialized("scanAndTransformStructured");
+  const json = structuredJson(data);
+  try { const {dataJson, transformations} = nativeScanAndTransformStructured(json, structuredOptions(config)); return {data:JSON.parse(dataJson), transformations}; } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+export function restoreStructured(data, context) {
+  assertInitialized("restoreStructured");
+  const json = structuredJson(data);
+  try { return nativeRestoreStructured(json, structuredOptions(context)); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+function structuredOptions(value) {
+  if (value === undefined) return undefined;
+  try { return JSON.parse(structuredJson(value, true)); } catch {
+    throw new DataFogError({code:"invalid_configuration", reason:"invalid_type", path:"", message:"structured request options must be JSON-compatible"});
   }
 }

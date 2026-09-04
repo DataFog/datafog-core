@@ -229,6 +229,19 @@ and browser WASM continues to reject key- and token-provider work explicitly.
 Pseudonymization and reversible token storage are not promised in browser WASM
 without a separately accepted host-managed key-custody boundary.
 
+## Next workstream: PERSON detection with automatic field discovery
+
+**Status: Core and bindings implemented; release and downstream adoption pending.**
+
+The [PERSON detection plan](person-detection-plan.md) extends Core with
+conservative automatic name-field discovery for structured JSON data, explicit
+mapping overrides, and path-qualified findings. It includes shared tests,
+transformation integration, performance measurement, and documentation. Core
+and its bindings ship together before downstream MCP adoption.
+
+This workstream adds schema-guided PERSON coverage. It does not change the
+completed privacy-operation slices or promise general prose name recognition.
+
 ## Acceptance bar
 
 Every completed slice must have:

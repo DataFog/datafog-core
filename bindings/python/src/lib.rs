@@ -320,14 +320,7 @@ impl From<core::RestoreResult> for RestoreResult {
             restorations: result
                 .restorations
                 .into_iter()
-                .map(|record| Restoration {
-                    source_byte_range: record.source_byte_range.into(),
-                    source_codepoint_range: record.source_codepoint_range.into(),
-                    output_byte_range: record.output_byte_range.into(),
-                    output_codepoint_range: record.output_codepoint_range.into(),
-                    token_ref: record.token_ref,
-                    resolved_token_version: record.resolved_token_version,
-                })
+                .map(Restoration::from)
                 .collect(),
         }
     }
@@ -571,6 +564,124 @@ struct PrivacyManager {
 
 #[pymethods]
 impl PrivacyManager {
+    #[pyo3(signature = (data, findings, config, context=None))]
+    fn transform_structured<'py>(
+        &self,
+        py: Python<'py>,
+        data: Py<PyAny>,
+        findings: Vec<Py<StructuredFinding>>,
+        config: Py<PyAny>,
+        context: Option<Py<PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let data = structured_data(py, data.bind(py))?;
+        let config_value = structured_options(py, config.bind(py), "")?;
+        let config = core::parse_transformation_config(&config_value)
+            .map_err(|error| privacy_error(py, error))?;
+        let findings = findings
+            .iter()
+            .map(|finding| finding.bind(py).borrow().to_core())
+            .collect::<Vec<_>>();
+        let context = context
+            .map(|context| structured_options(py, context.bind(py), ""))
+            .transpose()?
+            .map(|value| core::parse_privacy_context(&value))
+            .transpose()
+            .map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
+            let result = manager
+                .transform_structured(&data, &findings, &config, context.as_ref())
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, structured_transform_result(py, result)?))
+        })
+    }
+    #[pyo3(signature = (data, config, context=None))]
+    fn scan_and_transform_structured<'py>(
+        &self,
+        py: Python<'py>,
+        data: Py<PyAny>,
+        config: Py<PyAny>,
+        context: Option<Py<PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let data = structured_data(py, data.bind(py))?;
+        let config_value = structured_options(py, config.bind(py), "")?;
+        let config = core::structured::parse_scan_and_transform_config(&config_value)
+            .map_err(|error| privacy_error(py, error))?;
+        let context = context
+            .map(|context| structured_options(py, context.bind(py), ""))
+            .transpose()?
+            .map(|value| core::parse_privacy_context(&value))
+            .transpose()
+            .map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
+            let result = manager
+                .scan_and_transform_structured(&data, &config, context.as_ref())
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, structured_transform_result(py, result)?))
+        })
+    }
+    fn restore_structured<'py>(
+        &self,
+        py: Python<'py>,
+        data: Py<PyAny>,
+        context: Py<PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let data = structured_data(py, data.bind(py))?;
+        let context = structured_options(py, context.bind(py), "")?;
+        let context =
+            core::parse_privacy_context(&context).map_err(|error| privacy_error(py, error))?;
+        let key_provider = self
+            .key_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        let token_provider = self
+            .token_provider
+            .as_ref()
+            .map(|provider| provider.clone_ref(py));
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let manager = core::PrivacyManager::new(PythonKeyProvider {
+                provider: key_provider,
+            })
+            .with_token_provider(PythonTokenProvider {
+                provider: token_provider,
+            });
+            let result = manager
+                .restore_structured(&data, &context)
+                .await
+                .map_err(|error| Python::attach(|py| privacy_error(py, error)))?;
+            Python::attach(|py| Py::new(py, structured_restore_result(py, result)?))
+        })
+    }
+
     #[new]
     #[pyo3(signature = (provider=None, token_provider=None))]
     fn new(
@@ -899,6 +1010,260 @@ fn scan_and_transform(
         .map_err(|error| privacy_error(py, error))
 }
 
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+struct FieldMapping {
+    #[pyo3(get)]
+    path: String,
+    #[pyo3(get)]
+    entity_type: String,
+    #[pyo3(get)]
+    source: String,
+    #[pyo3(get)]
+    rule: String,
+}
+impl From<core::structured::FieldMapping> for FieldMapping {
+    fn from(mapping: core::structured::FieldMapping) -> Self {
+        Self {
+            path: mapping.path,
+            entity_type: mapping.entity_type,
+            source: mapping.source,
+            rule: mapping.rule,
+        }
+    }
+}
+
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+struct StructuredFinding {
+    #[pyo3(get)]
+    path: String,
+    #[pyo3(get)]
+    finding: Finding,
+}
+
+#[pyclass(frozen, skip_from_py_object)]
+struct StructuredScanResult {
+    #[pyo3(get)]
+    mappings: Vec<FieldMapping>,
+    #[pyo3(get)]
+    findings: Vec<StructuredFinding>,
+}
+
+fn structured_data(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    // The stdlib encoder rejects cycles/deep recursion safely. Check dictionaries
+    // and sequences first so it cannot silently coerce keys or tuple values.
+    let mut pending = vec![value.clone()];
+    let mut seen = std::collections::BTreeSet::new();
+    while let Some(value) = pending.pop() {
+        if value.is_none()
+            || value.is_instance_of::<PyBool>()
+            || value.is_instance_of::<pyo3::types::PyString>()
+            || value.is_instance_of::<pyo3::types::PyInt>()
+            || value.is_instance_of::<pyo3::types::PyFloat>()
+        {
+            continue;
+        }
+        if !seen.insert(value.as_ptr() as usize) {
+            // Repeated containers are valid JSON trees after serialization;
+            // the encoder below distinguishes shared references from cycles.
+            continue;
+        }
+        if let Ok(object) = value.cast::<PyDict>() {
+            for (key, child) in object.iter() {
+                if !key.is_instance_of::<pyo3::types::PyString>() {
+                    return Err(privacy_error(py, core::structured::invalid_data()));
+                }
+                pending.push(child);
+            }
+        } else if let Ok(array) = value.cast::<PyList>() {
+            pending.extend(array.iter());
+        } else {
+            return Err(privacy_error(py, core::structured::invalid_data()));
+        }
+    }
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("allow_nan", false)?;
+    let json: String = py
+        .import("json")?
+        .call_method("dumps", (value,), Some(&kwargs))
+        .and_then(|value| value.extract())
+        .map_err(|_| privacy_error(py, core::structured::invalid_data()))?;
+    core::structured::parse_document_json(&json).map_err(|error| privacy_error(py, error))
+}
+
+fn structured_config(
+    py: Python<'_>,
+    config: Option<&Bound<'_, PyAny>>,
+) -> PyResult<core::structured::StructuredScanConfig> {
+    match config {
+        Some(config) => core::structured::parse_scan_config(&structured_options(py, config, "")?)
+            .map_err(|error| privacy_error(py, error)),
+        None => Ok(core::structured::StructuredScanConfig::default()),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, config=None))]
+fn discover_fields(
+    py: Python<'_>,
+    data: &Bound<'_, PyAny>,
+    config: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Vec<FieldMapping>> {
+    core::structured::discover_fields(&structured_data(py, data)?, &structured_config(py, config)?)
+        .map(|mappings| mappings.into_iter().map(FieldMapping::from).collect())
+        .map_err(|error| privacy_error(py, error))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data, config=None))]
+fn scan_structured(
+    py: Python<'_>,
+    data: &Bound<'_, PyAny>,
+    config: Option<&Bound<'_, PyAny>>,
+) -> PyResult<StructuredScanResult> {
+    let result =
+        core::structured::scan(&structured_data(py, data)?, &structured_config(py, config)?)
+            .map_err(|error| privacy_error(py, error))?;
+    Ok(StructuredScanResult {
+        mappings: result
+            .mappings
+            .into_iter()
+            .map(FieldMapping::from)
+            .collect(),
+        findings: result
+            .findings
+            .into_iter()
+            .map(|located| StructuredFinding {
+                path: located.path,
+                finding: Finding::from(located.finding),
+            })
+            .collect(),
+    })
+}
+
+#[pymethods]
+impl StructuredFinding {
+    #[new]
+    fn new(path: String, finding: PyRef<'_, Finding>) -> Self {
+        Self {
+            path,
+            finding: finding.clone(),
+        }
+    }
+}
+impl StructuredFinding {
+    fn to_core(&self) -> core::structured::StructuredFinding {
+        core::structured::StructuredFinding {
+            path: self.path.clone(),
+            finding: self.finding.to_core(),
+        }
+    }
+}
+
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+struct StructuredTransformation {
+    #[pyo3(get)]
+    path: String,
+    #[pyo3(get)]
+    transformation: Transformation,
+}
+#[pyclass(frozen, skip_from_py_object)]
+struct StructuredTransformResult {
+    #[pyo3(get)]
+    data: Py<PyAny>,
+    #[pyo3(get)]
+    transformations: Vec<StructuredTransformation>,
+}
+#[pyclass(frozen, skip_from_py_object)]
+#[derive(Clone)]
+struct StructuredRestoration {
+    #[pyo3(get)]
+    path: String,
+    #[pyo3(get)]
+    restoration: Restoration,
+}
+#[pyclass(frozen, skip_from_py_object)]
+struct StructuredRestoreResult {
+    #[pyo3(get)]
+    data: Py<PyAny>,
+    #[pyo3(get)]
+    restorations: Vec<StructuredRestoration>,
+}
+fn structured_transform_result(
+    py: Python<'_>,
+    result: core::structured::StructuredTransformResult,
+) -> PyResult<StructuredTransformResult> {
+    Ok(StructuredTransformResult {
+        data: py
+            .import("json")?
+            .call_method1("loads", (result.data.to_string(),))?
+            .unbind(),
+        transformations: result
+            .transformations
+            .into_iter()
+            .map(|record| StructuredTransformation {
+                path: record.path,
+                transformation: Transformation::from(record.transformation),
+            })
+            .collect(),
+    })
+}
+fn structured_restore_result(
+    py: Python<'_>,
+    result: core::structured::StructuredRestoreResult,
+) -> PyResult<StructuredRestoreResult> {
+    Ok(StructuredRestoreResult {
+        data: py
+            .import("json")?
+            .call_method1("loads", (result.data.to_string(),))?
+            .unbind(),
+        restorations: result
+            .restorations
+            .into_iter()
+            .map(|record| StructuredRestoration {
+                path: record.path,
+                restoration: Restoration::from(record.restoration),
+            })
+            .collect(),
+    })
+}
+
+#[pyfunction]
+fn transform_structured(
+    py: Python<'_>,
+    data: &Bound<'_, PyAny>,
+    findings: Vec<Py<StructuredFinding>>,
+    config: &Bound<'_, PyAny>,
+) -> PyResult<StructuredTransformResult> {
+    let data = structured_data(py, data)?;
+    let config = core::parse_transformation_config(&structured_options(py, config, "")?)
+        .map_err(|error| privacy_error(py, error))?;
+    let findings: Vec<_> = findings
+        .iter()
+        .map(|finding| finding.bind(py).borrow().to_core())
+        .collect();
+    let result = core::structured::transform(&data, &findings, &config)
+        .map_err(|error| privacy_error(py, error))?;
+    structured_transform_result(py, result)
+}
+
+#[pyfunction]
+fn scan_and_transform_structured(
+    py: Python<'_>,
+    data: &Bound<'_, PyAny>,
+    config: &Bound<'_, PyAny>,
+) -> PyResult<StructuredTransformResult> {
+    let data = structured_data(py, data)?;
+    let config =
+        core::structured::parse_scan_and_transform_config(&structured_options(py, config, "")?)
+            .map_err(|error| privacy_error(py, error))?;
+    let result = core::structured::scan_and_transform(&data, &config)
+        .map_err(|error| privacy_error(py, error))?;
+    structured_transform_result(py, result)
+}
+
 #[pymodule]
 fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add(
@@ -917,6 +1282,17 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "DataFogKeyProviderError",
         module.py().get_type::<DataFogKeyProviderError>(),
     )?;
+    module.add_class::<FieldMapping>()?;
+    module.add_class::<StructuredFinding>()?;
+    module.add_class::<StructuredScanResult>()?;
+    module.add_class::<StructuredTransformation>()?;
+    module.add_class::<StructuredTransformResult>()?;
+    module.add_class::<StructuredRestoration>()?;
+    module.add_class::<StructuredRestoreResult>()?;
+    module.add_function(wrap_pyfunction!(transform_structured, module)?)?;
+    module.add_function(wrap_pyfunction!(scan_and_transform_structured, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_fields, module)?)?;
+    module.add_function(wrap_pyfunction!(scan_structured, module)?)?;
     module.add_class::<TextRange>()?;
     module.add_class::<Finding>()?;
     module.add_class::<Transformation>()?;
@@ -928,4 +1304,31 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;
     Ok(())
+}
+
+impl From<core::Restoration> for Restoration {
+    fn from(record: core::Restoration) -> Self {
+        Restoration {
+            source_byte_range: record.source_byte_range.into(),
+            source_codepoint_range: record.source_codepoint_range.into(),
+            output_byte_range: record.output_byte_range.into(),
+            output_codepoint_range: record.output_codepoint_range.into(),
+            token_ref: record.token_ref,
+            resolved_token_version: record.resolved_token_version,
+        }
+    }
+}
+
+fn structured_options(
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
+    path: &str,
+) -> PyResult<serde_json::Value> {
+    structured_data(py, value).map_err(|_| {
+        configuration_conversion_error(
+            py,
+            path,
+            "structured request options must be JSON-compatible",
+        )
+    })
 }

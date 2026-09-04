@@ -73,3 +73,17 @@ The package build is configured for:
 
 JavaScript operations throw `DataFogError` with stable `code`, optional
 `reason`, optional RFC 6901 `path`, and optional `findingIndex` properties.
+
+## Structured JSON and PERSON fields
+
+Use `discoverFields(data, config?)`, `scanStructured(data, config?)`,
+`transformStructured(data, findings, config)`, and
+`scanAndTransformStructured(data, config)`. Scan returns `{ mappings, findings }`;
+transformation returns `{ data, transformations }`. Located findings contain
+`path` and `finding`; located records contain `path` and `transformation`.
+`PrivacyManager` adds asynchronous structured transform, scan-and-transform,
+and restore methods with the same provider and scope contracts as text calls.
+
+Paths are JSON Pointers. All ranges, including JavaScript UTF-16 ranges,
+address the decoded string at that path. See [person-field discovery](/guides/person-discovery)
+for aliases, policy configuration, input limits, and examples.

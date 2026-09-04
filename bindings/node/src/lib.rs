@@ -614,3 +614,399 @@ pub fn restore_with_results(
         .map_err(js_privacy_error)
         .and_then(|result| js_restore_result(&text, result))
 }
+
+#[napi(object)]
+pub struct FieldMapping {
+    pub path: String,
+    pub entity_type: String,
+    pub source: String,
+    pub rule: String,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct StructuredFinding {
+    pub path: String,
+    pub finding: Finding,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct StructuredScanResult {
+    pub mappings: Vec<FieldMapping>,
+    pub findings: Vec<StructuredFinding>,
+}
+
+fn js_field_mapping(mapping: datafog_core::structured::FieldMapping) -> FieldMapping {
+    FieldMapping {
+        path: mapping.path,
+        entity_type: mapping.entity_type,
+        source: mapping.source,
+        rule: mapping.rule,
+    }
+}
+
+fn structured_config(
+    env: Env,
+    config: Option<Unknown<'_>>,
+) -> napi::Result<datafog_core::structured::StructuredScanConfig> {
+    match config {
+        Some(config) => datafog_core::structured::parse_scan_config(&env.from_js_value(config)?)
+            .map_err(js_privacy_error),
+        None => Ok(datafog_core::structured::StructuredScanConfig::default()),
+    }
+}
+
+#[napi(strict, catch_unwind)]
+pub fn discover_fields(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] data_json: String,
+    #[napi(ts_arg_type = "StructuredScanConfig | undefined")] config: Option<Unknown<'_>>,
+) -> napi::Result<Vec<FieldMapping>> {
+    let data =
+        datafog_core::structured::parse_document_json(&data_json).map_err(js_privacy_error)?;
+    let config = structured_config(env, config)?;
+    Ok(datafog_core::structured::discover_fields(&data, &config)
+        .map_err(js_privacy_error)?
+        .into_iter()
+        .map(js_field_mapping)
+        .collect())
+}
+
+#[napi(strict, catch_unwind)]
+pub fn scan_structured(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] data_json: String,
+    #[napi(ts_arg_type = "StructuredScanConfig | undefined")] config: Option<Unknown<'_>>,
+) -> napi::Result<StructuredScanResult> {
+    let data =
+        datafog_core::structured::parse_document_json(&data_json).map_err(js_privacy_error)?;
+    let config = structured_config(env, config)?;
+    let result = datafog_core::structured::scan(&data, &config).map_err(js_privacy_error)?;
+    Ok(StructuredScanResult {
+        mappings: result.mappings.into_iter().map(js_field_mapping).collect(),
+        findings: result
+            .findings
+            .into_iter()
+            .map(|located| {
+                let text = data
+                    .pointer(&located.path)
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| js_privacy_error(datafog_core::structured::invalid_data()))?;
+                Ok(StructuredFinding {
+                    path: located.path,
+                    finding: js_finding(text, located.finding)?,
+                })
+            })
+            .collect::<napi::Result<_>>()?,
+    })
+}
+
+#[napi(object, object_to_js = false)]
+pub struct StructuredFindingInput {
+    pub path: String,
+    pub finding: FindingInput,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct StructuredTransformation {
+    pub path: String,
+    pub transformation: Transformation,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct NativeStructuredTransformResult {
+    pub data_json: String,
+    pub transformations: Vec<StructuredTransformation>,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct StructuredRestoration {
+    pub path: String,
+    pub restoration: Restoration,
+}
+
+#[napi(object, object_from_js = false)]
+pub struct NativeStructuredRestoreResult {
+    pub data_json: String,
+    pub restorations: Vec<StructuredRestoration>,
+}
+
+fn core_structured_finding(
+    located: StructuredFindingInput,
+) -> datafog_core::structured::StructuredFinding {
+    datafog_core::structured::StructuredFinding {
+        path: located.path,
+        finding: core_finding(located.finding),
+    }
+}
+
+fn structured_text<'a>(data: &'a serde_json::Value, path: &str) -> napi::Result<&'a str> {
+    data.pointer(path)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| js_privacy_error(datafog_core::structured::invalid_data()))
+}
+
+fn js_structured_transform_result(
+    data: &serde_json::Value,
+    result: datafog_core::structured::StructuredTransformResult,
+) -> napi::Result<NativeStructuredTransformResult> {
+    let mut transformations = Vec::new();
+    for record in result.transformations {
+        let converted = js_transform_result(
+            structured_text(data, &record.path)?,
+            datafog_core::TransformResult {
+                text: structured_text(&result.data, &record.path)?.into(),
+                transformations: vec![record.transformation],
+            },
+        )?;
+        for transformation in converted.transformations {
+            transformations.push(StructuredTransformation {
+                path: record.path.clone(),
+                transformation,
+            });
+        }
+    }
+    Ok(NativeStructuredTransformResult {
+        data_json: result.data.to_string(),
+        transformations,
+    })
+}
+
+fn js_structured_restore_result(
+    data: &serde_json::Value,
+    result: datafog_core::structured::StructuredRestoreResult,
+) -> napi::Result<NativeStructuredRestoreResult> {
+    let mut restorations = Vec::new();
+    for record in result.restorations {
+        let converted = js_restore_result(
+            structured_text(data, &record.path)?,
+            datafog_core::RestoreResult {
+                text: structured_text(&result.data, &record.path)?.into(),
+                restorations: vec![record.restoration],
+            },
+        )?;
+        for restoration in converted.restorations {
+            restorations.push(StructuredRestoration {
+                path: record.path.clone(),
+                restoration,
+            });
+        }
+    }
+    Ok(NativeStructuredRestoreResult {
+        data_json: result.data.to_string(),
+        restorations,
+    })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_transform(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "StructuredFindingInput[]")] findings: Vec<StructuredFindingInput>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+) -> napi::Result<NativeStructuredTransformResult> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config: serde_json::Value = env.from_js_value(config)?;
+    let config = datafog_core::parse_transformation_config(&config).map_err(js_privacy_error)?;
+    let findings = findings
+        .into_iter()
+        .map(core_structured_finding)
+        .collect::<Vec<_>>();
+    datafog_core::structured::transform(&text, &findings, &config)
+        .map_err(js_privacy_error)
+        .and_then(|result| js_structured_transform_result(&text, result))
+}
+
+/// Scan text and transform the detected findings.
+
+#[napi(strict, catch_unwind)]
+pub fn structured_required_key_selectors(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "StructuredFindingInput[]")] findings: Vec<StructuredFindingInput>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+) -> napi::Result<Vec<KeySelector>> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config: serde_json::Value = env.from_js_value(config)?;
+    let config = datafog_core::parse_transformation_config(&config).map_err(js_privacy_error)?;
+    let findings = findings
+        .into_iter()
+        .map(core_structured_finding)
+        .collect::<Vec<_>>();
+    let selectors = datafog_core::structured::required_key_selectors(&text, &findings, &config)
+        .map_err(js_privacy_error)?;
+    js_key_selectors(&selectors)
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_required_tokenization_items(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "StructuredFindingInput[]")] findings: Vec<StructuredFindingInput>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+    #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
+) -> napi::Result<Vec<TokenizeItem>> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config_value: serde_json::Value = env.from_js_value(config)?;
+    let config =
+        datafog_core::parse_transformation_config(&config_value).map_err(js_privacy_error)?;
+    let context = context
+        .map(|value| -> napi::Result<serde_json::Value> { env.from_js_value(value) })
+        .transpose()?
+        .map(|value| datafog_core::parse_privacy_context(&value))
+        .transpose()
+        .map_err(js_privacy_error)?;
+    let findings = findings
+        .into_iter()
+        .map(core_structured_finding)
+        .collect::<Vec<_>>();
+    datafog_core::structured::required_tokenization_items(
+        &text,
+        &findings,
+        &config,
+        context.as_ref(),
+    )
+    .map_err(js_privacy_error)
+    .map(|items| {
+        items
+            .into_iter()
+            .map(|item| TokenizeItem {
+                id: item.id().to_owned(),
+                exact_value: item.exact_value().to_owned(),
+                token_ref: item.token_ref().to_owned(),
+            })
+            .collect()
+    })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_transform_with_provider_results(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "StructuredFindingInput[]")] findings: Vec<StructuredFindingInput>,
+    #[napi(ts_arg_type = "TransformationConfig")] config: Unknown<'_>,
+    #[napi(ts_arg_type = "PrivacyContext | undefined")] context: Option<Unknown<'_>>,
+    resolved_keys: Vec<ResolvedKeyInput>,
+    token_results: Vec<TokenizeResultInput>,
+) -> napi::Result<NativeStructuredTransformResult> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config_value: serde_json::Value = env.from_js_value(config)?;
+    let config =
+        datafog_core::parse_transformation_config(&config_value).map_err(js_privacy_error)?;
+    let context = context
+        .map(|value| -> napi::Result<serde_json::Value> { env.from_js_value(value) })
+        .transpose()?
+        .map(|value| datafog_core::parse_privacy_context(&value))
+        .transpose()
+        .map_err(js_privacy_error)?;
+    let findings = findings
+        .into_iter()
+        .map(core_structured_finding)
+        .collect::<Vec<_>>();
+    let selectors = datafog_core::structured::required_key_selectors(&text, &findings, &config)
+        .map_err(js_privacy_error)?;
+    let keys = core_key_bindings(selectors, resolved_keys)?;
+    datafog_core::structured::transform_with_provider_results(
+        &text,
+        &findings,
+        &config,
+        context.as_ref(),
+        keys,
+        core_token_results(token_results),
+    )
+    .map_err(js_privacy_error)
+    .and_then(|result| js_structured_transform_result(&text, result))
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_required_restore_items(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "PrivacyContext")] context: Unknown<'_>,
+) -> napi::Result<Vec<RestoreItem>> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let value: serde_json::Value = env.from_js_value(context)?;
+    let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
+    datafog_core::structured::required_restore_items(&text, &context)
+        .map_err(js_privacy_error)
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| RestoreItem {
+                    id: item.id().to_owned(),
+                    token_ref: item.token_ref().to_owned(),
+                    resolved_version: item.resolved_version().to_owned(),
+                    payload: Buffer::from(item.payload()),
+                })
+                .collect()
+        })
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_restore_with_results(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "PrivacyContext")] context: Unknown<'_>,
+    results: Vec<RestoredValueInput>,
+) -> napi::Result<NativeStructuredRestoreResult> {
+    let text = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let value: serde_json::Value = env.from_js_value(context)?;
+    let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
+    let results = results
+        .into_iter()
+        .map(|result| datafog_core::RestoredValue::new(result.id, result.value))
+        .collect();
+    datafog_core::structured::restore_with_results(&text, &context, results)
+        .map_err(js_privacy_error)
+        .and_then(|result| js_structured_restore_result(&text, result))
+}
+
+#[napi(strict, catch_unwind)]
+pub fn structured_scan_and_transform(
+    env: Env,
+    #[napi(ts_arg_type = "JsonDocument")] text: String,
+    #[napi(ts_arg_type = "StructuredScanAndTransformConfig")] config: Unknown<'_>,
+) -> napi::Result<NativeStructuredTransformResult> {
+    let data = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config =
+        datafog_core::structured::parse_scan_and_transform_config(&env.from_js_value(config)?)
+            .map_err(js_privacy_error)?;
+    let result =
+        datafog_core::structured::scan_and_transform(&data, &config).map_err(js_privacy_error)?;
+    js_structured_transform_result(&data, result)
+}
+
+#[napi(object, object_from_js = false)]
+pub struct PreparedStructuredScan {
+    pub findings: Vec<StructuredFinding>,
+    pub selectors: Vec<KeySelector>,
+}
+
+#[napi(strict, catch_unwind)]
+pub fn prepare_structured_scan_and_transform(
+    env: Env,
+    text: String,
+    config: Unknown<'_>,
+) -> napi::Result<PreparedStructuredScan> {
+    let data = datafog_core::structured::parse_document_json(&text).map_err(js_privacy_error)?;
+    let config =
+        datafog_core::structured::parse_scan_and_transform_config(&env.from_js_value(config)?)
+            .map_err(js_privacy_error)?;
+    let findings = datafog_core::structured::scan(&data, &config.scan)
+        .map_err(js_privacy_error)?
+        .findings;
+    let selectors =
+        datafog_core::structured::required_key_selectors(&data, &findings, &config.transform)
+            .map_err(js_privacy_error)?;
+    Ok(PreparedStructuredScan {
+        selectors: js_key_selectors(&selectors)?,
+        findings: findings
+            .into_iter()
+            .map(|located| {
+                Ok(StructuredFinding {
+                    finding: js_finding(structured_text(&data, &located.path)?, located.finding)?,
+                    path: located.path,
+                })
+            })
+            .collect::<napi::Result<_>>()?,
+    })
+}

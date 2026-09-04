@@ -1,0 +1,153 @@
+---
+title: "Discover and protect person fields"
+description: "Detect names from JSON field context without downloading a model."
+icon: "user-shield"
+---
+
+<Note>
+  Structured PERSON support is implemented and tested locally. Its package
+  release is pending.
+</Note>
+
+Structured scanning discovers person-name fields automatically and runs the
+existing text detectors on every string value. It uses field context, so names
+do not need to appear in a dictionary. This capability recognizes supported
+schemas; it does not recognize arbitrary person names in prose.
+
+## Scan and protect a record
+
+```js
+import { discoverFields, scanStructured, scanAndTransformStructured } from "@datafog/node";
+
+const data = {
+  customer: { firstName: "May", last_name: "Nguyễn", email: "may@example.test" },
+  package: { name: "Rose" },
+};
+
+const analysis = scanStructured(data);
+// analysis.mappings identifies /customer/firstName and /customer/last_name.
+// analysis.findings also includes the email in /customer/email.
+
+const result = scanAndTransformStructured(data, {
+  transform: { default: { strategy: "redact" } },
+});
+// result.data.customer is:
+// { firstName: "[PERSON]", last_name: "[PERSON]", email: "[EMAIL]" }
+// result.data.package.name remains "Rose".
+```
+
+Use `discoverFields(data)` when you need mapping evidence alone. No separate
+mapping-discovery call or approval step is required before `scanStructured`.
+The browser package exposes the same stateless methods after `await init()`.
+
+```python
+from datafog_core import scan_structured, scan_and_transform_structured
+
+record = {"first_name": "May", "last_name": "Nguyễn"}
+analysis = scan_structured(record)
+result = scan_and_transform_structured(
+    record, {"transform": {"default": {"strategy": "redact"}}}
+)
+assert result.data == {"first_name": "[PERSON]", "last_name": "[PERSON]"}
+```
+
+Rust uses the `datafog_core::structured` module and `serde_json::Value`:
+
+```rust
+use datafog_core::structured;
+use serde_json::json;
+
+fn main() -> Result<(), datafog_core::PrivacyError> {
+    let data = json!({"first_name": "May"});
+    let analysis = structured::scan(&data, &Default::default())?;
+    let config = structured::parse_scan_and_transform_config(&json!({
+        "transform": {"default": {"strategy": "redact"}}
+    }))?;
+    let result = structured::scan_and_transform(&data, &config)?;
+    assert_eq!(result.data["first_name"], "[PERSON]");
+    Ok(())
+}
+```
+
+## Supported field names
+
+Canonical aliases are `first_name`, `given_name`, `last_name`, `family_name`,
+`full_name`, and `surname`. Snake-case aliases accept ASCII case variants such
+as `FIRST_NAME`. Two-word aliases also accept exact camelCase and PascalCase
+spellings, such as `firstName` and `FirstName`.
+
+Generic `name` fields remain unresolved, including `customer.name`: a customer
+could be a company. There is no fuzzy matching; `firstname`, `first-name`, and
+`first_name_backup` are not aliases. Field-label coverage is this explicit list;
+name values can contain any valid Unicode. Locale does not translate field names.
+
+## Explicit mappings and exclusions
+
+```js
+const scan = {
+  mappings: { "/customer/name": "PERSON" },
+  exclude: ["/example/first_name"],
+};
+const analysis = scanStructured(data, scan);
+```
+
+Paths are concrete JSON Pointers. `/users/0/name` addresses an array element;
+`/a~1b/~0name` addresses keys `a/b` and `~name`. Dots are literal key characters.
+Wildcards and inherited container mappings are not supported. Missing paths and
+non-string targets have no effect. Explicit mappings currently support PERSON.
+
+Set `discover_person: false` to disable automatic aliases while retaining
+explicit mappings and the existing detectors. Exclusions suppress only automatic
+PERSON discovery. They do not exempt an EMAIL or other finding in the same field.
+Use transformation allowlists for value exemptions. Mapping and excluding the
+same path is an error, as are duplicate exclusions and unknown options.
+
+Mappings report a path, entity type, source (`field_alias` or `explicit_mapping`),
+and rule. They contain no field values. Empty strings can have a mapping without
+a PERSON finding. Whitespace-only strings have no PERSON finding; otherwise the
+entire original string is selected, including surrounding whitespace.
+
+## Findings and transformations
+
+A structured finding contains `path` and `finding`. Its ranges apply to the
+**decoded string at that path**, using the existing byte, code-point, and
+JavaScript UTF-16 coordinate systems. They are not serialized-document offsets.
+See [Findings and ranges](/concepts/findings-and-ranges).
+
+`transformStructured(data, analysis.findings, policy)` transforms explicit
+findings. `scanAndTransformStructured(data, { scan, transform: policy })`
+performs both operations. Results contain `data` and records shaped as
+`{ path, transformation }`, with source and output ranges local to that field.
+Input data is not mutated. An invalid finding fails the complete request.
+
+Selection, allowlists, masking, overrides, and overlap rules are shared with
+text transformations. PERSON can overlap another detector's finding. Use
+`entities: ["PERSON"]` when you want only name-field protection.
+
+Rust, Python, and Node `PrivacyManager` instances also support structured
+pseudonymization, tokenization, and restoration. JavaScript methods are
+`transformStructured`, `scanAndTransformStructured`, and `restoreStructured`;
+Python and Rust use snake_case. Supply providers and request scope as described
+in [Tokenization and restoration](/guides/tokenization-and-restoration).
+Keys resolve once per selector and tokenization uses one document-wide batch.
+Restoration deduplicates identical tokens across fields. Browser WASM rejects
+provider-backed operations with `unsupported_strategy`.
+
+## Input boundaries
+
+Supply a JSON object or array. String values are scanned; keys, numbers,
+booleans, and null values are not scanned. Null/empty names produce no PERSON
+finding. Unresolved fields still receive the existing text detectors, but a
+clean result does not establish that they contain no names.
+
+Inputs require finite numbers and integers in JavaScript's safe range,
+±(2^53−1), consistently across bindings. Nesting follows serde_json's default
+limit of fewer than 128 containers. Cycles and unsupported runtime values are
+rejected instead of silently coerced. Python accepts dict/list containers with
+string keys; JavaScript accepts plain objects and dense arrays without accessors,
+symbol keys, or undefined values. Serialized formatting and object key order
+are not preserved. Special keys such as `__proto__` remain ordinary data.
+
+The existing `scan(text)` API is unchanged. Passing raw JSON text to it does
+not enable field discovery. CSV, SQL schemas, logs, and prose name recognition
+are outside this structured API's coverage.

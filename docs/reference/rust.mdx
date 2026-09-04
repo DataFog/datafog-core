@@ -93,3 +93,15 @@ DataFog Core ships no cloud-, vault-, or database-specific provider.
 
 For exact public definitions, see the
 [crate source](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/lib.rs).
+
+## Structured JSON and PERSON fields
+
+The `datafog_core::structured` module exposes `discover_fields`, `scan`,
+`transform`, and `scan_and_transform`. Use `StructuredScanConfig::default()`
+for automatic discovery or `structured::parse_scan_config` for explicit mappings.
+`PrivacyManager` adds `transform_structured`, `scan_and_transform_structured`,
+and `restore_structured` with the existing provider and scope contracts.
+
+Paths are JSON Pointers. All ranges, including JavaScript UTF-16 ranges,
+address the decoded string at that path. See [person-field discovery](/guides/person-discovery)
+for aliases, policy configuration, input limits, and examples.
