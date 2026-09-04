@@ -1,6 +1,6 @@
 ---
 title: "Installation"
-description: "Install DataFog Core for Rust or Python and review Node.js and browser package availability."
+description: "Install DataFog Core for Rust, Python, Node.js, or browser WebAssembly."
 icon: "download"
 ---
 
@@ -10,8 +10,8 @@ icon: "download"
 | --- | --- | --- | --- |
 | Rust | `datafog-core` | `datafog_core` | Published on crates.io |
 | Python | `datafog-core` | `datafog_core` | Published on PyPI |
-| Node.js | `@datafog/node` | `@datafog/node` | npm release pending |
-| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | npm release pending |
+| Node.js | `@datafog/node` | `@datafog/node` | Published on npm |
+| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | Published on npm |
 
 <CodeGroup>
 
@@ -23,11 +23,21 @@ cargo add datafog-core
 python -m pip install datafog-core
 ```
 
+```bash Node.js
+npm install @datafog/node
+```
+
+```bash Browser / WASM
+npm install @datafog/wasm
+```
+
 </CodeGroup>
 
 <Warning>
   Do not use `pip install datafog` when following these pages. That command
-  installs the established DataFog Python library, not DataFog Core.
+  installs the established DataFog Python library, not DataFog Core. If you are
+  moving an existing application, follow [Migrate from DataFog
+  Python](/guides/migrating-from-datafog-python).
 </Warning>
 
 ## Runtime requirements
@@ -36,19 +46,6 @@ python -m pip install datafog-core
 - Python `3.10` or newer
 - Node.js `24.x` for the native Node package
 - A browser with WebAssembly support for the browser package
-
-## Work with unpublished JavaScript packages
-
-Until the npm releases are available, build and test the Node.js and browser
-packages from the repository instead of adding them to a production project.
-
-```bash
-git clone https://github.com/DataFog/datafog-core.git
-cd datafog-core
-```
-
-See [Development](/development) for the package build and installed-package test
-commands.
 
 ## Next step
 

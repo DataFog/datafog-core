@@ -1,0 +1,206 @@
+---
+title: "Migrate from DataFog Python"
+description: "Move from datafog 4.8.x to the canonical DataFog Core 0.2.x Python API."
+icon: "arrow-right-arrow-left"
+---
+
+<Warning>
+  This guide covers migration of the synchronous text detection and
+  transformation API from `datafog` 4.8.x to `datafog-core` 0.2.x. DataFog
+  Core is a new canonical API, not a drop-in replacement for the established
+  DataFog Python package.
+</Warning>
+
+DataFog Core makes detection results, text ranges, transformation policy, and
+provider-backed operations consistent across Rust, Python, Node.js, and
+browser/WASM. That consistency requires a few deliberate API changes in Python.
+
+DataFog Core 0.2 does not replace the legacy package's optional spaCy, GLiNER,
+OCR, distributed-processing, CLI, or application-guardrail features. Keep the
+established package for those workloads while adopting Core where its smaller,
+cross-runtime contract fits.
+
+## Change the package and import
+
+<CodeGroup>
+
+```bash DataFog Python 4.8.x
+python -m pip install datafog
+```
+
+```bash DataFog Core 0.2.x
+python -m pip install datafog-core
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```python DataFog Python 4.8.x
+from datafog.engine import Entity, redact, scan, scan_and_redact
+```
+
+```python DataFog Core 0.2.x
+from datafog_core import Finding, scan, scan_and_transform, transform
+```
+
+</CodeGroup>
+
+The distribution name uses a hyphen (`datafog-core`), while the Python import
+uses an underscore (`datafog_core`). The two distributions can be installed at
+the same time while an application is migrated incrementally.
+
+## Update scan results
+
+DataFog Python returns a `ScanResult` wrapper. DataFog Core returns a list of
+`Finding` objects directly.
+
+<CodeGroup>
+
+```python DataFog Python 4.8.x
+from datafog.engine import scan
+
+result = scan(
+    "Email jane@example.com",
+    engine="regex",
+    entity_types=["EMAIL"],
+)
+
+for entity in result.entities:
+    print(entity.type, entity.text, entity.start, entity.end)
+```
+
+```python DataFog Core 0.2.x
+from datafog_core import scan
+
+findings = scan("Email jane@example.com")
+
+for finding in findings:
+    print(
+        finding.entity_type,
+        finding.matched_text,
+        finding.codepoint_range.start,
+        finding.codepoint_range.end,
+    )
+```
+
+</CodeGroup>
+
+Use `codepoint_range` when slicing a Python string. Use `byte_range` when
+addressing the UTF-8 encoded input. Both ranges are zero-based and
+end-exclusive.
+
+| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| --- | --- |
+| `ScanResult.entities` | The return value from `scan` |
+| `Entity.type` | `Finding.entity_type` |
+| `Entity.text` | `Finding.matched_text` |
+| `Entity.start`, `Entity.end` | `Finding.codepoint_range.start`, `.end` for Python string indexing |
+| No distinct UTF-8 range | `Finding.byte_range` |
+| `Entity.engine` | `Finding.detector_name` and `.detector_version` |
+| `ScanResult.engine_used` | No aggregate equivalent; provenance is attached to each finding |
+
+Rule-based Core findings can have `confidence=None`. Do not assume every
+finding has a numeric confidence score.
+
+## Replace scan-and-redact calls
+
+DataFog Core separates detection configuration from transformation policy.
+`transform` requires explicit findings; `scan_and_transform` is the convenience
+operation that performs both steps.
+
+<CodeGroup>
+
+```python DataFog Python 4.8.x
+from datafog.engine import scan_and_redact
+
+result = scan_and_redact(
+    "Email jane@example.com",
+    engine="regex",
+    entity_types=["EMAIL"],
+    strategy="mask",
+)
+
+print(result.redacted_text)
+```
+
+```python DataFog Core 0.2.x
+from datafog_core import scan_and_transform
+
+result = scan_and_transform(
+    "Email jane@example.com",
+    {
+        "transform": {
+            "default": {"strategy": "mask"},
+            "entities": ["EMAIL"],
+        }
+    },
+)
+
+print(result.text)
+```
+
+</CodeGroup>
+
+| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| --- | --- |
+| `scan_and_redact(...)` | `scan_and_transform(text, {"scan": ..., "transform": ...})` |
+| `redact(text, entities, ...)` | `transform(text, findings, config)` |
+| `RedactResult.redacted_text` | `TransformResult.text` |
+| `RedactResult.entities` | `TransformResult.transformations` |
+| `RedactResult.mapping` | No plaintext mapping is returned |
+
+Transformation records describe what was applied, including source and output
+ranges, but intentionally omit the original matched PII.
+
+## Choose the intended transformation
+
+Do not migrate strategy names mechanically. In particular, legacy `token` and
+Core `tokenize` have different security and reversibility semantics.
+
+| DataFog Python 4.8.x strategy | DataFog Core migration |
+| --- | --- |
+| `mask` | Use `mask`. Core also supports explicit leading or trailing reveal rules. |
+| `token` | For an irreversible type placeholder, use `redact`. Use `tokenize` only when provider-backed restoration is required. |
+| `hash` | There is no unkeyed hash strategy. Use keyed `pseudonymize` only when stable, non-reversible linkage is required. |
+| `pseudonymize` | Review the behavior rather than renaming it. Core pseudonymization is deterministic, keyed, and provider-backed. |
+
+Core also adds `remove`, which deletes only the exact finding span.
+
+<Info>
+  For a strictly non-reversible first pass, choose `redact`, `mask`, or
+  `remove`. Core `pseudonymize` is keyed and one-way but intentionally linkable;
+  Core `tokenize` is reversible through the configured token provider.
+</Info>
+
+See [Privacy transformations](/concepts/privacy-transformations) for the full
+behavior and threat-model distinctions.
+
+## Remove legacy engine selection
+
+Do not translate `engine="regex"`, `"smart"`, `"spacy"`, or `"gliner"` into
+Core configuration. DataFog Core 0.2 owns detector composition and exposes
+`locale` as its scan setting. Detector provenance appears on each finding.
+
+Entity names are exact and case-sensitive. The built-in Core entities are:
+
+`EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`.
+
+Use canonical names such as `DATE` and `ZIP_CODE` rather than legacy aliases
+such as `DOB` or `ZIP`. Entity selection belongs in the transformation config,
+not the scan config.
+
+## Migration checklist
+
+- Replace the `datafog` distribution and `datafog.engine` imports.
+- Consume the list returned by `scan` instead of `ScanResult.entities`.
+- Rename entity fields and select `codepoint_range` or `byte_range` explicitly.
+- Replace `scan_and_redact` with `scan_and_transform` and a transformation envelope.
+- Remove legacy engine selectors and normalize entity names.
+- Select a Core strategy by behavior, especially for `token` and `pseudonymize`.
+- Stop depending on plaintext mappings or original PII in transformation records.
+- Update error handling for the [DataFog Core exceptions](/reference/errors).
+
+Continue with the [Python reference](/reference/python), then review
+[findings and ranges](/concepts/findings-and-ranges) and
+[configuration](/guides/configuration).

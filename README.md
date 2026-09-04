@@ -62,6 +62,28 @@ detection settings remain separate from transformation policy.
 | Node.js | `@datafog/node` | `@datafog/node` | Published |
 | Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | Published |
 
+## Migrating from DataFog Python
+
+DataFog Core is a separate distribution and canonical API, not a drop-in
+replacement for the established `datafog` Python package.
+
+| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| --- | --- |
+| `pip install datafog` | `pip install datafog-core` |
+| `from datafog.engine import ...` | `from datafog_core import ...` |
+| `scan(...).entities` | `scan(...)` returns `list[Finding]` |
+| `scan_and_redact(...)` | `scan_and_transform(...)` |
+| `result.redacted_text` | `result.text` |
+| `Entity.type`, `.text`, `.start`, `.end` | `Finding.entity_type`, `.matched_text`, `.byte_range`, `.codepoint_range` |
+
+Do not mechanically rename legacy `token` to Core `tokenize`: Core tokenization
+is provider-backed and reversible. For non-reversible output, use `redact`,
+`mask`, or `remove`; use keyed `pseudonymize` when stable linkage is required.
+
+See the dedicated [DataFog Python migration
+guide](docs/guides/migrating-from-datafog-python.mdx) for the API mapping,
+strategy differences, entity names, range semantics, and migration checklist.
+
 ## Quick start
 
 ### Rust

@@ -28,6 +28,7 @@
       {
         "group": "Guides",
         "pages": [
+          "guides/migrating-from-datafog-python",
           "guides/configuration",
           "guides/pseudonymization",
           "guides/tokenization-and-restoration"
