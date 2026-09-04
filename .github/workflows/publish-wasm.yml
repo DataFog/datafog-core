@@ -29,6 +29,7 @@ jobs:
       - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - run: npm ci --prefix bindings/wasm
       - run: npm run build --prefix bindings/wasm
-      - run: npm publish --prefix bindings/wasm
+      - run: npm publish
+        working-directory: bindings/wasm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
