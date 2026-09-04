@@ -9,6 +9,12 @@ entity type, matched text, byte range, code-point range,
 optional confidence, detector name, optional detector version
 ```
 
+Structured JSON scanning additionally discovers `PERSON` from documented name-field
+aliases or explicit JSON Pointer mappings. It scans every string value with the
+existing detectors and returns field paths plus string-local findings. No model
+or dictionary download is needed. See [person-field discovery](docs/guides/person-discovery.mdx)
+for `scan_structured` / `scanStructured` and structured transformation APIs.
+
 Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score. Node.js and browser WASM also

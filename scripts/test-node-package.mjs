@@ -30,7 +30,7 @@ function writeConsumerTest() {
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { DataFogError, PrivacyManager, scan, scanAndTransform, transform } from "@datafog/node";
+import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 
@@ -80,6 +80,49 @@ for (const name of ["development.jsonl", "final.jsonl"]) {
       \`\${name}: \${record.id}\`,
     );
     findings.forEach((finding) => verifyContract(record.text, finding));
+  }
+}
+
+const structuredRecords = readFileSync(path.join(fixturesDirectory, "structured.jsonl"), "utf8").trim().split("\\n").map(JSON.parse);
+
+function pointerValue(data, pointer) {
+  return pointer.slice(1).split("/").reduce((value, key) => value[key.replaceAll("~1", "/").replaceAll("~0", "~")], data);
+}
+for (const record of structuredRecords) {
+  const result = scanStructured(record.data, record.config);
+  const mappings = result.mappings.map(m => ({path:m.path, entity_type:m.entityType, source:m.source, rule:m.rule}));
+  if (JSON.stringify(mappings) !== JSON.stringify(record.mappings)) throw new Error("structured mappings: " + record.id);
+  if (JSON.stringify(discoverFields(record.data, record.config)) !== JSON.stringify(result.mappings)) throw new Error("discovery mismatch");
+  const actual = result.findings.map(({path, finding}) => {
+    verifyContract(pointerValue(record.data, path), finding);
+    return {path, ...legacyProjection(finding)};
+  });
+  if (JSON.stringify(actual) !== JSON.stringify(record.findings)) throw new Error("structured findings: " + record.id);
+}
+const cycle = {}; cycle.self = cycle;
+for (const input of [null, "secret-value", {n:NaN}, {n:Infinity}, {n:2 ** 53}, {n:1n}, {n:undefined}, {n:new Date()}, {n:new Map()}, {n:[,]}, cycle]) {
+  let failed = false;
+  try { scanStructured(input); } catch (error) {
+    failed = error instanceof DataFogError && error.code === "invalid_configuration" && error.path === "/data" && !error.message.includes("secret-value");
+  }
+  if (!failed) throw new Error("invalid structured input accepted");
+}
+
+const structuredTransformRecords = readFileSync(path.join(fixturesDirectory, "structured-transform.jsonl"), "utf8").trim().split("\\n").map(JSON.parse);
+
+for (const record of structuredTransformRecords) {
+  const result = scanAndTransformStructured(record.data, record.config);
+  const explicit = transformStructured(record.data, scanStructured(record.data, record.config.scan).findings, record.config.transform);
+  // Compare recursively without depending on object insertion order.
+  const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k => [k,ordered(value[k])])) : value;
+  if (JSON.stringify(ordered(result.data)) !== JSON.stringify(ordered(record.expected_data))) throw new Error("structured transform: " + record.id);
+  if (JSON.stringify(result) !== JSON.stringify(explicit)) throw new Error("structured explicit mismatch");
+  for (const {path, transformation:t} of result.transformations) {
+    const source = pointerValue(record.data, path);
+    const output = pointerValue(result.data, path);
+    if (output.slice(t.outputUtf16Range.start,t.outputUtf16Range.end) !== t.replacement) throw new Error("structured output range");
+    if (!source.slice(t.sourceUtf16Range.start,t.sourceUtf16Range.end)) throw new Error("structured source range");
+    if ("matchedText" in t) throw new Error("structured record echoes plaintext");
   }
 }
 
@@ -267,6 +310,32 @@ await assert.rejects(
     error.path === "/transform/default/key_ref",
 );
 
+
+const structuredPseudonyms = await manager.scanAndTransformStructured({first_name:"May",last_name:"May"}, {transform:pseudonymConfig});
+assert.equal(structuredPseudonyms.data.first_name, structuredPseudonyms.data.last_name);
+assert.notEqual(structuredPseudonyms.data.first_name,"May");
+assert.equal(providerCalls.length,2);
+const invalidContextData = {first_name:"May"};
+await assert.rejects(
+  manager.transformStructured(invalidContextData, scanStructured(invalidContextData).findings, pseudonymConfig, {scope:""}),
+  error => error instanceof DataFogError && error.code === "invalid_configuration",
+);
+await assert.rejects(
+  manager.scanAndTransformStructured(invalidContextData, {transform:pseudonymConfig}, {scope:""}),
+  error => error instanceof DataFogError && error.code === "invalid_configuration",
+);
+assert.equal(providerCalls.length,2, "invalid structured context must fail before resolving keys");
+const mutableData = {first_name:"May"};
+const mutableConfig = {transform:{default:{strategy:"pseudonymize",key_ref:"names"}}};
+const snapshotManager = new PrivacyManager({async resolveKey() {
+  mutableData.first_name="changed";
+  mutableConfig.transform.default.strategy="remove";
+  return {key: new Uint8Array(32),resolvedVersion:"v1"};
+}});
+const snapshotResult = await snapshotManager.scanAndTransformStructured(mutableData,mutableConfig);
+assert.notEqual(snapshotResult.data.first_name,"");
+assert.notEqual(snapshotResult.data.first_name,"changed");
+assert.equal(snapshotResult.transformations[0].transformation.strategy,"pseudonymize");
 const tokenRecords = new Map();
 let tokenCounter = 0;
 const tokenProvider = {
@@ -304,6 +373,18 @@ const tokenized = await tokenManager.scanAndTransform(
 assert.notEqual(tokenized.transformations[0].replacement, tokenized.transformations[1].replacement);
 assert.equal(tokenized.transformations[0].tokenRef, "customers/default");
 assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
+
+const structuredOriginal = {users:[{first_name:"👋 José"},{full_name:"May"}], count:2};
+const structuredTokens = await tokenManager.scanAndTransformStructured(structuredOriginal, {transform:{default:{strategy:"tokenize",token_ref:"names"}}}, tokenContext);
+const structuredRestored = await tokenManager.restoreStructured(structuredTokens.data, tokenContext);
+assert.deepEqual(structuredRestored.data, structuredOriginal);
+assert.equal(structuredRestored.restorations.length,2);
+await assert.rejects(tokenManager.restoreStructured(structuredTokens.data,{scope:"wrong"}), e => e.code === "token_access_denied");
+const invalidStructured = scanStructured(structuredOriginal).findings;
+invalidStructured[1].finding.byteRange.end = 999;
+const callsBefore = tokenCounter;
+await assert.rejects(tokenManager.transformStructured(structuredOriginal,invalidStructured,{default:{strategy:"tokenize",token_ref:"names"}},tokenContext), e => e.code === "invalid_finding" && e.findingIndex === 1);
+assert.equal(tokenCounter,callsBefore);
 const restored = await tokenManager.restore(tokenized.text, tokenContext);
 assert.equal(restored.text, "👋 jane@example.com jane@example.com");
 assert.equal(restored.restorations.length, 2);
@@ -404,6 +485,19 @@ void explicit;
 void convenience;
 void masked;
 void pseudonymized;
+
+import { discoverFields, scanStructured, transformStructured, scanAndTransformStructured, type StructuredScanResult, type StructuredTransformResult } from "@datafog/node";
+const document = { first_name: "May", count: 1 };
+const discovered = discoverFields(document, { mappings: { "/first_name": "PERSON" } });
+const structured: StructuredScanResult = scanStructured(document);
+const protectedDocument: StructuredTransformResult = transformStructured(document, structured.findings, maskConfig);
+const protectedTogether: StructuredTransformResult = scanAndTransformStructured(document, { transform: maskConfig });
+void discovered;
+void protectedDocument;
+void protectedTogether;
+const structuredManagerResult: Promise<StructuredTransformResult> = new PrivacyManager(provider).transformStructured(document, structured.findings, maskConfig);
+void structuredManagerResult;
+
 `.trimStart(),
   );
 

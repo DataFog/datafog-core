@@ -14,6 +14,10 @@ from datafog_core import (
     PrivacyManager,
     TextRange,
     scan,
+    scan_structured,
+    transform_structured,
+    scan_and_transform_structured,
+    discover_fields,
     scan_and_transform,
     transform,
 )
@@ -64,7 +68,54 @@ def verify_fixture(name: str) -> None:
         verify_contract(record["text"])
 
 
+def verify_structured() -> None:
+    for line in (ROOT / "fixtures" / "structured.jsonl").read_text().splitlines():
+        record = json.loads(line)
+        result = scan_structured(record["data"], record.get("config"))
+        mappings = [dict(path=m.path, entity_type=m.entity_type, source=m.source, rule=m.rule) for m in result.mappings]
+        assert mappings == record["mappings"], record["id"]
+        discovered = discover_fields(record["data"], record.get("config"))
+        assert [m.path for m in discovered] == [m.path for m in result.mappings]
+        actual = []
+        for located in result.findings:
+            text = record["data"]
+            for part in located.path[1:].split("/"):
+                key = part.replace("~1", "/").replace("~0", "~")
+                text = text[int(key)] if isinstance(text, list) else text[key]
+            f = located.finding
+            assert text.encode()[f.byte_range.start:f.byte_range.end].decode() == f.matched_text
+            assert text[f.codepoint_range.start:f.codepoint_range.end] == f.matched_text
+            assert f.confidence is None
+            actual.append(dict(path=located.path, label=f.entity_type, text=f.matched_text, start=f.codepoint_range.start, end=f.codepoint_range.end))
+        assert actual == record["findings"], record["id"]
+    for line in (ROOT / "fixtures" / "structured-transform.jsonl").read_text().splitlines():
+        record = json.loads(line)
+        result = scan_and_transform_structured(record["data"],record["config"])
+        explicit = transform_structured(record["data"],scan_structured(record["data"]).findings,record["config"]["transform"])
+        assert result.data == record["expected_data"], record["id"]
+        assert explicit.data == result.data
+        assert all(not hasattr(r.transformation,"matched_text") for r in result.transformations)
+    cycle = {}
+    cycle["cycle"] = cycle
+    try:
+        scan_structured({}, cycle)
+    except DataFogConfigurationError:
+        pass
+    else:
+        raise AssertionError("cyclic options accepted")
+    for data in [None, "secret-value", {1: "name"}, {"n": 2**100}, {"n": float("nan")}, {"n": float("inf")}, {"tuple": (1, 2)}, cycle]:
+        try:
+            scan_structured(data)
+        except DataFogConfigurationError as error:
+            assert error.code == "invalid_configuration"
+            assert error.path == "/data"
+            assert "secret-value" not in str(error)
+        else:
+            raise AssertionError("invalid structured input accepted")
+
+
 def main() -> None:
+    verify_structured()
     verify_fixture("development.jsonl")
     verify_fixture("final.jsonl")
     emoji_finding = scan("👋 jane@example.com")[0]
@@ -306,6 +357,27 @@ def main() -> None:
                     raise error
                 results.append({"id": item["id"], "value": record[3]})
             return results
+
+    async def structured_round_trip():
+        original = {"users":[{"first_name":"👋 José"},{"full_name":"May"}],"count":2}
+        provider = Provider()
+        pseudonyms = await PrivacyManager(provider).scan_and_transform_structured(original,{"transform":pseudonym_config})
+        assert len(provider.calls) == 1
+        assert pseudonyms.data != original
+        manager = PrivacyManager(None,TokenProvider())
+        context = {"scope":"tenant/α"}
+        config = {"transform":{"default":{"strategy":"tokenize","token_ref":"names"}}}
+        tokens = await manager.scan_and_transform_structured(original,config,context)
+        restored = await manager.restore_structured(tokens.data,context)
+        assert restored.data == original
+        assert len(restored.restorations) == 2
+        try:
+            await manager.restore_structured(tokens.data,{"scope":"wrong"})
+        except DataFogKeyProviderError as error:
+            assert error.code == "token_access_denied"
+        else:
+            raise AssertionError("wrong scope was accepted")
+    asyncio.run(structured_round_trip())
 
     async def token_round_trip():
         manager = PrivacyManager(None, TokenProvider())

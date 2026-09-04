@@ -90,3 +90,16 @@ async def restore_batch(scope: str, items: list[dict]) -> list[dict]:
 
 Exceptions expose stable `code`, optional `reason`, optional `path`, and
 optional `finding_index` attributes. See [Errors](/reference/errors).
+
+## Structured JSON and PERSON fields
+
+Use `discover_fields(data, config=None)`, `scan_structured(data, config=None)`,
+`transform_structured(data, findings, config)`, and
+`scan_and_transform_structured(data, config)`. Results expose `.mappings` and
+`.findings`, or `.data` and `.transformations`. `PrivacyManager` also exposes
+`transform_structured`, `scan_and_transform_structured`, and `restore_structured`
+for provider-backed work.
+
+Paths are JSON Pointers. All ranges, including JavaScript UTF-16 ranges,
+address the decoded string at that path. See [person-field discovery](/guides/person-discovery)
+for aliases, policy configuration, input limits, and examples.

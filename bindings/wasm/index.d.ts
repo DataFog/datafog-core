@@ -138,3 +138,33 @@ export interface Restoration {
 }
 export interface RestoreResult { readonly text: string; readonly restorations: Restoration[]; }
 export function restore(text: string, context: PrivacyContext): RestoreResult;
+
+/** JSON input uses finite numbers; integer values must be JavaScript-safe. */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
+export interface StructuredScanConfig {
+  readonly locale?: string;
+  readonly discover_person?: boolean;
+  readonly mappings?: Readonly<Record<string, "PERSON">>;
+  readonly exclude?: readonly string[];
+}
+
+export interface FieldMapping {
+  readonly path: string;
+  readonly entityType: "PERSON";
+  readonly source: "field_alias" | "explicit_mapping";
+  readonly rule: string;
+}
+export interface StructuredFinding { readonly path: string; readonly finding: Finding; }
+export interface StructuredScanResult { readonly mappings: FieldMapping[]; readonly findings: StructuredFinding[]; }
+export function discoverFields(data: JsonDocument, config?: StructuredScanConfig): FieldMapping[];
+export function scanStructured(data: JsonDocument, config?: StructuredScanConfig): StructuredScanResult;
+
+export interface StructuredScanAndTransformConfig { readonly scan?: StructuredScanConfig; readonly transform: TransformationConfig; }
+export interface StructuredFindingInput { readonly path: string; readonly finding: FindingInput; }
+export interface StructuredTransformation { readonly path: string; readonly transformation: Transformation; }
+export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
+export function transformStructured(data: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): StructuredTransformResult;
+export function scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig): StructuredTransformResult;
+/** Always rejects with unsupported_strategy after input validation. */
+export function restoreStructured(data: JsonDocument, context: PrivacyContext): never;

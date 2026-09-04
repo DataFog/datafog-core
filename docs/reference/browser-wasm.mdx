@@ -53,3 +53,17 @@ credentials and key custody require a separately designed host integration.
 
 The JavaScript wrapper throws `DataFogError` with the same stable fields as the
 Node.js binding. See [Errors](/reference/errors).
+
+## Structured JSON and PERSON fields
+
+Use `discoverFields(data, config?)`, `scanStructured(data, config?)`,
+`transformStructured(data, findings, config)`, and
+`scanAndTransformStructured(data, config)`. Scan returns `{ mappings, findings }`;
+transformation returns `{ data, transformations }`. Located findings contain
+`path` and `finding`; located records contain `path` and `transformation`.
+Call `await init()` first. Selected provider-backed strategies and
+`restoreStructured` reject with `unsupported_strategy`.
+
+Paths are JSON Pointers. All ranges, including JavaScript UTF-16 ranges,
+address the decoded string at that path. See [person-field discovery](/guides/person-discovery)
+for aliases, policy configuration, input limits, and examples.

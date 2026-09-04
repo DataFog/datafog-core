@@ -138,6 +138,10 @@ export interface PrivacyManagerProviders {
 }
 
 export declare class PrivacyManager {
+  transformStructured(data: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context?: PrivacyContext): Promise<StructuredTransformResult>;
+  scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig, context?: PrivacyContext): Promise<StructuredTransformResult>;
+  restoreStructured(data: JsonDocument, context: PrivacyContext): Promise<StructuredRestoreResult>;
+
   constructor(provider: KeyProvider | PrivacyManagerProviders, tokenProvider?: TokenProvider);
   transform(
     text: string,
@@ -152,3 +156,23 @@ export declare class PrivacyManager {
   ): Promise<TransformResult>;
   restore(text: string, context: PrivacyContext): Promise<RestoreResult>;
 }
+
+/** JSON input uses finite numbers; integer values must be JavaScript-safe. */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
+export interface StructuredScanConfig {
+  readonly locale?: string;
+  readonly discover_person?: boolean;
+  readonly mappings?: Readonly<Record<string, "PERSON">>;
+  readonly exclude?: readonly string[];
+}
+
+export interface StructuredScanAndTransformConfig {
+  readonly scan?: StructuredScanConfig;
+  readonly transform: TransformationConfig;
+}
+export declare function transformStructured(data: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): StructuredTransformResult;
+export declare function scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig): StructuredTransformResult;
+
+export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
+export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }

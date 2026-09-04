@@ -1,5 +1,15 @@
 import { Buffer } from "node:buffer";
 import {
+  structuredTransform as nativeStructuredTransform,
+  structuredScanAndTransform as nativeStructuredScanAndTransform,
+  structuredRequiredKeySelectors as nativeStructuredRequiredKeySelectors,
+  structuredRequiredTokenizationItems as nativeStructuredRequiredTokenizationItems,
+  structuredTransformWithProviderResults as nativeStructuredTransformWithProviderResults,
+  structuredRequiredRestoreItems as nativeStructuredRequiredRestoreItems,
+  structuredRestoreWithResults as nativeStructuredRestoreWithResults,
+  prepareStructuredScanAndTransform as nativePrepareStructuredScanAndTransform,
+  discoverFields as nativeDiscoverFields,
+  scanStructured as nativeScanStructured,
   prepareScanAndTransform as nativePrepareScanAndTransform,
   requiredKeySelectors as nativeRequiredKeySelectors,
   requiredRestoreItems as nativeRequiredRestoreItems,
@@ -167,7 +177,14 @@ export class PrivacyManager {
     }));
   }
 
-  async transform(text, findings, config, context) {
+  async transform(text, findings, config, context) { return this.#transform(text, findings, config, context); }
+  async scanAndTransform(text, config, context) { return this.#scanAndTransform(text, config, context); }
+  async restore(text, context) { return this.#restore(text, context); }
+  async transformStructured(data, findings, config, context) { return this.#transform(structuredJson(data), structuredOptions(findings), structuredOptions(config), structuredOptions(context), true); }
+  async scanAndTransformStructured(data, config, context) { return this.#scanAndTransform(structuredJson(data), structuredOptions(config), structuredOptions(context), true); }
+  async restoreStructured(data, context) { return this.#restore(structuredJson(data), structuredOptions(context), true); }
+
+  async #transform(text, findings, config, context, structured = false) {
     if (typeof text !== "string") {
       throw new TypeError("transform text must be a string");
     }
@@ -176,11 +193,15 @@ export class PrivacyManager {
     }
     let resolved = [];
     try {
-      const selectors = nativeRequiredKeySelectors(text, findings, config);
+      const selectors = (structured ? nativeStructuredRequiredKeySelectors : nativeRequiredKeySelectors)(text, findings, config);
+      const preparedItems = structured
+        ? nativeStructuredRequiredTokenizationItems(text, findings, config, context)
+        : undefined;
       resolved = await this.#resolve(selectors);
-      const items = nativeRequiredTokenizationItems(text, findings, config, context);
+      const items = preparedItems ?? nativeRequiredTokenizationItems(text, findings, config, context);
       const tokens = await this.#tokenize(items, context);
-      return nativeTransformWithProviderResults(text, findings, config, context, resolved, tokens);
+      const result = (structured ? nativeStructuredTransformWithProviderResults : nativeTransformWithProviderResults)(text, findings, config, context, resolved, tokens);
+      return structured ? structuredResult(result) : result;
     } catch (error) {
       if (error instanceof DataFogError) throw error;
       throw normalizeError(error, "invalid_configuration");
@@ -189,21 +210,29 @@ export class PrivacyManager {
     }
   }
 
-  async scanAndTransform(text, config, context) {
+  async #scanAndTransform(text, config, context, structured = false) {
     if (typeof text !== "string") {
       throw new TypeError("scanAndTransform text must be a string");
     }
     let prepared;
     try {
-      prepared = nativePrepareScanAndTransform(text, config);
+      prepared = (structured ? nativePrepareStructuredScanAndTransform : nativePrepareScanAndTransform)(text, config);
     } catch (error) {
       throw normalizeError(error, "invalid_configuration");
     }
+    let preparedItems;
+    if (structured) {
+      try {
+        preparedItems = nativeStructuredRequiredTokenizationItems(text, prepared.findings, config.transform, context);
+      } catch (error) {
+        throw withPathPrefix(error, "/transform");
+      }
+    }
     const resolved = await this.#resolve(prepared.selectors, "/transform");
     try {
-      const items = nativeRequiredTokenizationItems(text, prepared.findings, config.transform, context);
+      const items = preparedItems ?? nativeRequiredTokenizationItems(text, prepared.findings, config.transform, context);
       const tokens = await this.#tokenize(items, context);
-      return nativeTransformWithProviderResults(
+      const result = (structured ? nativeStructuredTransformWithProviderResults : nativeTransformWithProviderResults)(
         text,
         prepared.findings,
         config.transform,
@@ -211,6 +240,7 @@ export class PrivacyManager {
         resolved,
         tokens,
       );
+      return structured ? structuredResult(result) : result;
     } catch (error) {
       throw withPathPrefix(error, "/transform");
     } finally {
@@ -219,17 +249,20 @@ export class PrivacyManager {
   }
 
 
-  async restore(text, context) {
+  async #restore(text, context, structured = false) {
     if (typeof text !== "string") {
       throw new TypeError("restore text must be a string");
     }
     let items;
     try {
-      items = nativeRequiredRestoreItems(text, context);
+      items = (structured ? nativeStructuredRequiredRestoreItems : nativeRequiredRestoreItems)(text, context);
     } catch (error) {
       throw normalizeError(error, "invalid_configuration");
     }
-    if (items.length === 0) return nativeRestoreWithResults(text, context, []);
+    if (items.length === 0) {
+      const result = (structured ? nativeStructuredRestoreWithResults : nativeRestoreWithResults)(text, context, []);
+      return structured ? structuredResult(result) : result;
+    }
     if (!this.#tokenProvider) {
       throw new DataFogError({
         code: "token_provider_required",
@@ -242,7 +275,8 @@ export class PrivacyManager {
     } catch (error) {
       throw normalizeProviderError(error, undefined, "token_provider_error");
     }
-    return nativeRestoreWithResults(text, context, Array.isArray(results) ? results : []);
+    const result = (structured ? nativeStructuredRestoreWithResults : nativeRestoreWithResults)(text, context, Array.isArray(results) ? results : []);
+    return structured ? structuredResult(result) : result;
   }
 }
 
@@ -285,5 +319,69 @@ export function scanAndTransform(text, config) {
     return nativeScanAndTransform(text, config);
   } catch (error) {
     throw normalizeError(error, "invalid_configuration");
+  }
+}
+
+function structuredJson(data, omitUndefinedOptions = false) {
+  try {
+    if (data === null || typeof data !== "object") throw new TypeError();
+    const pending = [data];
+    const seen = new Set();
+    while (pending.length) {
+      const value = pending.pop();
+      if (value === null || typeof value === "string" || typeof value === "boolean") continue;
+      if (typeof value === "number") {
+        if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) throw new TypeError();
+        continue;
+      }
+      if (typeof value !== "object") throw new TypeError();
+      if (seen.has(value)) continue;
+      seen.add(value);
+      const array = Array.isArray(value);
+      if (!array && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new TypeError();
+      if (array && Object.keys(value).length !== value.length) throw new TypeError();
+      for (const key of Reflect.ownKeys(value)) {
+        if (array && key === "length") continue;
+        if (typeof key !== "string") throw new TypeError();
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor.enumerable || !("value" in descriptor)) throw new TypeError();
+        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)) throw new TypeError();
+        if (omitUndefinedOptions && !array && descriptor.value === undefined) continue;
+        pending.push(descriptor.value);
+      }
+    }
+    return JSON.stringify(data);
+  } catch {
+    throw new DataFogError({code:"invalid_configuration", reason:"invalid_type", path:"/data", message:"data must be a JSON object or array with finite numbers and safe integers"});
+  }
+}
+
+export function discoverFields(data, config) {
+  const json = structuredJson(data);
+  try { return nativeDiscoverFields(json, structuredOptions(config)); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+export function scanStructured(data, config) {
+  const json = structuredJson(data);
+  try { return nativeScanStructured(json, structuredOptions(config)); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+export function transformStructured(data, findings, config) {
+  const json = structuredJson(data);
+  try { return structuredResult(nativeStructuredTransform(json, structuredOptions(findings), structuredOptions(config))); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+export function scanAndTransformStructured(data, config) {
+  const json = structuredJson(data);
+  try { return structuredResult(nativeStructuredScanAndTransform(json, structuredOptions(config))); } catch (error) { throw normalizeError(error, "invalid_configuration"); }
+}
+
+function structuredResult({dataJson, ...records}) {
+  return {data:JSON.parse(dataJson), ...records};
+}
+
+function structuredOptions(value) {
+  if (value === undefined) return undefined;
+  try { return JSON.parse(structuredJson(value, true)); } catch {
+    throw new DataFogError({code:"invalid_configuration", reason:"invalid_type", path:"", message:"structured request options must be JSON-compatible"});
   }
 }

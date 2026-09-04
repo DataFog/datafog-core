@@ -131,6 +131,17 @@ void transformed;
 void scannedAndTransformed;
 void masked;
 void unchanged;
+
+import { discoverFields, scanStructured, transformStructured, scanAndTransformStructured, type StructuredScanResult, type StructuredTransformResult } from "@datafog/wasm";
+const document = { first_name: "May", count: 1 };
+const discovered = discoverFields(document, { mappings: { "/first_name": "PERSON" } });
+const structured: StructuredScanResult = scanStructured(document);
+const protectedDocument: StructuredTransformResult = transformStructured(document, structured.findings, maskConfig);
+const protectedTogether: StructuredTransformResult = scanAndTransformStructured(document, { transform: maskConfig });
+void discovered;
+void protectedDocument;
+void protectedTogether;
+
 `.trimStart(),
   );
 
@@ -190,7 +201,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl"]) {
+  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -204,7 +215,7 @@ try {
   await page.goto(serverInfo.url);
 
   await page.evaluate(async () => {
-    const { DataFogError, init, restore, scan, scanAndTransform, transform } = await import(
+    const { DataFogError, init, restore, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured, restoreStructured } = await import(
       "/node_modules/@datafog/wasm/index.js"
     );
 
@@ -280,6 +291,57 @@ try {
       }
     }
 
+const structuredRecords = (await fetch("/structured.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+
+function pointerValue(data, pointer) {
+  return pointer.slice(1).split("/").reduce((value, key) => value[key.replaceAll("~1", "/").replaceAll("~0", "~")], data);
+}
+for (const record of structuredRecords) {
+  const result = scanStructured(record.data, record.config);
+  const mappings = result.mappings.map(m => ({path:m.path, entity_type:m.entityType, source:m.source, rule:m.rule}));
+  if (JSON.stringify(mappings) !== JSON.stringify(record.mappings)) throw new Error("structured mappings: " + record.id);
+  if (JSON.stringify(discoverFields(record.data, record.config)) !== JSON.stringify(result.mappings)) throw new Error("discovery mismatch");
+  const actual = result.findings.map(({path, finding}) => {
+    verifyContract(pointerValue(record.data, path), finding);
+    return {path, ...legacyProjection(finding)};
+  });
+  if (JSON.stringify(actual) !== JSON.stringify(record.findings)) throw new Error("structured findings: " + record.id);
+}
+const cycle = {}; cycle.self = cycle;
+for (const input of [null, "secret-value", {n:NaN}, {n:Infinity}, {n:2 ** 53}, {n:1n}, {n:undefined}, {n:new Date()}, {n:new Map()}, {n:[,]}, cycle]) {
+  let failed = false;
+  try { scanStructured(input); } catch (error) {
+    failed = error instanceof DataFogError && error.code === "invalid_configuration" && error.path === "/data" && !error.message.includes("secret-value");
+  }
+  if (!failed) throw new Error("invalid structured input accepted");
+}
+
+const structuredTransformRecords = (await fetch("/structured-transform.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+
+for (const record of structuredTransformRecords) {
+  const result = scanAndTransformStructured(record.data, record.config);
+  const explicit = transformStructured(record.data, scanStructured(record.data, record.config.scan).findings, record.config.transform);
+  // Compare recursively without depending on object insertion order.
+  const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k => [k,ordered(value[k])])) : value;
+  if (JSON.stringify(ordered(result.data)) !== JSON.stringify(ordered(record.expected_data))) throw new Error("structured transform: " + record.id);
+  if (JSON.stringify(result) !== JSON.stringify(explicit)) throw new Error("structured explicit mismatch");
+  for (const {path, transformation:t} of result.transformations) {
+    const source = pointerValue(record.data, path);
+    const output = pointerValue(result.data, path);
+    if (output.slice(t.outputUtf16Range.start,t.outputUtf16Range.end) !== t.replacement) throw new Error("structured output range");
+    if (!source.slice(t.sourceUtf16Range.start,t.sourceUtf16Range.end)) throw new Error("structured source range");
+    if ("matchedText" in t) throw new Error("structured record echoes plaintext");
+  }
+}
+
+for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tokenize",token_ref:"names"}]) {
+  let rejected=false;
+  try { scanAndTransformStructured({first_name:"May"},{transform:{default:strategy}}); } catch(e) { rejected=e.code === "unsupported_strategy"; }
+  if (!rejected) throw new Error("structured provider operation accepted in WASM");
+}
+let restoreRejected = false;
+try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
+if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const emojiFinding = scan("👋 jane@example.com")[0];
     if (
       JSON.stringify(emojiFinding.byteRange) !== JSON.stringify({ start: 5, end: 21 }) ||

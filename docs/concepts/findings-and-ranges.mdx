@@ -73,3 +73,11 @@ Overlapping findings are resolved deterministically using structural span,
 length, confidence when both values are present, source position, entity type,
 and detector provenance. Selected transformations are returned in source
 document order.
+
+## Structured findings
+
+`scan_structured` / `scanStructured` returns located findings with `path` and
+`finding` fields. The path is an RFC 6901 JSON Pointer. Every range in the nested
+finding addresses the decoded string value at that path, not serialized JSON.
+Structured transformation/restoration records follow the same field-local rule
+for source and output strings. See [person-field discovery](/guides/person-discovery).
