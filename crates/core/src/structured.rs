@@ -321,6 +321,7 @@ fn selected_leaves<'a>(
 ) -> Result<Vec<SelectedLeaf<'a>>, PrivacyError> {
     let all = leaves(data)?;
     let mut grouped: BTreeMap<&str, Vec<Finding>> = BTreeMap::new();
+    let mut offsets = BTreeMap::new();
     for (index, located) in findings.iter().enumerate() {
         if validate_pointer(&located.path, "").is_err()
             || data
@@ -340,7 +341,10 @@ fn selected_leaves<'a>(
             .pointer(&located.path)
             .and_then(Value::as_str)
             .ok_or_else(invalid_data)?;
-        validate_finding(text, &located.finding).map_err(|kind| {
+        let field_offsets = offsets
+            .entry(located.path.as_str())
+            .or_insert_with(|| TextIndex::new(text));
+        validate_finding_with_index(text, &located.finding, field_offsets).map_err(|kind| {
             let mut error = PrivacyError::invalid_finding(index, kind);
             error.path = error.path.map(|path| {
                 path.replacen(

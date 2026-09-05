@@ -72,6 +72,12 @@ optional confidence, and detector provenance.
 `TransformResult` contains transformed `text` and ordered `transformations`.
 `RestoreResult` contains restored `text` and ordered `restorations`.
 
+For repeated UTF-16 conversions on the same string, reuse
+`TextIndex::new(text)` and call its `utf16_range(byte_range)` method. It accepts
+overlapping or unordered ranges, validates UTF-8 boundaries, and returns the
+same ranges and errors as the standalone `utf16_range` helper. The index borrows
+the string and builds sparse checkpoints as needed.
+
 ## Provider-backed manager
 
 `PrivacyManager<P, T>` composes key and token provider capabilities.

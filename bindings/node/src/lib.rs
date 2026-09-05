@@ -3,6 +3,7 @@
 use napi::bindgen_prelude::Buffer;
 use napi::{Env, Error, Status, Unknown};
 use napi_derive::napi;
+use std::collections::BTreeMap;
 
 #[napi(object)]
 pub struct TextRange {
@@ -224,19 +225,26 @@ fn js_range(range: datafog_core::TextRange) -> napi::Result<TextRange> {
     })
 }
 
-fn js_utf16_range(text: &str, range: datafog_core::TextRange) -> napi::Result<TextRange> {
-    datafog_core::utf16_range(text, range)
+fn js_utf16_range(
+    index: &mut datafog_core::TextIndex<'_>,
+    range: datafog_core::TextRange,
+) -> napi::Result<TextRange> {
+    index
+        .utf16_range(range)
         .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
         .and_then(js_range)
 }
 
-fn js_finding(text: &str, finding: datafog_core::Finding) -> napi::Result<Finding> {
+fn js_finding(
+    index: &mut datafog_core::TextIndex<'_>,
+    finding: datafog_core::Finding,
+) -> napi::Result<Finding> {
     Ok(Finding {
         entity_type: finding.entity_type,
         matched_text: finding.matched_text,
         byte_range: js_range(finding.byte_range)?,
         codepoint_range: js_range(finding.codepoint_range)?,
-        utf16_range: js_utf16_range(text, finding.byte_range)?,
+        utf16_range: js_utf16_range(index, finding.byte_range)?,
         confidence: finding.confidence.map(f64::from),
         detector_name: finding.detector_name,
         detector_version: finding.detector_version,
@@ -282,47 +290,48 @@ fn js_transform_result(
     source_text: &str,
     result: datafog_core::TransformResult,
 ) -> napi::Result<TransformResult> {
-    let output_text = &result.text;
+    let mut source_index = datafog_core::TextIndex::new(source_text);
+    let mut output_index = datafog_core::TextIndex::new(&result.text);
     Ok(TransformResult {
         transformations: result
             .transformations
             .into_iter()
             .map(|transformation| {
-                Ok(Transformation {
-                    entity_type: transformation.entity_type,
-                    source_byte_range: js_range(transformation.source_byte_range)?,
-                    source_codepoint_range: js_range(transformation.source_codepoint_range)?,
-                    source_utf16_range: js_utf16_range(
-                        source_text,
-                        transformation.source_byte_range,
-                    )?,
-                    confidence: transformation.confidence.map(f64::from),
-                    detector_name: transformation.detector_name,
-                    detector_version: transformation.detector_version,
-                    strategy: match transformation.strategy {
-                        datafog_core::TransformationStrategy::Redact => "redact".to_owned(),
-                        datafog_core::TransformationStrategy::Remove => "remove".to_owned(),
-                        datafog_core::TransformationStrategy::Mask(_) => "mask".to_owned(),
-                        datafog_core::TransformationStrategy::Pseudonymize(_) => {
-                            "pseudonymize".to_owned()
-                        }
-                        datafog_core::TransformationStrategy::Tokenize(_) => "tokenize".to_owned(),
-                    },
-                    replacement: transformation.replacement,
-                    output_byte_range: js_range(transformation.output_byte_range)?,
-                    output_codepoint_range: js_range(transformation.output_codepoint_range)?,
-                    output_utf16_range: js_utf16_range(
-                        output_text,
-                        transformation.output_byte_range,
-                    )?,
-                    key_ref: transformation.key_ref,
-                    resolved_key_version: transformation.resolved_key_version,
-                    token_ref: transformation.token_ref,
-                    resolved_token_version: transformation.resolved_token_version,
-                })
+                js_transformation(&mut source_index, &mut output_index, transformation)
             })
             .collect::<napi::Result<Vec<_>>>()?,
         text: result.text,
+    })
+}
+
+fn js_transformation(
+    source_index: &mut datafog_core::TextIndex<'_>,
+    output_index: &mut datafog_core::TextIndex<'_>,
+    transformation: datafog_core::Transformation,
+) -> napi::Result<Transformation> {
+    Ok(Transformation {
+        entity_type: transformation.entity_type,
+        source_byte_range: js_range(transformation.source_byte_range)?,
+        source_codepoint_range: js_range(transformation.source_codepoint_range)?,
+        source_utf16_range: js_utf16_range(source_index, transformation.source_byte_range)?,
+        confidence: transformation.confidence.map(f64::from),
+        detector_name: transformation.detector_name,
+        detector_version: transformation.detector_version,
+        strategy: match transformation.strategy {
+            datafog_core::TransformationStrategy::Redact => "redact".to_owned(),
+            datafog_core::TransformationStrategy::Remove => "remove".to_owned(),
+            datafog_core::TransformationStrategy::Mask(_) => "mask".to_owned(),
+            datafog_core::TransformationStrategy::Pseudonymize(_) => "pseudonymize".to_owned(),
+            datafog_core::TransformationStrategy::Tokenize(_) => "tokenize".to_owned(),
+        },
+        replacement: transformation.replacement,
+        output_byte_range: js_range(transformation.output_byte_range)?,
+        output_codepoint_range: js_range(transformation.output_codepoint_range)?,
+        output_utf16_range: js_utf16_range(output_index, transformation.output_byte_range)?,
+        key_ref: transformation.key_ref,
+        resolved_key_version: transformation.resolved_key_version,
+        token_ref: transformation.token_ref,
+        resolved_token_version: transformation.resolved_token_version,
     })
 }
 
@@ -343,25 +352,32 @@ fn js_restore_result(
     source_text: &str,
     result: datafog_core::RestoreResult,
 ) -> napi::Result<RestoreResult> {
-    let output_text = &result.text;
+    let mut source_index = datafog_core::TextIndex::new(source_text);
+    let mut output_index = datafog_core::TextIndex::new(&result.text);
     Ok(RestoreResult {
         restorations: result
             .restorations
             .into_iter()
-            .map(|record| {
-                Ok(Restoration {
-                    source_byte_range: js_range(record.source_byte_range)?,
-                    source_codepoint_range: js_range(record.source_codepoint_range)?,
-                    source_utf16_range: js_utf16_range(source_text, record.source_byte_range)?,
-                    output_byte_range: js_range(record.output_byte_range)?,
-                    output_codepoint_range: js_range(record.output_codepoint_range)?,
-                    output_utf16_range: js_utf16_range(output_text, record.output_byte_range)?,
-                    token_ref: record.token_ref,
-                    resolved_token_version: record.resolved_token_version,
-                })
-            })
+            .map(|record| js_restoration(&mut source_index, &mut output_index, record))
             .collect::<napi::Result<Vec<_>>>()?,
         text: result.text,
+    })
+}
+
+fn js_restoration(
+    source_index: &mut datafog_core::TextIndex<'_>,
+    output_index: &mut datafog_core::TextIndex<'_>,
+    record: datafog_core::Restoration,
+) -> napi::Result<Restoration> {
+    Ok(Restoration {
+        source_byte_range: js_range(record.source_byte_range)?,
+        source_codepoint_range: js_range(record.source_codepoint_range)?,
+        source_utf16_range: js_utf16_range(source_index, record.source_byte_range)?,
+        output_byte_range: js_range(record.output_byte_range)?,
+        output_codepoint_range: js_range(record.output_codepoint_range)?,
+        output_utf16_range: js_utf16_range(output_index, record.output_byte_range)?,
+        token_ref: record.token_ref,
+        resolved_token_version: record.resolved_token_version,
     })
 }
 
@@ -414,9 +430,10 @@ pub fn scan(
     } else {
         datafog_core::ScanConfig::default()
     };
+    let mut index = datafog_core::TextIndex::new(&text);
     datafog_core::scan_with_config(&text, &config)
         .into_iter()
-        .map(|finding| js_finding(&text, finding))
+        .map(|finding| js_finding(&mut index, finding))
         .collect()
 }
 
@@ -498,10 +515,11 @@ pub fn prepare_scan_and_transform(
     let selectors =
         datafog_core::required_key_selectors(&text, &findings, config.transformation_config())
             .map_err(js_privacy_error)?;
+    let mut index = datafog_core::TextIndex::new(&text);
     Ok(PreparedScanAndTransform {
         findings: findings
             .into_iter()
-            .map(|finding| js_finding(&text, finding))
+            .map(|finding| js_finding(&mut index, finding))
             .collect::<napi::Result<Vec<_>>>()?,
         selectors: js_key_selectors(&selectors)?,
     })
@@ -683,20 +701,7 @@ pub fn scan_structured(
     let result = datafog_core::structured::scan(&data, &config).map_err(js_privacy_error)?;
     Ok(StructuredScanResult {
         mappings: result.mappings.into_iter().map(js_field_mapping).collect(),
-        findings: result
-            .findings
-            .into_iter()
-            .map(|located| {
-                let text = data
-                    .pointer(&located.path)
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| js_privacy_error(datafog_core::structured::invalid_data()))?;
-                Ok(StructuredFinding {
-                    path: located.path,
-                    finding: js_finding(text, located.finding)?,
-                })
-            })
-            .collect::<napi::Result<_>>()?,
+        findings: js_structured_findings(&data, result.findings)?,
     })
 }
 
@@ -745,25 +750,46 @@ fn structured_text<'a>(data: &'a serde_json::Value, path: &str) -> napi::Result<
         .ok_or_else(|| js_privacy_error(datafog_core::structured::invalid_data()))
 }
 
+fn js_structured_findings(
+    data: &serde_json::Value,
+    findings: Vec<datafog_core::structured::StructuredFinding>,
+) -> napi::Result<Vec<StructuredFinding>> {
+    let mut indices = BTreeMap::new();
+    findings
+        .into_iter()
+        .map(|located| {
+            let text = structured_text(data, &located.path)?;
+            let index = indices
+                .entry(located.path.clone())
+                .or_insert_with(|| datafog_core::TextIndex::new(text));
+            Ok(StructuredFinding {
+                finding: js_finding(index, located.finding)?,
+                path: located.path,
+            })
+        })
+        .collect()
+}
+
 fn js_structured_transform_result(
     data: &serde_json::Value,
     result: datafog_core::structured::StructuredTransformResult,
 ) -> napi::Result<NativeStructuredTransformResult> {
     let mut transformations = Vec::new();
+    let mut indices = BTreeMap::new();
     for record in result.transformations {
-        let converted = js_transform_result(
-            structured_text(data, &record.path)?,
-            datafog_core::TransformResult {
-                text: structured_text(&result.data, &record.path)?.into(),
-                transformations: vec![record.transformation],
-            },
-        )?;
-        for transformation in converted.transformations {
-            transformations.push(StructuredTransformation {
-                path: record.path.clone(),
-                transformation,
+        let source = structured_text(data, &record.path)?;
+        let output = structured_text(&result.data, &record.path)?;
+        let (source_index, output_index) =
+            indices.entry(record.path.clone()).or_insert_with(|| {
+                (
+                    datafog_core::TextIndex::new(source),
+                    datafog_core::TextIndex::new(output),
+                )
             });
-        }
+        transformations.push(StructuredTransformation {
+            path: record.path,
+            transformation: js_transformation(source_index, output_index, record.transformation)?,
+        });
     }
     Ok(NativeStructuredTransformResult {
         data_json: result.data.to_string(),
@@ -776,20 +802,21 @@ fn js_structured_restore_result(
     result: datafog_core::structured::StructuredRestoreResult,
 ) -> napi::Result<NativeStructuredRestoreResult> {
     let mut restorations = Vec::new();
+    let mut indices = BTreeMap::new();
     for record in result.restorations {
-        let converted = js_restore_result(
-            structured_text(data, &record.path)?,
-            datafog_core::RestoreResult {
-                text: structured_text(&result.data, &record.path)?.into(),
-                restorations: vec![record.restoration],
-            },
-        )?;
-        for restoration in converted.restorations {
-            restorations.push(StructuredRestoration {
-                path: record.path.clone(),
-                restoration,
+        let source = structured_text(data, &record.path)?;
+        let output = structured_text(&result.data, &record.path)?;
+        let (source_index, output_index) =
+            indices.entry(record.path.clone()).or_insert_with(|| {
+                (
+                    datafog_core::TextIndex::new(source),
+                    datafog_core::TextIndex::new(output),
+                )
             });
-        }
+        restorations.push(StructuredRestoration {
+            path: record.path,
+            restoration: js_restoration(source_index, output_index, record.restoration)?,
+        });
     }
     Ok(NativeStructuredRestoreResult {
         data_json: result.data.to_string(),
@@ -999,14 +1026,6 @@ pub fn prepare_structured_scan_and_transform(
             .map_err(js_privacy_error)?;
     Ok(PreparedStructuredScan {
         selectors: js_key_selectors(&selectors)?,
-        findings: findings
-            .into_iter()
-            .map(|located| {
-                Ok(StructuredFinding {
-                    finding: js_finding(structured_text(&data, &located.path)?, located.finding)?,
-                    path: located.path,
-                })
-            })
-            .collect::<napi::Result<_>>()?,
+        findings: js_structured_findings(&data, findings)?,
     })
 }

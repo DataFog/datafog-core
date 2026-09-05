@@ -244,7 +244,7 @@ completed privacy-operation slices or promise general prose name recognition.
 
 ## Slice 10: Finding-selection performance
 
-**Status: implemented; review and combined release pending.**
+**Status: merged; combined release pending.**
 
 Replace linear duplicate searches with indexed groups and repeated overlap
 scans with ordered interval selection. Preserve validation, filtering,
@@ -255,6 +255,17 @@ The [selection measurements](finding-selection-performance.md) document exact
 behavior comparisons, reproducible scaling benchmarks, and remaining performance
 limits. Prepare one 0.3.0 release containing structured PERSON and this change
 after review; individual feature PRs do not bump or publish package versions.
+
+## Slice 11: Offset calculation and record conversion
+
+**Status: implemented; review pending for inclusion in 0.3.0.**
+
+Reuse lazy text indexes for finding validation and Unicode range conversion,
+maintain running output positions, and remove per-record field copies from Node
+structured result conversion. Preserve existing validation and selection rules.
+The [bookkeeping measurements](bookkeeping-performance.md) record complete
+request comparisons, correctness checks, and remaining costs. Reusing validated
+request state across operation stages remains separate work.
 
 ## Acceptance bar
 

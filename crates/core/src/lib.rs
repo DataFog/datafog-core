@@ -1,7 +1,9 @@
 //! Core PII scanning API for DataFog.
+mod offsets;
 pub mod structured;
 use base64::Engine;
 use hmac::{Hmac, Mac};
+pub use offsets::TextIndex;
 use regex::{Regex, RegexSet, RegexSetBuilder};
 use sha2::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,6 +38,14 @@ impl std::error::Error for Utf16RangeError {}
 /// Convert a UTF-8 byte range into zero-based, end-exclusive UTF-16 code-unit
 /// offsets for JavaScript consumers.
 pub fn utf16_range(text: &str, byte_range: TextRange) -> Result<TextRange, Utf16RangeError> {
+    validate_utf8_range(text, byte_range)?;
+    Ok(TextRange {
+        start: text[..byte_range.start].encode_utf16().count(),
+        end: text[..byte_range.end].encode_utf16().count(),
+    })
+}
+
+fn validate_utf8_range(text: &str, byte_range: TextRange) -> Result<(), Utf16RangeError> {
     if byte_range.start > byte_range.end {
         return Err(Utf16RangeError);
     }
@@ -46,10 +56,7 @@ pub fn utf16_range(text: &str, byte_range: TextRange) -> Result<TextRange, Utf16
         return Err(Utf16RangeError);
     }
 
-    Ok(TextRange {
-        start: text[..byte_range.start].encode_utf16().count(),
-        end: text[..byte_range.end].encode_utf16().count(),
-    })
+    Ok(())
 }
 
 /// A piece of potentially sensitive content detected in an input string.
@@ -2344,8 +2351,9 @@ fn select_findings(
     findings: &[Finding],
     config: &TransformationConfig,
 ) -> Result<Vec<Finding>, PrivacyError> {
+    let mut offsets = TextIndex::new(text);
     for (finding_index, finding) in findings.iter().enumerate() {
-        if let Err(kind) = validate_finding(text, finding) {
+        if let Err(kind) = validate_finding_with_index(text, finding, &mut offsets) {
             return Err(PrivacyError::invalid_finding(finding_index, kind));
         }
     }
@@ -2457,11 +2465,14 @@ fn apply_transformations(
     let mut output = String::with_capacity(text.len());
     let mut transformations = Vec::with_capacity(selected_findings.len());
     let mut source_byte_cursor = 0;
+    let mut output_codepoints = 0;
 
     for (finding_index, finding) in selected_findings.iter().enumerate() {
-        output.push_str(&text[source_byte_cursor..finding.byte_range.start]);
+        let unchanged = &text[source_byte_cursor..finding.byte_range.start];
+        output.push_str(unchanged);
+        output_codepoints += unchanged.chars().count();
         let output_byte_start = output.len();
-        let output_codepoint_start = output.chars().count();
+        let output_codepoint_start = output_codepoints;
         let strategy = config.strategy_for(finding);
         let mut key_ref = None;
         let mut resolved_key_version = None;
@@ -2512,6 +2523,7 @@ fn apply_transformations(
         };
         output.push_str(&replacement);
 
+        output_codepoints += replacement.chars().count();
         transformations.push(Transformation {
             entity_type: finding.entity_type.clone(),
             source_byte_range: finding.byte_range,
@@ -2527,7 +2539,7 @@ fn apply_transformations(
             },
             output_codepoint_range: TextRange {
                 start: output_codepoint_start,
-                end: output.chars().count(),
+                end: output_codepoints,
             },
             key_ref,
             resolved_key_version,
@@ -2819,7 +2831,16 @@ fn overlap_preference(left: &Finding, right: &Finding) -> std::cmp::Ordering {
         .then_with(|| left.detector_version.cmp(&right.detector_version))
 }
 
+#[cfg(test)]
 fn validate_finding(text: &str, finding: &Finding) -> Result<(), FindingValidationError> {
+    validate_finding_with_index(text, finding, &mut TextIndex::new(text))
+}
+
+fn validate_finding_with_index(
+    text: &str,
+    finding: &Finding,
+    offsets: &mut TextIndex<'_>,
+) -> Result<(), FindingValidationError> {
     if finding.byte_range.start >= finding.byte_range.end {
         return Err(FindingValidationError::EmptyOrReversedByteRange);
     }
@@ -2835,11 +2856,12 @@ fn validate_finding(text: &str, finding: &Finding) -> Result<(), FindingValidati
         return Err(FindingValidationError::EmptyOrReversedCodepointRange);
     }
 
-    let Some(codepoint_start_byte) = byte_offset_at_codepoint(text, finding.codepoint_range.start)
+    let Some(codepoint_start_byte) =
+        offsets.byte_offset_at_codepoint(finding.codepoint_range.start)
     else {
         return Err(FindingValidationError::CodepointRangeOutOfBounds);
     };
-    let Some(codepoint_end_byte) = byte_offset_at_codepoint(text, finding.codepoint_range.end)
+    let Some(codepoint_end_byte) = offsets.byte_offset_at_codepoint(finding.codepoint_range.end)
     else {
         return Err(FindingValidationError::CodepointRangeOutOfBounds);
     };
@@ -2860,6 +2882,7 @@ fn validate_finding(text: &str, finding: &Finding) -> Result<(), FindingValidati
     Ok(())
 }
 
+#[cfg(test)]
 fn byte_offset_at_codepoint(text: &str, codepoint_offset: usize) -> Option<usize> {
     text.char_indices()
         .map(|(byte_offset, _)| byte_offset)
@@ -2882,6 +2905,7 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Finding> {
     });
 
     let is_ascii = text.is_ascii();
+    let mut offsets = TextIndex::new(text);
 
     candidates
         .into_iter()
@@ -2892,13 +2916,13 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Finding> {
             let start = if is_ascii {
                 candidate.start_byte
             } else {
-                code_point_offset(text, candidate.start_byte)
+                offsets.codepoint_offset(candidate.start_byte)
             };
 
             let end = if is_ascii {
                 candidate.end_byte
             } else {
-                code_point_offset(text, candidate.end_byte)
+                offsets.codepoint_offset(candidate.end_byte)
             };
 
             Finding {
@@ -2915,10 +2939,6 @@ fn finalize(text: &str, mut candidates: Vec<Candidate>) -> Vec<Finding> {
             }
         })
         .collect()
-}
-
-fn code_point_offset(text: &str, byte_offset: usize) -> usize {
-    text[..byte_offset].chars().count()
 }
 
 static PHONE_RE: LazyLock<Regex> = LazyLock::new(|| {
