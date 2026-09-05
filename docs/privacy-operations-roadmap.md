@@ -242,6 +242,20 @@ and its bindings ship together before downstream MCP adoption.
 This workstream adds schema-guided PERSON coverage. It does not change the
 completed privacy-operation slices or promise general prose name recognition.
 
+## Slice 10: Finding-selection performance
+
+**Status: implemented; review and combined release pending.**
+
+Replace linear duplicate searches with indexed groups and repeated overlap
+scans with ordered interval selection. Preserve validation, filtering,
+confidence/provenance preferences, and source order for all labels. Retain a
+compatibility fallback where mixed confidence prevents safe sorting.
+
+The [selection measurements](finding-selection-performance.md) document exact
+behavior comparisons, reproducible scaling benchmarks, and remaining performance
+limits. Prepare one 0.3.0 release containing structured PERSON and this change
+after review; individual feature PRs do not bump or publish package versions.
+
 ## Acceptance bar
 
 Every completed slice must have:

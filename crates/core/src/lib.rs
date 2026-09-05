@@ -2350,30 +2350,50 @@ fn select_findings(
         }
     }
 
+    Ok(select_validated_findings(findings, config))
+}
+
+fn select_validated_findings(findings: &[Finding], config: &TransformationConfig) -> Vec<Finding> {
     let mut selected_findings: Vec<Finding> = Vec::with_capacity(findings.len());
+    let mut duplicate_indices = BTreeMap::new();
     for finding in findings
         .iter()
         .filter(|finding| config.includes(finding) && !config.allows(finding))
     {
-        if let Some(existing) = selected_findings
-            .iter_mut()
-            .find(|existing| findings_are_duplicates(existing, finding))
-        {
-            if duplicate_preference(finding, existing).is_lt() {
-                *existing = finding.clone();
+        // Validation against the same text makes the byte range determine both
+        // the matched text and the code-point range. Preserve encounter order
+        // within each group: mixed confidence is not a sortable preference.
+        let identity = (
+            finding.entity_type.as_str(),
+            finding.byte_range.start,
+            finding.byte_range.end,
+        );
+        match duplicate_indices.entry(identity) {
+            std::collections::btree_map::Entry::Occupied(entry) => {
+                let existing = &mut selected_findings[*entry.get()];
+                if duplicate_preference(finding, existing).is_lt() {
+                    *existing = finding.clone();
+                }
             }
-        } else {
-            selected_findings.push(finding.clone());
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(selected_findings.len());
+                selected_findings.push(finding.clone());
+            }
         }
     }
-    selected_findings.sort_by_key(|finding| {
+    selected_findings.sort_by(|left, right| {
         (
-            finding.codepoint_range.start,
-            finding.codepoint_range.end,
-            finding.entity_type.clone(),
+            left.codepoint_range.start,
+            left.codepoint_range.end,
+            &left.entity_type,
         )
+            .cmp(&(
+                right.codepoint_range.start,
+                right.codepoint_range.end,
+                &right.entity_type,
+            ))
     });
-    Ok(resolve_overlaps(selected_findings))
+    resolve_overlaps(selected_findings)
 }
 
 fn key_selectors(config: &TransformationConfig, selected_findings: &[Finding]) -> Vec<KeySelector> {
@@ -2678,13 +2698,6 @@ pub fn scan_and_transform(
     .map_err(|error| error.prefixed("/transform"))
 }
 
-fn findings_are_duplicates(left: &Finding, right: &Finding) -> bool {
-    left.entity_type == right.entity_type
-        && left.matched_text == right.matched_text
-        && left.byte_range == right.byte_range
-        && left.codepoint_range == right.codepoint_range
-}
-
 fn duplicate_preference(candidate: &Finding, existing: &Finding) -> std::cmp::Ordering {
     if let (Some(candidate_confidence), Some(existing_confidence)) =
         (candidate.confidence, existing.confidence)
@@ -2699,7 +2712,51 @@ fn duplicate_preference(candidate: &Finding, existing: &Finding) -> std::cmp::Or
         .cmp(&(&existing.detector_name, &existing.detector_version))
 }
 
-fn resolve_overlaps(mut remaining: Vec<Finding>) -> Vec<Finding> {
+// Input is validated, deduplicated, and sorted in source order.
+fn resolve_overlaps(mut findings: Vec<Finding>) -> Vec<Finding> {
+    if findings
+        .windows(2)
+        .all(|pair| pair[0].byte_range.end <= pair[1].byte_range.start)
+    {
+        return findings;
+    }
+
+    // Containment agrees with descending code-point length on validated ranges.
+    // Within one length, confidence is comparable only if all values are present
+    // or all are absent. Mixing them can make the preference cyclic, so retain
+    // the original pairwise selection in that case.
+    let mut confidence_by_length = BTreeMap::new();
+    for finding in &findings {
+        let length = finding.codepoint_range.end - finding.codepoint_range.start;
+        let has_confidence = finding.confidence.is_some();
+        let previous = confidence_by_length.entry(length).or_insert(has_confidence);
+        if *previous != has_confidence {
+            return resolve_overlaps_pairwise(findings);
+        }
+    }
+
+    findings.sort_by(overlap_preference);
+    let mut selected: BTreeMap<usize, Finding> = BTreeMap::new();
+    for finding in findings {
+        let start = finding.byte_range.start;
+        // Accepted intervals never overlap. The closest predecessor and
+        // successor suffice, and tree insertion avoids shifting a sorted Vec.
+        let overlaps_previous = selected
+            .range(..=start)
+            .next_back()
+            .is_some_and(|(_, previous)| previous.byte_range.end > start);
+        let overlaps_next = selected
+            .range(start..)
+            .next()
+            .is_some_and(|(&next_start, _)| next_start < finding.byte_range.end);
+        if !overlaps_previous && !overlaps_next {
+            selected.insert(start, finding);
+        }
+    }
+    selected.into_values().collect()
+}
+
+fn resolve_overlaps_pairwise(mut remaining: Vec<Finding>) -> Vec<Finding> {
     let mut selected = Vec::with_capacity(remaining.len());
     while !remaining.is_empty() {
         let mut preferred_index = 0;
@@ -3452,6 +3509,9 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
         start += 1;
     }
 }
+
+#[cfg(test)]
+mod selection_tests;
 
 #[cfg(test)]
 mod tests {
