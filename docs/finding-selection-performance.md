@@ -44,6 +44,50 @@ and therefore use the faster algorithm. Disjoint inputs take the fast path
 regardless of confidence. Duplicate preferences can also be cyclic, which is why
 indexing preserves the original per-group fold rather than sorting duplicates.
 
+## Policy rationale and comparable tools
+
+The fallback preserves the confidence rule in
+[ADR 001](adr/001-privacy-core-contract.md#duplicates-and-overlaps). It is a
+compatibility choice for this performance change, not a requirement for every
+future overlap policy. The public
+[finding guide](concepts/findings-and-ranges.mdx#missing-confidence) explains
+what callers supplying optional confidence should expect.
+
+The following comparison was checked on 2026-09-04. These are policy examples;
+they do not establish equivalent outputs or performance across the tools.
+
+| Tool | Confidence and overlap policy | Relevance to Core |
+| --- | --- | --- |
+| Presidio | Recognizer results expect a numeric score, and regex patterns require an assigned score. Its anonymizer prefers higher scores for identical spans and the larger span for containment. It also merges overlapping findings of the same type and handles partial intersections differently from Core. | A score can be assigned by a rule author without running a model. The supported contract avoids our distinction between scored and unscored findings, but adopting the full policy would change Core behavior. |
+| spaCy EntityRuler | Among overlapping rule matches, prefers the span with more tokens, then the earlier position. Confidence is not used for this selection. | Structural priority avoids the missing-confidence cycle. Core measures length in Unicode code points, so its ranges and length metric would remain different. |
+| Google Sensitive Data Protection | Uses defined likelihood levels. A custom detector defaults to `VERY_LIKELY` when its likelihood is omitted. Explicit exclusion rules can suppress domain matches that overlap email matches. | Defaults give omitted configuration a defined meaning, and explicit rules handle particular overlap relationships. This does not establish Google's complete internal winner-selection algorithm. |
+
+Sources:
+
+- Presidio: [result score contract](https://github.com/data-privacy-stack/presidio/blob/e9b5795ff9302fc8a306eee9a73b87ab00426166/presidio-analyzer/presidio_analyzer/recognizer_result.py),
+  [regex pattern scores](https://presidio.dataprivacystack.org/tutorial/02_regex/),
+  [documented overlap behavior](https://presidio.dataprivacystack.org/anonymizer/#handling-overlaps-between-entities),
+  and [same-type merging implementation](https://github.com/data-privacy-stack/presidio/blob/e9b5795ff9302fc8a306eee9a73b87ab00426166/presidio-anonymizer/presidio_anonymizer/anonymizer_engine.py).
+- spaCy: [EntityRuler overlap rules](https://spacy.io/api/entityruler#call).
+- Google: [custom-detector likelihood default](https://docs.cloud.google.com/sensitive-data-protection/docs/reference/rest/v2/InspectConfig#CustomInfoType)
+  and [overlap-exclusion example](https://docs.cloud.google.com/sensitive-data-protection/docs/samples/dlp-inspect-string-without-overlap).
+
+### Proposed future direction — not implemented
+
+For a future simplification, prefer a consistent structural ordering: longer
+Unicode code-point span, earlier source position, then stable entity/provenance
+tie-breakers. Retain confidence as metadata without using it to rank overlaps.
+This would keep confidence optional while allowing all overlap candidates to be
+sorted consistently, including mixed-confidence inputs.
+
+This proposal would change some winners for caller-supplied scored findings.
+It needs a separate behavior decision and focused PR updating ADR 001, public
+documentation, and regression fixtures. That work must also explicitly decide
+whether confidence still chooses provenance within duplicate groups; changing
+overlap ordering alone does not remove their encounter-order dependence.
+No confidence policy option, inferred score, or change to protection behavior
+is introduced in Slice Ten. The fallback stays in place for this PR.
+
 ## Reproducible measurement
 
 Run from the repository root:

@@ -74,6 +74,20 @@ length, confidence when both values are present, source position, entity type,
 and detector provenance. Selected transformations are returned in source
 document order.
 
+### Missing confidence
+
+Omitted confidence means unknown; Core does not assign it a score of zero.
+Comparing confidence only when both values are present can produce conflicting
+preferences across three or more overlapping findings. Core preserves its
+existing pairwise selection behavior in these cases rather than changing which
+text gets protected through sorting.
+
+When overlaps exist and an equal-length group mixes scored and unscored
+findings, overlap selection uses a compatibility fallback that can take
+quadratic time. Length here means Unicode code points. Disjoint findings and
+findings produced exclusively by the built-in detectors, including structured
+PERSON, use the faster selection path.
+
 ## Structured findings
 
 `scan_structured` / `scanStructured` returns located findings with `path` and
