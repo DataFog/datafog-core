@@ -77,19 +77,26 @@ struct TransformResult {
     transformations: Vec<Transformation>,
 }
 
-fn utf16_range(text: &str, range: datafog_core::TextRange) -> Result<TextRange, JsValue> {
-    datafog_core::utf16_range(text, range)
+fn utf16_range(
+    index: &mut datafog_core::TextIndex<'_>,
+    range: datafog_core::TextRange,
+) -> Result<TextRange, JsValue> {
+    index
+        .utf16_range(range)
         .map(TextRange::from)
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
-fn finding_from_core(text: &str, finding: datafog_core::Finding) -> Result<Finding, JsValue> {
+fn finding_from_core(
+    index: &mut datafog_core::TextIndex<'_>,
+    finding: datafog_core::Finding,
+) -> Result<Finding, JsValue> {
     Ok(Finding {
         entity_type: finding.entity_type,
         matched_text: finding.matched_text,
         byte_range: finding.byte_range.into(),
         codepoint_range: finding.codepoint_range.into(),
-        utf16_range: utf16_range(text, finding.byte_range)?,
+        utf16_range: utf16_range(index, finding.byte_range)?,
         confidence: finding.confidence,
         detector_name: finding.detector_name,
         detector_version: finding.detector_version,
@@ -117,13 +124,14 @@ fn result_to_js(
     source_text: &str,
     result: datafog_core::TransformResult,
 ) -> Result<JsValue, JsValue> {
-    let output_text = &result.text;
+    let mut source_index = datafog_core::TextIndex::new(source_text);
+    let mut output_index = datafog_core::TextIndex::new(&result.text);
     let result = TransformResult {
         transformations: result
             .transformations
             .into_iter()
             .map(|transformation| {
-                transformation_from_core(source_text, output_text, transformation)
+                transformation_from_core(&mut source_index, &mut output_index, transformation)
             })
             .collect::<Result<Vec<_>, JsValue>>()?,
         text: result.text,
@@ -140,9 +148,10 @@ pub fn scan(text: &str, config: Option<JsValue>) -> Result<JsValue, JsValue> {
     } else {
         datafog_core::ScanConfig::default()
     };
+    let mut index = datafog_core::TextIndex::new(text);
     let findings: Vec<Finding> = datafog_core::scan_with_config(text, &config)
         .into_iter()
-        .map(|finding| finding_from_core(text, finding))
+        .map(|finding| finding_from_core(&mut index, finding))
         .collect::<Result<_, _>>()?;
 
     serde_wasm_bindgen::to_value(&findings).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -288,6 +297,7 @@ pub fn scan_structured(data_json: &str, config: Option<JsValue>) -> Result<JsVal
     let data = datafog_core::structured::parse_document_json(data_json).map_err(privacy_error)?;
     let result = datafog_core::structured::scan(&data, &structured_config(config)?)
         .map_err(privacy_error)?;
+    let mut indices = std::collections::BTreeMap::new();
     let findings = result
         .findings
         .into_iter()
@@ -296,9 +306,12 @@ pub fn scan_structured(data_json: &str, config: Option<JsValue>) -> Result<JsVal
                 .pointer(&located.path)
                 .and_then(serde_json::Value::as_str)
                 .ok_or_else(|| privacy_error(datafog_core::structured::invalid_data()))?;
+            let index = indices
+                .entry(located.path.clone())
+                .or_insert_with(|| datafog_core::TextIndex::new(text));
             Ok(StructuredFinding {
                 path: located.path,
-                finding: finding_from_core(text, located.finding)?,
+                finding: finding_from_core(index, located.finding)?,
             })
         })
         .collect::<Result<Vec<_>, JsValue>>()?;
@@ -310,15 +323,15 @@ pub fn scan_structured(data_json: &str, config: Option<JsValue>) -> Result<JsVal
 }
 
 fn transformation_from_core(
-    source_text: &str,
-    output_text: &str,
+    source_index: &mut datafog_core::TextIndex<'_>,
+    output_index: &mut datafog_core::TextIndex<'_>,
     transformation: datafog_core::Transformation,
 ) -> Result<Transformation, JsValue> {
     Ok(Transformation {
         entity_type: transformation.entity_type,
         source_byte_range: transformation.source_byte_range.into(),
         source_codepoint_range: transformation.source_codepoint_range.into(),
-        source_utf16_range: utf16_range(source_text, transformation.source_byte_range)?,
+        source_utf16_range: utf16_range(source_index, transformation.source_byte_range)?,
         confidence: transformation.confidence,
         detector_name: transformation.detector_name,
         detector_version: transformation.detector_version,
@@ -332,7 +345,7 @@ fn transformation_from_core(
         replacement: transformation.replacement,
         output_byte_range: transformation.output_byte_range.into(),
         output_codepoint_range: transformation.output_codepoint_range.into(),
-        output_utf16_range: utf16_range(output_text, transformation.output_byte_range)?,
+        output_utf16_range: utf16_range(output_index, transformation.output_byte_range)?,
         key_ref: transformation.key_ref,
         resolved_key_version: transformation.resolved_key_version,
         token_ref: transformation.token_ref,
@@ -388,6 +401,7 @@ fn structured_result_to_js(
         data_json: String,
         transformations: Vec<Record>,
     }
+    let mut indices = std::collections::BTreeMap::new();
     let transformations = result
         .transformations
         .into_iter()
@@ -401,9 +415,20 @@ fn structured_result_to_js(
                 .pointer(&record.path)
                 .and_then(serde_json::Value::as_str)
                 .ok_or_else(|| privacy_error(datafog_core::structured::invalid_data()))?;
+            let (source_index, output_index) =
+                indices.entry(record.path.clone()).or_insert_with(|| {
+                    (
+                        datafog_core::TextIndex::new(source),
+                        datafog_core::TextIndex::new(output),
+                    )
+                });
             Ok(Record {
                 path: record.path,
-                transformation: transformation_from_core(source, output, record.transformation)?,
+                transformation: transformation_from_core(
+                    source_index,
+                    output_index,
+                    record.transformation,
+                )?,
             })
         })
         .collect::<Result<Vec<_>, JsValue>>()?;
