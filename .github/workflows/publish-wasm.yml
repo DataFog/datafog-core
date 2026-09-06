@@ -5,6 +5,11 @@ on:
     tags:
       - "wasm-v*"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and verify the package without publishing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -14,8 +19,12 @@ jobs:
     name: Publish @datafog/wasm to npm
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - run: python3 scripts/check-release.py wasm
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
@@ -24,12 +33,13 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
-          cache-dependency-path: bindings/wasm/package-lock.json
+      - run: npm install --global npm@11.17.0
       - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - run: npm ci --prefix bindings/wasm
-      - run: npm run build --prefix bindings/wasm
-      - run: npm publish
+      - run: npx --prefix bindings/wasm playwright install --with-deps chromium
+      - run: npm run test:package --prefix bindings/wasm
+      - run: npm publish --dry-run --ignore-scripts
         working-directory: bindings/wasm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish
+        if: github.event_name == 'push' || !inputs.dry_run
+        working-directory: bindings/wasm

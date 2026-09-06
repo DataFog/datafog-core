@@ -1,0 +1,62 @@
+---
+title: "0.3.0"
+description: "Structured PERSON discovery and faster finding selection and text-position handling."
+icon: "tag"
+---
+
+DataFog Core 0.3.0 adds structured PERSON discovery and improves performance
+when processing many findings. Rust, Python, Node.js, and browser WASM share
+the detection and stateless protection behavior.
+
+## Structured PERSON support
+
+- Discover explicit name fields such as `first_name`, `last_name`, and
+  `fullName` without a model or dictionary download.
+- Supply concrete JSON Pointer mappings for fields that automatic discovery
+  leaves unresolved, such as `/customer/name`.
+- Scan JSON string values with the original seven detectors and return each
+  finding with its field path. Protect the findings with the existing policies.
+- Use structured pseudonymization, tokenization, and restoration through
+  Rust, Python, and Node provider integrations. Browser WASM retains its
+  existing restriction on provider-backed operations.
+
+PERSON detection uses field context. It does not recognize arbitrary names in
+prose, and passing serialized JSON to `scan(text)` does not enable discovery.
+See [Discover and protect person fields](/guides/person-discovery).
+
+## Performance
+
+- Index duplicate findings and resolve ordinary overlaps with ordered interval
+  selection. Built-in findings use an O(m log m) selection path, where m is the
+  finding count.
+- Reuse lazy text indexes during validation and byte/code-point/UTF-16 range
+  conversion, maintain running output positions, and avoid copying a whole
+  field for every Node transformation record.
+- Expose Rust's reusable `TextIndex` for converting multiple ranges from the
+  same string. See the [Rust reference](/reference/rust).
+
+On one local macOS ARM64 benchmark, selection of 4,096 disjoint findings fell
+from 60.3 ms to 0.56 ms. Separately, the bookkeeping changes reduced a complete
+Node structured scan-and-protect request with 1,024 findings in one Unicode
+field from 242.3 ms to 3.2 ms. These measure different stages and baselines;
+they are not a universal speedup guarantee. Short-field workloads changed
+little, and one sparse scan-only case was about 10% slower.
+
+The [selection benchmark notes](https://github.com/DataFog/datafog-core/blob/main/docs/finding-selection-performance.md)
+and [bookkeeping benchmark notes](https://github.com/DataFog/datafog-core/blob/main/docs/bookkeeping-performance.md)
+include inputs, methodology, and limitations.
+
+## Compatibility and publishing
+
+Existing validation, offset semantics, transformation policies, and finding
+preferences are preserved. Caller-supplied overlapping findings that mix
+scored and unscored confidence can retain the original quadratic selection
+algorithm to preserve its behavior. See [Findings and ranges](/concepts/findings-and-ranges).
+
+The Node and WASM release workflows publish to npm from GitHub Actions using
+trusted publishing. Node builds cover macOS ARM64/x64, Linux GNU ARM64/x64,
+and Windows x64. Node.js 24.x remains required.
+
+This release contains [PR #12](https://github.com/DataFog/datafog-core/pull/12),
+[PR #13](https://github.com/DataFog/datafog-core/pull/13), and
+[PR #14](https://github.com/DataFog/datafog-core/pull/14).

@@ -5,6 +5,11 @@ on:
     tags:
       - "node-v*"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and verify packages without publishing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -34,6 +39,7 @@ jobs:
             build_args: ""
     steps:
       - uses: actions/checkout@v4
+      - run: python3 scripts/check-release.py node
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
@@ -50,6 +56,14 @@ jobs:
           name: bindings-${{ matrix.target }}
           path: bindings/node/datafog.*.node
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        with:
+          name: node-wrapper
+          path: |
+            bindings/node/native.js
+            bindings/node/index.d.ts
+          if-no-files-found: error
 
   publish:
     name: Publish to npm
@@ -58,25 +72,40 @@ jobs:
     environment: npm
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
-          cache-dependency-path: bindings/node/package-lock.json
+      - run: npm install --global npm@11.17.0
       - run: npm ci --prefix bindings/node
       - uses: actions/download-artifact@v4
         with:
+          pattern: bindings-*
           path: bindings/node/artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-wrapper
+          path: bindings/node
       - name: Assemble platform packages
         working-directory: bindings/node
         run: |
           npx napi create-npm-dirs
           npx napi artifacts --output-dir artifacts
+          npx napi prepublish -t npm --no-gh-release --skip-optional-publish
+      - name: Verify assembled package and native dependency
+        working-directory: bindings/node
+        run: npm run test:package -- --prebuilt --platform-package npm/linux-x64-gnu
+      - name: Check all package contents without publishing
+        working-directory: bindings/node
+        run: |
+          for package in npm/*; do
+            (cd "$package" && npm publish --dry-run --ignore-scripts)
+          done
+          npm publish --dry-run --ignore-scripts
       - name: Publish
+        if: github.event_name == 'push' || !inputs.dry_run
         working-directory: bindings/node
         run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

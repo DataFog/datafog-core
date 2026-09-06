@@ -550,9 +550,21 @@ void structuredManagerResult;
 }
 
 let tarball;
+let platformTarball;
 
 try {
-  run("npm", ["run", "build"], nodePackage);
+  if (!process.argv.includes("--prebuilt")) {
+    run("npm", ["run", "build"], nodePackage);
+  }
+  const platformArgument = process.argv.indexOf("--platform-package");
+  if (platformArgument !== -1) {
+    const platformDirectory = path.resolve(nodePackage, process.argv[platformArgument + 1]);
+    const packed = JSON.parse(execFileSync("npm", ["pack", "--json"], {
+      cwd: platformDirectory,
+      encoding: "utf8",
+    }));
+    platformTarball = path.join(platformDirectory, packed[0].filename);
+  }
 
   const packed = JSON.parse(
     execFileSync("npm", ["pack", "--json"], {
@@ -587,6 +599,7 @@ try {
       "install",
       "--ignore-scripts",
       tarball,
+      ...(platformTarball ? [platformTarball] : []),
       `typescript@${nodePackageJson.devDependencies.typescript}`,
     ],
     temporaryDirectory,
@@ -606,6 +619,9 @@ try {
 } finally {
   if (tarball) {
     rmSync(tarball, { force: true });
+  }
+  if (platformTarball) {
+    rmSync(platformTarball, { force: true });
   }
   rmSync(temporaryDirectory, { recursive: true, force: true });
 }

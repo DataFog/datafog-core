@@ -46,6 +46,10 @@
         ]
       },
       {
+        "group": "Releases",
+        "pages": ["releases/0-3-0"]
+      },
+      {
         "group": "Contributing",
         "pages": ["development"]
       }

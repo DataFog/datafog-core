@@ -2,8 +2,9 @@
 
 This is a focused follow-up to [Slice Ten](finding-selection-performance.md).
 The baseline is the merge of PR #13, commit
-`083eaaab6bcfcfba9a31bc8ce1cfc99f1c2a3cae`. The change is a candidate for the
-planned 0.3.0 release; package versions stay at 0.2.0 until release preparation.
+`083eaaab6bcfcfba9a31bc8ce1cfc99f1c2a3cae`. The change is included in the
+0.3.0 release. The measurements below compare the two implementations before
+the release version bump.
 
 ## Scope and behavior
 

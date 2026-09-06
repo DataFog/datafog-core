@@ -1,6 +1,6 @@
 ---
 title: "Migrate from DataFog Python"
-description: "Move from datafog 4.8.x to the canonical DataFog Core 0.2.x Python API."
+description: "Move from datafog 4.8.x to the canonical DataFog Core 0.3.x Python API."
 icon: "arrow-right-arrow-left"
 ---
 
@@ -15,7 +15,7 @@ DataFog Core makes detection results, text ranges, transformation policy, and
 provider-backed operations consistent across Rust, Python, Node.js, and
 browser/WASM. That consistency requires a few deliberate API changes in Python.
 
-DataFog Core 0.2 does not replace the legacy package's optional spaCy, GLiNER,
+DataFog Core 0.3 does not replace the legacy package's optional spaCy, GLiNER,
 OCR, distributed-processing, CLI, or application-guardrail features. Keep the
 established package for those workloads while adopting Core where its smaller,
 cross-runtime contract fits.
@@ -28,7 +28,7 @@ cross-runtime contract fits.
 python -m pip install datafog
 ```
 
-```bash DataFog Core 0.2.x
+```bash DataFog Core 0.3.x
 python -m pip install datafog-core
 ```
 
@@ -40,7 +40,7 @@ python -m pip install datafog-core
 from datafog.engine import Entity, redact, scan, scan_and_redact
 ```
 
-```python DataFog Core 0.2.x
+```python DataFog Core 0.3.x
 from datafog_core import Finding, scan, scan_and_transform, transform
 ```
 
@@ -70,7 +70,7 @@ for entity in result.entities:
     print(entity.type, entity.text, entity.start, entity.end)
 ```
 
-```python DataFog Core 0.2.x
+```python DataFog Core 0.3.x
 from datafog_core import scan
 
 findings = scan("Email jane@example.com")
@@ -90,7 +90,7 @@ Use `codepoint_range` when slicing a Python string. Use `byte_range` when
 addressing the UTF-8 encoded input. Both ranges are zero-based and
 end-exclusive.
 
-| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| DataFog Python 4.8.x | DataFog Core 0.3.x |
 | --- | --- |
 | `ScanResult.entities` | The return value from `scan` |
 | `Entity.type` | `Finding.entity_type` |
@@ -124,7 +124,7 @@ result = scan_and_redact(
 print(result.redacted_text)
 ```
 
-```python DataFog Core 0.2.x
+```python DataFog Core 0.3.x
 from datafog_core import scan_and_transform
 
 result = scan_and_transform(
@@ -142,7 +142,7 @@ print(result.text)
 
 </CodeGroup>
 
-| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| DataFog Python 4.8.x | DataFog Core 0.3.x |
 | --- | --- |
 | `scan_and_redact(...)` | `scan_and_transform(text, {"scan": ..., "transform": ...})` |
 | `redact(text, entities, ...)` | `transform(text, findings, config)` |
@@ -179,7 +179,7 @@ behavior and threat-model distinctions.
 ## Remove legacy engine selection
 
 Do not translate `engine="regex"`, `"smart"`, `"spacy"`, or `"gliner"` into
-Core configuration. DataFog Core 0.2 owns detector composition and exposes
+Core configuration. DataFog Core 0.3 owns detector composition and exposes
 `locale` as its scan setting. Detector provenance appears on each finding.
 
 Entity names are exact and case-sensitive. The built-in Core entities are:

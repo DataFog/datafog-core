@@ -1,6 +1,6 @@
 # PERSON detection with automatic field discovery
 
-**Status: Core and binding implementation complete; release and downstream adoption pending.**
+**Status: Core and binding implementation included in 0.3.0; downstream adoption pending.**
 
 The implemented contract is [ADR 002](adr/002-structured-person-discovery.md).
 Verification and measurement results are recorded in [structured performance](structured-performance.md).
