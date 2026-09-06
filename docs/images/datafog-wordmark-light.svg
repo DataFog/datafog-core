@@ -1,0 +1,9 @@
+<svg width="280" height="48" viewBox="0 0 280 48" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon -->
+  <rect width="48" height="48" rx="10" fill="#0E0C09"/>
+  <rect x="8" y="11" width="32" height="6" rx="1.5" fill="#E8A84C"/>
+  <rect x="8" y="21" width="24" height="6" rx="1.5" fill="#E8A84C"/>
+  <rect x="8" y="31" width="28" height="6" rx="1.5" fill="#E8A84C"/>
+  <!-- Text -->
+  <text x="62" y="33" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="22" fill="#313030" letter-spacing="0.08em">DATAFOG</text>
+</svg>

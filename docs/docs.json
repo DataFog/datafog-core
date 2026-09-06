@@ -4,9 +4,39 @@
   "name": "DataFog Core",
   "description": "PII detection and privacy transformations for Rust, Python, Node.js, and browsers",
   "colors": {
-    "primary": "#0F766E",
-    "light": "#0F766E",
-    "dark": "#2DD4BF"
+    "primary": "#795900",
+    "light": "#F7BE36",
+    "dark": "#795900"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "background": {
+    "color": {
+      "light": "#E5E2E1",
+      "dark": "#131313"
+    }
+  },
+  "logo": {
+    "light": "/images/datafog-wordmark-light.svg",
+    "dark": "/images/datafog-wordmark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "fonts": {
+    "heading": {
+      "family": "Hanken Grotesk",
+      "weight": 600
+    },
+    "body": {
+      "family": "Inter"
+    }
+  },
+  "seo": {
+    "metatags": {
+      "og:image": "https://datafog.ai/datafog-icon-512.png",
+      "twitter:image": "https://datafog.ai/datafog-icon-512.png",
+      "twitter:card": "summary"
+    }
   },
   "navigation": {
     "groups": [
