@@ -126,6 +126,26 @@ for (const record of structuredTransformRecords) {
   }
 }
 
+const denseData = {a:"👋 may@example.test ".repeat(80), b:"中 é other@example.test ".repeat(80)};
+const denseFindings = scanStructured(denseData).findings;
+assert.equal(denseFindings.length, 160);
+for (const {path, finding} of denseFindings) verifyContract(pointerValue(denseData, path), finding);
+for (const strategy of [{strategy:"redact"}, {strategy:"remove"}, {strategy:"mask",character:"🔒"}]) {
+  const config = {default:strategy};
+  const result = transformStructured(denseData, [...denseFindings].reverse(), config);
+  assert.deepEqual(result, scanAndTransformStructured(denseData, {transform:config}));
+  assert.equal(result.transformations.length, 160);
+  for (const {path, transformation:t} of result.transformations) {
+    const source = pointerValue(denseData, path);
+    const output = pointerValue(result.data, path);
+    const expectedSource = path === "/a" ? "may@example.test" : "other@example.test";
+    assert.equal(source.slice(t.sourceUtf16Range.start,t.sourceUtf16Range.end), expectedSource);
+    assert.equal(Array.from(output).slice(t.outputCodepointRange.start,t.outputCodepointRange.end).join(""), t.replacement);
+    assert.equal(output.slice(t.outputUtf16Range.start,t.outputUtf16Range.end), t.replacement);
+    assert.equal(Buffer.from(output).subarray(t.outputByteRange.start,t.outputByteRange.end).toString(), t.replacement);
+  }
+}
+
 const emojiFinding = scan("👋 jane@example.com")[0];
 assert.deepEqual(emojiFinding.byteRange, { start: 5, end: 21 });
 assert.deepEqual(emojiFinding.codepointRange, { start: 2, end: 18 });
@@ -418,6 +438,17 @@ assert.throws(
     error.reason === "unknown_field" &&
     error.path === "/overides",
 );
+
+const denseTokens = await tokenManager.scanAndTransformStructured(denseData, {transform:{default:{strategy:"tokenize",token_ref:"dense"}}}, tokenContext);
+const denseRestored = await tokenManager.restoreStructured(denseTokens.data, tokenContext);
+assert.deepEqual(denseRestored.data, denseData);
+assert.equal(denseRestored.restorations.length, 160);
+for (const {path, restoration:r} of denseRestored.restorations) {
+  const source = pointerValue(denseTokens.data, path);
+  const output = pointerValue(denseRestored.data, path);
+  assert.ok(source.slice(r.sourceUtf16Range.start,r.sourceUtf16Range.end).startsWith("DFTOKENv1("));
+  assert.equal(output.slice(r.outputUtf16Range.start,r.outputUtf16Range.end), path === "/a" ? "may@example.test" : "other@example.test");
+}
 
 console.log("Installed @datafog/node package matches fixtures and transform contracts.");
 `.trimStart(),

@@ -334,6 +334,26 @@ for (const record of structuredTransformRecords) {
   }
 }
 
+const denseData = {a:"👋 may@example.test ".repeat(80), b:"中 é other@example.test ".repeat(80)};
+const denseFindings = scanStructured(denseData).findings;
+if (denseFindings.length !== 160) throw new Error("dense finding count");
+for (const {path, finding} of denseFindings) verifyContract(pointerValue(denseData, path), finding);
+for (const strategy of [{strategy:"redact"}, {strategy:"remove"}, {strategy:"mask",character:"🔒"}]) {
+  const config = {default:strategy};
+  const result = transformStructured(denseData, [...denseFindings].reverse(), config);
+  if (JSON.stringify(result) !== JSON.stringify(scanAndTransformStructured(denseData, {transform:config}))) throw new Error("dense explicit mismatch");
+  if (result.transformations.length !== 160) throw new Error("dense transformation count");
+  for (const {path, transformation:t} of result.transformations) {
+    const source = pointerValue(denseData, path);
+    const output = pointerValue(result.data, path);
+    const expectedSource = path === "/a" ? "may@example.test" : "other@example.test";
+    if (source.slice(t.sourceUtf16Range.start,t.sourceUtf16Range.end) !== expectedSource) throw new Error("dense source range");
+    if (Array.from(output).slice(t.outputCodepointRange.start,t.outputCodepointRange.end).join("") !== t.replacement) throw new Error("dense codepoint range");
+    if (output.slice(t.outputUtf16Range.start,t.outputUtf16Range.end) !== t.replacement) throw new Error("dense UTF-16 range");
+    if (new TextDecoder().decode(new TextEncoder().encode(output).subarray(t.outputByteRange.start,t.outputByteRange.end)) !== t.replacement) throw new Error("dense byte range");
+  }
+}
+
 for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tokenize",token_ref:"names"}]) {
   let rejected=false;
   try { scanAndTransformStructured({first_name:"May"},{transform:{default:strategy}}); } catch(e) { rejected=e.code === "unsupported_strategy"; }
