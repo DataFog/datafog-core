@@ -231,7 +231,7 @@ without a separately accepted host-managed key-custody boundary.
 
 ## Next workstream: PERSON detection with automatic field discovery
 
-**Status: Core and bindings implemented; release and downstream adoption pending.**
+**Status: Core and bindings included in 0.3.0; downstream adoption pending.**
 
 The [PERSON detection plan](person-detection-plan.md) extends Core with
 conservative automatic name-field discovery for structured JSON data, explicit
@@ -244,7 +244,7 @@ completed privacy-operation slices or promise general prose name recognition.
 
 ## Slice 10: Finding-selection performance
 
-**Status: merged; combined release pending.**
+**Status: merged; included in 0.3.0.**
 
 Replace linear duplicate searches with indexed groups and repeated overlap
 scans with ordered interval selection. Preserve validation, filtering,
@@ -253,12 +253,12 @@ compatibility fallback where mixed confidence prevents safe sorting.
 
 The [selection measurements](finding-selection-performance.md) document exact
 behavior comparisons, reproducible scaling benchmarks, and remaining performance
-limits. Prepare one 0.3.0 release containing structured PERSON and this change
-after review; individual feature PRs do not bump or publish package versions.
+limits. The 0.3.0 release combines structured PERSON and this change with Slice 11;
+individual feature PRs do not bump or publish package versions.
 
 ## Slice 11: Offset calculation and record conversion
 
-**Status: implemented; review pending for inclusion in 0.3.0.**
+**Status: merged; included in 0.3.0.**
 
 Reuse lazy text indexes for finding validation and Unicode range conversion,
 maintain running output positions, and remove per-record field copies from Node

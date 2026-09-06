@@ -3,8 +3,8 @@
 This change addresses [issue #10](https://github.com/DataFog/datafog-core/issues/10)
 in the shared Rust transformation path, following the structured PERSON work.
 Public APIs, policies, detection coverage, offsets, and package versions are
-unchanged. PERSON and this optimization are intended for a combined 0.3.0
-release after review; this change does not publish packages.
+unchanged. PERSON and this optimization are included in the combined 0.3.0
+release; the original feature PR did not publish packages.
 
 ## Algorithm and compatibility
 

@@ -70,3 +70,52 @@ bindings/wasm/      Browser WebAssembly binding
 fixtures/           Shared conformance fixtures
 docs/               Architecture records and Mintlify documentation
 ```
+
+## Publish a release from GitHub Actions
+
+Keep the four Cargo package versions, Python project version, both npm
+package versions, and their lockfiles aligned. The publishing workflows run
+`python3 scripts/check-release.py <runtime>` and reject inconsistent versions
+or a release tag that does not match the package version.
+
+Run the quality gates and installed-package tests above on the release commit.
+Merge the release preparation PR, then create these tags on that same commit
+for version 0.3.0:
+
+| Tag | Workflow | Destination |
+| --- | --- | --- |
+| `rust-v0.3.0` | `publish-rust.yml` | crates.io |
+| `python-v0.3.0` | `publish-python.yml` | PyPI |
+| `node-v0.3.0` | `publish-node.yml` | npm: Node and five native platform packages |
+| `wasm-v0.3.0` | `publish-wasm.yml` | npm: browser WASM |
+
+Each tag push starts its publishing workflow. Check all four runs and install
+the published versions before announcing the combined release. Registry
+publication is not atomic across packages; inspect any partial result before
+retrying. Never move a tag that has already published a package.
+
+The npm workflows also accept a manual `dry_run` input, which defaults to
+`true`. A dry run builds and verifies package contents without publishing.
+For an actual manual publish, select the intended release tag and set
+`dry_run` to `false`.
+
+### npm trusted publisher setup
+
+Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+once in each package's npm settings. Use GitHub organization **DataFog**,
+repository **datafog-core**, environment **npm**, and allow direct
+`npm publish`:
+
+| Packages | Workflow filename |
+| --- | --- |
+| `@datafog/node`, `@datafog/node-darwin-arm64`, `@datafog/node-darwin-x64`, `@datafog/node-linux-x64-gnu`, `@datafog/node-linux-arm64-gnu`, `@datafog/node-win32-x64-msvc` | `publish-node.yml` |
+| `@datafog/wasm` | `publish-wasm.yml` |
+
+The publish jobs request GitHub's OIDC identity with `id-token: write` and use
+npm 11.17.0 on Node 24. They do not use `NPM_TOKEN` or a local machine's npm
+session. npm generates provenance for these public packages automatically.
+
+The Node workflow builds all five native binaries, transfers the generated
+JavaScript loader and types to the publish job, and runs the installed-package
+suite against the assembled package and its Linux native dependency before
+publishing. The WASM workflow runs the browser package suite before publishing.

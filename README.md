@@ -73,7 +73,7 @@ detection settings remain separate from transformation policy.
 DataFog Core is a separate distribution and canonical API, not a drop-in
 replacement for the established `datafog` Python package.
 
-| DataFog Python 4.8.x | DataFog Core 0.2.x |
+| DataFog Python 4.8.x | DataFog Core 0.3.x |
 | --- | --- |
 | `pip install datafog` | `pip install datafog-core` |
 | `from datafog.engine import ...` | `from datafog_core import ...` |

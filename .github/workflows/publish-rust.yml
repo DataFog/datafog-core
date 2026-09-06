@@ -16,6 +16,7 @@ jobs:
     environment: crates-io
     steps:
       - uses: actions/checkout@v4
+      - run: python3 scripts/check-release.py rust
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish --package datafog-core --locked
         env:
