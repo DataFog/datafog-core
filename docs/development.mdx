@@ -44,6 +44,8 @@ python -m venv .venv
 .venv/bin/maturin build --manifest-path bindings/python/Cargo.toml --release
 .venv/bin/python -m pip install --force-reinstall target/wheels/*.whl
 .venv/bin/python bindings/python/tests/test_installed.py
+.venv/bin/python -m pip install -r bindings/python/tests/requirements-typing.txt
+.venv/bin/python bindings/python/tests/test_typing.py
 ```
 
 ## Documentation preview
@@ -80,14 +82,14 @@ or a release tag that does not match the package version.
 
 Run the quality gates and installed-package tests above on the release commit.
 Merge the release preparation PR, then create these tags on that same commit
-for version 0.3.0:
+for version 0.3.1:
 
 | Tag | Workflow | Destination |
 | --- | --- | --- |
-| `rust-v0.3.0` | `publish-rust.yml` | crates.io |
-| `python-v0.3.0` | `publish-python.yml` | PyPI |
-| `node-v0.3.0` | `publish-node.yml` | npm: Node and five native platform packages |
-| `wasm-v0.3.0` | `publish-wasm.yml` | npm: browser WASM |
+| `rust-v0.3.1` | `publish-rust.yml` | crates.io |
+| `python-v0.3.1` | `publish-python.yml` | PyPI |
+| `node-v0.3.1` | `publish-node.yml` | npm: Node and five native platform packages |
+| `wasm-v0.3.1` | `publish-wasm.yml` | npm: browser WASM |
 
 Each tag push starts its publishing workflow. Check all four runs and install
 the published versions before announcing the combined release. Registry

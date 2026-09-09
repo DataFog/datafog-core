@@ -1,0 +1,19 @@
+---
+title: "0.3.1"
+description: "Python type information for the compiled DataFog Core API."
+icon: "tag"
+---
+
+DataFog Core 0.3.1 adds Python typing support for the compiled extension,
+addressing [issue #17](https://github.com/DataFog/datafog-core/issues/17).
+
+- Wheels include a complete API stub and the PEP 561 `py.typed` marker.
+- Type checkers recognize imports, function signatures, immutable result
+  properties, configuration dictionaries, exceptions, and awaitable privacy
+  manager methods.
+- Python CI checks valid and invalid downstream usage with Pyright and mypy,
+  including a wheel rebuilt from the source distribution.
+
+The Python package keeps its existing public imports. Detection,
+transformation, and offset behavior are unchanged. All package versions advance
+together under the repository's release policy.

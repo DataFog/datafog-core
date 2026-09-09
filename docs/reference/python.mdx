@@ -18,6 +18,19 @@ import datafog_core
   calls.
 </Note>
 
+## Type checking
+
+Starting with 0.3.1, the wheel includes PEP 561 typing metadata and stubs for
+all public functions, result objects, exceptions, and awaitable manager methods.
+Pyright and mypy can infer finding and result types and check configuration
+literals without a separate stub package.
+
+Configuration and provider helper types in the stub are prefixed with `_` and
+exist only for type checking. If you use them in annotations, import them inside
+`if TYPE_CHECKING:` and use postponed annotations (`from __future__ import
+annotations`); they are not runtime exports. Runtime validation still enforces
+value constraints such as supported locales, nonnegative ranges, and valid keys.
+
 ## Synchronous functions
 
 ```python
