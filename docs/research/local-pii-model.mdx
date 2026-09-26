@@ -1,29 +1,24 @@
 ---
-title: "Local PII detection: from a Mac to native Rust"
-description: "A DataFog research preview: seven PII categories, local inference, and results on 90,018 held-out synthetic documents."
+title: "A small PII model for local Rust inference"
+description: "A DataFog research preview: detection results across seven PII categories, local runtime measurements, and fine-tuning on a Mac."
 ---
 
-**Research preview · September 2026**
+**DataFog research preview · September 2026**
 
-We built a small PII model that runs locally in Rust and returns typed spans
-for redaction. Text stays on the machine during inference. No hosted model or
-Python runtime is required.
+We fine-tuned a 65.2-million-parameter DistilBERT model to detect seven categories
+of PII and packaged it for local inference in Rust. It returns typed spans for
+redaction, with no hosted model or Python runtime required during inference.
 
-## What we built
+The first evaluation covered detection accuracy, local runtime behavior, and
+the resources needed for fine-tuning.
 
-The model is a 65.2-million-parameter DistilBERT encoder fine-tuned to detect
-first names, last names, email addresses, phone numbers, street addresses,
-customer IDs, and account numbers. Findings use UTF-8 byte offsets into the
-original text. Overlapping windows handle long inputs.
+## Detection quality
 
-Training took **2 hours 15 minutes on an Apple M5 Pro with 48 GB of memory**.
-The native deployment bundle, including the inference runtime, is about
-**300 MB**.
-
-## First results
+The model detects first names, last names, email addresses, phone numbers,
+street addresses, customer IDs, and account numbers.
 
 On **90,018 held-out synthetic Nemotron-PII documents**, containing 248,739
-annotated entities across the seven categories:
+annotated entities:
 
 | Exact typed-span metric | Result |
 | --- | ---: |
@@ -31,28 +26,71 @@ annotated entities across the seven categories:
 | Recall | 97.63% |
 | F1 | 98.32% |
 
-A prediction counts as correct only when both its category and boundaries
-match the annotation. Model selection, calibration, and threshold selection
-used separate partitions; the inference artifacts were frozen before test scoring.
+A prediction counts as correct when both its category and boundaries match the
+annotation. Separate partitions were used for checkpoint selection, confidence
+calibration, and threshold selection. The inference artifacts were frozen before
+test scoring.
 
-The comparison with the **legacy DataFog Python 4.8.1 regex engine** was useful:
+Results across all seven categories:
+
+| Entity | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: |
+| First name | 99.40% | 98.30% | 98.85% |
+| Last name | 99.31% | 97.96% | 98.63% |
+| Email | 98.57% | 97.74% | 98.15% |
+| Phone number | 98.29% | 95.28% | 96.76% |
+| Street address | 98.47% | 96.66% | 97.56% |
+| Customer ID | 99.27% | 98.00% | 98.63% |
+| Account number | 98.76% | 96.83% | 97.78% |
+
+For email and phone numbers, the model was compared with the **legacy DataFog
+Python 4.8.1 regex engine**. These were the two categories supported by that
+baseline within the seven-category evaluation:
 
 | Entity | Legacy regex F1 | Model F1 |
 | --- | ---: | ---: |
 | Email | **99.19%** | 98.15% |
 | Phone number | 54.35% | **96.76%** |
 
-## What remains unproven
+These results describe performance on this synthetic dataset. Structural
+validation removed malformed annotations, but semantic annotation errors remain.
+Generalization to real customer-support data has not yet been established.
 
-These are synthetic-data results. Structural validation does not eliminate
-semantic annotation errors, and real-world generalization remains unproven.
 A separate set of seven hand-authored support fixtures recovered **14 of 18
-entities**. Those fixtures help expose failures; they are too small to establish
-customer-support accuracy.
+entities**. Those examples exposed failures that the aggregate score alone
+would not convey.
 
-Confidence calibration and the selected threshold are experimental. The model
-supports only the seven listed categories, and an empty result does not mean
-a document is free of sensitive information.
+## Local deployment
+
+The model runs through a native Rust runtime and returns UTF-8 byte offsets
+into the original text. Long inputs are processed in overlapping windows.
+
+The deployment bundle is approximately **300 MB**, including the inference
+runtime. On the development Mac, individual warm requests produced these
+measurements:
+
+| Input size | Observed request time |
+| --- | ---: |
+| 115 bytes | 6 ms |
+| 752 bytes | 21 ms |
+| 2,010 bytes | 81 ms |
+| 4,502 bytes | 173 ms |
+
+These are preliminary observations at four input lengths. Repeated latency
+measurements and throughput testing are still needed.
+
+Confidence calibration and the acceptance threshold are experimental.
+Detection is limited to the seven listed categories.
+
+## Fine-tuning on a Mac
+
+Fine-tuning completed in **2 hours 15 minutes on an Apple M5 Pro with 48 GB
+of unified memory**.
+
+An existing pretrained DistilBERT encoder was used; the model was not pretrained
+from scratch. The run demonstrates that this fine-tuning workflow can be
+completed locally on a laptop. No comparison of training speed or inference
+performance against NVIDIA hardware was conducted.
 
 ## Next
 
@@ -60,6 +98,7 @@ The frozen model will next be evaluated on a separate public PII dataset,
 followed by a reviewed support-ticket set. Missed entities, unnecessary
 redaction, and performance relative to regex will be measured across both.
 
-[Read the evaluation methodology and detailed results](/research/local-pii-methodology).
+Repeated runtime measurements will be used to characterize median latency,
+tail latency, and throughput on explicitly documented hardware.
 
-Building local privacy controls today? [Start with the shipping DataFog Core SDKs](/get-started/quickstart).
+[Read the evaluation methodology and detailed results](/research/local-pii-methodology).
