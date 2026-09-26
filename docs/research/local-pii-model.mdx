@@ -1,0 +1,72 @@
+---
+title: "Local PII detection: from a Mac to native Rust"
+description: "A DataFog research preview: seven PII categories, local inference, and results on 90,018 held-out synthetic documents."
+---
+
+**Research preview · September 2026**
+
+We built a small PII model that runs locally in Rust and returns typed spans
+for redaction. Text stays on the machine during inference. No hosted model or
+Python runtime is required.
+
+This is a standalone experiment. It is not yet included in the DataFog Core
+SDKs, and the results below do not establish production readiness.
+
+## What we built
+
+The model is a 65.2-million-parameter DistilBERT encoder fine-tuned to detect
+first names, last names, email addresses, phone numbers, street addresses,
+customer IDs, and account numbers. Findings use UTF-8 byte offsets into the
+original text. Overlapping windows handle long inputs.
+
+Training took **2 hours 15 minutes on an Apple M5 Pro with 48 GB of memory**.
+The native deployment bundle, including the inference runtime, is about
+**300 MB**.
+
+## First results
+
+On **90,018 held-out synthetic Nemotron-PII documents**, containing 248,739
+annotated entities across the seven categories:
+
+| Exact typed-span metric | Result |
+| --- | ---: |
+| Precision | 99.01% |
+| Recall | 97.63% |
+| F1 | 98.32% |
+
+A prediction counts as correct only when both its category and boundaries
+match the annotation. Model selection, calibration, and threshold selection
+used separate partitions; the inference artifacts were frozen before test scoring.
+
+The comparison with the **legacy DataFog Python 4.8.1 regex engine** was useful:
+
+| Entity | Legacy regex F1 | Model F1 |
+| --- | ---: | ---: |
+| Email | **99.19%** | 98.15% |
+| Phone number | 54.35% | **96.76%** |
+
+This is not a comparison against current DataFog Core. Regex performed better
+on email; the model performed better on phone numbers. That gives us a reason
+to test a combined detector, but we have not measured one yet.
+
+## What remains unproven
+
+These are synthetic-data results. Structural validation does not eliminate
+semantic annotation errors, and real-world generalization remains unproven.
+A separate set of seven hand-authored support fixtures recovered **14 of 18
+entities**. Those fixtures help expose failures; they are too small to establish
+customer-support accuracy.
+
+Confidence calibration and the selected threshold are experimental. The model
+supports only the seven listed categories, and an empty result does not mean
+a document is free of sensitive information.
+
+## Next
+
+Our next evaluation should test the frozen model on a separate public PII
+dataset, followed by a reviewed support-ticket set. We want to measure missed
+entities, unnecessary redaction, and where regex remains the better tool.
+
+[Read the evaluation methodology and detailed results](/research/local-pii-methodology).
+
+Building local privacy controls today? [Start with the shipping DataFog Core SDKs](/get-started/quickstart).

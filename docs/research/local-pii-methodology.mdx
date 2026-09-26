@@ -1,0 +1,143 @@
+---
+title: "Local PII model: evaluation methodology"
+description: "Data provenance, split rules, exact-span results, calibration limitations, and native runtime observations for the DataFog research preview."
+---
+
+This page documents one completed prototype run. It is not an independent
+public benchmark or a production model release. The model bundle and full
+reproduction package have not been publicly released.
+
+## Data and provenance
+
+We used [NVIDIA Nemotron-PII](https://huggingface.co/datasets/nvidia/Nemotron-PII/tree/b70ffaf5ff39e079776134c5bf4381f00a9fd1ed),
+revision `b70ffaf5ff39e079776134c5bf4381f00a9fd1ed`.
+Attribution: NVIDIA; Amy Steier, Andre Manoel, Alexa Haushalter, and Maarten
+Van Segbroeck, *Nemotron-PII* (2025), CC BY 4.0.
+We selected seven entity types, validated source offsets, and derived grouped
+partitions. We are reporting aggregate results rather than redistributing the dataset.
+
+The source contained 100,000 training and 100,000 test documents. Structural
+exclusions removed 19,101 documents for source-slice mismatches and 20 for
+duplicate or overlapping annotations. Seven training-side documents were
+removed for test-family overlap. Families were grouped using source identifiers,
+exact text, and template signatures; this does not rule out every near-duplicate.
+
+| Partition | Documents | Purpose |
+| --- | ---: | --- |
+| Training | 89,307 | Fit model weights |
+| Validation | 514 | Select checkpoint |
+| Calibration fit | 501 | Fit pooled isotonic calibration |
+| Calibration select | 532 | Select acceptance threshold |
+| Test | 90,018 | Frozen held-out evaluation |
+
+The pretrained encoder was `distilbert/distilbert-base-cased`, revision
+`6ea81172465e8b0ad3fddeed32b986cdcdcffcf0`. Fine-tuning ran for two epochs
+with FP32 MPS, batch size 16, learning rate 0.00002, and weight decay 0.01.
+The selected checkpoint had the lowest validation token loss.
+
+The runtime uses manually constructed windows of up to 512 tokens with
+42-token overlap and global UTF-8 byte offsets. This is finite boundary-test
+evidence, not a guarantee for every possible entity length. Sixteen annotated
+boundaries in the training source could not be represented by token boundaries.
+
+## Scoring and freeze
+
+An exact typed-span match requires the same entity category, start offset, and
+end offset as the gold annotation. Overall scores are micro-averaged over
+the seven target categories. Target-clean documents remain in evaluation.
+
+Inference and evaluation inputs were hashed before final test scoring. The final
+audit verified those inputs were unchanged and independently recounted the
+90,018 documents and the totals below. Two implementation repairs—tokenizer
+overflow handling and export evaluation mode—occurred before final test scoring.
+Neither used final test outcomes for tuning.
+
+| Label | Gold entities | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Overall | 248,739 | 99.01% | 97.63% | 98.32% |
+| First name | 74,498 | 99.40% | 98.30% | 98.85% |
+| Last name | 52,864 | 99.31% | 97.96% | 98.63% |
+| Email | 49,246 | 98.57% | 97.74% | 98.15% |
+| Phone number | 22,033 | 98.29% | 95.28% | 96.76% |
+| Street address | 15,382 | 98.47% | 96.66% | 97.56% |
+| Customer ID | 19,085 | 99.27% | 98.00% | 98.63% |
+| Account number | 15,631 | 98.76% | 96.83% | 97.78% |
+
+Totals: **242,853 true positives, 2,424 false positives, 5,886 false negatives**.
+At least one annotated entity was missed in 3,947 documents; at least one
+spurious entity was predicted in 1,730 documents. Among 16,233 target-clean
+documents, 81 had an accepted prediction.
+
+UTF-8 byte-union redaction precision was 99.66%, recall 97.89%, and F1 98.76%.
+This measure ignores entity categories and weights multibyte characters by
+byte length: 63,160 gold bytes were missed and 10,061 unnecessary bytes redacted.
+
+## Regex comparison
+
+The baseline was the published **legacy DataFog Python 4.8.1 regex engine**,
+not current DataFog Core. Only email and phone number were compared because
+those are the baseline's supported categories within this experiment's scope.
+Both systems saw all test documents, with the same exact-span scoring.
+
+| Scope | Legacy regex F1 | Model F1 |
+| --- | ---: | ---: |
+| Email | 99.19% | 98.15% |
+| Phone number | 54.35% | 96.76% |
+| Email and phone combined | 81.18% | 97.73% |
+
+The combined row covers 71,279 gold entities. It must not be compared directly
+with the model's seven-category overall F1. No hybrid system was evaluated.
+
+## Confidence and operating point
+
+Pooled isotonic calibration was fitted on 1,220 predicted spans from 501
+documents. Only 48 predictions were incorrect. The acceptance threshold,
+`0.64864865`, maximized exact typed-span F1 on the separate calibration-select
+partition, with ties resolved by recall and then higher threshold.
+
+| Held-out predicted-span measure | Raw score | Calibrated score |
+| --- | ---: | ---: |
+| Brier score | 0.014821 | 0.013717 |
+| ECE, ten equal-width bins | 0.011747 | 0.007427 |
+
+These measures cover all 250,771 predicted spans before thresholding. They do
+not account for undetected entities. ECE depends on binning, sparse confidence
+regions remain unreliable, and calibration may change on another population.
+The selected threshold is experimental, not a recommended production default.
+
+## Native runtime observations
+
+The bundle uses Rust with ONNX Runtime 1.30.0 on Apple arm64. It contains
+300,076,892 bytes, approximately 300 MB. All 16 bundle checksums passed the
+final audit; the packaged executable processed Unicode and clean-input smoke
+cases with no Python on PATH.
+
+| Input size, UTF-8 bytes | Observed warm request time |
+| --- | ---: |
+| 115 | 6 ms |
+| 752 | 21 ms |
+| 2,010 | 81 ms |
+| 4,502 | 173 ms |
+
+These are individual end-to-end observations on the development Mac, not
+latency percentiles or service guarantees. Cold process launch plus the first
+empty-input inference took 170 ms. Maximum RSS sampled after responses was
+496 MB; it is not an allocator high-water mark.
+
+Python and Rust matched token IDs, masks, global offsets, findings, and
+redaction on the parity fixtures. Maximum observed absolute logit difference
+was zero on those cases, not a universal numerical guarantee.
+
+## Limits and next evaluation
+
+Seven hand-authored support fixtures contained 18 target entities. The model
+recovered 14, with precision 93.33%, recall 77.78%, and F1 84.85%. These are
+diagnostic synthetic examples, not a representative customer-support sample.
+
+No real customer tickets were evaluated. Structural validation cannot correct
+all semantic annotation errors. The model and threshold need a separate
+public-dataset evaluation and reviewed domain-specific examples before any
+claim about broader reliability. Publishing a new public PII benchmark is a
+separate project requiring annotation review, provenance, and frozen scoring rules.
+
+[Return to the research preview](/research/local-pii-model).
