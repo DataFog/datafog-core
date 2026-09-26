@@ -9,9 +9,6 @@ We built a small PII model that runs locally in Rust and returns typed spans
 for redaction. Text stays on the machine during inference. No hosted model or
 Python runtime is required.
 
-This is a standalone experiment. It is not yet included in the DataFog Core
-SDKs, and the results below do not establish production readiness.
-
 ## What we built
 
 The model is a 65.2-million-parameter DistilBERT encoder fine-tuned to detect
@@ -45,10 +42,6 @@ The comparison with the **legacy DataFog Python 4.8.1 regex engine** was useful:
 | Email | **99.19%** | 98.15% |
 | Phone number | 54.35% | **96.76%** |
 
-This is not a comparison against current DataFog Core. Regex performed better
-on email; the model performed better on phone numbers. That gives us a reason
-to test a combined detector, but we have not measured one yet.
-
 ## What remains unproven
 
 These are synthetic-data results. Structural validation does not eliminate
@@ -63,9 +56,9 @@ a document is free of sensitive information.
 
 ## Next
 
-Our next evaluation should test the frozen model on a separate public PII
-dataset, followed by a reviewed support-ticket set. We want to measure missed
-entities, unnecessary redaction, and where regex remains the better tool.
+The frozen model will next be evaluated on a separate public PII dataset,
+followed by a reviewed support-ticket set. Missed entities, unnecessary
+redaction, and performance relative to regex will be measured across both.
 
 [Read the evaluation methodology and detailed results](/research/local-pii-methodology).
 
