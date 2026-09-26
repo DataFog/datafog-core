@@ -80,6 +80,10 @@
         "pages": ["releases/0-3-1", "releases/0-3-0"]
       },
       {
+        "group": "Research",
+        "pages": ["research/local-pii-model", "research/local-pii-methodology"]
+      },
+      {
         "group": "Contributing",
         "pages": ["development"]
       }
