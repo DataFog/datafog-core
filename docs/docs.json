@@ -57,7 +57,8 @@
           "reference/jwt",
           "reference/private-keys",
           "reference/uuid",
-            "reference/us-routing-number"
+            "reference/us-routing-number",
+            "reference/npi"
         ]
       },
       {
