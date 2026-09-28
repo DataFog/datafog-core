@@ -43,6 +43,17 @@ export function verifyBearerToken(api, records) {
       equal(api.transformStructured(data, located, test.config), structured, "explicit structured transform");
     }
   }
+  const data = {"👋/~":{"aUtHoRiZaTiOn":"  bEaReR abc._~+/==\t"}, Authorization:["Bearer hidden"], "X-Authorization":"Bearer hidden", a:"Authorization:", b:"Bearer hidden", invalid:{Authorization:"Bearer bad!value"}};
+  const found = api.scanStructured(data).findings.filter(f => f.finding.entityType === "BEARER_TOKEN");
+  equal(found.length,1,"structured header count");
+  equal(found[0].path,"/👋~1~0/aUtHoRiZaTiOn","structured header path");
+  equal(project(data["👋/~"].aUtHoRiZaTiOn,[found[0].finding]),[{label:"BEARER_TOKEN",text:"abc._~+/==",start:9,end:19}],"structured header offsets");
+  const expected = {...data,"👋/~":{aUtHoRiZaTiOn:"  bEaReR [BEARER_TOKEN]\t"}};
+  const transformed = api.scanAndTransformStructured(data,{transform:{default:{strategy:"redact"},entities:["BEARER_TOKEN"]}}).data;
+  equal(Object.keys(transformed).sort(),Object.keys(expected).sort(),"structured header keys");
+  for (const key of Object.keys(expected)) equal(transformed[key],expected[key],"structured header redaction " + key);
+  equal(api.scan("Bearer abc123").filter(f=>f.entityType === "BEARER_TOKEN"),[],"bare header value is not text context");
+
 }
 
 export async function verifyBearerTokenProviders(records, manager, tokenManager, context) {

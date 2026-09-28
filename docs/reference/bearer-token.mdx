@@ -8,7 +8,7 @@ description: "Detect explicit Authorization header credentials with precise toke
 `BEARER_TOKEN` is enabled by default for text and structured string scans. It recognizes explicit HTTP Authorization headers and quoted JSON header entries. Header names and the `Bearer` scheme are ASCII case-insensitive.
 
 ```python
-from datafog_core import scan_and_transform
+from datafog_core import scan_and_transform, scan_and_transform_structured
 
 text = 'Authorization: Bearer example-token'
 result = scan_and_transform(text, {
@@ -32,6 +32,14 @@ The token follows the alphabet in [RFC 6750 section 2.1](https://www.rfc-editor.
 
 Bare `Bearer TOKEN` prose, random token-shaped strings, `Proxy-Authorization`, and `X-Authorization` are excluded. Malformed values with invalid characters, interior padding, extra words, Unicode token characters, missing quotes, or JSON escapes are rejected as a whole; no token prefix is returned. JSON escape sequences are not decoded.
 
-Structured scans inspect each string value independently. A structured object with an `Authorization` key and a value of `Bearer TOKEN` does not supply header context to the detector: the string itself must contain a supported header representation. This preserves string-local offsets and avoids combining context across fields.
+Structured scans also recognize string values whose immediate field key is exactly `Authorization`, ignoring ASCII case: for example, `{"headers":{"Authorization":"Bearer TOKEN"}}`. The same header-value parser runs in Rust and returns token-only offsets local to the string, so redaction leaves `Bearer ` intact. This explicit field context does not extend to arrays under that key, prefixed keys such as `X-Authorization`, or sibling fields. Bare `scan("Bearer TOKEN")` remains unrecognized.
+
+```python
+result = scan_and_transform_structured(
+    {"headers": {"Authorization": "Bearer example-token"}},
+    {"transform": {"default": {"strategy": "redact"}, "entities": ["BEARER_TOKEN"]}}
+)
+assert result.data == {"headers": {"Authorization": "Bearer [BEARER_TOKEN]"}}
+```
 
 A token can also qualify as `JWT` or another credential entity. Scan results retain overlapping findings. Select `BEARER_TOKEN` in a transformation configuration to redact the complete token regardless of overlap. Supported masking, removal, allowlists, pseudonymization, and tokenization use the existing transformation rules.

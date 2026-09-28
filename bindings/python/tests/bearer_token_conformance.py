@@ -90,6 +90,15 @@ def verify():
                 (t.path, t.transformation) for t in structured.transformations
             ]
 
+    data = {"👋/~":{"aUtHoRiZaTiOn":"  bEaReR abc._~+/==\t"}, "Authorization":["Bearer hidden"], "X-Authorization":"Bearer hidden", "a":"Authorization:", "b":"Bearer hidden", "invalid":{"Authorization":"Bearer bad!value"}}
+    found = [f for f in api.scan_structured(data).findings if f.finding.entity_type == "BEARER_TOKEN"]
+    assert len(found) == 1
+    assert found[0].path == "/👋~1~0/aUtHoRiZaTiOn"
+    assert project(data["👋/~"]["aUtHoRiZaTiOn"], [found[0].finding]) == [dict(label="BEARER_TOKEN",text="abc._~+/==",start=9,end=19)]
+    expected = {**data,"👋/~":{"aUtHoRiZaTiOn":"  bEaReR [BEARER_TOKEN]\t"}}
+    assert api.scan_and_transform_structured(data,{"transform":{"default":{"strategy":"redact"},"entities":["BEARER_TOKEN"]}}).data == expected
+    assert not any(f.entity_type == "BEARER_TOKEN" for f in api.scan("Bearer abc123"))
+
 
 async def verify_providers(manager, token_manager, context):
     for row in RECORDS:

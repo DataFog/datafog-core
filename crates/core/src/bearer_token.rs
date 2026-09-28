@@ -4,7 +4,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 static HEADER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i-u:authorization)(?:"[ \t\r\n]*:[ \t\r\n]*"|[ \t]*:[ \t]*)(?i-u:bearer) +"#)
+    Regex::new(r#"(?i-u:authorization)(?:"[ \t\r\n]*:[ \t\r\n]*"|[ \t]*:[ \t]*)"#)
         .expect("static Authorization header regex")
 });
 
@@ -42,20 +42,46 @@ pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
         } else {
             remaining.split(['\r', '\n']).next().unwrap_or(remaining)
         };
-        let value = value.trim_end_matches([' ', '\t']);
-        let unpadded = value.trim_end_matches('=');
-        if unpadded.is_empty()
-            || !unpadded.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric()
-                    || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/')
-            })
-        {
-            continue;
+        if let Some((start, end)) = token_range(value) {
+            candidates.push(Candidate {
+                label: Label::BearerToken,
+                start_byte: header.end() + start,
+                end_byte: header.end() + end,
+            });
         }
+    }
+}
+
+/// Reuse the header grammar when the immediate structured field supplies its name.
+pub(super) fn detect_header_value(value: &str, candidates: &mut Vec<Candidate>) {
+    if let Some((start_byte, end_byte)) = token_range(value) {
         candidates.push(Candidate {
             label: Label::BearerToken,
-            start_byte: header.end(),
-            end_byte: header.end() + value.len(),
+            start_byte,
+            end_byte,
         });
     }
+}
+
+fn token_range(value: &str) -> Option<(usize, usize)> {
+    let trimmed = value.trim_start_matches([' ', '\t']);
+    if !trimmed.get(..6)?.eq_ignore_ascii_case("Bearer") {
+        return None;
+    }
+    let after_scheme = &trimmed[6..];
+    if !after_scheme.starts_with(' ') {
+        return None;
+    }
+    let token = after_scheme.trim_start_matches(' ');
+    let start = value.len() - token.len();
+    let token = token.trim_end_matches([' ', '\t']);
+    let unpadded = token.trim_end_matches('=');
+    if unpadded.is_empty()
+        || !unpadded.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/')
+        })
+    {
+        return None;
+    }
+    Some((start, start + token.len()))
 }

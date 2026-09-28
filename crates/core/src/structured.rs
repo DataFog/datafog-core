@@ -272,6 +272,14 @@ pub fn scan(
     };
     for leaf in leaves(data)? {
         let mut findings = scan_with_config(leaf.text, &config.scan);
+        if leaf
+            .key
+            .is_some_and(|key| key.eq_ignore_ascii_case("Authorization"))
+        {
+            let mut candidates = Vec::new();
+            crate::bearer_token::detect_header_value(leaf.text, &mut candidates);
+            findings.extend(crate::finalize(leaf.text, candidates));
+        }
         if let Some(mapping) = field_mapping(&leaf, config) {
             if !leaf.text.trim().is_empty() {
                 findings.push(Finding {

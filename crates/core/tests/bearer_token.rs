@@ -82,16 +82,32 @@ fn shared_bearer_token_conformance() {
 }
 
 #[test]
-fn header_context_is_not_combined_across_structured_fields() {
-    let result = structured::scan(
-        &json!({"Authorization":"Bearer abc123", "a":"Authorization:", "b":"Bearer abc123"}),
-        &structured::StructuredScanConfig::default(),
+fn structured_authorization_uses_only_the_immediate_field_key() {
+    let data = json!({"👋/~":{"aUtHoRiZaTiOn":"  bEaReR abc._~+/==\t"}, "Authorization":["Bearer hidden"], "X-Authorization":"Bearer hidden", "a":"Authorization:", "b":"Bearer hidden", "invalid":{"Authorization":"Bearer bad!value"}});
+    let config = structured::StructuredScanConfig::default();
+    let result = structured::scan(&data, &config).unwrap();
+    let found: Vec<_> = result
+        .findings
+        .iter()
+        .filter(|finding| finding.finding.entity_type == "BEARER_TOKEN")
+        .collect();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].path, "/👋~1~0/aUtHoRiZaTiOn");
+    assert_eq!(
+        project("  bEaReR abc._~+/==\t", &[found[0].finding.clone()]),
+        json!([{"label":"BEARER_TOKEN","text":"abc._~+/==","start":9,"end":19}])
+    );
+    let config = structured::parse_scan_and_transform_config(
+        &json!({"transform":{"default":{"strategy":"redact"},"entities":["BEARER_TOKEN"]}}),
     )
     .unwrap();
+    let result = structured::scan_and_transform(&data, &config).unwrap();
+    let mut expected = data.clone();
+    expected["👋/~"]["aUtHoRiZaTiOn"] = json!("  bEaReR [BEARER_TOKEN]\t");
+    assert_eq!(result.data, expected);
     assert!(
-        result
-            .findings
+        datafog_core::scan("Bearer abc123")
             .iter()
-            .all(|finding| finding.finding.entity_type != "BEARER_TOKEN")
+            .all(|finding| finding.entity_type != "BEARER_TOKEN")
     );
 }
