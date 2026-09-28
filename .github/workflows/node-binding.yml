@@ -9,6 +9,7 @@ on:
       - "bindings/node/**"
       - "fixtures/**"
       - "scripts/test-node-package.mjs"
+      - "scripts/german-conformance.mjs"
       - ".github/workflows/node-binding.yml"
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - "bindings/node/**"
       - "fixtures/**"
       - "scripts/test-node-package.mjs"
+      - "scripts/german-conformance.mjs"
       - ".github/workflows/node-binding.yml"
 
 jobs:

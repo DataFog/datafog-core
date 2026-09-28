@@ -1,4 +1,5 @@
 //! Core PII scanning API for DataFog.
+mod german;
 mod offsets;
 pub mod structured;
 use base64::Engine;
@@ -522,7 +523,7 @@ fn json_pointer_segment(segment: &str) -> String {
 }
 
 /// Scanner configuration. Current built-in detectors share the same execution
-/// path; locale is retained for detector-specific routing as coverage expands.
+/// path; German locale aliases activate the German format/context detectors.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ScanConfig {
     locale: Option<String>,
@@ -1878,6 +1879,13 @@ enum Label {
     IpAddress,
     Date,
     ZipCode,
+    DeIban,
+    DeVatId,
+    DeTaxId,
+    DeSocialSecurityNumber,
+    DePostalCode,
+    DePassportNumber,
+    DeResidencePermitNumber,
 }
 
 /// define a helper function for Label
@@ -1891,6 +1899,13 @@ impl Label {
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
+            Label::DeIban => "DE_IBAN",
+            Label::DeVatId => "DE_VAT_ID",
+            Label::DeTaxId => "DE_TAX_ID",
+            Label::DeSocialSecurityNumber => "DE_SOCIAL_SECURITY_NUMBER",
+            Label::DePostalCode => "DE_POSTAL_CODE",
+            Label::DePassportNumber => "DE_PASSPORT_NUMBER",
+            Label::DeResidencePermitNumber => "DE_RESIDENCE_PERMIT_NUMBER",
         }
     }
 
@@ -1903,6 +1918,13 @@ impl Label {
             Label::IpAddress => "datafog-core/ip-address",
             Label::Date => "datafog-core/date",
             Label::ZipCode => "datafog-core/zip-code",
+            Label::DeIban => "datafog-core/de-iban",
+            Label::DeVatId => "datafog-core/de-vat-id",
+            Label::DeTaxId => "datafog-core/de-tax-id",
+            Label::DeSocialSecurityNumber => "datafog-core/de-social-security-number",
+            Label::DePostalCode => "datafog-core/de-postal-code",
+            Label::DePassportNumber => "datafog-core/de-passport-number",
+            Label::DeResidencePermitNumber => "datafog-core/de-residence-permit-number",
         }
     }
 }
@@ -1920,7 +1942,7 @@ pub fn scan(text: &str) -> Vec<Finding> {
 }
 
 /// Scan text using explicit detector configuration.
-pub fn scan_with_config(text: &str, _config: &ScanConfig) -> Vec<Finding> {
+pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
@@ -1929,6 +1951,9 @@ pub fn scan_with_config(text: &str, _config: &ScanConfig) -> Vec<Finding> {
     detect_date(text, &mut candidates);
     detect_zip_code(text, &mut candidates);
     detect_ip_address(text, &mut candidates);
+    if german::enabled(config.locale()) {
+        german::detect(text, &mut candidates);
+    }
     finalize(text, candidates)
 }
 
@@ -3712,6 +3737,53 @@ mod tests {
         fn with_order(mut self, order: Arc<Mutex<Vec<&'static str>>>) -> Self {
             self.order = Some(order);
             self
+        }
+    }
+
+    #[test]
+    fn german_fixtures_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "german",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("german").unwrap();
+        for line in include_str!("../../../fixtures/german.jsonl").lines() {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            if row["sample"] != true {
+                continue;
+            }
+            let text = row["text"].as_str().unwrap();
+            let entities: Vec<_> = row["entities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| e["label"].clone())
+                .collect();
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"german"}),
+                json!({"strategy":"tokenize","token_ref":"german"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({"scan":row["config"],"transform":{"default":strategy,"entities":entities}})).unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), entities.len());
+                assert_ne!(result.text, text);
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
+            }
         }
     }
 

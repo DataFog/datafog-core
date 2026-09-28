@@ -9,6 +9,7 @@ on:
       - "bindings/wasm/**"
       - "fixtures/**"
       - "scripts/test-wasm-package.mjs"
+      - "scripts/german-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - "bindings/wasm/**"
       - "fixtures/**"
       - "scripts/test-wasm-package.mjs"
+      - "scripts/german-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
 
 jobs:

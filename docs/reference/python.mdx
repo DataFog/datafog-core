@@ -29,7 +29,7 @@ Configuration and provider helper types in the stub are prefixed with `_` and
 exist only for type checking. If you use them in annotations, import them inside
 `if TYPE_CHECKING:` and use postponed annotations (`from __future__ import
 annotations`); they are not runtime exports. Runtime validation still enforces
-value constraints such as supported locales, nonnegative ranges, and valid keys.
+value constraints such as nonempty locale strings, nonnegative ranges, and valid keys.
 
 ## Synchronous functions
 
@@ -116,3 +116,6 @@ for provider-backed work.
 Paths are JSON Pointers. All ranges, including JavaScript UTF-16 ranges,
 address the decoded string at that path. See [person-field discovery](/guides/person-discovery)
 for aliases, policy configuration, input limits, and examples.
+
+German locale routing and the seven additional entity labels are documented in
+the [German entity reference](/reference/german-entities) (unreleased).

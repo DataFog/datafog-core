@@ -69,6 +69,7 @@
         "group": "SDK reference",
         "pages": [
           "reference/rust",
+          "reference/german-entities",
           "reference/python",
           "reference/node",
           "reference/browser-wasm",

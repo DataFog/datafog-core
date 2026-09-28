@@ -204,3 +204,34 @@ not the scan config.
 Continue with the [Python reference](/reference/python), then review
 [findings and ranges](/concepts/findings-and-ranges) and
 [configuration](/guides/configuration).
+
+## German detection migration (unreleased)
+
+The seven German labels are implemented in Core, with shared Rust, installed
+Python/Node and browser/WASM conformance fixtures. This is format/context
+compatibility, not exact regex parity with Python 4.8.1. The comparison baseline
+is the published 4.8.1 contract and its `tests/test_de_pii_regex.py`; those legacy
+fixtures remain unchanged. `fixtures/german.jsonl` records the new contract.
+
+| Behavior | Python 4.8.1 comparison | Core policy |
+| --- | --- | --- |
+| Activation | German locale or explicit German entity selection | Singular `locale`; transformation selection alone does not activate a detector |
+| IBAN validation | Format detection, no checksum requirement | Same; checksum-invalid candidates are detected |
+| Whitespace | Broad regex `\s` acceptance | Only space, tab, NBSP, narrow NBSP at prescribed positions; newline and other Unicode whitespace rejected |
+| Digits | Unicode regex `\d` | ASCII `[0-9]` only |
+| Context | Legacy context-substring matching | Immediate context + horizontal gap + value; ASCII boundary on context and value; no intervening prose/newline |
+| Grouping | Legacy regex forms | Independent optional single separators at documented boundaries; no arbitrary or repeated value separators |
+| Postal spans | Prefix included | Prefix included; `PLZ: 10115` explicitly rejected |
+| Passport/residence | One-letter/eight-digit and AT/seven-digit heuristics | Same limited heuristics, not exhaustive official document coverage |
+| Generic overlaps | Adapter selection behavior is legacy-specific | Scans retain both candidates; transformations use existing Core overlap rules |
+
+All matching preserves source casing and separators. Allowlist entries must use
+that source representation. Required context stays in the output, except postal
+prefixes, which are part of the finding and are replaced too.
+
+The Python adapter may translate explicit German entity requests into locale
+`de` and then filter results, but must separately test legacy overlap and
+selection semantics. Core adds no plural `locales`, engine switch or scan-time
+entity selector. General German 4.9 integration requires a subsequently
+published compatible Core wheel and an adapter extra-pin update; source-only
+work does not complete that release step.
