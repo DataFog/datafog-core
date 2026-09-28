@@ -33,6 +33,7 @@ import path from "node:path";
 import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
+import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import * as germanApi from "@datafog/node";
@@ -43,6 +44,8 @@ const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"
 const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const us_routing_numberRecords = readFileSync(path.join(fixturesDirectory,"us-routing-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
+const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+verifyNpi(germanApi,npiRecords);
 verifyGerman(germanApi,germanRecords);
 verifyJwt(germanApi,jwtRecords);
 const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
@@ -411,6 +414,7 @@ assert.equal(tokenized.transformations[0].tokenRef, "customers/default");
 assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 
 await verifyUsRoutingNumberProviders(us_routing_numberRecords, manager, tokenManager, tokenContext);
+await verifyNpiProviders(npiRecords, manager, tokenManager, tokenContext);
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
 await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
 await verifyPrivateKeyProviders(privateKeyRecords, manager, tokenManager, tokenContext);
@@ -618,6 +622,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   writeConsumerTest();
 
   run(

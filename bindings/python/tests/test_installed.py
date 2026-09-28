@@ -10,6 +10,7 @@ import jwt_conformance
 import private_key_conformance
 import uuid_conformance
 import us_routing_number_conformance
+import npi_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -125,6 +126,7 @@ def main() -> None:
     private_key_conformance.verify()
     uuid_conformance.verify()
     us_routing_number_conformance.verify()
+    npi_conformance.verify()
     verify_structured()
     verify_fixture("development.jsonl")
     verify_fixture("final.jsonl")
@@ -369,6 +371,7 @@ def main() -> None:
             return results
 
     asyncio.run(us_routing_number_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
+    asyncio.run(npi_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(german_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(jwt_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(private_key_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
