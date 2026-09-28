@@ -4,6 +4,7 @@ mod jwt;
 mod offsets;
 mod private_key;
 pub mod structured;
+mod us_routing_number;
 mod uuid;
 use base64::Engine;
 use hmac::{Hmac, Mac};
@@ -1910,6 +1911,7 @@ enum Label {
     ZipCode,
     Jwt,
     PrivateKey,
+    UsRoutingNumber,
     DeIban,
     DeVatId,
     DeTaxId,
@@ -1934,6 +1936,7 @@ impl Label {
             Label::Jwt => "JWT",
             Label::PrivateKey => "PRIVATE_KEY",
             Label::Uuid => "UUID",
+            Label::UsRoutingNumber => "US_ROUTING_NUMBER",
             Label::DeIban => "DE_IBAN",
             Label::DeVatId => "DE_VAT_ID",
             Label::DeTaxId => "DE_TAX_ID",
@@ -1956,6 +1959,7 @@ impl Label {
             Label::Jwt => "datafog-core/jwt",
             Label::PrivateKey => "datafog-core/private-key",
             Label::Uuid => "datafog-core/uuid",
+            Label::UsRoutingNumber => "datafog-core/us-routing-number",
             Label::DeIban => "datafog-core/de-iban",
             Label::DeVatId => "datafog-core/de-vat-id",
             Label::DeTaxId => "datafog-core/de-tax-id",
@@ -1983,6 +1987,7 @@ pub fn scan(text: &str) -> Vec<Finding> {
 pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
     jwt::detect(text, &mut candidates);
+    us_routing_number::detect(text, &mut candidates);
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);
@@ -3905,6 +3910,49 @@ mod tests {
                         .text,
                     text
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn us_routing_number_fixtures_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "german",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("german").unwrap();
+        for line in include_str!("../../../fixtures/us-routing-number.jsonl").lines() {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            if row["sample"] != true {
+                continue;
+            }
+            let text = row["text"].as_str().unwrap();
+            let expected_count = row["entities"].as_array().unwrap().len();
+            let entities = vec!["US_ROUTING_NUMBER"];
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"german"}),
+                json!({"strategy":"tokenize","token_ref":"german"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({"scan":row["config"],"transform":{"default":strategy,"entities":entities}})).unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), expected_count);
+                assert_ne!(result.text, text);
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
             }
         }
     }
