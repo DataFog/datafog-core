@@ -11,8 +11,8 @@ fn capability_contract_is_sorted_owned_and_scope_explicit() {
     let second = capabilities();
     let value = serde_json::to_value(&second).unwrap();
     assert_eq!(value["contract_version"], 1);
-    assert_eq!(second.supported_entities.len(), 20);
-    assert_eq!(second.default_entities.len(), 11);
+    assert_eq!(second.supported_entities.len(), 21);
+    assert_eq!(second.default_entities.len(), 12);
     assert!(
         second
             .supported_entities
@@ -96,6 +96,7 @@ fn every_advertised_text_entity_has_an_executable_activation_recipe() {
         include_str!("../../../fixtures/final.jsonl"),
         include_str!("../../../fixtures/german.jsonl"),
         include_str!("../../../fixtures/jwt.jsonl"),
+        include_str!("../../../fixtures/bearer-token.jsonl"),
         include_str!("../../../fixtures/private-key.jsonl"),
         include_str!("../../../fixtures/uuid.jsonl"),
         include_str!("../../../fixtures/us-routing-number.jsonl"),

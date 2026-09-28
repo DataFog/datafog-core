@@ -1,4 +1,5 @@
 //! Core PII scanning API for DataFog.
+mod bearer_token;
 mod capabilities;
 pub use capabilities::{
     ActivationScanConfig, Capabilities, EntityActivation, EntityCapabilities, LocaleCapabilities,
@@ -1922,6 +1923,7 @@ enum Label {
     IpAddress,
     Date,
     ZipCode,
+    BearerToken,
     Jwt,
     PrivateKey,
     UsRoutingNumber,
@@ -1947,6 +1949,7 @@ impl Label {
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
+            Label::BearerToken => "BEARER_TOKEN",
             Label::Jwt => "JWT",
             Label::PrivateKey => "PRIVATE_KEY",
             Label::Uuid => "UUID",
@@ -1971,6 +1974,7 @@ impl Label {
             Label::IpAddress => "datafog-core/ip-address",
             Label::Date => "datafog-core/date",
             Label::ZipCode => "datafog-core/zip-code",
+            Label::BearerToken => "datafog-core/bearer-token",
             Label::Jwt => "datafog-core/jwt",
             Label::PrivateKey => "datafog-core/private-key",
             Label::Uuid => "datafog-core/uuid",

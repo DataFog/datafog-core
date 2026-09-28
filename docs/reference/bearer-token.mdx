@@ -1,0 +1,45 @@
+---
+title: "Bearer tokens"
+description: "Detect explicit Authorization header credentials with precise token spans."
+---
+
+<Note>Added in the Core 0.4.1 candidate. Published 0.4.0 packages do not include this detector.</Note>
+
+`BEARER_TOKEN` is enabled by default for text and structured string scans. It recognizes explicit HTTP Authorization headers and quoted JSON header entries. Header names and the `Bearer` scheme are ASCII case-insensitive.
+
+```python
+from datafog_core import scan_and_transform, scan_and_transform_structured
+
+text = 'Authorization: Bearer example-token'
+result = scan_and_transform(text, {
+    "transform": {"default": {"strategy": "redact"}, "entities": ["BEARER_TOKEN"]}
+})
+assert result.text == 'Authorization: Bearer [BEARER_TOKEN]'
+```
+
+The finding covers only the token, excluding the header name, scheme, whitespace, and quotes. Byte, code point, and JavaScript UTF-16 offsets use the existing finding contract. Provenance is `datafog-core/bearer-token`; confidence is omitted. Node.js and browser WASM use the same configuration with `scanAndTransform`; Rust uses `scan_and_transform` with parsed configuration.
+
+## Accepted forms
+
+- A raw `Authorization: Bearer TOKEN` line, optionally indented with spaces or tabs. The value must end at a line boundary or end of input, with optional trailing spaces or tabs.
+- A quoted JSON entry such as `{"Authorization": "Bearer TOKEN"}`. A standalone `"Authorization": "Bearer TOKEN"` fragment is also recognized. The key must begin an object or follow a comma, allowing JSON whitespace.
+
+One or more ASCII spaces must separate `Bearer` from its token. Tabs in that position are rejected. Spaces and tabs around the colon are accepted for copied header representations.
+
+The token follows the alphabet in [RFC 6750 section 2.1](https://www.rfc-editor.org/rfc/rfc6750#section-2.1): ASCII letters, digits, `-`, `.`, `_`, `~`, `+`, and `/`, optionally followed by terminal `=` characters. At least one non-padding character is required. There is no arbitrary minimum length, Base64 decoding, signature verification, network request, or credential-validity check. A period belongs to the token and is retained.
+
+## Boundaries and selection
+
+Bare `Bearer TOKEN` prose, random token-shaped strings, `Proxy-Authorization`, and `X-Authorization` are excluded. Malformed values with invalid characters, interior padding, extra words, Unicode token characters, missing quotes, or JSON escapes are rejected as a whole; no token prefix is returned. JSON escape sequences are not decoded.
+
+Structured scans also recognize string values whose immediate field key is exactly `Authorization`, ignoring ASCII case: for example, `{"headers":{"Authorization":"Bearer TOKEN"}}`. The same header-value parser runs in Rust and returns token-only offsets local to the string, so redaction leaves `Bearer ` intact. This explicit field context does not extend to arrays under that key, prefixed keys such as `X-Authorization`, or sibling fields. Bare `scan("Bearer TOKEN")` remains unrecognized.
+
+```python
+result = scan_and_transform_structured(
+    {"headers": {"Authorization": "Bearer example-token"}},
+    {"transform": {"default": {"strategy": "redact"}, "entities": ["BEARER_TOKEN"]}}
+)
+assert result.data == {"headers": {"Authorization": "Bearer [BEARER_TOKEN]"}}
+```
+
+A token can also qualify as `JWT` or another credential entity. Scan results retain overlapping findings. Select `BEARER_TOKEN` in a transformation configuration to redact the complete token regardless of overlap. Supported masking, removal, allowlists, pseudonymization, and tokenization use the existing transformation rules.

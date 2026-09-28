@@ -36,18 +36,21 @@ import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-rout
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
+import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import * as germanApi from "@datafog/node";
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+const bearerRecords = readFileSync(path.join(fixturesDirectory,"bearer-token.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const us_routing_numberRecords = readFileSync(path.join(fixturesDirectory,"us-routing-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
 verifyGerman(germanApi,germanRecords);
 verifyJwt(germanApi,jwtRecords);
+verifyBearerToken(germanApi,bearerRecords);
 const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyPrivateKey(germanApi,privateKeyRecords);
 const uuidRecords = readFileSync(path.join(fixturesDirectory,"uuid.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
@@ -417,6 +420,7 @@ await verifyUsRoutingNumberProviders(us_routing_numberRecords, manager, tokenMan
 await verifyNpiProviders(npiRecords, manager, tokenManager, tokenContext);
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
 await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
+await verifyBearerTokenProviders(bearerRecords, manager, tokenManager, tokenContext);
 await verifyPrivateKeyProviders(privateKeyRecords, manager, tokenManager, tokenContext);
 await verifyUuidProviders(manager,tokenManager,tokenContext);
 
@@ -619,6 +623,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));

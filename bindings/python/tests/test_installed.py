@@ -8,6 +8,7 @@ from pathlib import Path
 import capabilities_conformance
 import german_conformance
 import jwt_conformance
+import bearer_token_conformance
 import private_key_conformance
 import uuid_conformance
 import us_routing_number_conformance
@@ -125,6 +126,7 @@ def main() -> None:
     capabilities_conformance.verify()
     german_conformance.verify()
     jwt_conformance.verify()
+    bearer_token_conformance.verify()
     private_key_conformance.verify()
     uuid_conformance.verify()
     us_routing_number_conformance.verify()
@@ -376,6 +378,7 @@ def main() -> None:
     asyncio.run(npi_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(german_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(jwt_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
+    asyncio.run(bearer_token_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(private_key_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
 
     asyncio.run(uuid_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"uuid"}))

@@ -100,6 +100,7 @@ impl Detector {
 static REGISTRY: LazyLock<Vec<Detector>> = LazyLock::new(|| {
     use Activation::{Default, Uuid};
     vec![
+        Detector::single(Label::BearerToken, crate::bearer_token::detect, Default),
         Detector::single(Label::Jwt, crate::jwt::detect, Default),
         Detector::single(
             Label::UsRoutingNumber,
