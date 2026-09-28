@@ -138,3 +138,11 @@ strategies, overrides and exact/full-match regex allowlists; exact allowlists
 compare original casing and separators. Provider-backed strategies remain
 unavailable in WASM. Scans retain generic overlaps, while transformations use
 existing containment/length and lexical tie-breaking rules.
+
+## UUID detection (unreleased)
+
+Use `{"detect_uuid":true}` in a text or structured scan configuration to enable
+[canonical UUID detection](/reference/uuid). The default is `false`; locale does
+not change it. The option accepts only booleans, including an explicit `false`.
+For scan-and-transform, place it under `scan` and use `transform.entities` to
+select UUID replacements. Selection alone never enables scanning.

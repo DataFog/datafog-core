@@ -4,6 +4,7 @@ mod jwt;
 mod offsets;
 mod private_key;
 pub mod structured;
+mod uuid;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 pub use offsets::TextIndex;
@@ -525,10 +526,11 @@ fn json_pointer_segment(segment: &str) -> String {
 }
 
 /// Scanner configuration. Current built-in detectors share the same execution
-/// path; German locale aliases activate the German format/context detectors.
+/// path; German locale aliases activate German detectors, and UUIDs are opt-in.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ScanConfig {
     locale: Option<String>,
+    detect_uuid: bool,
 }
 
 impl ScanConfig {
@@ -549,6 +551,18 @@ impl ScanConfig {
         }
         self.locale = Some(locale);
         Ok(self)
+    }
+
+    /// Enable detection of canonical UUID identifiers (disabled by default).
+    /// UUID syntax alone does not establish that a value is sensitive.
+    pub fn with_uuid_detection(mut self, enabled: bool) -> Self {
+        self.detect_uuid = enabled;
+        self
+    }
+
+    /// Whether canonical UUID detection is enabled.
+    pub fn uuid_detection_enabled(&self) -> bool {
+        self.detect_uuid
     }
 
     /// Configured locale, when explicitly supplied.
@@ -724,13 +738,26 @@ pub fn parse_scan_and_transform_config(
 /// Parse canonical scanner configuration.
 pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, PrivacyError> {
     let object = require_object(value, "", "scan configuration must be an object")?;
-    reject_unknown_fields(object, &["locale"], "")?;
+    reject_unknown_fields(object, &["locale", "detect_uuid"], "")?;
     let mut config = ScanConfig::new();
+    if let Some(enabled) = object.get("detect_uuid") {
+        config = config.with_uuid_detection(parse_uuid_detection(enabled)?);
+    }
     if let Some(locale) = object.get("locale") {
         let locale = require_string(locale, "/locale", "scan locale must be a string")?;
         config = config.with_locale(locale)?;
     }
     Ok(config)
+}
+
+fn parse_uuid_detection(value: &serde_json::Value) -> Result<bool, PrivacyError> {
+    value.as_bool().ok_or_else(|| {
+        PrivacyError::invalid_configuration(
+            PrivacyErrorReason::InvalidType,
+            "/detect_uuid",
+            "detect_uuid must be a boolean",
+        )
+    })
 }
 
 /// Parse the canonical request-level authorization context.
@@ -1890,6 +1917,7 @@ enum Label {
     DePostalCode,
     DePassportNumber,
     DeResidencePermitNumber,
+    Uuid,
 }
 
 /// define a helper function for Label
@@ -1905,6 +1933,7 @@ impl Label {
             Label::ZipCode => "ZIP_CODE",
             Label::Jwt => "JWT",
             Label::PrivateKey => "PRIVATE_KEY",
+            Label::Uuid => "UUID",
             Label::DeIban => "DE_IBAN",
             Label::DeVatId => "DE_VAT_ID",
             Label::DeTaxId => "DE_TAX_ID",
@@ -1926,6 +1955,7 @@ impl Label {
             Label::ZipCode => "datafog-core/zip-code",
             Label::Jwt => "datafog-core/jwt",
             Label::PrivateKey => "datafog-core/private-key",
+            Label::Uuid => "datafog-core/uuid",
             Label::DeIban => "datafog-core/de-iban",
             Label::DeVatId => "datafog-core/de-vat-id",
             Label::DeTaxId => "datafog-core/de-tax-id",
@@ -1963,6 +1993,9 @@ pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     private_key::detect(text, &mut candidates);
     if german::enabled(config.locale()) {
         german::detect(text, &mut candidates);
+    }
+    if config.uuid_detection_enabled() {
+        uuid::detect(text, &mut candidates);
     }
     finalize(text, candidates)
 }
@@ -3840,6 +3873,38 @@ mod tests {
                         text
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn uuid_provider_round_trip() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "uuid",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("uuid").unwrap();
+        let text = "👋 550e8400-e29b-41d4-a716-446655440000";
+        for strategy in [
+            json!({"strategy":"pseudonymize","key_ref":"uuid"}),
+            json!({"strategy":"tokenize","token_ref":"uuid"}),
+        ] {
+            let config = parse_scan_and_transform_config(&json!({"scan":{"detect_uuid":true},"transform":{"default":strategy,"entities":["UUID"]}})).unwrap();
+            let result =
+                block_on(manager.scan_and_transform_with_context(text, &config, Some(&context)))
+                    .unwrap();
+            assert_eq!(result.transformations.len(), 1);
+            assert_ne!(result.text, text);
+            if strategy["strategy"] == "tokenize" {
+                assert_eq!(
+                    block_on(manager.restore(&result.text, &context))
+                        .unwrap()
+                        .text,
+                    text
+                );
             }
         }
     }

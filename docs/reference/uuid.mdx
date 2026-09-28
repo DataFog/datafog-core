@@ -1,0 +1,60 @@
+---
+title: "UUID identifiers"
+description: "Opt-in recognition of canonical UUIDs with exact source ranges."
+icon: "fingerprint"
+---
+
+<Note>
+  Unreleased: this feature requires a build containing UUID detection. Published
+  0.3.1 packages do not include it.
+</Note>
+
+UUIDs often identify records, requests or public resources. A UUID-shaped value
+is not inherently personal or secret, so UUID scanning is disabled by default.
+Enable it explicitly when those identifiers belong in your privacy policy.
+
+```python
+from datafog_core import scan_and_transform
+
+result = scan_and_transform("Customer 550e8400-e29b-41d4-a716-446655440000", {
+    "scan": {"detect_uuid": True},
+    "transform": {"default": {"strategy": "redact"}, "entities": ["UUID"]},
+})
+assert result.text == "Customer [UUID]"
+```
+
+Node and browser/WASM use the same JSON configuration with `detect_uuid: true`
+and `scanAndTransform`. For Rust, use
+`ScanConfig::new().with_uuid_detection(true)`. The option is independent of
+locale, applies equally to text and structured scans, and must be a boolean.
+Selecting `UUID` for transformation does not activate detection. Explicit UUID
+findings can be transformed without any scan configuration.
+
+## Accepted syntax
+
+The detector recognizes the canonical `8-4-4-4-12` ASCII hex-and-hyphen form,
+with version nibble 1–8 and IETF variant nibble `8`, `9`, `a` or `b`. Uppercase,
+lowercase and mixed-case hex are accepted and preserved. The format and bit
+positions follow [RFC 9562 sections 4.1–4.2](https://www.rfc-editor.org/rfc/rfc9562.html#section-4).
+
+The policy excludes compact 32-character forms, other variants, unknown versions,
+and the Nil/Max sentinel UUIDs. Braces and a `urn:uuid:` prefix may surround a
+match but are not part of it. An immediately adjacent ASCII letter, digit,
+underscore or hyphen prevents a match, so longer identifiers cannot yield a
+UUID prefix. Unicode text and punctuation can delimit a match.
+
+Recognition does not establish uniqueness, ownership, a valid timestamp or
+sensitivity. No UUID generation, registry lookup or network access occurs.
+
+## Findings and transformations
+
+The label is `UUID`, detector name `datafog-core/uuid`, and version is the current
+Core crate version. Confidence is absent. Source casing and exact byte/code-point
+ranges are preserved; JavaScript bindings also return slice-compatible UTF-16
+ranges. Structured findings use string-local ranges and JSON Pointer paths.
+
+All existing transformation strategies, entity selection, overrides, and exact
+or full-match regex allowlists work. Exact allowlists compare original casing.
+Redaction uses `[UUID]`; masks cover all 36 source characters, including hyphens.
+Provider-backed operations remain unsupported in browser/WASM. Generic scan
+findings are retained; transformation overlap resolution is unchanged.

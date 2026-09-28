@@ -55,7 +55,8 @@
           "concepts/privacy-transformations",
           "reference/german-entities",
           "reference/jwt",
-          "reference/private-keys"
+          "reference/private-keys",
+          "reference/uuid"
         ]
       },
       {
