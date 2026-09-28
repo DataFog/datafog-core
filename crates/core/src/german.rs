@@ -3,50 +3,47 @@ use crate::{Candidate, Label};
 use regex::Regex;
 use std::sync::LazyLock;
 
-pub(super) fn enabled(locale: Option<&str>) -> bool {
-    locale.is_some_and(|locale| {
-        let locale = locale.trim();
-        ["de", "de-DE", "de_DE"]
-            .iter()
-            .any(|alias| locale.eq_ignore_ascii_case(alias))
-    })
+pub(super) fn labels() -> Vec<Label> {
+    DEFINITIONS.iter().map(|(label, _, _)| *label).collect()
 }
+
+const DEFINITIONS: &[(Label, &str, &str)] = &[
+    (Label::DeIban, "", r"DE[0-9]{2}(?:H?[0-9]{4}){4}H?[0-9]{2}"),
+    (Label::DeVatId, "", r"DE(?:H|-)?[0-9]{9}"),
+    (
+        Label::DeTaxId,
+        r"(?:Steuer(?:H|-)?ID|Steueridentifikationsnummer|Identifikationsnummer|IdNr\.?|Tax(?:H|-)?ID)",
+        r"[0-9]{2}H?[0-9]{3}H?[0-9]{3}H?[0-9]{3}",
+    ),
+    (
+        Label::DeSocialSecurityNumber,
+        r"(?:Rentenversicherungsnummer|Sozialversicherungsnummer|RVNR|SVNR)",
+        r"[0-9]{2}H?[0-9]{6}H?[A-Za-z]H?[0-9]{3}",
+    ),
+    (
+        Label::DePostalCode,
+        "",
+        r"(?:PLZ(?:H|:|-)?|DE(?:H|-)|D(?:H|-))[0-9]{5}",
+    ),
+    (
+        Label::DePassportNumber,
+        r"(?:Passnummer|Reisepass(?:nummer)?|Passport(?:H+No\.?|H+Number)?)",
+        r"[A-Za-z][0-9]{8}",
+    ),
+    (
+        Label::DeResidencePermitNumber,
+        r"(?:Aufenthaltstitel|Aufenthaltserlaubnis|ResidenceH+Permit|eAT)",
+        r"AT[0-9]{7}",
+    ),
+];
 
 // ASCII case folding is intentional. H excludes newlines and other Unicode whitespace.
 static DETECTORS: LazyLock<Vec<(Label, Regex)>> = LazyLock::new(|| {
     let horizontal = r"(?u:[ \t\x{00a0}\x{202f}])";
     let gap = format!("{horizontal}*[:#-]?{horizontal}*");
-    let definitions = [
-        (Label::DeIban, "", r"DE[0-9]{2}(?:H?[0-9]{4}){4}H?[0-9]{2}"),
-        (Label::DeVatId, "", r"DE(?:H|-)?[0-9]{9}"),
-        (
-            Label::DeTaxId,
-            r"(?:Steuer(?:H|-)?ID|Steueridentifikationsnummer|Identifikationsnummer|IdNr\.?|Tax(?:H|-)?ID)",
-            r"[0-9]{2}H?[0-9]{3}H?[0-9]{3}H?[0-9]{3}",
-        ),
-        (
-            Label::DeSocialSecurityNumber,
-            r"(?:Rentenversicherungsnummer|Sozialversicherungsnummer|RVNR|SVNR)",
-            r"[0-9]{2}H?[0-9]{6}H?[A-Za-z]H?[0-9]{3}",
-        ),
-        (
-            Label::DePostalCode,
-            "",
-            r"(?:PLZ(?:H|:|-)?|DE(?:H|-)|D(?:H|-))[0-9]{5}",
-        ),
-        (
-            Label::DePassportNumber,
-            r"(?:Passnummer|Reisepass(?:nummer)?|Passport(?:H+No\.?|H+Number)?)",
-            r"[A-Za-z][0-9]{8}",
-        ),
-        (
-            Label::DeResidencePermitNumber,
-            r"(?:Aufenthaltstitel|Aufenthaltserlaubnis|ResidenceH+Permit|eAT)",
-            r"AT[0-9]{7}",
-        ),
-    ];
-    definitions
-        .into_iter()
+    DEFINITIONS
+        .iter()
+        .copied()
         .map(|(label, context, value)| {
             let context = context.replace('H', horizontal);
             let value = value.replace('H', horizontal);

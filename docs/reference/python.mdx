@@ -29,7 +29,7 @@ Configuration and provider helper types in the stub are prefixed with `_` and
 exist only for type checking. If you use them in annotations, import them inside
 `if TYPE_CHECKING:` and use postponed annotations (`from __future__ import
 annotations`); they are not runtime exports. Runtime validation still enforces
-value constraints such as nonempty locale strings, nonnegative ranges, and valid keys.
+value constraints such as recognized locale aliases, nonnegative ranges, and valid keys.
 
 ## Synchronous functions
 
@@ -119,3 +119,7 @@ for aliases, policy configuration, input limits, and examples.
 
 German locale routing and the seven additional entity labels are documented in
 the [German entity reference](/reference/german-entities) (unreleased).
+
+## Capability discovery (0.4.0 candidate)
+
+Use `capabilities()` to inspect the runtime registry, including supported entities, default detectors, locale aliases, and activation settings. See the [capabilities contract and generated inventory](/reference/capabilities) and [0.4.x compatibility policy](/reference/compatibility).

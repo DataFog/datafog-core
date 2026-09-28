@@ -1,0 +1,48 @@
+---
+title: "Compatibility policy"
+description: "The public API and capability contract for the 0.4 release line."
+---
+
+This policy applies to the **0.4.x** release line across Rust, Python, Node.js,
+and browser WASM. Version 0.4.0 is currently a release candidate in source;
+preparing a version bump does not publish a package.
+
+## Stable within 0.4.x
+
+Existing public function signatures, required finding fields, documented error
+and exception interfaces, and offset semantics remain compatible throughout
+0.4.x. Byte ranges use UTF-8 bytes, code-point ranges use Unicode code points,
+and JavaScript UTF-16 ranges use UTF-16 code units. Every range is zero-based
+and end-exclusive. Structured finding ranges remain local to the string leaf
+identified by the JSON Pointer path.
+
+Breaking changes to a binding's existing public interface require **0.5.0**.
+This includes removing or renaming required finding fields, changing existing
+argument requirements, or changing the documented error or range contract.
+
+## Additions and detector changes
+
+New entity labels, supported locales, API entry points, and optional metadata
+fields are compatible additions. Consumers should tolerate unknown optional
+metadata and use the Rust/Python capability API when choosing detectors. Do not infer
+capabilities solely from a package version or maintain a private copy of the
+supported-label inventory.
+
+Detection results are data-dependent. Detector fixes and improvements can change
+which findings are returned, including correcting false positives or missed
+matches. A compatible API does not guarantee identical findings for every input
+across patch releases. Pin package versions and maintain representative fixtures
+when exact detection output is part of an application's acceptance criteria.
+
+## Capability contract version
+
+The capability response carries `contract_version: 1`. This version identifies
+the meaning and structure of the capability contract, independently of the
+package version. Compatible additions such as an additional entity, locale, or
+optional metadata field retain contract version 1. Changes to existing capability
+field meanings or incompatible structure require a contract-version increment.
+
+See the [capabilities reference](/reference/capabilities) for the generated
+inventory and activation metadata. The [0.4.0 candidate notes](/releases/0-4-0)
+identify the intentional locale-validation change introduced at the release
+boundary.

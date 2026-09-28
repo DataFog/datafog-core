@@ -115,9 +115,11 @@ selection, key reference, or token reference are invalid.
 `scan(text, {"locale":"de"})` activates all seven
 [German entity types](/reference/german-entities). `de`, `de-DE`, and `de_DE`
 are recognized after trimming and ASCII case-insensitive comparison. The stored
-locale is preserved. Other nonempty locale strings remain accepted and run the
-base detectors; omitted locale does not activate German detectors. Empty,
-whitespace-only, non-string, and unknown configuration fields remain errors.
+locale is preserved. Recognized `en-US` and `fr` aliases run the base detectors;
+omitted locale does not activate German detectors. In the 0.4.0 candidate,
+unsupported explicit locales are configuration errors, as are empty,
+whitespace-only, non-string values and unknown configuration fields. Query the
+[runtime capabilities](/reference/capabilities) for the recognized aliases.
 Structured scans use the same locale routing within each string value.
 
 For German-only transformations, specify both routing and selection:

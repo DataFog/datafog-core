@@ -20,14 +20,18 @@ from datafog_core import (
     Restoration, RestoreResult, FieldMapping, StructuredFinding,
     StructuredScanResult, StructuredTransformation, StructuredTransformResult,
     StructuredRestoration, StructuredRestoreResult, PrivacyManager,
-    scan, transform, scan_and_transform, discover_fields, scan_structured,
+    capabilities, scan, transform, scan_and_transform, discover_fields, scan_structured,
     transform_structured, scan_and_transform_structured,
 )
 if TYPE_CHECKING:
     from datafog_core import (
         _TransformationConfig, _JsonDocument, _TokenizeItem, _TokenizeResult,
-        _RestoreItem, _RestoreResult, _ResolvedKey,
+        _RestoreItem, _RestoreResult, _ResolvedKey, _Capabilities,
     )
+
+assert_type(capabilities(), _Capabilities)
+assert_type(capabilities()["supported_entities"], list[str])
+assert_type(capabilities()["locales"]["de"]["enabled_entities"], list[str])
 
 config: _TransformationConfig = {
     "default": {"strategy": "mask", "character": "*", "reveal": {"direction": "last", "count": 4}},
@@ -120,7 +124,8 @@ for error in (DataFogConfigurationError(), DataFogFindingError(), DataFogInterna
 
 # Each line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
-from datafog_core import scan, transform, scan_structured, PrivacyManager, TransformResult
+from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
+capabilities(1)  # error
 scan(123)  # error
 scan("text", {"locale": 123})  # error
 scan("text", {"detect_uuid": "true"})  # error

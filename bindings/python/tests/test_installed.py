@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import asyncio
 from pathlib import Path
+import capabilities_conformance
 import german_conformance
 import jwt_conformance
 import private_key_conformance
@@ -121,6 +122,7 @@ def verify_structured() -> None:
 
 
 def main() -> None:
+    capabilities_conformance.verify()
     german_conformance.verify()
     jwt_conformance.verify()
     private_key_conformance.verify()

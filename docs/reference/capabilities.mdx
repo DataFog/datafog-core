@@ -1,0 +1,105 @@
+---
+title: "Runtime capabilities"
+description: "Discover supported entities, detector defaults, locale aliases, and activation settings."
+---
+
+<Note>The capability API targets the unreleased 0.4.0 candidate. Published 0.3.1 packages do not provide this API.</Note>
+
+Call `capabilities()` to discover what the installed runtime supports. The Rust
+registry supplies the response for Rust and Python; applications do not need
+hardcoded label lists or version-based detector guesses. Supported entities
+include detectors that require explicit configuration and structured-only
+features, so support does not mean enabled by default.
+
+```python
+from datafog_core import capabilities, scan
+
+info = capabilities()
+assert info["contract_version"] == 1
+uuid_config = info["entities"]["UUID"]["activation"]["scan_config"]
+findings = scan("550e8400-e29b-41d4-a716-446655440000", uuid_config)
+assert any(f.entity_type == "UUID" for f in findings)
+```
+
+```rust
+let info = datafog_core::capabilities();
+assert_eq!(info.contract_version, 1);
+assert!(info.supported_entities.iter().any(|label| label == "UUID"));
+```
+
+Node.js and browser WASM share the core detector behavior but do not export a
+capability-discovery API in this candidate. Their existing scan APIs remain
+available.
+
+## Response contract
+
+Rust serialization and Python expose the same field names. Rust exposes typed
+metadata and Python returns a fresh mapping.
+
+| Field | Meaning |
+| --- | --- |
+| `contract_version` | Capability schema and semantic version, currently `1`; independent of the package version. |
+| `supported_entities` | All entity labels supported by this runtime, including optional and structured-only features. |
+| `default_entities` | Entity labels enabled by an ordinary text scan with omitted configuration. |
+| `locales` | Recognized locale aliases mapped to objects containing additional `enabled_entities` beyond the defaults. |
+| `entities` | Metadata indexed by entity label: supported `scopes` and an `activation` object. |
+
+`activation.kind` distinguishes `default`, `locale`, `config`, and `structured`.
+When present, `activation.scan_config` provides the explicit scan settings for
+that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
+use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
+structured scanning; inspect it before choosing a runtime operation.
+
+## Candidate inventory
+
+This table was generated from the candidate Rust `capabilities()` response (contract version 1). It reports **20 supported entities** and **11 default text detectors**. It is documentation of the candidate; query the installed runtime for its actual inventory.
+
+| Entity | Scopes | Activation | Scan settings |
+| --- | --- | --- | --- |
+| `CREDIT_CARD` | structured, text | `default` | — |
+| `DATE` | structured, text | `default` | — |
+| `DE_IBAN` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_PASSPORT_NUMBER` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_POSTAL_CODE` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_RESIDENCE_PERMIT_NUMBER` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_SOCIAL_SECURITY_NUMBER` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_TAX_ID` | structured, text | `locale` | `{"locale":"de"}` |
+| `DE_VAT_ID` | structured, text | `locale` | `{"locale":"de"}` |
+| `EMAIL` | structured, text | `default` | — |
+| `IP_ADDRESS` | structured, text | `default` | — |
+| `JWT` | structured, text | `default` | — |
+| `NPI` | structured, text | `default` | — |
+| `PERSON` | structured | `structured` | — |
+| `PHONE` | structured, text | `default` | — |
+| `PRIVATE_KEY` | structured, text | `default` | — |
+| `SSN` | structured, text | `default` | — |
+| `US_ROUTING_NUMBER` | structured, text | `default` | — |
+| `UUID` | structured, text | `config` | `{"detect_uuid":true}` |
+| `ZIP_CODE` | structured, text | `default` | — |
+
+`locales[alias].enabled_entities` lists **additions to the default text detectors**, not the entire active inventory. `en-US` and `fr` therefore have empty additions, while German aliases add seven entities. UUID configuration is independent of these locale additions.
+
+| Locale alias | Additional entity labels |
+| --- | --- |
+| `de` | `DE_IBAN`, `DE_PASSPORT_NUMBER`, `DE_POSTAL_CODE`, `DE_RESIDENCE_PERMIT_NUMBER`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_TAX_ID`, `DE_VAT_ID` |
+| `de-DE` | `DE_IBAN`, `DE_PASSPORT_NUMBER`, `DE_POSTAL_CODE`, `DE_RESIDENCE_PERMIT_NUMBER`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_TAX_ID`, `DE_VAT_ID` |
+| `de_DE` | `DE_IBAN`, `DE_PASSPORT_NUMBER`, `DE_POSTAL_CODE`, `DE_RESIDENCE_PERMIT_NUMBER`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_TAX_ID`, `DE_VAT_ID` |
+| `en-US` | None |
+| `fr` | None |
+
+## Locale handling
+
+Locale comparison trims the supplied value and uses ASCII case-insensitive
+matching. The original configured string remains preserved. German aliases
+activate their locale-specific entities; `en-US` and `fr` retain base detection.
+Omitted locale runs base detection. Unsupported explicit locale strings raise
+the existing configuration error in the 0.4.0 candidate.
+
+Selecting an entity for transformation does not activate its detector. Use the
+reported scan settings and keep transformation selection separate. Structured
+PERSON detection retains its documented discovery/mapping workflow; it does
+not become a free-text name detector because it appears in this inventory.
+
+See [configuration](/guides/configuration),
+[PERSON discovery](/guides/person-discovery), and the
+[compatibility policy](/reference/compatibility).

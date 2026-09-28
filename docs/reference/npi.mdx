@@ -3,7 +3,7 @@ title: 'National Provider Identifiers'
 description: 'Context-required NPI detection and transformation boundaries'
 ---
 
-<Note>This detector is unreleased. Examples require a build containing this change.</Note>
+<Note>This detector targets the unreleased 0.4.0 candidate. Examples require a build containing this change.</Note>
 
 `NPI` is enabled by default in every locale. It detects exactly 10 contiguous ASCII digits immediately after `NPI`, `National Provider Identifier` (ASCII case insensitive). Words within a label require one or more horizontal spaces. Horizontal spacing means space, tab, nonbreaking space, or narrow nonbreaking space. Between label and value, any number of horizontal spaces and at most one colon, hash, or hyphen are accepted. Newlines and intervening prose are rejected. ASCII letters or digits immediately adjacent to the label or value prevent a match, including labels joined directly to digits.
 

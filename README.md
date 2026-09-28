@@ -56,7 +56,7 @@ full-match regex values:
 }
 ```
 
-`scan_and_transform` uses `{ scan?: { locale?: string }, transform: ... }` so
+`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean }, transform: ... }` so
 detection settings remain separate from transformation policy.
 
 ## Packages
@@ -278,7 +278,8 @@ fixtures/           Shared conformance fixtures
 
 Pass `{"locale":"de"}` to text or structured scans. Trimmed, ASCII
 case-insensitive `de`, `de-DE`, and `de_DE` activate all seven German detectors;
-omitted and other nonempty locales keep base detection only.
+omitted locale and recognized `en-US`/`fr` aliases keep base detection only.
+The 0.4.0 candidate rejects unsupported explicit locales.
 
 ```python
 from datafog_core import scan_and_transform
@@ -307,3 +308,5 @@ structured scans, independently of locale. It emits `UUID` findings for versions
 1–8 with the IETF variant and original casing/ranges. UUID syntax does not imply
 sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
 excluded sentinel forms and transformation examples.
+
+The source candidate targets **0.4.0**; publication and downstream Python integration are separate release gates. See the [candidate release checklist](docs/releases/0-4-0.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).

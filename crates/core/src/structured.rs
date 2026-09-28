@@ -3,6 +3,8 @@
 use super::*;
 use serde_json::Value;
 
+pub(super) const PERSON_ENTITY_TYPE: &str = "PERSON";
+
 /// Reusable structured scan policy. Explicit PERSON mappings still apply when
 /// automatic discovery is disabled. Exclusions affect PERSON discovery only.
 #[derive(Debug, Clone, Default)]
@@ -119,7 +121,9 @@ pub fn parse_scan_config(value: &Value) -> Result<StructuredScanConfig, PrivacyE
         {
             let path = format!("/mappings/{}", json_pointer_segment(pointer));
             validate_pointer(pointer, &path)?;
-            if require_string(entity, &path, "mapping entity must be a string")? != "PERSON" {
+            if require_string(entity, &path, "mapping entity must be a string")?
+                != PERSON_ENTITY_TYPE
+            {
                 return Err(PrivacyError::invalid_configuration(
                     PrivacyErrorReason::InvalidValue,
                     path,
@@ -239,7 +243,7 @@ fn field_mapping(leaf: &Leaf<'_>, config: &StructuredScanConfig) -> Option<Field
     };
     Some(FieldMapping {
         path: leaf.path.clone(),
-        entity_type: "PERSON".into(),
+        entity_type: PERSON_ENTITY_TYPE.into(),
         source: source.into(),
         rule: rule.into(),
     })
@@ -271,7 +275,7 @@ pub fn scan(
         if let Some(mapping) = field_mapping(&leaf, config) {
             if !leaf.text.trim().is_empty() {
                 findings.push(Finding {
-                    entity_type: "PERSON".into(),
+                    entity_type: PERSON_ENTITY_TYPE.into(),
                     matched_text: leaf.text.into(),
                     byte_range: TextRange {
                         start: 0,
