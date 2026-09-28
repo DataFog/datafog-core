@@ -7,6 +7,7 @@ import asyncio
 from pathlib import Path
 import capabilities_conformance
 import german_conformance
+import credential_overlap_conformance
 import jwt_conformance
 import bearer_token_conformance
 import private_key_conformance
@@ -127,6 +128,7 @@ def verify_structured() -> None:
 def main() -> None:
     capabilities_conformance.verify()
     german_conformance.verify()
+    credential_overlap_conformance.verify()
     jwt_conformance.verify()
     bearer_token_conformance.verify()
     private_key_conformance.verify()

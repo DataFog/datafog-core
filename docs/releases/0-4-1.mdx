@@ -1,0 +1,153 @@
+---
+title: "0.4.1 candidate"
+description: "Three default credential detectors with unchanged capability contract and explicit Python integration gates."
+icon: "tag"
+---
+
+<Warning>Core 0.4.1 is an unreleased source candidate. Core 0.4.0 remains the published release. The local exact-wheel Python 4.9 integration gate has passed. Cross-platform validation, publication, and registry-installed verification remain separate release gates.</Warning>
+
+## New default detectors
+
+The candidate adds three labels to ordinary text and structured scanning,
+without changing capability contract version 1. The runtime registry now reports
+**23 supported entities** and **14 default text detectors**; the
+[capabilities reference](/reference/capabilities) is generated from that registry.
+All bindings use the Rust implementations and preserve existing finding offsets
+and provenance. Locale and UUID activation rules are unchanged.
+
+| Label | Recognition scope | Finding span |
+| --- | --- | --- |
+| `API_KEY` | Provider-prefixed GitHub tokens and Stripe secret/restricted keys | Complete key, excluding surrounding assignment/header context |
+| `BEARER_TOKEN` | Explicit Authorization headers and quoted JSON header entries; structured immediate `Authorization` string fields | Token only, excluding `Bearer ` and header context |
+| `CREDENTIAL_URI` | Scoped `postgres://` or `postgresql://` URI with explicit nonempty password in user information | Complete original URI, including path/query and original percent encoding |
+
+These are lexical detectors. They do not authenticate credentials, contact
+providers, check entropy, or establish that a connection succeeds.
+
+### Provider key heuristics
+
+[API key detection](/reference/api-keys) recognizes case-sensitive GitHub
+`ghp_`, `gho_`, and `ghu_` bodies of exactly 36 ASCII letters/digits; `ghr_`
+bodies of 76; and `github_pat_` bodies of 22 letters/digits, an underscore, and
+59 letters/digits. Installation tokens beginning `ghs_` are opaque: at least
+36 letters/digits, underscores, hyphens, or periods, with no JWT decoding or
+segment-count requirement. A final period remains part of an otherwise valid
+`ghs_` value.
+
+Stripe `sk_test_`, `sk_live_`, `rk_test_`, and `rk_live_` keys require at least
+24 ASCII letters/digits after the prefix. That minimum is a detector heuristic,
+not a provider-issued-key guarantee. Publishable keys, webhook secrets,
+organization keys, unprefixed strings, and other provider formats are excluded.
+The reference defines exact boundaries and whole-value rejection rules.
+
+### Bearer context
+
+[Bearer detection](/reference/bearer-token) requires explicit Authorization
+context. Raw headers must occupy a header line; quoted JSON header entries
+must satisfy the documented boundaries. Structured scanning also accepts a
+string leaf immediately named `Authorization`, ignoring ASCII case, and
+preserves `Bearer ` when transforming the token. Arrays under that key,
+sibling fields, prefixed header names, and bare `Bearer TOKEN` prose do not
+supply context. Tokens follow the RFC 6750 alphabet and terminal-padding rule.
+
+### Credential URI boundaries
+
+[Credential URI detection](/reference/credential-uri) accepts the two PostgreSQL
+scheme spellings with ASCII case-insensitive matching, an explicit nonempty
+password, and a single supported hostname, IPv4/IPv6 host, or omitted host.
+Decimal ports and percent triplets are recognized lexically; port ranges and
+decoded credential content are not validated. Whole-URI spans preserve
+RFC-valid terminal punctuation, which can be ambiguous with prose.
+
+Passwordless or query-only secrets, multiple hosts, percent-encoded Unix
+socket hosts, fragments, raw Unicode URI content, JDBC prefixes, and other
+schemes remain outside this initial scope. See the detector reference for
+encoding and delimiter rules.
+
+## Legacy Python overlap compatibility
+
+The Python 4.9 adapter was integrated in
+[merged PR #179](https://github.com/DataFog/datafog-python/pull/179). The local
+candidate-wheel audit below exercises that adapter source. This Core candidate
+does not change Python's default backend or publish the higher-level package.
+
+Its existing legacy path resolves overlaps **before filtering selected labels**.
+That order is preserved rather than introducing special priorities for the new
+labels. Consequently, explicit legacy entity selection can return no finding
+even when Core originally detected the selected label:
+
+| Overlapping findings | Legacy overlap result before selection |
+| --- | --- |
+| `API_KEY` and `BEARER_TOKEN` on the same span | `API_KEY` suppresses `BEARER_TOKEN` |
+| `BEARER_TOKEN` and `JWT` on the same span | `BEARER_TOKEN` suppresses `JWT` |
+| A containing `CREDENTIAL_URI` and an inner `API_KEY` or `JWT` | `CREDENTIAL_URI` suppresses the inner finding |
+
+Native Core and `datafog.v5` scan results retain the overlapping candidates;
+native transformations apply entity selection before resolving overlaps.
+Callers requiring a particular label can use that native interface. The
+previously reviewed PHONE/NPI limitation is described in the
+[0.4.0 release notes](/releases/0-4-0#python-adapter-dependency-and-npi-selection).
+
+## Local exact-wheel integration result
+
+**PASS:** the exact candidate wheel was installed with the actual Python 4.9
+adapter in an isolated environment. Installed artifact provenance matched the
+expected SHA256. No functional integration failures were found.
+
+| Evidence | Validated value |
+| --- | --- |
+| Core wheel | `datafog_core-0.4.1-cp310-abi3-macosx_11_0_arm64.whl` |
+| Wheel SHA256 | `d6ad451b8ebdd303a9a22410805f83b55876cd22062ce2f9ecb470b4bcd4ec3f` |
+| Python adapter source | [`e31e9e5dd97581622515a97e4421dc558828e706`](https://github.com/DataFog/datafog-python/commit/e31e9e5dd97581622515a97e4421dc558828e706), installed as editable `datafog==4.9.0` |
+| Local platform | CPython 3.12.13, macOS 26.6.2 ARM64 |
+| Adapter and frozen regression suites | 352 passed; no skips or expected failures |
+| Credential overlap audit | 10 fixtures, 60 native/v5 transformations, and individual legacy label selections passed |
+| Installed Core binding suite | Text, structured, capability, provider, transformation, and detector fixtures passed |
+| Dependency consistency | `pip check` passed |
+
+Reviewed frozen parity remained **77 matches, 2 detector differences, 1
+validation difference, and 31 cases outside backend scope**, with no additional
+deviations. The overlap audit confirmed the legacy selection differences above,
+exact/regex allowlists, Unicode offsets, structured Authorization context and
+exclusions, and locale acceptance/rejection. Python's default backend remained
+Python; the new credential labels did not silently activate there.
+
+### Reproduce the local gate
+
+Set `ADAPTER_CHECKOUT` to the reviewed Python adapter checkout, `CORE_CHECKOUT`
+to the matching Core conformance checkout, `CORE_WHEEL` to the exact wheel,
+`PYTHON` to CPython 3.12, and `VENV` to a fresh environment directory. Set
+`OVERLAP_AUDIT` to the reviewed release audit script retained with the integration
+evidence. These commands install the local wheel rather than resolving Core
+from a registry:
+
+```bash
+"$PYTHON" -m venv "$VENV"
+"$VENV/bin/python" -m pip install -e "${ADAPTER_CHECKOUT}[test,cli]" "$CORE_WHEEL"
+"$VENV/bin/python" -m pip check
+(
+  cd "$ADAPTER_CHECKOUT"
+  "$VENV/bin/python" -m pytest \
+    tests/test_contract_481.py tests/test_core_capability_adapter.py \
+    tests/test_rust_backend.py tests/test_api_bridge_49.py \
+    tests/test_core04_integration.py tests/test_rust_contract.py -q
+  "$VENV/bin/python" -m tests.rust_contract --output "$VENV/parity.json"
+)
+"$VENV/bin/python" "$CORE_CHECKOUT/bindings/python/tests/test_installed.py"
+"$VENV/bin/python" "$OVERLAP_AUDIT"
+```
+
+Verify the wheel SHA256 before installation and retain pip's `direct_url.json`
+artifact provenance with the results. The final source revision and hosted
+results belong in the release PR; the wheel hash above identifies the binary
+actually exercised by this local gate. See the [validation limits](#validation-limits)
+before treating this result as release readiness.
+
+### Validation limits
+
+This result covers one local macOS ARM64 wheel on CPython 3.12.13. It does not
+establish cross-platform wheel compatibility, complete the Rust/Node/browser
+WASM gates, authorize publication, or verify registry-installed artifacts.
+Core 0.4.1 remains unpublished. Final combined-source checks, cross-platform
+hosted validation, publication review, and post-publication installation checks
+remain required. No package is published by preparing these notes.

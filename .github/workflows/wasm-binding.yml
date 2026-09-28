@@ -10,6 +10,7 @@ on:
       - "fixtures/**"
       - "scripts/test-wasm-package.mjs"
       - "scripts/german-conformance.mjs"
+      - "scripts/credential-overlap-conformance.mjs"
       - "scripts/uuid-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - "fixtures/**"
       - "scripts/test-wasm-package.mjs"
       - "scripts/german-conformance.mjs"
+      - "scripts/credential-overlap-conformance.mjs"
       - "scripts/uuid-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
 

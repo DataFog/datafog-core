@@ -50,16 +50,17 @@ that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
 use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
 structured scanning; inspect it before choosing a runtime operation.
 
-The unreleased 0.4.1 candidate additionally advertises `API_KEY` with `default`
-activation and both text and structured scopes; contract version remains `1`.
-See [API key detection](/reference/api-keys).
+## Version 0.4.1 candidate inventory
 
-## Version 0.4.0 inventory
+<Note>This inventory describes the unreleased 0.4.1 source candidate. Published 0.4.0 exposes 20 supported entities and 11 default text detectors; its history is preserved in the [0.4.0 release notes](/releases/0-4-0).</Note>
 
-This table was generated from the Core 0.4.0 Rust `capabilities()` response (contract version 1). It reports **20 supported entities** and **11 default text detectors**. It is documentation of version 0.4.0; query the installed runtime for its actual inventory.
+This table was generated from the candidate Rust `capabilities()` response. It reports **23 supported entities** and **14 default text detectors**, with unchanged `contract_version: 1`. Query the installed runtime for its actual inventory.
 
 | Entity | Scopes | Activation | Scan settings |
 | --- | --- | --- | --- |
+| `API_KEY` | structured, text | `default` | — |
+| `BEARER_TOKEN` | structured, text | `default` | — |
+| `CREDENTIAL_URI` | structured, text | `default` | — |
 | `CREDIT_CARD` | structured, text | `default` | — |
 | `DATE` | structured, text | `default` | — |
 | `DE_IBAN` | structured, text | `locale` | `{"locale":"de"}` |
@@ -81,7 +82,7 @@ This table was generated from the Core 0.4.0 Rust `capabilities()` response (con
 | `UUID` | structured, text | `config` | `{"detect_uuid":true}` |
 | `ZIP_CODE` | structured, text | `default` | — |
 
-`locales[alias].enabled_entities` lists **additions to the default text detectors**, not the entire active inventory. `en-US` and `fr` therefore have empty additions, while German aliases add seven entities. UUID configuration is independent of these locale additions.
+`locales[alias].enabled_entities` lists **additions to the default text detectors**, not the entire active inventory. German aliases add seven entities; `en-US` and `fr` add none. UUID activation remains independent.
 
 | Locale alias | Additional entity labels |
 | --- | --- |
@@ -90,6 +91,8 @@ This table was generated from the Core 0.4.0 Rust `capabilities()` response (con
 | `de_DE` | `DE_IBAN`, `DE_PASSPORT_NUMBER`, `DE_POSTAL_CODE`, `DE_RESIDENCE_PERMIT_NUMBER`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_TAX_ID`, `DE_VAT_ID` |
 | `en-US` | None |
 | `fr` | None |
+
+The three new default labels are [API_KEY](/reference/api-keys), [BEARER_TOKEN](/reference/bearer-token), and [CREDENTIAL_URI](/reference/credential-uri). Bearer recognition uses explicit header context in text and also the immediate `Authorization` field key in structured objects. Neither other field names nor transformation selection activate arbitrary token detection.
 
 ## Locale handling
 
