@@ -1,6 +1,8 @@
 # German PII implementation verification
 
-This is an unreleased source feature based on `origin/main` at `88c4fad`.
+This records pre-release source verification based on `origin/main` at `88c4fad`.
+The German detectors subsequently shipped in Core 0.4.0; the measurements below
+retain their original source baseline.
 The focused locale suite is `fixtures/german.jsonl`. Expected German findings
 are filtered by `DE_` because generic detectors may legitimately overlap them.
 Its 304 cases cover aliases/defaults, accepted and rejected lexical/context

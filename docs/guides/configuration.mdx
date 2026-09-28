@@ -110,13 +110,13 @@ Unknown fields and explicit `null` values are rejected. Empty structural maps
 are treated as omission, but empty semantic values such as an empty entity
 selection, key reference, or token reference are invalid.
 
-## German scan locale (unreleased)
+## German scan locale
 
 `scan(text, {"locale":"de"})` activates all seven
 [German entity types](/reference/german-entities). `de`, `de-DE`, and `de_DE`
 are recognized after trimming and ASCII case-insensitive comparison. The stored
 locale is preserved. Recognized `en-US` and `fr` aliases run the base detectors;
-omitted locale does not activate German detectors. In the 0.4.0 candidate,
+omitted locale does not activate German detectors. In Core 0.4.0,
 unsupported explicit locales are configuration errors, as are empty,
 whitespace-only, non-string values and unknown configuration fields. Query the
 [runtime capabilities](/reference/capabilities) for the recognized aliases.
@@ -141,7 +141,7 @@ compare original casing and separators. Provider-backed strategies remain
 unavailable in WASM. Scans retain generic overlaps, while transformations use
 existing containment/length and lexical tie-breaking rules.
 
-## UUID detection (unreleased)
+## UUID detection
 
 Use `{"detect_uuid":true}` in a text or structured scan configuration to enable
 [canonical UUID detection](/reference/uuid). The default is `false`; locale does

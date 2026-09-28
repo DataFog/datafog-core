@@ -5,8 +5,7 @@ icon: "fingerprint"
 ---
 
 <Note>
-  This coverage targets the unreleased 0.4.0 candidate and requires a build containing the feature.
-  Published 0.3.1 packages do not include these detectors. All four runtimes
+  This coverage is available in Core 0.4.0 or newer. All four runtimes
   share the same Core implementation.
 </Note>
 
@@ -84,7 +83,7 @@ console.assert(result.text === "IBAN: [DE_IBAN]");
 
 For detection alone, pass `{"locale":"de"}` directly to `scan` (Rust:
 `scan_with_config`). Omitted locale leaves German detection disabled. Recognized `en-US` and `fr` aliases retain base detection; unsupported explicit
-locales raise a configuration error in the 0.4.0 candidate. Selecting `DE_IBAN` for a transformation
+locales raise a configuration error in Core 0.4.0. Selecting `DE_IBAN` for a transformation
 does not activate detection, and transforming explicit findings requires no locale.
 
 ## Supported formats
@@ -180,5 +179,5 @@ return overlapping findings; they remain available to callers. Configure
 [overrides and allowlists](/guides/configuration) for the exact original values,
 including their casing and separators.
 
-See [German detection migration](/guides/migrating-from-datafog-python#german-detection-migration-unreleased)
+See [German detection migration](/guides/migrating-from-datafog-python#german-detection-migration)
 for intentional differences from Python 4.8.1 and the Python 4.9 release dependency.
