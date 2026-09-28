@@ -31,6 +31,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-conformance.mjs";
+import { expandSyntheticFixture } from "./synthetic-fixtures.mjs";
+import { verifyApiKey, verifyApiKeyProviders } from "./api-key-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
@@ -52,7 +54,9 @@ verifyGerman(germanApi,germanRecords);
 verifyJwt(germanApi,jwtRecords);
 verifyBearerToken(germanApi,bearerRecords);
 const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+const apiKeyRecords = readFileSync(path.join(fixturesDirectory,"api-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse).map(expandSyntheticFixture);
 verifyPrivateKey(germanApi,privateKeyRecords);
+verifyApiKey(germanApi,apiKeyRecords);
 const uuidRecords = readFileSync(path.join(fixturesDirectory,"uuid.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyUuid(germanApi,uuidRecords);
 
@@ -422,6 +426,7 @@ await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
 await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
 await verifyBearerTokenProviders(bearerRecords, manager, tokenManager, tokenContext);
 await verifyPrivateKeyProviders(privateKeyRecords, manager, tokenManager, tokenContext);
+await verifyApiKeyProviders(apiKeyRecords, manager, tokenManager, tokenContext);
 await verifyUuidProviders(manager,tokenManager,tokenContext);
 
 const structuredOriginal = {users:[{first_name:"👋 José"},{full_name:"May"}], count:2};
@@ -625,6 +630,8 @@ try {
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"api-key-conformance.mjs"), readFileSync(path.join(root,"scripts/api-key-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));

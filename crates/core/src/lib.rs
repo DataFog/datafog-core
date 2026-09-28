@@ -1,4 +1,5 @@
 //! Core PII scanning API for DataFog.
+mod api_key;
 mod bearer_token;
 mod capabilities;
 pub use capabilities::{
@@ -1916,6 +1917,7 @@ impl std::error::Error for PrivacyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
+    ApiKey,
     Email,
     Phone,
     Ssn,
@@ -1942,6 +1944,7 @@ enum Label {
 impl Label {
     fn as_str(self) -> &'static str {
         match self {
+            Label::ApiKey => "API_KEY",
             Label::Email => "EMAIL",
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
@@ -1967,6 +1970,7 @@ impl Label {
 
     fn detector_name(self) -> &'static str {
         match self {
+            Label::ApiKey => "datafog-core/api-key",
             Label::Email => "datafog-core/email",
             Label::Phone => "datafog-core/phone",
             Label::Ssn => "datafog-core/ssn",
@@ -3613,6 +3617,12 @@ mod selection_tests;
 
 #[cfg(test)]
 mod tests {
+    mod synthetic_fixtures {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/synthetic_fixtures.rs"
+        ));
+    }
     use super::{
         Finding, FindingValidationError, KeyProvider, KeyProviderError, KeyProviderErrorKind,
         KeyProviderFuture, KeySelector, MAX_REGEX_PATTERN_BYTES, MAX_REGEX_RULES, MaskConfig,
@@ -3992,6 +4002,51 @@ mod tests {
                 ))
                 .unwrap();
                 assert_eq!(result.transformations.len(), expected_count);
+                assert_ne!(result.text, text);
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn api_key_fixtures_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "german",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("german").unwrap();
+        for line in include_str!("../../../fixtures/api-key.jsonl").lines() {
+            let row: serde_json::Value =
+                synthetic_fixtures::expand(serde_json::from_str(line).unwrap());
+            if row["sample"] != true {
+                continue;
+            }
+            let text = row["text"].as_str().unwrap();
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"german"}),
+                json!({"strategy":"tokenize","token_ref":"german"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({"scan":row["config"],"transform":{"default":strategy,"entities":["API_KEY"]}})).unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(
+                    result.transformations.len(),
+                    row["entities"].as_array().unwrap().len()
+                );
                 assert_ne!(result.text, text);
                 if strategy["strategy"] == "tokenize" {
                     assert_eq!(

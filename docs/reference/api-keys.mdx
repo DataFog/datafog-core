@@ -1,0 +1,75 @@
+---
+title: 'API keys'
+description: 'Provider-prefixed GitHub tokens and Stripe secret or restricted keys.'
+---
+
+<Warning>`API_KEY` targets the unreleased Core 0.4.1 candidate. Published 0.4.0 packages do not include this detector.</Warning>
+
+`API_KEY` runs by default in Rust, Python, Node.js, and browser WASM. It reports
+whole credential values without consuming surrounding quotes, assignments, or
+an `Authorization: Bearer ` prefix. No provider requests, checksum validation,
+entropy scoring, or credential authentication are performed.
+
+## Supported lexical shapes
+
+Prefixes and case are significant. The body requirements below define this
+release's detection policy; they do not guarantee that a provider issued a key.
+
+| Provider / kind | Prefix | Body rule |
+| --- | --- | --- |
+| GitHub classic PAT, OAuth, user access | `ghp_`, `gho_`, `ghu_` | Exactly 36 ASCII letters/digits |
+| GitHub refresh token | `ghr_` | Exactly 76 ASCII letters/digits |
+| GitHub fine-grained PAT | `github_pat_` | 22 ASCII letters/digits, `_`, then 59 ASCII letters/digits |
+| GitHub installation token | `ghs_` | At least 36 ASCII letters/digits, `_`, `-`, or `.` |
+| Stripe secret or restricted key | `sk_test_`, `sk_live_`, `rk_test_`, `rk_live_` | At least 24 ASCII letters/digits, without a fixed upper length |
+
+[GitHub documents its token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats).
+Its [2026 installation-token guidance](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/)
+introduces longer JWT-style `ghs_` tokens and recommends treating them as opaque.
+This detector accepts both opaque and dotted shapes without decoding their contents.
+It does not assume every GitHub token has the same fixed length.
+
+[Stripe documents secret, restricted, test, and live prefixes](https://docs.stripe.com/keys).
+Stripe does not promise a fixed body length there; the 24-character minimum is
+this detector's conservative lexical threshold, not a provider validation rule.
+
+Unsupported shapes include unprefixed legacy tokens, generic high-entropy
+strings, Stripe publishable `pk_` keys, organization `sk_org_` keys, webhook
+`whsec_` secrets, and provider formats outside the table.
+
+## Boundaries and transformations
+
+A key embedded in a longer Unicode identifier is rejected. Likewise, a token
+containing unsupported punctuation such as `/`, `+`, or `~`, or ending in `=`,
+is rejected as a whole rather than partially redacted. Quoted values,
+`API_KEY=value` assignments, and whitespace-delimited values work. One terminal
+period is excluded as prose punctuation only when the complete run is invalid
+and removing that period makes it valid. A period is a valid character in an
+opaque `ghs_` token, so it is retained there, even when it could be prose.
+No dot count or nonempty JWT-segment requirement is imposed on `ghs_` tokens.
+Keys concatenated into URL paths are outside this policy. Larger dotted strings
+are rejected for fixed-format keys; `ghs_` consumes the whole supported opaque run.
+
+```python
+from datafog_core import capabilities, scan_and_transform
+
+# Deliberately synthetic: illustrates the lexical shape, not a usable key.
+key = "ghp_" + "aB9" * 12
+assert "API_KEY" in capabilities()["default_entities"]
+result = scan_and_transform("Authorization: Bearer " + key, {
+    "transform": {"default": {"strategy": "redact"}, "entities": ["API_KEY"]},
+})
+assert result.text == "Authorization: Bearer [API_KEY]"
+```
+
+Structured scanning applies the same detector independently to each string.
+Byte, Unicode code-point, and JavaScript UTF-16 offsets follow the
+[finding contract](/concepts/findings-and-ranges). Provenance is
+`datafog-core/api-key`, with the Core version and no confidence score.
+All existing transformations, exact allowlists, and entity selections apply;
+provider-dependent operations retain their runtime-specific support.
+
+When findings overlap, existing transformation selection chooses the complete
+credential span over a nested JWT span. The `Bearer` scheme itself is outside
+this detector's finding. Selecting another entity for transformation does not
+implicitly select `API_KEY`.

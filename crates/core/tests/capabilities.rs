@@ -1,3 +1,5 @@
+#[path = "support/synthetic_fixtures.rs"]
+mod synthetic_fixtures;
 use datafog_core::{
     PrivacyErrorReason, ScanConfig, capabilities, parse_scan_and_transform_config,
     parse_scan_config, scan, scan_with_config, structured,
@@ -11,8 +13,8 @@ fn capability_contract_is_sorted_owned_and_scope_explicit() {
     let second = capabilities();
     let value = serde_json::to_value(&second).unwrap();
     assert_eq!(value["contract_version"], 1);
-    assert_eq!(second.supported_entities.len(), 21);
-    assert_eq!(second.default_entities.len(), 12);
+    assert_eq!(second.supported_entities.len(), 22);
+    assert_eq!(second.default_entities.len(), 13);
     assert!(
         second
             .supported_entities
@@ -98,12 +100,13 @@ fn every_advertised_text_entity_has_an_executable_activation_recipe() {
         include_str!("../../../fixtures/jwt.jsonl"),
         include_str!("../../../fixtures/bearer-token.jsonl"),
         include_str!("../../../fixtures/private-key.jsonl"),
+        include_str!("../../../fixtures/api-key.jsonl"),
         include_str!("../../../fixtures/uuid.jsonl"),
         include_str!("../../../fixtures/us-routing-number.jsonl"),
         include_str!("../../../fixtures/npi.jsonl"),
     ] {
         for line in corpus.lines() {
-            let row: Value = serde_json::from_str(line).unwrap();
+            let row: Value = synthetic_fixtures::expand(serde_json::from_str(line).unwrap());
             for entity in row
                 .get("entities")
                 .or_else(|| row.get("matches"))

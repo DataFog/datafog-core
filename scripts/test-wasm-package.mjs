@@ -201,7 +201,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl"]) {
+  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -212,6 +212,8 @@ try {
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"api-key-conformance.mjs"), readFileSync(path.join(root,"scripts/api-key-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
@@ -258,12 +260,16 @@ try {
     verifyJwt(germanApi,jwtRecords);
     verifyBearerToken(germanApi,bearerRecords);
     const {verifyPrivateKey} = await import("/private-key-conformance.mjs");
+    const {expandSyntheticFixture} = await import("/synthetic-fixtures.mjs");
+    const {verifyApiKey} = await import("/api-key-conformance.mjs");
     const privateKeyRecords = (await fetch("/private-key.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+    const apiKeyRecords = (await fetch("/api-key.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse).map(expandSyntheticFixture);
     verifyPrivateKey(germanApi,privateKeyRecords);
+    verifyApiKey(germanApi,apiKeyRecords);
     const {verifyUuid} = await import("/uuid-conformance.mjs");
     const uuidRecords = (await fetch("/uuid.jsonl").then(r=>r.text())).trim().split("\n").map(JSON.parse);
     verifyUuid(germanApi,uuidRecords);
-    for (const row of [...germanRecords,...jwtRecords,...bearerRecords,...privateKeyRecords].filter(r => r.sample)) {
+    for (const row of [...germanRecords,...jwtRecords,...bearerRecords,...privateKeyRecords,...apiKeyRecords].filter(r => r.sample)) {
       for (const strategy of [{strategy:"pseudonymize",key_ref:"german"},{strategy:"tokenize",token_ref:"german"}]) {
         let rejected = false;
         try { scanAndTransform(row.text,{scan:row.config,transform:{default:strategy,entities:[...new Set(row.entities.map(e => e.label))]}}); }

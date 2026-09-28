@@ -50,6 +50,10 @@ that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
 use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
 structured scanning; inspect it before choosing a runtime operation.
 
+The unreleased 0.4.1 candidate additionally advertises `API_KEY` with `default`
+activation and both text and structured scopes; contract version remains `1`.
+See [API key detection](/reference/api-keys).
+
 ## Version 0.4.0 inventory
 
 This table was generated from the Core 0.4.0 Rust `capabilities()` response (contract version 1). It reports **20 supported entities** and **11 default text detectors**. It is documentation of version 0.4.0; query the installed runtime for its actual inventory.
