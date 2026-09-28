@@ -1,0 +1,35 @@
+---
+title: "JWT"
+description: "Recognize compact JSON Web Tokens and transform their full spans."
+---
+
+<Warning>This detector is unreleased. Build from current source until the next package release; published 0.3.1 packages do not include it.</Warning>
+
+`JWT` is enabled by default in Rust, Python, Node.js, and browser WASM. It detects a complete compact token with exactly three unpadded Base64URL segments. The decoded header and payload must be JSON objects, and the header must contain a nonempty string `alg`. For `alg: "none"`, the signature must be empty. Other algorithms require a nonempty, decodable signature.
+
+Detection does not verify signatures, supported algorithms, expiration, issuers, or claims. Expired tokens and unknown algorithm names can still be sensitive and are recognized. A finding does not establish authenticity or grant authorization.
+
+## Scan and redact
+
+```python
+from datafog_core import scan, scan_and_transform
+
+token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiZXhwIjowfQ.c2ln"
+findings = scan(token)
+result = scan_and_transform(token, {
+    "transform": {"default": {"strategy": "redact"}, "entities": ["JWT"]}
+})
+assert result.text == "[JWT]"
+```
+
+Node.js and browser WASM use `scan(token)` and `scanAndTransform(token, config)` with the same configuration. Rust uses `scan` and `scan_and_transform` with the parsed configuration. Structured scans recognize tokens within individual string values and report JSON Pointer paths; they never combine values across fields.
+
+The finding covers the entire encoded token, excluding surrounding quotes, whitespace, or an `Authorization: Bearer ` prefix. All standard byte, code point, and JavaScript UTF-16 ranges apply. Provenance is `datafog-core/jwt`; confidence is omitted. Masking, removal, entity selection, allowlists, and supported provider transformations use the existing transformation contract.
+
+## Boundaries and limitations
+
+Recognition examines maximal runs of ASCII letters, digits, `_`, `-`, `.`, `=`, `+`, and `/`. Adjacent characters from this set prevent partial matches: extra segments, padding, standard Base64 characters, invalidate the whole run. One final sentence period is excluded when removing it leaves a valid token. The structural empty-signature period of an unsecured token is preserved; an additional sentence period is excluded. This necessarily treats a single trailing empty fourth segment as punctuation. Multiple extra periods are rejected. Quotes, whitespace, and other punctuation delimit tokens; non-ASCII characters also delimit tokens.
+
+Truncated tokens, malformed JSON, noncanonical Base64URL, nonobject payloads, and five-segment encrypted JWE values are not detected. A truncation that still satisfies the structural rules is indistinguishable from a complete token without cryptographic verification. Decoded claims are not scanned recursively. Generic findings overlapping a JWT remain visible in scan results; transformation overlap selection applies normally.
+
+The compact representation follows [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519.html) and the unpadded Base64URL encoding in [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515.html).

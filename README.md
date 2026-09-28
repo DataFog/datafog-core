@@ -2,7 +2,7 @@
 
 Fast structured PII detection, implemented in Rust and exposed for Rust, Python, Node.js, and browsers.
 
-It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER` (unreleased). Every binding returns the same finding information:
+It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. The next release also detects `JWT` tokens by default; see the [JWT reference](docs/reference/jwt.mdx). With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER` (unreleased). Every binding returns the same finding information:
 
 ```text
 entity type, matched text, byte range, code-point range,

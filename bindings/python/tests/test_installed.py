@@ -6,6 +6,7 @@ import json
 import asyncio
 from pathlib import Path
 import german_conformance
+import jwt_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -117,6 +118,7 @@ def verify_structured() -> None:
 
 def main() -> None:
     german_conformance.verify()
+    jwt_conformance.verify()
     verify_structured()
     verify_fixture("development.jsonl")
     verify_fixture("final.jsonl")
@@ -361,6 +363,7 @@ def main() -> None:
             return results
 
     asyncio.run(german_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
+    asyncio.run(jwt_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
 
     async def structured_round_trip():
         original = {"users":[{"first_name":"👋 José"},{"full_name":"May"}],"count":2}

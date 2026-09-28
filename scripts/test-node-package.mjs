@@ -31,12 +31,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
+import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import * as germanApi from "@datafog/node";
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
 const fixturesDirectory = process.argv[2];
 const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyGerman(germanApi,germanRecords);
+verifyJwt(germanApi,jwtRecords);
 
 assert.throws(() => scan(123), TypeError);
 
@@ -399,6 +402,7 @@ assert.equal(tokenized.transformations[0].tokenRef, "customers/default");
 assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
+await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
 
 const structuredOriginal = {users:[{first_name:"👋 José"},{full_name:"May"}], count:2};
 const structuredTokens = await tokenManager.scanAndTransformStructured(structuredOriginal, {transform:{default:{strategy:"tokenize",token_ref:"names"}}}, tokenContext);
@@ -598,6 +602,7 @@ try {
   );
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeConsumerTest();
 
   run(
