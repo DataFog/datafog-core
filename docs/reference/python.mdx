@@ -18,6 +18,24 @@ import datafog_core
   calls.
 </Note>
 
+## Relationship to the upcoming Python 4.9 bridge
+
+<Note>
+  The `datafog` 4.9 bridge is **unreleased**. The APIs below are available
+  directly from the published `datafog-core` package; the upcoming
+  `datafog.v5` namespace will reexport those same native objects.
+</Note>
+
+The bridge's optional `datafog[rust]` extra pins `datafog-core==0.3.1`.
+`datafog.scan(..., backend="rust")` keeps legacy result objects and Python
+redaction semantics. It is different from `datafog.v5.scan(...)`, which returns
+native findings and uses the Core schema described on this page. Existing
+`datafog` calls default to the Python backend even with the extra installed.
+
+See the [bridge migration guide](/guides/migrating-from-datafog-python#upcoming-python-49-bridge-unreleased)
+for installation timing, configuration limits, German detection gaps, and the
+5.0 retirement schedule. Do not translate legacy strategy names mechanically.
+
 ## Type checking
 
 Starting with 0.3.1, the wheel includes PEP 561 typing metadata and stubs for

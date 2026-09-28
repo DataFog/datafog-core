@@ -43,6 +43,18 @@ npm install @datafog/wasm
   Python](/guides/migrating-from-datafog-python).
 </Warning>
 
+## Upcoming DataFog Python bridge
+
+The established `datafog` package is preparing an **unreleased 4.9 bridge**.
+Its optional `datafog[rust]` extra will pin `datafog-core==0.3.1`, with Python
+remaining the default backend. Explicit Rust detection will preserve legacy
+result objects; `datafog.v5` will expose the native Core schema.
+
+These bridge APIs are not available in `datafog` 4.8.1. Continue using the direct
+`datafog-core` installation above for the examples on these pages. See
+[Migrate from DataFog Python](/guides/migrating-from-datafog-python) for the
+upcoming bridge, known coverage differences, and planned 5.0 removals.
+
 ## Runtime requirements
 
 - Rust `1.88` or newer

@@ -1,12 +1,12 @@
 ---
 title: "Migrate from DataFog Python"
-description: "Move from datafog 4.8.x to the canonical DataFog Core 0.3.x Python API."
+description: "Migrate to DataFog Core directly or prepare for the unreleased Python 4.9 bridge."
 icon: "arrow-right-arrow-left"
 ---
 
 <Warning>
   This guide covers migration of the synchronous text detection and
-  transformation API from `datafog` 4.8.x to `datafog-core` 0.2.x. DataFog
+  transformation API from `datafog` 4.8.x to `datafog-core` 0.3.x. DataFog
   Core is a new canonical API, not a drop-in replacement for the established
   DataFog Python package.
 </Warning>
@@ -20,7 +20,113 @@ OCR, distributed-processing, CLI, or application-guardrail features. Keep the
 established package for those workloads while adopting Core where its smaller,
 cross-runtime contract fits.
 
-## Change the package and import
+## Upcoming Python 4.9 bridge (unreleased)
+
+<Warning>
+  The following `datafog` APIs are planned for the unreleased 4.9 bridge in
+  [Python PR #178](https://github.com/DataFog/datafog-python/pull/178).
+  They are not available in the published 4.8.1 package. Installation commands
+  in this section apply once a package containing the bridge is released.
+</Warning>
+
+The bridge provides two separate adoption paths. Installing the optional extra
+alone does not change existing detection behavior.
+
+| Entry point | Detection | Result schema and transformation behavior |
+| --- | --- | --- |
+| `datafog.scan` / `datafog.redact` | Python by default; explicit `backend="rust"` uses Core | Existing `ScanResult` / `RedactResult`, numbered tokens and plaintext mappings |
+| `datafog.compat.v4` | Same backend selection as the top-level facade | Same legacy classes, preserving their identity |
+| `datafog.v5` | Core directly | Native `Finding` / `TransformResult` objects and Core strategies |
+
+### Retain legacy results with Rust detection
+
+```bash After the Python 4.9 bridge is released
+python -m pip install "datafog[rust]"
+```
+
+The bridge's `rust` extra pins **`datafog-core==0.3.1`**. A base installation
+requires no native module; `datafog[all]` retains its legacy dependencies, so
+request `datafog[all,rust]` if both sets are needed.
+
+```python Python 4.9 bridge (unreleased)
+import datafog
+
+result = datafog.scan("Contact alice@example.com", backend="rust")
+assert result.entities[0].type == "EMAIL"
+
+redacted = datafog.redact("Contact alice@example.com", backend="rust")
+assert redacted.redacted_text == "Contact [EMAIL_1]"
+assert redacted.mapping == {"[EMAIL_1]": "alice@example.com"}
+```
+
+`backend` is keyword-only and defaults to `"python"`. Rust supports only
+`engine="regex"`. When calling `datafog.engine.scan` or `scan_and_redact`, pass
+`engine="regex"` explicitly because those low-level functions default to
+`"smart"`. Unsupported combinations and missing dependencies raise errors;
+native failures propagate. There is **no silent fallback to Python**.
+
+The adapter uses code-point offsets for Python indices, preserves Python
+aliases and full-match allowlists, and keeps Python transformation behavior.
+Its regex provenance and confidence `1.0` are compatibility values rather than
+native probability estimates. Explicit-entity redaction performs no detection
+and needs no native module.
+
+`sanitize`, `scan_prompt`, and `filter_output` forward the backend keyword.
+`TextService`, `DataFog`, CLI text commands, guardrail objects, application
+adapters, and ML composition retain their existing detection paths in 4.9.
+
+### Preview the native schema
+
+```python Python 4.9 bridge (unreleased)
+from datafog.v5 import Finding, scan, scan_and_transform
+
+findings = scan("Contact alice@example.com")
+assert isinstance(findings[0], Finding)
+assert findings[0].entity_type == "EMAIL"
+
+result = scan_and_transform(
+    "Contact alice@example.com",
+    {"transform": {"default": {"strategy": "redact"}}},
+)
+assert result.text == "Contact [EMAIL]"
+```
+
+The preview reexports the actual Core objects, including structured operations
+and `PrivacyManager`; it does not translate legacy schemas or strategy names.
+Importing `datafog` or the preview module alone does not load Core. Accessing
+preview exports requires the native dependency. The direct Core guidance below
+also applies to these native exports.
+
+### Coverage limits and retirement schedule
+
+Core **0.3.1** does not implement the seven German-specific detectors. The
+legacy Rust adapter explicitly rejects German locales and `DE_*` selections;
+use `backend="python"` for those workloads. Direct Core and `datafog.v5` retain
+Core's own configuration semantics: accepting a locale does not establish
+German detector coverage.
+
+The bridge's finite 4.8.1 comparison corpus records two additional detector
+differences: Core rejects the tested invalid-checksum credit-card value and the
+SSN embedded in an alphanumeric token. This is an experimental alternative,
+not a claim of universal parity. Review the
+[Python migration evidence](https://github.com/DataFog/datafog-python/blob/6ebd4c86655e0561941475762a7d71e45204f60f/docs/migration-4.9.md)
+before switching workloads.
+
+| Surface | Planned 4.9 behavior | Planned 5.0 behavior |
+| --- | --- | --- |
+| `detect()` / `process()` | Remain available with revised deprecation warnings | Remove |
+| OCR / Donut / Tesseract / image services | Remain available with use-time warnings | Remove APIs and extras |
+| Spark / distributed processing | Remain available with use-time warnings | Remove APIs and extras |
+| Legacy scan/redact facade | Top-level API and `compat.v4` remain available | Native schema becomes primary; compatibility lifetime set separately |
+| spaCy / GLiNER | Unchanged | No removal decision in this increment |
+
+The earlier commitment to retain `detect()` and `process()` through 5.x has
+been revised: removal is planned for **5.0**. Neither shim is exposed through
+`compat.v4` or `datafog.v5`. Replace them with explicit scan or transformation
+calls, reviewing changed output semantics. Users needing OCR or Spark can stay
+on the final 4.x release; no successor package is promised.
+
+## Migrate directly: change the package and import
 
 <CodeGroup>
 
@@ -190,7 +296,7 @@ Use canonical names such as `DATE` and `ZIP_CODE` rather than legacy aliases
 such as `DOB` or `ZIP`. Entity selection belongs in the transformation config,
 not the scan config.
 
-## Migration checklist
+## Direct Core migration checklist
 
 - Replace the `datafog` distribution and `datafog.engine` imports.
 - Consume the list returned by `scan` instead of `ScanResult.entities`.
