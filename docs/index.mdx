@@ -34,7 +34,7 @@ for Python, Node.js, and browser WebAssembly.
 
 ## Supported entities
 
-The built-in detector recognizes:
+Text scans recognize these entities without a locale:
 
 - `EMAIL`
 - `PHONE`
@@ -43,6 +43,18 @@ The built-in detector recognizes:
 - `IP_ADDRESS`
 - `DATE`
 - `ZIP_CODE`
+
+Structured scans also discover `PERSON` in supported name fields. See
+[structured person discovery](/guides/person-discovery) for field mappings.
+
+<Note>
+  **Unreleased German coverage:** an explicit German locale adds `DE_IBAN`,
+  `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`,
+  `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. See the
+  [German entity reference](/reference/german-entities) for examples, required
+  contexts, and format limitations. This coverage requires a build containing
+  the feature; published 0.3.1 packages do not include it.
+</Note>
 
 Built-in entity names are uppercase. The finding contract remains extensible so
 custom detectors can introduce additional entity names in the future.
