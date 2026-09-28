@@ -201,7 +201,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl"]) {
+  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "private-key.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -210,6 +210,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
   browser = await chromium.launch();
@@ -243,7 +244,10 @@ try {
     const jwtRecords = (await fetch("/jwt.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyGerman(germanApi,germanRecords);
     verifyJwt(germanApi,jwtRecords);
-    for (const row of [...germanRecords,...jwtRecords].filter(r => r.sample)) {
+    const {verifyPrivateKey} = await import("/private-key-conformance.mjs");
+    const privateKeyRecords = (await fetch("/private-key.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+    verifyPrivateKey(germanApi,privateKeyRecords);
+    for (const row of [...germanRecords,...jwtRecords,...privateKeyRecords].filter(r => r.sample)) {
       for (const strategy of [{strategy:"pseudonymize",key_ref:"german"},{strategy:"tokenize",token_ref:"german"}]) {
         let rejected = false;
         try { scanAndTransform(row.text,{scan:row.config,transform:{default:strategy,entities:[...new Set(row.entities.map(e => e.label))]}}); }

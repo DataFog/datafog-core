@@ -30,6 +30,7 @@ function writeConsumerTest() {
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import * as germanApi from "@datafog/node";
@@ -40,6 +41,8 @@ const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"
 const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyGerman(germanApi,germanRecords);
 verifyJwt(germanApi,jwtRecords);
+const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+verifyPrivateKey(germanApi,privateKeyRecords);
 
 assert.throws(() => scan(123), TypeError);
 
@@ -403,6 +406,7 @@ assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
 await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
+await verifyPrivateKeyProviders(privateKeyRecords, manager, tokenManager, tokenContext);
 
 const structuredOriginal = {users:[{first_name:"👋 José"},{full_name:"May"}], count:2};
 const structuredTokens = await tokenManager.scanAndTransformStructured(structuredOriginal, {transform:{default:{strategy:"tokenize",token_ref:"names"}}}, tokenContext);
@@ -603,6 +607,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   writeConsumerTest();
 
   run(
