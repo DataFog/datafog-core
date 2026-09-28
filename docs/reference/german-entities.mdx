@@ -5,7 +5,7 @@ icon: "fingerprint"
 ---
 
 <Note>
-  This coverage is unreleased and requires a build containing the feature.
+  This coverage targets the unreleased 0.4.0 candidate and requires a build containing the feature.
   Published 0.3.1 packages do not include these detectors. All four runtimes
   share the same Core implementation.
 </Note>
@@ -83,8 +83,8 @@ console.assert(result.text === "IBAN: [DE_IBAN]");
 </CodeGroup>
 
 For detection alone, pass `{"locale":"de"}` directly to `scan` (Rust:
-`scan_with_config`). Omitted locale leaves German detection disabled. Other
-nonempty locales remain accepted. Selecting `DE_IBAN` for a transformation
+`scan_with_config`). Omitted locale leaves German detection disabled. Recognized `en-US` and `fr` aliases retain base detection; unsupported explicit
+locales raise a configuration error in the 0.4.0 candidate. Selecting `DE_IBAN` for a transformation
 does not activate detection, and transforming explicit findings requires no locale.
 
 ## Supported formats

@@ -1,4 +1,9 @@
 //! Core PII scanning API for DataFog.
+mod capabilities;
+pub use capabilities::{
+    ActivationScanConfig, Capabilities, EntityActivation, EntityCapabilities, LocaleCapabilities,
+    capabilities,
+};
 mod german;
 mod jwt;
 mod npi;
@@ -541,7 +546,7 @@ impl ScanConfig {
         Self::default()
     }
 
-    /// Set a non-empty locale identifier.
+    /// Set a supported locale identifier (trimmed and ASCII case-insensitive).
     pub fn with_locale(mut self, locale: impl Into<String>) -> Result<Self, PrivacyError> {
         let locale = locale.into();
         if locale.trim().is_empty() {
@@ -549,6 +554,13 @@ impl ScanConfig {
                 PrivacyErrorReason::EmptyValue,
                 "/locale",
                 "scan locale must not be empty or whitespace-only",
+            ));
+        }
+        if !capabilities::valid_locale(&locale) {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::InvalidValue,
+                "/locale",
+                "unsupported scan locale",
             ));
         }
         self.locale = Some(locale);
@@ -1990,23 +2002,7 @@ pub fn scan(text: &str) -> Vec<Finding> {
 /// Scan text using explicit detector configuration.
 pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
-    jwt::detect(text, &mut candidates);
-    us_routing_number::detect(text, &mut candidates);
-    npi::detect(text, &mut candidates);
-    detect_email(text, &mut candidates);
-    detect_phone(text, &mut candidates);
-    detect_ssn(text, &mut candidates);
-    detect_credit_card(text, &mut candidates);
-    detect_date(text, &mut candidates);
-    detect_zip_code(text, &mut candidates);
-    detect_ip_address(text, &mut candidates);
-    private_key::detect(text, &mut candidates);
-    if german::enabled(config.locale()) {
-        german::detect(text, &mut candidates);
-    }
-    if config.uuid_detection_enabled() {
-        uuid::detect(text, &mut candidates);
-    }
+    capabilities::detect(text, config, &mut candidates);
     finalize(text, candidates)
 }
 

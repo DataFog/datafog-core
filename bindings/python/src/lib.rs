@@ -956,6 +956,14 @@ fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
     exception
 }
 
+/// Return an independent, JSON-compatible snapshot of the Core capability contract.
+#[pyfunction]
+fn capabilities(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let json = serde_json::to_string(&core::capabilities())
+        .map_err(|_| internal_error(py, "failed to serialize Core capabilities"))?;
+    Ok(py.import("json")?.call_method1("loads", (json,))?.unbind())
+}
+
 /// Scan text for supported PII findings.
 #[pyfunction]
 #[pyo3(signature = (text, config=None))]
@@ -1300,6 +1308,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Restoration>()?;
     module.add_class::<RestoreResult>()?;
     module.add_class::<PrivacyManager>()?;
+    module.add_function(wrap_pyfunction!(capabilities, module)?)?;
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;

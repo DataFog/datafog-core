@@ -12,6 +12,26 @@ class _ScanConfig(TypedDict, total=False):
     locale: str
     detect_uuid: bool
 
+class _CapabilityActivationRequired(TypedDict):
+    kind: Literal["default", "locale", "config", "structured"]
+
+class _CapabilityActivation(_CapabilityActivationRequired, total=False):
+    scan_config: _ScanConfig
+
+class _EntityCapability(TypedDict):
+    scopes: list[Literal["structured", "text"]]
+    activation: _CapabilityActivation
+
+class _LocaleCapability(TypedDict):
+    enabled_entities: list[str]
+
+class _Capabilities(TypedDict):
+    contract_version: Literal[1]
+    supported_entities: list[str]
+    default_entities: list[str]
+    locales: dict[str, _LocaleCapability]
+    entities: dict[str, _EntityCapability]
+
 class _StructuredScanConfig(_ScanConfig, total=False):
     discover_person: bool
     mappings: dict[str, Literal["PERSON"]]
@@ -358,6 +378,8 @@ class PrivacyManager:
     def restore_structured(
         self, data: _JsonDocument, context: _PrivacyContext
     ) -> Awaitable[StructuredRestoreResult]: ...
+
+def capabilities() -> _Capabilities: ...
 
 def scan(text: str, config: _ScanConfig | None = None) -> list[Finding]: ...
 def transform(

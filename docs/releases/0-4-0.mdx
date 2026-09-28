@@ -1,0 +1,77 @@
+---
+title: "0.4.0 candidate"
+description: "Expanded detection, runtime capabilities, and strict locale validation; publication pending."
+icon: "tag"
+---
+
+<Warning>
+  This is an unreleased source candidate targeting 0.4.0. Version-aligned
+  manifests and passing Core tests do not mean packages have been published or
+  that downstream Python integration has passed. The release gate below must
+  be completed against the candidate artifacts before publication.
+</Warning>
+
+## Candidate changes
+
+- JWT and complete PEM private-key detection run by default.
+- Context-labeled US routing numbers and National Provider Identifiers run by
+  default. They detect lexical shapes without checksum or registry validation.
+- Canonical UUID detection is opt-in through `detect_uuid: true`.
+- German locale routing adds seven German entity types.
+- Rust and Python runtime capability metadata describes supported entities, default detection,
+  locale additions, and configuration needed to activate scoped detectors.
+- Package versions are aligned at 0.4.0 across Rust, Python, Node.js, and WASM.
+
+The runtime-generated [capabilities reference](/reference/capabilities) is the
+inventory source. Detector details and limits are documented in the
+[JWT](/reference/jwt), [private-key](/reference/private-keys),
+[UUID](/reference/uuid), [routing-number](/reference/us-routing-number),
+[NPI](/reference/npi), and [German entities](/reference/german-entities) pages.
+
+## Intentional locale-validation change
+
+Explicit locales are now checked against the runtime registry. The recognized
+aliases are `de`, `de-DE`, `de_DE`, `en-US`, and `fr`, compared after trimming
+and with ASCII case-insensitive matching. German aliases activate German
+detectors; `en-US` and `fr` retain base detection. Omitting the locale also runs
+base detection. UUID activation remains independent of locale.
+
+Previously, arbitrary nonempty locale strings were accepted and silently used
+base detection. In 0.4.0, unsupported explicit locales raise the binding's
+existing configuration error. Update callers that supplied placeholder or
+unrecognized locale strings before adopting the candidate. The
+[compatibility policy](/reference/compatibility) governs subsequent 0.4.x changes.
+
+## Release readiness gate
+
+The checklist is a release procedure, not a claim that its steps have passed.
+Record artifact paths, checksums, tested commits, commands, and results in the
+release review.
+
+1. Land the focused detector and capability changes; select the exact candidate
+   commit. Confirm all package and lockfile versions with
+   `python3 scripts/check-release.py python`.
+2. Run Rust formatting, Clippy, and workspace tests; build and test the installed
+   Python wheel and source distribution, Node package, and real-browser WASM
+   package. Verify Rust and Python capabilities agree and metadata matches actual
+   detector activation across runtimes.
+3. Validate Mintlify content and links against the same candidate. Confirm the
+   generated capabilities inventory is current.
+4. Build a candidate Python wheel from that commit. Install that local artifact
+   into an isolated environment for the downstream `datafog-python` checkout;
+   record the wheel hash and both repository commits. Run its adapter, public
+   API, German detector, transformation, structured-data, and regression suites.
+   Test failure handling for unsupported locales and activation based on
+   capability metadata. Fix and repeat against a newly identified artifact if
+   integration fails.
+5. Review downstream results and confirm the intended minimum Core dependency
+   and release order in `datafog-python`. **Downstream integration remains a
+   required gate; Core's installed-wheel tests do not replace it.**
+6. After approval of the verified candidate, publish the runtime packages from
+   the same release commit using the documented [release workflows](/development#publish-a-release-from-github-actions).
+   Creating a tag or invoking a publish workflow is a separate release action.
+7. Verify registry artifacts by installing the published versions before
+   announcing availability. Complete any dependent `datafog-python` release
+   only after its Core dependency is available.
+
+No package publication is performed by preparing this candidate.
