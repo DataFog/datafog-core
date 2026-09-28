@@ -1,0 +1,71 @@
+---
+title: 'Private keys'
+description: 'Detect and transform complete PEM private-key blocks across all runtimes.'
+---
+
+<Warning>
+`PRIVATE_KEY` is unreleased. These examples require a build containing this detector;
+published 0.3.1 packages do not include it.
+</Warning>
+
+`PRIVATE_KEY` is enabled by default in Rust, Python, Node.js, and browser WASM.
+It recognizes complete PEM blocks using these case-sensitive labels:
+
+- `PRIVATE KEY`
+- `RSA PRIVATE KEY`
+- `EC PRIVATE KEY`
+- `DSA PRIVATE KEY`
+- `OPENSSH PRIVATE KEY`
+- `ENCRYPTED PRIVATE KEY`
+
+The matching `-----BEGIN …-----` and `-----END …-----` delimiters must each
+occupy an entire line. LF and CRLF line endings are supported. The body must
+contain nonempty Base64-shaped lines using ASCII letters, digits, `+`, `/`, and
+at most two trailing `=` characters. Its combined length must be divisible by
+four. Empty lines, spaces, tabs, and data after padding are rejected.
+
+This is lexical detection: it does not decode, decrypt, or validate the key.
+The deliberately synthetic body below demonstrates the shape without providing
+a usable key. Public keys, certificates, truncated fragments, indented or inline
+delimiters, and legacy `Proc-Type` / `DEK-Info` header blocks are outside this
+initial detector's scope.
+
+## Scan and redact
+
+```python
+import datafog_core as df
+
+pem = "-----BEGIN PRIVATE KEY-----\nYWJjZA==\n-----END PRIVATE KEY-----"
+findings = df.scan(pem)
+assert findings[0].entity_type == "PRIVATE_KEY"
+result = df.scan_and_transform(pem, {
+    "transform": {
+        "default": {"strategy": "redact"},
+        "entities": ["PRIVATE_KEY"],
+    },
+})
+assert result.text == "[PRIVATE_KEY]"
+```
+
+Node.js uses the same configuration with `scan` and `scanAndTransform` from
+`@datafog/node`. Browser applications import these functions and initialize
+`@datafog/wasm` first. Rust uses `scan` and `scan_and_transform`. See the
+[SDK reference](/reference/rust) for each runtime's return types.
+
+## Finding and transformation boundaries
+
+Each finding covers the entire block, including both delimiters and every
+original internal newline. It excludes the newline following the closing
+delimiter and any surrounding text. The finding has entity type `PRIVATE_KEY`,
+detector name `datafog-core/private-key`, the Core detector version, and no
+confidence score.
+
+Byte, Unicode code-point, and JavaScript UTF-16 offsets retain the standard
+[finding contract](/concepts/findings-and-ranges). Structured scans inspect each string
+value independently; a header and footer in separate fields never form a key.
+
+Redaction replaces the whole block with `[PRIVATE_KEY]`; masking and removal
+also operate on its entire span. Existing entity selection, exact allowlists,
+and source-range validation apply. Pseudonymization and reversible tokenization use
+the existing providers in Rust, Python, and Node.js. Browser WASM rejects these
+provider-dependent strategies as documented in its [SDK reference](/reference/browser-wasm).

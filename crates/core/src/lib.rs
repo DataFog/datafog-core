@@ -2,6 +2,7 @@
 mod german;
 mod jwt;
 mod offsets;
+mod private_key;
 pub mod structured;
 use base64::Engine;
 use hmac::{Hmac, Mac};
@@ -1881,6 +1882,7 @@ enum Label {
     Date,
     ZipCode,
     Jwt,
+    PrivateKey,
     DeIban,
     DeVatId,
     DeTaxId,
@@ -1902,6 +1904,7 @@ impl Label {
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
             Label::Jwt => "JWT",
+            Label::PrivateKey => "PRIVATE_KEY",
             Label::DeIban => "DE_IBAN",
             Label::DeVatId => "DE_VAT_ID",
             Label::DeTaxId => "DE_TAX_ID",
@@ -1922,6 +1925,7 @@ impl Label {
             Label::Date => "datafog-core/date",
             Label::ZipCode => "datafog-core/zip-code",
             Label::Jwt => "datafog-core/jwt",
+            Label::PrivateKey => "datafog-core/private-key",
             Label::DeIban => "datafog-core/de-iban",
             Label::DeVatId => "datafog-core/de-vat-id",
             Label::DeTaxId => "datafog-core/de-tax-id",
@@ -1956,6 +1960,7 @@ pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     detect_date(text, &mut candidates);
     detect_zip_code(text, &mut candidates);
     detect_ip_address(text, &mut candidates);
+    private_key::detect(text, &mut candidates);
     if german::enabled(config.locale()) {
         german::detect(text, &mut candidates);
     }
@@ -3756,6 +3761,53 @@ mod tests {
         .with_token_provider(TestTokenProvider::default());
         let context = PrivacyContext::new("german").unwrap();
         for line in include_str!("../../../fixtures/german.jsonl").lines() {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            if row["sample"] != true {
+                continue;
+            }
+            let text = row["text"].as_str().unwrap();
+            let entities: Vec<_> = row["entities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| e["label"].clone())
+                .collect();
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"german"}),
+                json!({"strategy":"tokenize","token_ref":"german"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({"scan":row["config"],"transform":{"default":strategy,"entities":entities}})).unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), entities.len());
+                assert_ne!(result.text, text);
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn private_key_fixtures_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "german",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("german").unwrap();
+        for line in include_str!("../../../fixtures/private-key.jsonl").lines() {
             let row: serde_json::Value = serde_json::from_str(line).unwrap();
             if row["sample"] != true {
                 continue;

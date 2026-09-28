@@ -54,7 +54,8 @@
           "concepts/findings-and-ranges",
           "concepts/privacy-transformations",
           "reference/german-entities",
-          "reference/jwt"
+          "reference/jwt",
+          "reference/private-keys"
         ]
       },
       {
