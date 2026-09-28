@@ -390,8 +390,8 @@ let tokenCounter = 0;
 const tokenProvider = {
   async tokenizeBatch(scope, items) {
     return items.map((item) => {
-      const payload = Uint8Array.of(++tokenCounter);
-      tokenRecords.set(payload[0], {
+      const payload = new TextEncoder().encode(String(++tokenCounter));
+      tokenRecords.set(Buffer.from(payload).toString("hex"), {
         scope,
         tokenRef: item.tokenRef,
         version: "active-1",
@@ -402,7 +402,7 @@ const tokenProvider = {
   },
   async restoreBatch(scope, items) {
     return items.map((item) => {
-      const record = tokenRecords.get(item.payload[0]);
+      const record = tokenRecords.get(Buffer.from(item.payload).toString("hex"));
       if (!record || record.scope !== scope || record.tokenRef !== item.tokenRef || record.version !== item.resolvedVersion) {
         const error = new Error("denied");
         error.code = "token_access_denied";
