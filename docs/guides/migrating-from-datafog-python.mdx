@@ -237,3 +237,7 @@ entity selector. Core 0.4.0 is published. The capability-aware higher-level adap
 [draft PR #179](https://github.com/DataFog/datafog-python/pull/179). That adapter
 requires its own hosted checks and release review; see the
 [reviewed legacy NPI selection limitation](/releases/0-4-0#python-adapter-dependency-and-npi-selection).
+
+## Credential detector migration (0.4.1 candidate)
+
+The candidate adds API keys, explicit Bearer header tokens, and scoped PostgreSQL credential URIs. Python 4.9 retains its existing default backend and legacy overlap-before-selection behavior. A same-span API key can suppress a Bearer token, a Bearer token can suppress a JWT, and a containing credential URI can suppress an inner API key or JWT before legacy selection runs. Explicit selection can therefore return empty. Native Core and `datafog.v5` retain scan candidates and apply selection before overlap during transformation. See the [candidate compatibility matrix and exact-wheel integration gate](/releases/0-4-1#legacy-python-overlap-compatibility).

@@ -38,6 +38,7 @@ import { verifyCredentialUri, verifyCredentialUriProviders } from "./credential-
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
+import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import * as germanApi from "@datafog/node";
@@ -45,6 +46,7 @@ import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanSt
 
 const fixturesDirectory = process.argv[2];
 const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+const credentialOverlapRecords = readFileSync(path.join(fixturesDirectory,"credential-overlaps.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const bearerRecords = readFileSync(path.join(fixturesDirectory,"bearer-token.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const us_routing_numberRecords = readFileSync(path.join(fixturesDirectory,"us-routing-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
@@ -54,6 +56,7 @@ verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
 verifyGerman(germanApi,germanRecords);
+verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
 verifyJwt(germanApi,jwtRecords);
 verifyBearerToken(germanApi,bearerRecords);
 const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
@@ -631,6 +634,7 @@ try {
   );
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
