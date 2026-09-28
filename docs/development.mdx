@@ -80,11 +80,12 @@ package versions, and their lockfiles aligned. The publishing workflows run
 `python3 scripts/check-release.py <runtime>` and reject inconsistent versions
 or a release tag that does not match the package version.
 
-Run the quality gates and installed-package tests above on the release commit.
-Merge the release preparation PR, then create these tags on that same commit
-for the planned 0.4.0 release, only after completing the
-[candidate integration checklist](/releases/0-4-0#release-readiness-gate).
-The source version bump does not authorize or perform publication:
+For future releases, run the quality gates and installed-package tests above
+on the release commit, complete the
+[integration checklist](/releases/0-4-0#release-readiness-gate), and merge the
+release preparation PR before creating runtime tags on that same commit.
+Version 0.4.0 has already been published using the tags below; do not recreate
+or move these tags. A source version bump alone does not publish packages:
 
 | Tag | Workflow | Destination |
 | --- | --- | --- |

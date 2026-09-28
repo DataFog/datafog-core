@@ -2,7 +2,7 @@
 
 Fast structured PII detection, implemented in Rust and exposed for Rust, Python, Node.js, and browsers.
 
-It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. The next release also detects `JWT` tokens by default; see the [JWT reference](docs/reference/jwt.mdx). With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER` (unreleased). Complete PEM private-key blocks are also detected as `PRIVATE_KEY` by default (unreleased); see the [private-key reference](docs/reference/private-keys.mdx). Context-labeled `US_ROUTING_NUMBER` detection is also available (unreleased); see [the detector rules](docs/reference/us-routing-number.mdx). Context-labeled `NPI` detection is also available (unreleased); see [the detector rules](docs/reference/npi.mdx). Every binding returns the same finding information:
+It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. Version 0.4.0 also detects `JWT` tokens by default; see the [JWT reference](docs/reference/jwt.mdx). With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. Complete PEM private-key blocks are also detected as `PRIVATE_KEY` by default; see the [private-key reference](docs/reference/private-keys.mdx). Context-labeled `US_ROUTING_NUMBER` detection is also available; see [the detector rules](docs/reference/us-routing-number.mdx). Context-labeled `NPI` detection is also available; see [the detector rules](docs/reference/npi.mdx). Every binding returns the same finding information:
 
 ```text
 entity type, matched text, byte range, code-point range,
@@ -274,12 +274,12 @@ fixtures/           Shared conformance fixtures
 
 [MIT](LICENSE)
 
-## German structured identifiers (unreleased)
+## German structured identifiers
 
 Pass `{"locale":"de"}` to text or structured scans. Trimmed, ASCII
 case-insensitive `de`, `de-DE`, and `de_DE` activate all seven German detectors;
 omitted locale and recognized `en-US`/`fr` aliases keep base detection only.
-The 0.4.0 candidate rejects unsupported explicit locales.
+Version 0.4.0 rejects unsupported explicit locales.
 
 ```python
 from datafog_core import scan_and_transform
@@ -298,10 +298,10 @@ boundaries, never newlines. Returned text and offsets preserve the source.
 Passport and residence-permit patterns are legacy heuristics with limited
 coverage. See the [German entity reference](docs/reference/german-entities.mdx)
 and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
-The Python 4.9 adapter requires a subsequently published compatible Core wheel;
-this source change does not update its extra pin or publish a release.
+Core 0.4.0 is published. The higher-level Python adapter and its dependency
+update remain separate and unreleased in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179).
 
-## UUID identifiers (unreleased)
+## UUID identifiers
 
 Canonical UUID detection is opt-in: pass `{"detect_uuid":true}` to text or
 structured scans, independently of locale. It emits `UUID` findings for versions
@@ -309,4 +309,4 @@ structured scans, independently of locale. It emits `UUID` findings for versions
 sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
 excluded sentinel forms and transformation examples.
 
-The source candidate targets **0.4.0**; publication and downstream Python integration are separate release gates. See the [candidate release checklist](docs/releases/0-4-0.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).
+**0.4.0 is published** for Rust, Python, Node.js, and WASM. The higher-level Python adapter remains a separate unreleased integration in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179). See the [release notes](docs/releases/0-4-0.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).

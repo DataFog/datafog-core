@@ -3,7 +3,7 @@ title: "JWT"
 description: "Recognize compact JSON Web Tokens and transform their full spans."
 ---
 
-<Warning>This detector targets the unreleased 0.4.0 candidate. Build from current source until the next package release; published 0.3.1 packages do not include it.</Warning>
+<Note>This detector is available in Core 0.4.0 or newer.</Note>
 
 `JWT` is enabled by default in Rust, Python, Node.js, and browser WASM. It detects a complete compact token with exactly three unpadded Base64URL segments. The decoded header and payload must be JSON objects, and the header must contain a nonempty string `alg`. For `alg: "none"`, the signature must be empty. Other algorithms require a nonempty, decodable signature.
 

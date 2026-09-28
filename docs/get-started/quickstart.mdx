@@ -89,15 +89,14 @@ Transformation records contain ranges, detector provenance, the selected
 strategy, and the exact replacement. They intentionally do not repeat the
 original matched PII.
 
-## German identifiers (unreleased)
+## German identifiers
 
 To detect German identifiers, supply a German scan locale. To transform only
 German IBANs, also select `DE_IBAN` in the transformation configuration. These
 are separate controls: selecting an entity does not activate its detector.
 
 The [German entity examples](/reference/german-entities#scan-and-redact-an-iban)
-show this configuration in all four runtimes. They require a build containing
-the feature; published 0.3.1 packages do not include German detection.
+show this configuration in all four runtimes. They require Core 0.4.0 or newer.
 
 ## Next steps
 

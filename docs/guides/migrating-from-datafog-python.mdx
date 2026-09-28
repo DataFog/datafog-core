@@ -205,7 +205,7 @@ Continue with the [Python reference](/reference/python), then review
 [findings and ranges](/concepts/findings-and-ranges) and
 [configuration](/guides/configuration).
 
-## German detection migration (unreleased)
+## German detection migration
 
 The seven German labels are implemented in Core, with shared Rust, installed
 Python/Node and browser/WASM conformance fixtures. This is format/context
@@ -232,6 +232,8 @@ prefixes, which are part of the finding and are replaced too.
 The Python adapter may translate explicit German entity requests into locale
 `de` and then filter results, but must separately test legacy overlap and
 selection semantics. Core adds no plural `locales`, engine switch or scan-time
-entity selector. General German 4.9 integration requires a subsequently
-published compatible Core wheel and an adapter extra-pin update; source-only
-work does not complete that release step.
+entity selector. Core 0.4.0 is published. The capability-aware higher-level adapter and its
+`datafog-core>=0.4.0,<0.5` dependency remain in unreleased
+[draft PR #179](https://github.com/DataFog/datafog-python/pull/179). That adapter
+requires its own hosted checks and release review; see the
+[reviewed legacy NPI selection limitation](/releases/0-4-0#python-adapter-dependency-and-npi-selection).

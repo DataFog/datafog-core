@@ -43,23 +43,22 @@ Text scans recognize these entities without a locale:
 - `IP_ADDRESS`
 - `DATE`
 - `ZIP_CODE`
-- `JWT` (unreleased; [recognition rules](/reference/jwt))
-- `PRIVATE_KEY` (unreleased; complete PEM blocks — [format and boundaries](/reference/private-keys))
+- `JWT` ([recognition rules](/reference/jwt))
+- `PRIVATE_KEY` (complete PEM blocks — [format and boundaries](/reference/private-keys))
 
 Structured scans also discover `PERSON` in supported name fields. See
 [structured person discovery](/guides/person-discovery) for field mappings.
 
 <Note>
-  **Unreleased German coverage:** an explicit German locale adds `DE_IBAN`,
+  **German coverage (0.4.0+):** an explicit German locale adds `DE_IBAN`,
   `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`,
   `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. See the
   [German entity reference](/reference/german-entities) for examples, required
-  contexts, and format limitations. This coverage requires a build containing
-  the feature; published 0.3.1 packages do not include it.
+  contexts, and format limitations. This coverage is available in Core 0.4.0 or newer.
 </Note>
 
 UUID identifiers can also be detected with an explicit `detect_uuid: true`
-option (unreleased). See [UUID identifiers](/reference/uuid) for the supported
+option in Core 0.4.0 or newer. See [UUID identifiers](/reference/uuid) for the supported
 syntax and why this detector is opt-in.
 
 Built-in entity names are uppercase. The finding contract remains extensible so
@@ -88,7 +87,7 @@ explicit scan-then-transform convenience operation.
   </Card>
 </Columns>
 
-[Unreleased US routing number detection](/reference/us-routing-number) adds `US_ROUTING_NUMBER` with explicit text context.
-[Unreleased National Provider Identifiers detection](/reference/npi) adds `NPI` with explicit text context.
+[US routing number detection](/reference/us-routing-number) adds `US_ROUTING_NUMBER` with explicit text context.
+[National Provider Identifiers detection](/reference/npi) adds `NPI` with explicit text context.
 
-The [0.4.0 source candidate](/releases/0-4-0) includes runtime capability discovery and a [compatibility policy](/reference/compatibility). Publication and downstream Python integration remain separate release gates.
+[DataFog Core 0.4.0](/releases/0-4-0) is published across all four runtimes and includes Rust/Python capability discovery and a [compatibility policy](/reference/compatibility). The higher-level Python adapter remains a separate unreleased integration in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179).

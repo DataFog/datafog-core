@@ -1,17 +1,23 @@
 ---
-title: "0.4.0 candidate"
-description: "Expanded detection, runtime capabilities, and strict locale validation; publication pending."
+title: "0.4.0"
+description: "Expanded detection, runtime capabilities, and strict locale validation."
 icon: "tag"
 ---
 
-<Warning>
-  This is an unreleased source candidate targeting 0.4.0. Version-aligned
-  manifests and passing Core tests do not mean packages have been published or
-  that downstream Python integration has passed. The release gate below must
-  be completed against the candidate artifacts before publication.
-</Warning>
+DataFog Core [**0.4.0 is published**](https://github.com/DataFog/datafog-core/releases/tag/v0.4.0) for Rust, Python, Node.js, and browser WASM.
+All four runtime tags point to source commit
+[`133bceff`](https://github.com/DataFog/datafog-core/commit/133bceff0d2a53a7f6d1a75693330c1797285654).
 
-## Candidate changes
+Registry-installed artifacts were verified after publication:
+
+| Runtime | Distribution | Verification |
+| --- | --- | --- |
+| Rust | [datafog-core 0.4.0](https://crates.io/crates/datafog-core/0.4.0) | crates.io artifact checksum and installed-crate smoke test |
+| Python | [datafog-core 0.4.0](https://pypi.org/project/datafog-core/0.4.0/) | PyPI wheel, 352 downstream adapter/contract checks, and `pip check` |
+| Node.js | [@datafog/node 0.4.0](https://www.npmjs.com/package/@datafog/node/v/0.4.0) | Clean registry installation and native smoke test |
+| Browser/WASM | [@datafog/wasm 0.4.0](https://www.npmjs.com/package/@datafog/wasm/v/0.4.0) | Registry installation and actual Chromium smoke test |
+
+## Changes
 
 - JWT and complete PEM private-key detection run by default.
 - Context-labeled US routing numbers and National Provider Identifiers run by
@@ -39,14 +45,32 @@ base detection. UUID activation remains independent of locale.
 Previously, arbitrary nonempty locale strings were accepted and silently used
 base detection. In 0.4.0, unsupported explicit locales raise the binding's
 existing configuration error. Update callers that supplied placeholder or
-unrecognized locale strings before adopting the candidate. The
+unrecognized locale strings before adopting 0.4.0. The
 [compatibility policy](/reference/compatibility) governs subsequent 0.4.x changes.
+
+## Python adapter dependency and NPI selection
+
+The Core Python binding (`datafog_core`) and the higher-level `datafog-python`
+package have separate release lifecycles. The capability-aware adapter is
+tracked in [datafog-python draft PR #179](https://github.com/DataFog/datafog-python/pull/179),
+which targets `datafog-core>=0.4.0,<0.5`. The published Core wheel has passed the 352-check local adapter/contract
+suite. The adapter draft remains unreleased and must complete its hosted checks
+and separate release review before it is merged or released. Core availability alone does not release the higher-level adapter.
+
+A reviewed compatibility limitation remains in the legacy Python adapter.
+Core can return both `PHONE` and `NPI` for the same numeric span. Legacy
+processing resolves overlaps before filtering selected labels and gives
+`PHONE` priority, so selecting only `NPI` through that legacy path can return
+no finding. Default legacy redaction still protects the number. The native
+`datafog.v5.scan` path retains the NPI finding, and native transformations can
+select `NPI` explicitly. PR #179 tests this behavior while preserving the
+legacy overlap and selection rules.
 
 ## Release readiness gate
 
-The checklist is a release procedure, not a claim that its steps have passed.
-Record artifact paths, checksums, tested commits, commands, and results in the
-release review.
+The following procedure remains applicable to future releases. The 0.4.0
+registry verification results are recorded above. Record artifact paths,
+checksums, tested commits, commands, and results in each release review.
 
 1. Land the focused detector and capability changes; select the exact candidate
    commit. Confirm all package and lockfile versions with
@@ -73,5 +97,3 @@ release review.
 7. Verify registry artifacts by installing the published versions before
    announcing availability. Complete any dependent `datafog-python` release
    only after its Core dependency is available.
-
-No package publication is performed by preparing this candidate.

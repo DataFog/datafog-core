@@ -3,7 +3,7 @@ title: "Runtime capabilities"
 description: "Discover supported entities, detector defaults, locale aliases, and activation settings."
 ---
 
-<Note>The capability API targets the unreleased 0.4.0 candidate. Published 0.3.1 packages do not provide this API.</Note>
+<Note>The capability API is available in Rust and Python with Core 0.4.0 or newer.</Note>
 
 Call `capabilities()` to discover what the installed runtime supports. The Rust
 registry supplies the response for Rust and Python; applications do not need
@@ -28,7 +28,7 @@ assert!(info.supported_entities.iter().any(|label| label == "UUID"));
 ```
 
 Node.js and browser WASM share the core detector behavior but do not export a
-capability-discovery API in this candidate. Their existing scan APIs remain
+capability-discovery API in 0.4.0. Their existing scan APIs remain
 available.
 
 ## Response contract
@@ -50,9 +50,9 @@ that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
 use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
 structured scanning; inspect it before choosing a runtime operation.
 
-## Candidate inventory
+## Version 0.4.0 inventory
 
-This table was generated from the candidate Rust `capabilities()` response (contract version 1). It reports **20 supported entities** and **11 default text detectors**. It is documentation of the candidate; query the installed runtime for its actual inventory.
+This table was generated from the Core 0.4.0 Rust `capabilities()` response (contract version 1). It reports **20 supported entities** and **11 default text detectors**. It is documentation of version 0.4.0; query the installed runtime for its actual inventory.
 
 | Entity | Scopes | Activation | Scan settings |
 | --- | --- | --- | --- |
@@ -93,7 +93,7 @@ Locale comparison trims the supplied value and uses ASCII case-insensitive
 matching. The original configured string remains preserved. German aliases
 activate their locale-specific entities; `en-US` and `fr` retain base detection.
 Omitted locale runs base detection. Unsupported explicit locale strings raise
-the existing configuration error in the 0.4.0 candidate.
+the existing configuration error in Core 0.4.0.
 
 Selecting an entity for transformation does not activate its detector. Use the
 reported scan settings and keep transformation selection separate. Structured
