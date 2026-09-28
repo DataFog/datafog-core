@@ -8,6 +8,7 @@ from pathlib import Path
 import german_conformance
 import jwt_conformance
 import private_key_conformance
+import uuid_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -121,6 +122,7 @@ def main() -> None:
     german_conformance.verify()
     jwt_conformance.verify()
     private_key_conformance.verify()
+    uuid_conformance.verify()
     verify_structured()
     verify_fixture("development.jsonl")
     verify_fixture("final.jsonl")
@@ -367,6 +369,8 @@ def main() -> None:
     asyncio.run(german_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(jwt_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(private_key_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
+
+    asyncio.run(uuid_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"uuid"}))
 
     async def structured_round_trip():
         original = {"users":[{"first_name":"👋 José"},{"full_name":"May"}],"count":2}

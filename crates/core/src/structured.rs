@@ -77,15 +77,26 @@ fn validate_pointer(pointer: &str, path: &str) -> Result<(), PrivacyError> {
     Ok(())
 }
 
-/// Parse `{ locale?, discover_person?, mappings?: {pointer: "PERSON"}, exclude?: [pointer] }`.
+/// Parse `{ locale?, detect_uuid?, discover_person?, mappings?: {pointer: "PERSON"}, exclude?: [pointer] }`.
 pub fn parse_scan_config(value: &Value) -> Result<StructuredScanConfig, PrivacyError> {
     let object = require_object(value, "", "structured scan configuration must be an object")?;
     reject_unknown_fields(
         object,
-        &["locale", "discover_person", "mappings", "exclude"],
+        &[
+            "locale",
+            "detect_uuid",
+            "discover_person",
+            "mappings",
+            "exclude",
+        ],
         "",
     )?;
     let mut config = StructuredScanConfig::default();
+    if let Some(enabled) = object.get("detect_uuid") {
+        config.scan = config
+            .scan
+            .with_uuid_detection(parse_uuid_detection(enabled)?);
+    }
     if let Some(locale) = object.get("locale") {
         config.scan = config.scan.with_locale(require_string(
             locale,

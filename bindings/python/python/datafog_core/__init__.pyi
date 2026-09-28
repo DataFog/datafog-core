@@ -10,6 +10,7 @@ _JsonDocument: TypeAlias = list[_JsonValue] | dict[str, _JsonValue]
 
 class _ScanConfig(TypedDict, total=False):
     locale: str
+    detect_uuid: bool
 
 class _StructuredScanConfig(_ScanConfig, total=False):
     discover_person: bool

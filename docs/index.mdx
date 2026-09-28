@@ -58,6 +58,10 @@ Structured scans also discover `PERSON` in supported name fields. See
   the feature; published 0.3.1 packages do not include it.
 </Note>
 
+UUID identifiers can also be detected with an explicit `detect_uuid: true`
+option (unreleased). See [UUID identifiers](/reference/uuid) for the supported
+syntax and why this detector is opt-in.
+
 Built-in entity names are uppercase. The finding contract remains extensible so
 custom detectors can introduce additional entity names in the future.
 

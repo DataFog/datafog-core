@@ -299,3 +299,11 @@ coverage. See the [German entity reference](docs/reference/german-entities.mdx)
 and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
 The Python 4.9 adapter requires a subsequently published compatible Core wheel;
 this source change does not update its extra pin or publish a release.
+
+## UUID identifiers (unreleased)
+
+Canonical UUID detection is opt-in: pass `{"detect_uuid":true}` to text or
+structured scans, independently of locale. It emits `UUID` findings for versions
+1–8 with the IETF variant and original casing/ranges. UUID syntax does not imply
+sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
+excluded sentinel forms and transformation examples.

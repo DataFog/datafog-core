@@ -31,6 +31,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-conformance.mjs";
+import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import * as germanApi from "@datafog/node";
@@ -43,6 +44,8 @@ verifyGerman(germanApi,germanRecords);
 verifyJwt(germanApi,jwtRecords);
 const privateKeyRecords = readFileSync(path.join(fixturesDirectory,"private-key.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyPrivateKey(germanApi,privateKeyRecords);
+const uuidRecords = readFileSync(path.join(fixturesDirectory,"uuid.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+verifyUuid(germanApi,uuidRecords);
 
 assert.throws(() => scan(123), TypeError);
 
@@ -407,6 +410,7 @@ assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
 await verifyJwtProviders(jwtRecords, manager, tokenManager, tokenContext);
 await verifyPrivateKeyProviders(privateKeyRecords, manager, tokenManager, tokenContext);
+await verifyUuidProviders(manager,tokenManager,tokenContext);
 
 const structuredOriginal = {users:[{first_name:"👋 José"},{full_name:"May"}], count:2};
 const structuredTokens = await tokenManager.scanAndTransformStructured(structuredOriginal, {transform:{default:{strategy:"tokenize",token_ref:"names"}}}, tokenContext);
@@ -487,7 +491,7 @@ import {
   type TransformResult,
 } from "@datafog/node";
 
-const findings: Finding[] = scan("Email jane@example.com");
+const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true});
 const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
@@ -608,6 +612,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeConsumerTest();
 
   run(

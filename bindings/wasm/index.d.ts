@@ -36,6 +36,8 @@ export interface TransformationConfig {
 
 export interface ScanConfig {
   readonly locale?: string;
+  /** Opt-in canonical UUID detection; disabled by default. */
+  readonly detect_uuid?: boolean;
 }
 
 export interface ScanAndTransformConfig {
@@ -144,6 +146,8 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
 export interface StructuredScanConfig {
   readonly locale?: string;
+  /** Opt-in canonical UUID detection; disabled by default. */
+  readonly detect_uuid?: boolean;
   readonly discover_person?: boolean;
   readonly mappings?: Readonly<Record<string, "PERSON">>;
   readonly exclude?: readonly string[];
