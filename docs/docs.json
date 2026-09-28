@@ -60,7 +60,8 @@
           "reference/api-keys",
           "reference/uuid",
           "reference/us-routing-number",
-          "reference/npi"
+          "reference/npi",
+          "reference/credential-uri"
         ]
       },
       {

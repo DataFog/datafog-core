@@ -12,6 +12,8 @@ on:
       - "scripts/german-conformance.mjs"
       - "scripts/uuid-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
+      - "scripts/*-conformance.mjs"
+      - "scripts/synthetic-fixtures.mjs"
   pull_request:
     paths:
       - "Cargo.toml"
@@ -23,6 +25,8 @@ on:
       - "scripts/german-conformance.mjs"
       - "scripts/uuid-conformance.mjs"
       - ".github/workflows/wasm-binding.yml"
+      - "scripts/*-conformance.mjs"
+      - "scripts/synthetic-fixtures.mjs"
 
 jobs:
   installed-package:

@@ -201,7 +201,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl"]) {
+  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -216,6 +216,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
@@ -252,6 +253,9 @@ try {
     const bearerRecords = (await fetch("/bearer-token.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     const {verifyUsRoutingNumber} = await import("/us-routing-number-conformance.mjs");
     const us_routing_numberRecords = (await fetch("/us-routing-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+    const {verifyCredentialUri} = await import("/credential-uri-conformance.mjs");
+    const credential_uriRecords = (await fetch("/credential-uri.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+    verifyCredentialUri(germanApi,credential_uriRecords);
     verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
     const {verifyNpi} = await import("/npi-conformance.mjs");
     const npiRecords = (await fetch("/npi.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);

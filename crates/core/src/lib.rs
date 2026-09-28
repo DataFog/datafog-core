@@ -2,6 +2,7 @@
 mod api_key;
 mod bearer_token;
 mod capabilities;
+mod credential_uri;
 pub use capabilities::{
     ActivationScanConfig, Capabilities, EntityActivation, EntityCapabilities, LocaleCapabilities,
     capabilities,
@@ -1918,6 +1919,7 @@ impl std::error::Error for PrivacyError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
     ApiKey,
+    CredentialUri,
     Email,
     Phone,
     Ssn,
@@ -1945,6 +1947,7 @@ impl Label {
     fn as_str(self) -> &'static str {
         match self {
             Label::ApiKey => "API_KEY",
+            Label::CredentialUri => "CREDENTIAL_URI",
             Label::Email => "EMAIL",
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
@@ -1971,6 +1974,7 @@ impl Label {
     fn detector_name(self) -> &'static str {
         match self {
             Label::ApiKey => "datafog-core/api-key",
+            Label::CredentialUri => "datafog-core/credential-uri",
             Label::Email => "datafog-core/email",
             Label::Phone => "datafog-core/phone",
             Label::Ssn => "datafog-core/ssn",
@@ -3947,6 +3951,49 @@ mod tests {
             let text = row["text"].as_str().unwrap();
             let expected_count = row["entities"].as_array().unwrap().len();
             let entities = vec!["US_ROUTING_NUMBER"];
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"german"}),
+                json!({"strategy":"tokenize","token_ref":"german"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({"scan":row["config"],"transform":{"default":strategy,"entities":entities}})).unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), expected_count);
+                assert_ne!(result.text, text);
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn credential_uri_fixtures_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "german",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("german").unwrap();
+        for line in include_str!("../../../fixtures/credential-uri.jsonl").lines() {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            if row["sample"] != true {
+                continue;
+            }
+            let text = row["text"].as_str().unwrap();
+            let expected_count = row["entities"].as_array().unwrap().len();
+            let entities = vec!["CREDENTIAL_URI"];
             for strategy in [
                 json!({"strategy":"pseudonymize","key_ref":"german"}),
                 json!({"strategy":"tokenize","token_ref":"german"}),
