@@ -116,10 +116,11 @@ Python; the new credential labels did not silently activate there.
 
 Set `ADAPTER_CHECKOUT` to the reviewed Python adapter checkout, `CORE_CHECKOUT`
 to the matching Core conformance checkout, `CORE_WHEEL` to the exact wheel,
-`PYTHON` to CPython 3.12, and `VENV` to a fresh environment directory. Set
-`OVERLAP_AUDIT` to the reviewed release audit script retained with the integration
-evidence. These commands install the local wheel rather than resolving Core
-from a registry:
+`PYTHON` to CPython 3.12, and `VENV` to a fresh environment directory. The
+checked-in `bindings/python/tests/test_python49_integration.py` exercises the
+real installed adapter and expands the shared synthetic fixtures. It prints a
+summary by default; `--output` optionally saves detailed JSON evidence. These
+commands install the local wheel rather than resolving Core from a registry:
 
 ```bash
 "$PYTHON" -m venv "$VENV"
@@ -134,7 +135,8 @@ from a registry:
   "$VENV/bin/python" -m tests.rust_contract --output "$VENV/parity.json"
 )
 "$VENV/bin/python" "$CORE_CHECKOUT/bindings/python/tests/test_installed.py"
-"$VENV/bin/python" "$OVERLAP_AUDIT"
+"$VENV/bin/python" "$CORE_CHECKOUT/bindings/python/tests/test_python49_integration.py" \
+  --output "$VENV/overlap-results.json"
 ```
 
 Verify the wheel SHA256 before installation and retain pip's `direct_url.json`
