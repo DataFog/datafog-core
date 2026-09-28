@@ -4,9 +4,90 @@ description: "Locale-gated German format and context detection, with exact sourc
 icon: "fingerprint"
 ---
 
-This coverage is unreleased. All four bindings share these Core detectors.
+<Note>
+  This coverage is unreleased and requires a build containing the feature.
+  Published 0.3.1 packages do not include these detectors. All four runtimes
+  share the same Core implementation.
+</Note>
+
 Activate them with `{"locale":"de"}`; `de-DE` and `de_DE` also work,
 case-insensitively after trimming. Base detectors always continue to run.
+
+## Scan and redact an IBAN
+
+Pass the locale to scanning and the entity selection to transformations. This
+example keeps the `IBAN:` label and replaces only the original account value.
+
+<CodeGroup>
+
+```rust Rust
+use datafog_core::{
+    scan_and_transform, ScanAndTransformConfig, ScanConfig,
+    TransformationConfig, TransformationStrategy,
+};
+
+let transform = TransformationConfig::new(TransformationStrategy::Redact)
+    .with_entities(vec!["DE_IBAN".to_owned()])
+    .unwrap();
+let config = ScanAndTransformConfig::new(transform)
+    .with_scan(ScanConfig::default().with_locale("de").unwrap());
+let result = scan_and_transform("IBAN: DE44 5001 0517 5407 3249 31", &config)
+    .unwrap();
+
+assert_eq!(result.text, "IBAN: [DE_IBAN]");
+```
+
+```python Python
+from datafog_core import scan_and_transform
+
+result = scan_and_transform("IBAN: DE44 5001 0517 5407 3249 31", {
+    "scan": {"locale": "de"},
+    "transform": {
+        "default": {"strategy": "redact"},
+        "entities": ["DE_IBAN"],
+    },
+})
+
+assert result.text == "IBAN: [DE_IBAN]"
+```
+
+```javascript Node.js
+import { scanAndTransform } from "@datafog/node";
+
+const result = scanAndTransform("IBAN: DE44 5001 0517 5407 3249 31", {
+  scan: { locale: "de" },
+  transform: {
+    default: { strategy: "redact" },
+    entities: ["DE_IBAN"],
+  },
+});
+
+console.assert(result.text === "IBAN: [DE_IBAN]");
+```
+
+```javascript Browser/WASM
+import { init, scanAndTransform } from "@datafog/wasm";
+
+await init();
+const result = scanAndTransform("IBAN: DE44 5001 0517 5407 3249 31", {
+  scan: { locale: "de" },
+  transform: {
+    default: { strategy: "redact" },
+    entities: ["DE_IBAN"],
+  },
+});
+
+console.assert(result.text === "IBAN: [DE_IBAN]");
+```
+
+</CodeGroup>
+
+For detection alone, pass `{"locale":"de"}` directly to `scan` (Rust:
+`scan_with_config`). Omitted locale leaves German detection disabled. Other
+nonempty locales remain accepted. Selecting `DE_IBAN` for a transformation
+does not activate detection, and transforming explicit findings requires no locale.
+
+## Supported formats
 
 | Label | Detector name | Value / context |
 | --- | --- | --- |
@@ -66,3 +147,38 @@ ranges. Confidence is absent and detector version is the current crate version.
 Repeated occurrences have separate source ranges. Scanning retains overlaps;
 transformations resolve them using the existing selection rules and emit one
 unnumbered placeholder such as `[DE_TAX_ID]` per selected finding.
+
+## Structured values
+
+The same locale applies independently within each string. Context must appear
+in that string; a property named `Steuer-ID` does not supply textual context.
+
+```python
+from datafog_core import scan_and_transform_structured
+
+result = scan_and_transform_structured({
+    "account": "DE44 5001 0517 5407 3249 31",
+    "notes": ["Steuer-ID 12345678901"],
+    "Steuer-ID": "12345678901",
+}, {
+    "scan": {"locale": "de"},
+    "transform": {
+        "default": {"strategy": "redact"},
+        "entities": ["DE_IBAN", "DE_TAX_ID"],
+    },
+})
+
+assert result.data == {
+    "account": "[DE_IBAN]",
+    "notes": ["Steuer-ID [DE_TAX_ID]"],
+    "Steuer-ID": "12345678901",
+}
+```
+
+Only German findings are selected in this example. Generic detectors may also
+return overlapping findings; they remain available to callers. Configure
+[overrides and allowlists](/guides/configuration) for the exact original values,
+including their casing and separators.
+
+See [German detection migration](/guides/migrating-from-datafog-python#german-detection-migration-unreleased)
+for intentional differences from Python 4.8.1 and the Python 4.9 release dependency.
