@@ -12,6 +12,7 @@ import bearer_token_conformance
 import private_key_conformance
 import api_key_conformance
 import uuid_conformance
+import credential_uri_conformance
 import us_routing_number_conformance
 import npi_conformance
 
@@ -131,6 +132,7 @@ def main() -> None:
     private_key_conformance.verify()
     api_key_conformance.verify()
     uuid_conformance.verify()
+    credential_uri_conformance.verify()
     us_routing_number_conformance.verify()
     npi_conformance.verify()
     verify_structured()
@@ -376,6 +378,7 @@ def main() -> None:
                 results.append({"id": item["id"], "value": record[3]})
             return results
 
+    asyncio.run(credential_uri_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(us_routing_number_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(npi_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))
     asyncio.run(german_conformance.verify_providers(PrivacyManager(Provider()), PrivacyManager(token_provider=TokenProvider()), {"scope":"german"}))

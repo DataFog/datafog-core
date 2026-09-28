@@ -13,8 +13,8 @@ fn capability_contract_is_sorted_owned_and_scope_explicit() {
     let second = capabilities();
     let value = serde_json::to_value(&second).unwrap();
     assert_eq!(value["contract_version"], 1);
-    assert_eq!(second.supported_entities.len(), 22);
-    assert_eq!(second.default_entities.len(), 13);
+    assert_eq!(second.supported_entities.len(), 23);
+    assert_eq!(second.default_entities.len(), 14);
     assert!(
         second
             .supported_entities
@@ -104,6 +104,7 @@ fn every_advertised_text_entity_has_an_executable_activation_recipe() {
         include_str!("../../../fixtures/uuid.jsonl"),
         include_str!("../../../fixtures/us-routing-number.jsonl"),
         include_str!("../../../fixtures/npi.jsonl"),
+        include_str!("../../../fixtures/credential-uri.jsonl"),
     ] {
         for line in corpus.lines() {
             let row: Value = synthetic_fixtures::expand(serde_json::from_str(line).unwrap());

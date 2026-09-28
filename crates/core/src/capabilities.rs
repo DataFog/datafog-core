@@ -102,6 +102,7 @@ static REGISTRY: LazyLock<Vec<Detector>> = LazyLock::new(|| {
     vec![
         Detector::single(Label::BearerToken, crate::bearer_token::detect, Default),
         Detector::single(Label::ApiKey, crate::api_key::detect, Default),
+        Detector::single(Label::CredentialUri, crate::credential_uri::detect, Default),
         Detector::single(Label::Jwt, crate::jwt::detect, Default),
         Detector::single(
             Label::UsRoutingNumber,

@@ -34,6 +34,7 @@ import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-confo
 import { expandSyntheticFixture } from "./synthetic-fixtures.mjs";
 import { verifyApiKey, verifyApiKeyProviders } from "./api-key-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
+import { verifyCredentialUri, verifyCredentialUriProviders } from "./credential-uri-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
@@ -47,6 +48,8 @@ const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"
 const jwtRecords = readFileSync(path.join(fixturesDirectory,"jwt.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const bearerRecords = readFileSync(path.join(fixturesDirectory,"bearer-token.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const us_routing_numberRecords = readFileSync(path.join(fixturesDirectory,"us-routing-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+const credential_uriRecords = readFileSync(path.join(fixturesDirectory,"credential-uri.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
+verifyCredentialUri(germanApi,credential_uriRecords);
 verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
@@ -420,6 +423,7 @@ assert.notEqual(tokenized.transformations[0].replacement, tokenized.transformati
 assert.equal(tokenized.transformations[0].tokenRef, "customers/default");
 assert.equal(tokenized.transformations[0].resolvedTokenVersion, "active-1");
 
+await verifyCredentialUriProviders(credential_uriRecords, manager, tokenManager, tokenContext);
 await verifyUsRoutingNumberProviders(us_routing_numberRecords, manager, tokenManager, tokenContext);
 await verifyNpiProviders(npiRecords, manager, tokenManager, tokenContext);
 await verifyGermanProviders(germanRecords, manager, tokenManager, tokenContext);
@@ -634,6 +638,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   writeConsumerTest();
 

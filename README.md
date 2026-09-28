@@ -310,3 +310,5 @@ sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
 excluded sentinel forms and transformation examples.
 
 **0.4.0 is published** for Rust, Python, Node.js, and WASM. The higher-level Python adapter remains a separate unreleased integration in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179). See the [release notes](docs/releases/0-4-0.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).
+
+The unreleased **0.4.1 candidate** adds default `CREDENTIAL_URI` detection for scoped PostgreSQL URIs containing explicit passwords. Findings and transformations cover the whole original URI; see [syntax, boundaries, and exclusions](docs/reference/credential-uri.mdx).
