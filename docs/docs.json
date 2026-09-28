@@ -57,6 +57,7 @@
           "reference/jwt",
           "reference/bearer-token",
           "reference/private-keys",
+          "reference/api-keys",
           "reference/uuid",
           "reference/us-routing-number",
           "reference/npi"
