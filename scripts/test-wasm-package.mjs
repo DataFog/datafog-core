@@ -201,7 +201,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl"]) {
+  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -209,6 +209,7 @@ try {
   }
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
   browser = await chromium.launch();
@@ -237,14 +238,17 @@ try {
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
     const {verifyGerman} = await import("/german-conformance.mjs");
+    const {verifyJwt} = await import("/jwt-conformance.mjs");
     const germanRecords = (await fetch("/german.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
+    const jwtRecords = (await fetch("/jwt.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyGerman(germanApi,germanRecords);
-    for (const row of germanRecords.filter(r => r.sample)) {
+    verifyJwt(germanApi,jwtRecords);
+    for (const row of [...germanRecords,...jwtRecords].filter(r => r.sample)) {
       for (const strategy of [{strategy:"pseudonymize",key_ref:"german"},{strategy:"tokenize",token_ref:"german"}]) {
         let rejected = false;
-        try { scanAndTransform(row.text,{scan:row.config,transform:{default:strategy,entities:row.entities.map(e => e.label)}}); }
+        try { scanAndTransform(row.text,{scan:row.config,transform:{default:strategy,entities:[...new Set(row.entities.map(e => e.label))]}}); }
         catch (error) { rejected = error.code === "unsupported_strategy"; }
-        if (!rejected) throw new Error("German provider strategy accepted in WASM");
+        if (!rejected) throw new Error("Provider strategy accepted in WASM: " + row.id + " " + strategy.strategy);
       }
     }
 

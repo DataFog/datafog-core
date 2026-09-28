@@ -1,5 +1,6 @@
 //! Core PII scanning API for DataFog.
 mod german;
+mod jwt;
 mod offsets;
 pub mod structured;
 use base64::Engine;
@@ -1879,6 +1880,7 @@ enum Label {
     IpAddress,
     Date,
     ZipCode,
+    Jwt,
     DeIban,
     DeVatId,
     DeTaxId,
@@ -1899,6 +1901,7 @@ impl Label {
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
             Label::ZipCode => "ZIP_CODE",
+            Label::Jwt => "JWT",
             Label::DeIban => "DE_IBAN",
             Label::DeVatId => "DE_VAT_ID",
             Label::DeTaxId => "DE_TAX_ID",
@@ -1918,6 +1921,7 @@ impl Label {
             Label::IpAddress => "datafog-core/ip-address",
             Label::Date => "datafog-core/date",
             Label::ZipCode => "datafog-core/zip-code",
+            Label::Jwt => "datafog-core/jwt",
             Label::DeIban => "datafog-core/de-iban",
             Label::DeVatId => "datafog-core/de-vat-id",
             Label::DeTaxId => "datafog-core/de-tax-id",
@@ -1944,6 +1948,7 @@ pub fn scan(text: &str) -> Vec<Finding> {
 /// Scan text using explicit detector configuration.
 pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
+    jwt::detect(text, &mut candidates);
     detect_email(text, &mut candidates);
     detect_phone(text, &mut candidates);
     detect_ssn(text, &mut candidates);

@@ -53,7 +53,8 @@
         "pages": [
           "concepts/findings-and-ranges",
           "concepts/privacy-transformations",
-          "reference/german-entities"
+          "reference/german-entities",
+          "reference/jwt"
         ]
       },
       {
