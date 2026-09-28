@@ -1,0 +1,184 @@
+---
+title: "German entities"
+description: "Locale-gated German format and context detection, with exact source ranges."
+icon: "fingerprint"
+---
+
+<Note>
+  This coverage is unreleased and requires a build containing the feature.
+  Published 0.3.1 packages do not include these detectors. All four runtimes
+  share the same Core implementation.
+</Note>
+
+Activate them with `{"locale":"de"}`; `de-DE` and `de_DE` also work,
+case-insensitively after trimming. Base detectors always continue to run.
+
+## Scan and redact an IBAN
+
+Pass the locale to scanning and the entity selection to transformations. This
+example keeps the `IBAN:` label and replaces only the original account value.
+
+<CodeGroup>
+
+```rust Rust
+use datafog_core::{
+    scan_and_transform, ScanAndTransformConfig, ScanConfig,
+    TransformationConfig, TransformationStrategy,
+};
+
+let transform = TransformationConfig::new(TransformationStrategy::Redact)
+    .with_entities(vec!["DE_IBAN".to_owned()])
+    .unwrap();
+let config = ScanAndTransformConfig::new(transform)
+    .with_scan(ScanConfig::default().with_locale("de").unwrap());
+let result = scan_and_transform("IBAN: DE44 5001 0517 5407 3249 31", &config)
+    .unwrap();
+
+assert_eq!(result.text, "IBAN: [DE_IBAN]");
+```
+
+```python Python
+from datafog_core import scan_and_transform
+
+result = scan_and_transform("IBAN: DE44 5001 0517 5407 3249 31", {
+    "scan": {"locale": "de"},
+    "transform": {
+        "default": {"strategy": "redact"},
+        "entities": ["DE_IBAN"],
+    },
+})
+
+assert result.text == "IBAN: [DE_IBAN]"
+```
+
+```javascript Node.js
+import { scanAndTransform } from "@datafog/node";
+
+const result = scanAndTransform("IBAN: DE44 5001 0517 5407 3249 31", {
+  scan: { locale: "de" },
+  transform: {
+    default: { strategy: "redact" },
+    entities: ["DE_IBAN"],
+  },
+});
+
+console.assert(result.text === "IBAN: [DE_IBAN]");
+```
+
+```javascript Browser/WASM
+import { init, scanAndTransform } from "@datafog/wasm";
+
+await init();
+const result = scanAndTransform("IBAN: DE44 5001 0517 5407 3249 31", {
+  scan: { locale: "de" },
+  transform: {
+    default: { strategy: "redact" },
+    entities: ["DE_IBAN"],
+  },
+});
+
+console.assert(result.text === "IBAN: [DE_IBAN]");
+```
+
+</CodeGroup>
+
+For detection alone, pass `{"locale":"de"}` directly to `scan` (Rust:
+`scan_with_config`). Omitted locale leaves German detection disabled. Other
+nonempty locales remain accepted. Selecting `DE_IBAN` for a transformation
+does not activate detection, and transforming explicit findings requires no locale.
+
+## Supported formats
+
+| Label | Detector name | Value / context |
+| --- | --- | --- |
+| `DE_IBAN` | `datafog-core/de-iban` | `DE` + 20 digits, compact or optional grouping `DE44 5001 0517 5407 3249 31`; no context |
+| `DE_VAT_ID` | `datafog-core/de-vat-id` | `DE`, optionally one horizontal separator or hyphen, then nine digits; no context |
+| `DE_TAX_ID` | `datafog-core/de-tax-id` | Eleven digits, optionally grouped 2/3/3/3; tax context below |
+| `DE_SOCIAL_SECURITY_NUMBER` | `datafog-core/de-social-security-number` | Two digits, six digits, one ASCII letter, three digits; optional single horizontal separators between groups; insurance context below |
+| `DE_POSTAL_CODE` | `datafog-core/de-postal-code` | `PLZ` + optional one horizontal separator, colon or hyphen + five digits; or `DE`/`D` + one horizontal separator or hyphen + five digits |
+| `DE_PASSPORT_NUMBER` | `datafog-core/de-passport-number` | One ASCII letter and eight digits; passport context below |
+| `DE_RESIDENCE_PERMIT_NUMBER` | `datafog-core/de-residence-permit-number` | `AT` and seven digits; residence context below |
+
+All prefixes and labels match ASCII case-insensitively. Digits are `[0-9]`.
+Horizontal separators are U+0020 SPACE, U+0009 TAB, U+00A0 NBSP and U+202F
+NARROW NBSP. Optional value separators occur independently at group boundaries,
+at most one each. IBAN separators after `DE`, arbitrary grouping, double
+separators, hyphens, periods and newlines are rejected. A candidate immediately
+preceded or followed by an ASCII letter/digit is rejected; adjacent non-ASCII
+characters and punctuation are allowed. Longer identifiers cannot yield a
+valid-length prefix.
+
+## Required contexts
+
+Context must immediately precede the value, separated by zero or more horizontal
+separators, optionally one `:`, `#` or `-`, then zero or more horizontal
+separators. The value still needs its ASCII-alphanumeric boundary. Thus
+`IdNr.12345678901` works and `IdNr12345678901` does not. Context cannot start
+inside an ASCII word or number, span a newline, or activate later values in a list.
+
+- Tax: `SteuerID`, `Steuer-ID`, `Steuer ID`, `Steueridentifikationsnummer`,
+  `Identifikationsnummer`, `IdNr`, `IdNr.`, `TaxID`, `Tax-ID`, `Tax ID`.
+  The single spaces within the short labels may be any horizontal separator.
+- Insurance: `Rentenversicherungsnummer`, `Sozialversicherungsnummer`, `RVNR`, `SVNR`.
+- Passport: `Passnummer`, `Reisepass`, `Reisepassnummer`, `Passport`,
+  `Passport No`, `Passport No.`, `Passport Number`. The spaces after `Passport`
+  may be one or more horizontal separators.
+- Residence: `Aufenthaltstitel`, `Aufenthaltserlaubnis`, `Residence Permit`, `eAT`.
+  The space in `Residence Permit` may be one or more horizontal separators.
+
+Tax, insurance, passport and residence findings include only the value, so
+transformations retain their context. Postal findings include the prefix:
+`PLZ:10115` is one complete finding; `PLZ: 10115` is deliberately rejected.
+Structured keys and sibling values never supply context. Paths are JSON Pointers
+and all ranges are local to the original string value.
+
+## Detection policy and findings
+
+There is no IBAN/VAT/tax checksum validation, bank or postal directory lookup,
+pension date validation, document issuance validation, network call or model
+requirement. Sensitive-looking transcription errors are intentionally detected.
+Detection establishes neither validity nor existence of an account or identifier.
+Passport and residence patterns preserve legacy heuristics and do not cover all
+German documents. Personalausweis and tax-office Steuernummer are outside scope.
+
+Every finding preserves original casing, internal separators and zero-based,
+end-exclusive byte/code-point ranges. JavaScript bindings also expose UTF-16
+ranges. Confidence is absent and detector version is the current crate version.
+Repeated occurrences have separate source ranges. Scanning retains overlaps;
+transformations resolve them using the existing selection rules and emit one
+unnumbered placeholder such as `[DE_TAX_ID]` per selected finding.
+
+## Structured values
+
+The same locale applies independently within each string. Context must appear
+in that string; a property named `Steuer-ID` does not supply textual context.
+
+```python
+from datafog_core import scan_and_transform_structured
+
+result = scan_and_transform_structured({
+    "account": "DE44 5001 0517 5407 3249 31",
+    "notes": ["Steuer-ID 12345678901"],
+    "Steuer-ID": "12345678901",
+}, {
+    "scan": {"locale": "de"},
+    "transform": {
+        "default": {"strategy": "redact"},
+        "entities": ["DE_IBAN", "DE_TAX_ID"],
+    },
+})
+
+assert result.data == {
+    "account": "[DE_IBAN]",
+    "notes": ["Steuer-ID [DE_TAX_ID]"],
+    "Steuer-ID": "12345678901",
+}
+```
+
+Only German findings are selected in this example. Generic detectors may also
+return overlapping findings; they remain available to callers. Configure
+[overrides and allowlists](/guides/configuration) for the exact original values,
+including their casing and separators.
+
+See [German detection migration](/guides/migrating-from-datafog-python#german-detection-migration-unreleased)
+for intentional differences from Python 4.8.1 and the Python 4.9 release dependency.

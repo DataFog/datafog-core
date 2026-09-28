@@ -2,7 +2,7 @@
 
 Fast structured PII detection, implemented in Rust and exposed for Rust, Python, Node.js, and browsers.
 
-It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. Every binding returns the same finding information:
+It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER` (unreleased). Every binding returns the same finding information:
 
 ```text
 entity type, matched text, byte range, code-point range,
@@ -273,3 +273,29 @@ fixtures/           Shared conformance fixtures
 ## License
 
 [MIT](LICENSE)
+
+## German structured identifiers (unreleased)
+
+Pass `{"locale":"de"}` to text or structured scans. Trimmed, ASCII
+case-insensitive `de`, `de-DE`, and `de_DE` activate all seven German detectors;
+omitted and other nonempty locales keep base detection only.
+
+```python
+from datafog_core import scan_and_transform
+
+result = scan_and_transform("IBAN DE44 5001 0517 5407 3249 31", {
+    "scan": {"locale": "de"},
+    "transform": {"default": {"strategy": "redact"}, "entities": ["DE_IBAN"]},
+})
+assert result.text == "IBAN [DE_IBAN]"
+```
+
+These are format/context detectors, not official identifier validators. IBAN
+checksums and account existence are not checked. Digits are ASCII; permitted
+internal separators are space, tab, NBSP and narrow NBSP at specified group
+boundaries, never newlines. Returned text and offsets preserve the source.
+Passport and residence-permit patterns are legacy heuristics with limited
+coverage. See the [German entity reference](docs/reference/german-entities.mdx)
+and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
+The Python 4.9 adapter requires a subsequently published compatible Core wheel;
+this source change does not update its extra pin or publish a release.

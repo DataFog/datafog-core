@@ -109,3 +109,32 @@ are rejected even when their entity is not selected.
 Unknown fields and explicit `null` values are rejected. Empty structural maps
 are treated as omission, but empty semantic values such as an empty entity
 selection, key reference, or token reference are invalid.
+
+## German scan locale (unreleased)
+
+`scan(text, {"locale":"de"})` activates all seven
+[German entity types](/reference/german-entities). `de`, `de-DE`, and `de_DE`
+are recognized after trimming and ASCII case-insensitive comparison. The stored
+locale is preserved. Other nonempty locale strings remain accepted and run the
+base detectors; omitted locale does not activate German detectors. Empty,
+whitespace-only, non-string, and unknown configuration fields remain errors.
+Structured scans use the same locale routing within each string value.
+
+For German-only transformations, specify both routing and selection:
+
+```json
+{
+  "scan": { "locale": "de" },
+  "transform": {
+    "default": { "strategy": "redact" },
+    "entities": ["DE_IBAN"]
+  }
+}
+```
+
+Transformation selection never activates detection. Explicit German findings
+passed to `transform` require no locale. All seven labels support existing
+strategies, overrides and exact/full-match regex allowlists; exact allowlists
+compare original casing and separators. Provider-backed strategies remain
+unavailable in WASM. Scans retain generic overlaps, while transformations use
+existing containment/length and lexical tie-breaking rules.
