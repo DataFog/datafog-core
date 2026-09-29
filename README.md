@@ -298,8 +298,8 @@ boundaries, never newlines. Returned text and offsets preserve the source.
 Passport and residence-permit patterns are legacy heuristics with limited
 coverage. See the [German entity reference](docs/reference/german-entities.mdx)
 and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
-Core 0.4.0 is published. The higher-level Python adapter and its dependency
-update remain separate and unreleased in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179).
+The higher-level Python adapter and its dependency update were merged in
+[PR #179](https://github.com/DataFog/datafog-python/pull/179). Its package release is separate from Core.
 
 ## UUID identifiers
 
@@ -309,6 +309,6 @@ structured scans, independently of locale. It emits `UUID` findings for versions
 sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
 excluded sentinel forms and transformation examples.
 
-**0.4.0 is published** for Rust, Python, Node.js, and WASM. The higher-level Python adapter remains a separate unreleased integration in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179). See the [release notes](docs/releases/0-4-0.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).
+**0.4.1 is published** for Rust, Python, Node.js, and WASM. The higher-level Python adapter is integrated in [merged PR #179](https://github.com/DataFog/datafog-python/pull/179); its package release is separate. See the [release notes](docs/releases/0-4-1.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).
 
-The unreleased **0.4.1 candidate** adds three default detectors: provider-prefixed [`API_KEY`](docs/reference/api-keys.mdx), context-required [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), and whole PostgreSQL [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx). The registry reports 23 supported entities and 14 defaults with capability contract 1. See the [candidate release notes](docs/releases/0-4-1.mdx) for exact scopes, preserved legacy Python overlap behavior, and the required exact-wheel Python 4.9 integration gate. Python's default backend is unchanged.
+**Core 0.4.1** adds three default detectors: provider-prefixed [`API_KEY`](docs/reference/api-keys.mdx), context-required [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), and whole PostgreSQL [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx). The registry reports 23 supported entities and 14 defaults with capability contract 1. See the [release notes](docs/releases/0-4-1.mdx) for exact scopes, preserved legacy Python overlap behavior, and the passed local exact-wheel Python 4.9 integration gate. Python's default backend is unchanged.

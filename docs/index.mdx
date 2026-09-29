@@ -43,9 +43,9 @@ Text scans recognize these entities without a locale:
 - `IP_ADDRESS`
 - `DATE`
 - `ZIP_CODE`
-- `BEARER_TOKEN` (0.4.1 candidate; [explicit Authorization headers](/reference/bearer-token))
+- `BEARER_TOKEN` (0.4.1; [explicit Authorization headers](/reference/bearer-token))
 - `JWT` ([recognition rules](/reference/jwt))
-- `API_KEY` (unreleased 0.4.1 candidate; [supported providers](/reference/api-keys))
+- `API_KEY` (0.4.1; [supported providers](/reference/api-keys))
 - `PRIVATE_KEY` (complete PEM blocks — [format and boundaries](/reference/private-keys))
 
 Structured scans also discover `PERSON` in supported name fields. See
@@ -92,6 +92,6 @@ explicit scan-then-transform convenience operation.
 [US routing number detection](/reference/us-routing-number) adds `US_ROUTING_NUMBER` with explicit text context.
 [National Provider Identifiers detection](/reference/npi) adds `NPI` with explicit text context.
 
-[DataFog Core 0.4.0](/releases/0-4-0) is published across all four runtimes and includes Rust/Python capability discovery and a [compatibility policy](/reference/compatibility). The higher-level Python adapter remains a separate unreleased integration in [draft PR #179](https://github.com/DataFog/datafog-python/pull/179).
+[DataFog Core 0.4.1](/releases/0-4-1) is published across all four runtimes and includes Rust/Python capability discovery and a [compatibility policy](/reference/compatibility). The higher-level Python adapter is integrated in [merged PR #179](https://github.com/DataFog/datafog-python/pull/179); its package release is separate.
 
-The unreleased [0.4.1 candidate](/releases/0-4-1) adds default `API_KEY`, `BEARER_TOKEN`, and `CREDENTIAL_URI` detection. The runtime registry reports 23 supported entities and 14 defaults. Published 0.4.0 remains distinct; Python 4.9 adapter integration must pass against the exact candidate wheel.
+[Core 0.4.1](/releases/0-4-1) adds default `API_KEY`, `BEARER_TOKEN`, and `CREDENTIAL_URI` detection. The runtime registry reports 23 supported entities and 14 defaults. The local Python 4.9 adapter integration gate passed against the exact candidate wheel; the release notes record its evidence and limits.

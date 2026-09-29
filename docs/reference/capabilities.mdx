@@ -28,7 +28,7 @@ assert!(info.supported_entities.iter().any(|label| label == "UUID"));
 ```
 
 Node.js and browser WASM share the core detector behavior but do not export a
-capability-discovery API in 0.4.0. Their existing scan APIs remain
+capability-discovery API in 0.4.1. Their existing scan APIs remain
 available.
 
 ## Response contract
@@ -50,11 +50,11 @@ that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
 use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
 structured scanning; inspect it before choosing a runtime operation.
 
-## Version 0.4.1 candidate inventory
+## Version 0.4.1 inventory
 
-<Note>This inventory describes the unreleased 0.4.1 source candidate. Published 0.4.0 exposes 20 supported entities and 11 default text detectors; its history is preserved in the [0.4.0 release notes](/releases/0-4-0).</Note>
+<Note>This inventory describes Core 0.4.1. Core 0.4.0 exposes 20 supported entities and 11 default text detectors; its history is preserved in the [0.4.0 release notes](/releases/0-4-0).</Note>
 
-This table was generated from the candidate Rust `capabilities()` response. It reports **23 supported entities** and **14 default text detectors**, with unchanged `contract_version: 1`. Query the installed runtime for its actual inventory.
+This table was generated from the Rust `capabilities()` response. It reports **23 supported entities** and **14 default text detectors**, with unchanged `contract_version: 1`. Query the installed runtime for its actual inventory.
 
 | Entity | Scopes | Activation | Scan settings |
 | --- | --- | --- | --- |
