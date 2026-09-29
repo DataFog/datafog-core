@@ -1,14 +1,54 @@
 ---
-title: "0.4.1 candidate"
+title: "0.4.1"
 description: "Three default credential detectors with unchanged capability contract and explicit Python integration gates."
 icon: "tag"
 ---
 
-<Warning>Core 0.4.1 is an unreleased source candidate. Core 0.4.0 remains the published release. The local exact-wheel Python 4.9 integration gate has passed. Cross-platform validation, publication, and registry-installed verification remain separate release gates.</Warning>
+<Note>Core 0.4.1 is published for Rust, Python, Node.js, and browser WASM. All four runtimes passed clean registry-installed verification. See the [GitHub release](https://github.com/DataFog/datafog-core/releases/tag/v0.4.1).</Note>
+
+## Release provenance
+
+The release source is [`175e67548f654c740352a7d909ae55d376dfcb0d`](https://github.com/DataFog/datafog-core/commit/175e67548f654c740352a7d909ae55d376dfcb0d).
+All four runtime packages are published at version **0.4.1**.
+
+| Runtime | Registry package | Installation verification |
+| --- | --- | --- |
+| Rust | [`datafog-core` 0.4.1](https://crates.io/crates/datafog-core/0.4.1) | Passed in a clean registry-only consumer |
+| Python | [`datafog-core` 0.4.1](https://pypi.org/project/datafog-core/0.4.1/) | Passed with a clean registry wheel and actual Python 4.9 adapter |
+| Node.js | [`@datafog/node` 0.4.1](https://www.npmjs.com/package/@datafog/node/v/0.4.1) | Passed with a clean npm installation and native Node 24 |
+| Browser WASM | [`@datafog/wasm` 0.4.1](https://www.npmjs.com/package/@datafog/wasm/v/0.4.1) | Passed in actual Chromium with a clean npm installation |
+
+The Rust registry consumer verified capability contract 1, the 23/14 inventory,
+all three credential detectors, Unicode byte/code-point ranges, explicit-label
+redaction, and unsupported-locale rejection. Its Cargo.lock resolved crates.io
+with checksum `25b0893bd983973d65793f6406f18e0b1da30f1996148996813758b16ea20b29`.
+
+The Python workflow published five platform wheels and a source distribution.
+The clean PyPI macOS ARM64 wheel passed installed binding and typing checks,
+`pip check`, all 352 adapter regression tests against adapter source
+`e31e9e5dd97581622515a97e4421dc558828e706`, and the portable 10-fixture,
+60-transformation overlap audit. Frozen parity remained unchanged.
+The browser WASM npm installation passed all ten conformance helpers in
+Chromium, including 23/14 inventory parity and `detectorVersion: 0.4.1`.
+
+| Published Python artifact | SHA256 |
+| --- | --- |
+| macOS ARM64 wheel | `2f18f93854ae335b3e12de52b61c29b7013ff03e601bf67380cb09712ecef5cb` |
+| Source distribution | `74a8f545ccfff8d52a149ac9bc02cd6cc8295e883cd36cbb96b6b5f460f35807` |
+
+The Node.js registry installation passed all ten conformance helpers using the
+native binding on Node 24. Checks covered 23/14 scan inventory parity, structured
+`PERSON`, German and UUID opt-ins, and `detectorVersion: 0.4.1`. The npm lockfile
+confirmed registry provenance without a local package archive.
+
+Publishing workflows: [Rust](https://github.com/DataFog/datafog-core/actions/runs/36500691044),
+[Python](https://github.com/DataFog/datafog-core/actions/runs/36500693068),
+[Node.js](https://github.com/DataFog/datafog-core/actions/runs/36500695528), and
+[browser WASM](https://github.com/DataFog/datafog-core/actions/runs/36500697381).
 
 ## New default detectors
 
-The candidate adds three labels to ordinary text and structured scanning,
+Core 0.4.1 adds three labels to ordinary text and structured scanning,
 without changing capability contract version 1. The runtime registry now reports
 **23 supported entities** and **14 default text detectors**; the
 [capabilities reference](/reference/capabilities) is generated from that registry.
@@ -68,7 +108,7 @@ encoding and delimiter rules.
 
 The Python 4.9 adapter was integrated in
 [merged PR #179](https://github.com/DataFog/datafog-python/pull/179). The local
-candidate-wheel audit below exercises that adapter source. This Core candidate
+candidate-wheel audit below exercises that adapter source. This Core release
 does not change Python's default backend or publish the higher-level package.
 
 Its existing legacy path resolves overlaps **before filtering selected labels**.
@@ -140,9 +180,9 @@ commands install the local wheel rather than resolving Core from a registry:
 ```
 
 Verify the wheel SHA256 before installation and retain pip's `direct_url.json`
-artifact provenance with the results. The final source revision and hosted
-results belong in the release PR; the wheel hash above identifies the binary
-actually exercised by this local gate. See the [validation limits](#validation-limits)
+artifact provenance with the results. The wheel hash above identifies the binary
+actually exercised by this local gate; it is separate from registry artifact
+checksums. The final release source is recorded above. See the [validation limits](#validation-limits)
 before treating this result as release readiness.
 
 ### Validation limits
@@ -150,6 +190,5 @@ before treating this result as release readiness.
 This result covers one local macOS ARM64 wheel on CPython 3.12.13. It does not
 establish cross-platform wheel compatibility, complete the Rust/Node/browser
 WASM gates, authorize publication, or verify registry-installed artifacts.
-Core 0.4.1 remains unpublished. Final combined-source checks, cross-platform
-hosted validation, publication review, and post-publication installation checks
-remain required. No package is published by preparing these notes.
+Post-publication installation results are recorded separately above. This local
+evidence must not be substituted for those registry checks.

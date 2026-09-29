@@ -232,12 +232,12 @@ prefixes, which are part of the finding and are replaced too.
 The Python adapter may translate explicit German entity requests into locale
 `de` and then filter results, but must separately test legacy overlap and
 selection semantics. Core adds no plural `locales`, engine switch or scan-time
-entity selector. Core 0.4.0 is published. The capability-aware higher-level adapter and its
-`datafog-core>=0.4.0,<0.5` dependency remain in unreleased
-[draft PR #179](https://github.com/DataFog/datafog-python/pull/179). That adapter
-requires its own hosted checks and release review; see the
+entity selector. The capability-aware higher-level adapter and its
+`datafog-core>=0.4.0,<0.5` dependency were merged in
+[PR #179](https://github.com/DataFog/datafog-python/pull/179). The higher-level
+Python package has its own release process; see the
 [reviewed legacy NPI selection limitation](/releases/0-4-0#python-adapter-dependency-and-npi-selection).
 
-## Credential detector migration (0.4.1 candidate)
+## Credential detector migration (0.4.1)
 
-The candidate adds API keys, explicit Bearer header tokens, and scoped PostgreSQL credential URIs. Python 4.9 retains its existing default backend and legacy overlap-before-selection behavior. A same-span API key can suppress a Bearer token, a Bearer token can suppress a JWT, and a containing credential URI can suppress an inner API key or JWT before legacy selection runs. Explicit selection can therefore return empty. Native Core and `datafog.v5` retain scan candidates and apply selection before overlap during transformation. See the [candidate compatibility matrix and exact-wheel integration gate](/releases/0-4-1#legacy-python-overlap-compatibility).
+Core 0.4.1 adds API keys, explicit Bearer header tokens, and scoped PostgreSQL credential URIs. Python 4.9 retains its existing default backend and legacy overlap-before-selection behavior. A same-span API key can suppress a Bearer token, a Bearer token can suppress a JWT, and a containing credential URI can suppress an inner API key or JWT before legacy selection runs. Explicit selection can therefore return empty. Native Core and `datafog.v5` retain scan candidates and apply selection before overlap during transformation. See the [compatibility matrix and exact-wheel integration results](/releases/0-4-1#legacy-python-overlap-compatibility).
