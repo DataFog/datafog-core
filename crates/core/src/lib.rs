@@ -3249,12 +3249,19 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
     (last_digit_end, digits)
 }
 
+/// Digits after `3.` or `3,` are the fractional part of a decimal number, not a card.
+fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
+    start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut start = 0;
 
     while start < bytes.len() {
-        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+        if !bytes[start].is_ascii_digit()
+            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+            || follows_decimal_separator(bytes, start)
         {
             start += 1;
             continue;
@@ -4314,10 +4321,41 @@ mod tests {
     }
 
     #[test]
+    fn detects_credit_card_after_separator_without_leading_digit() {
+        for prefix in [".", ",", "no.", "no,"] {
+            for digits in ["4222222222222", "4111111111111111", "4111111111111111110"] {
+                let text = format!("{prefix}{digits}");
+                assert_eq!(
+                    scan(&text),
+                    vec![expected_ascii_finding(
+                        "CREDIT_CARD",
+                        digits,
+                        prefix.len(),
+                        prefix.len() + digits.len(),
+                        "datafog-core/credit-card",
+                    )],
+                    "{text}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn rejects_invalid_credit_card_candidates() {
         assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
         assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
         assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
+        for fraction in [
+            "4222222222222",
+            "4111111111111111",
+            "4111111111111111110",
+            "41111111111111111100",
+        ] {
+            for separator in [".", ","] {
+                let text = format!("3{separator}{fraction}");
+                assert!(scan(&text).is_empty(), "{text}"); // decimal fraction
+            }
+        }
     }
 
     #[test]
