@@ -33,6 +33,7 @@ import path from "node:path";
 import { verifyPrivateKey, verifyPrivateKeyProviders } from "./private-key-conformance.mjs";
 import { expandSyntheticFixture } from "./synthetic-fixtures.mjs";
 import { verifyApiKey, verifyApiKeyProviders } from "./api-key-conformance.mjs";
+import { verifyEmailContext } from "./email-context-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyCredentialUri, verifyCredentialUriProviders } from "./credential-uri-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
@@ -65,6 +66,7 @@ verifyPrivateKey(germanApi,privateKeyRecords);
 verifyApiKey(germanApi,apiKeyRecords);
 const uuidRecords = readFileSync(path.join(fixturesDirectory,"uuid.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyUuid(germanApi,uuidRecords);
+verifyEmailContext(germanApi, readFileSync(path.join(fixturesDirectory,"email-context.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
 
 assert.throws(() => scan(123), TypeError);
 
@@ -515,7 +517,9 @@ import {
   type TransformResult,
 } from "@datafog/node";
 
-const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true});
+// @ts-expect-error Unsupported source format.
+scan("", {format: "yaml"});
+const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env"});
 const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
@@ -640,6 +644,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"api-key-conformance.mjs"), readFileSync(path.join(root,"scripts/api-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"email-context-conformance.mjs"), readFileSync(path.join(root,"scripts/email-context-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));

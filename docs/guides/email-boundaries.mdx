@@ -1,0 +1,92 @@
+---
+title: "Email boundaries in source files"
+description: "Preserve environment assignments and SQL string delimiters with explicit scan context."
+---
+
+Email local parts can contain apostrophes and equals signs. Without document
+context, `SUPPORT_EMAIL=support@example.com` can be an assignment or one address.
+Core's default text scanner retains its existing local-part coverage. Select
+`format: "env"` or `format: "sql"` explicitly when scanning those source formats.
+This setting changes email boundaries only; other detectors keep their existing
+behavior. It does not validate the file or guarantee syntax preservation for
+every entity type or SQL dialect.
+
+## Usage
+
+```python
+from datafog_core import scan, transform
+
+text = "SUPPORT_EMAIL=support@example.com"
+findings = scan(text, {"format": "env"})
+assert findings[0].matched_text == "support@example.com"
+assert findings[0].byte_range.start == 14
+result = transform(text, findings, {
+    "default": {"strategy": "redact"}, "entities": ["EMAIL"],
+})
+assert result.text == "SUPPORT_EMAIL=[EMAIL]"
+```
+
+```javascript
+const result = scanAndTransform("SELECT 'li.wei@example.com';", {
+  scan: {format: "sql"},
+  transform: {default: {strategy: "redact"}, entities: ["EMAIL"]},
+});
+// result.text === "SELECT '[EMAIL]';"
+```
+
+Rust uses `ScanConfig::new().with_format(ScanFormat::Env)` or `ScanFormat::Sql`.
+The serialized configuration accepts exactly `"text"`, `"env"`, and `"sql"`;
+invalid types or values report `/format` (or `/scan/format` in the combined
+envelope). Omission is equivalent to `"text"`. Locale and UUID settings can be
+combined with format. Structured scanning applies the selected format to each
+string leaf; supply it only when those strings contain source text.
+
+## Environment assignments
+
+Recognized assignments begin at the start of a line, after optional horizontal
+whitespace and `export`. Keys use `[A-Za-z_][A-Za-z0-9_]*`, with optional whitespace
+around the first `=`. Only that first delimiter separates the key and value:
+`EMAIL=customer=tag@example.com` finds `customer=tag@example.com`.
+
+A value beginning with a single or double quote is scanned inside the enclosing
+quotes. Values may span lines. Single quotes are literal; backslash escapes skip
+the following source character when locating a double-quoted value's closing
+delimiter. Unquoted values retain apostrophes, equals signs, and other supported
+local-part characters. A `#` at the start of an unquoted region or after whitespace
+starts a comment; `person#tag@example.com` remains a complete address.
+
+Comments are also scanned for emails, preserving their comment marker. Lines
+that do not match the assignment grammar use ordinary text email matching.
+An unterminated quoted value is scanned through EOF, preserving its opening
+quote. Core does not perform interpolation, shell evaluation, or escape decoding.
+
+## SQL source
+
+Single-quoted string literals and double-quoted identifiers are scanned inside
+their enclosing delimiters. A doubled delimiter is an escape inside the same
+source region. Line comments (`--`) and block comments (`/* ... */`, including
+nested comments) are scanned separately, preserving their comment markers;
+quotes inside comments do not alter subsequent string boundaries.
+
+Findings describe the original source, including escapes. For example,
+`'o''connor=tag@example.com'` finds `o''connor=tag@example.com` and redacts to
+`'[EMAIL]'`. Matching and allowlists use that raw source spelling, rather than
+the decoded database value. Byte, code-point, and JavaScript UTF-16 ranges refer
+to the original input. No normalization or decoded-value offset mapping occurs.
+
+An unterminated quoted region is scanned through EOF, preserving its opening
+delimiter. SQL backslash escapes, PostgreSQL dollar quoting, and dialect-specific
+quote prefixes are not interpreted. Encoded email characters can therefore be
+missed or partially matched. Use a dialect-aware source extractor for such
+inputs; this mode is a bounded lexical policy, not a general SQL parser.
+
+## MCP adoption
+
+This is the upstream work for [datafog-mcp issue #31](https://github.com/DataFog/datafog-mcp/issues/31).
+MCP must pass the applicable format when it calls `scan`, and use those findings
+for `transform`. Updating the dependency alone does not change default scanning.
+The downstream change should require a released core version containing this API,
+update its lockfile, and exercise scan offsets plus redact, mask, and remove on
+actual `.env` and SQL fixture files while verifying that originals stay unchanged.
+Review corpus span changes explicitly; this fix targets damage to surrounding
+syntax, while preserving the strict type-and-span correctness measure.

@@ -12,6 +12,7 @@ import jwt_conformance
 import bearer_token_conformance
 import private_key_conformance
 import api_key_conformance
+import email_context_conformance
 import uuid_conformance
 import credential_uri_conformance
 import us_routing_number_conformance
@@ -133,6 +134,7 @@ def main() -> None:
     bearer_token_conformance.verify()
     private_key_conformance.verify()
     api_key_conformance.verify()
+    email_context_conformance.verify()
     uuid_conformance.verify()
     credential_uri_conformance.verify()
     us_routing_number_conformance.verify()

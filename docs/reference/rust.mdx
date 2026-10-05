@@ -118,3 +118,9 @@ the [German entity reference](/reference/german-entities).
 ## Capability discovery (0.4.0+)
 
 Use `capabilities()` to inspect the runtime registry, including supported entities, default detectors, locale aliases, and activation settings. See the [capabilities contract and generated inventory](/reference/capabilities) and [0.4.x compatibility policy](/reference/compatibility).
+
+## Email source context
+
+Use the optional scan `format` setting (`"text"`, `"env"`, or `"sql"`) to
+delimit emails in environment assignments or standard SQL quoted strings.
+See [email boundaries](/guides/email-boundaries) for examples and syntax limits.

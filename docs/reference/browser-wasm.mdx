@@ -67,3 +67,9 @@ German locale routing and the seven additional entity labels are documented in
 the [German entity reference](/reference/german-entities).
 
 Core 0.4.0 shares its detector registry with Rust and Python. Runtime `capabilities()` discovery is exposed by Rust and Python only; this binding retains its existing scan APIs. See the [capability inventory](/reference/capabilities) and [compatibility policy](/reference/compatibility).
+
+## Email source context
+
+Use the optional scan `format` setting (`"text"`, `"env"`, or `"sql"`) to
+delimit emails in environment assignments or standard SQL quoted strings.
+See [email boundaries](/guides/email-boundaries) for examples and syntax limits.

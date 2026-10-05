@@ -49,6 +49,8 @@ export interface TransformationConfig {
 }
 
 export interface ScanConfig {
+  /** Source syntax for email boundaries; defaults to text. */
+  readonly format?: "text" | "env" | "sql";
   readonly locale?: string;
   /** Opt-in canonical UUID detection; disabled by default. */
   readonly detect_uuid?: boolean;
@@ -163,6 +165,8 @@ export declare class PrivacyManager {
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
 export interface StructuredScanConfig {
+  /** Source syntax for email boundaries in each string leaf; defaults to text. */
+  readonly format?: "text" | "env" | "sql";
   readonly locale?: string;
   /** Opt-in canonical UUID detection; disabled by default. */
   readonly detect_uuid?: boolean;
