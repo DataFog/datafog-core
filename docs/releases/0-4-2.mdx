@@ -1,0 +1,51 @@
+---
+title: "0.4.2"
+description: "Explicit email boundaries for environment assignments and standard SQL source."
+icon: "tag"
+---
+
+## Email source context
+
+Core 0.4.2 adds an optional scan `format` setting across Rust, Python, Node.js,
+and browser WASM, including structured string leaves. Use `"env"` to preserve
+environment assignment keys and value quotes, or `"sql"` to preserve standard
+SQL string delimiters. Omitting the setting keeps existing text scan behavior.
+
+| Source | Format | Redacted output |
+| --- | --- | --- |
+| `SUPPORT_EMAIL=support@example.com` | `env` | `SUPPORT_EMAIL=[EMAIL]` |
+| `'li.wei@example.com'` | `sql` | `'[EMAIL]'` |
+
+This fixes the upstream boundary handling tracked by
+[datafog-mcp issue #31](https://github.com/DataFog/datafog-mcp/issues/31).
+MCP must adopt this release and pass the appropriate format; a dependency
+update alone does not change ordinary `scan(text)` calls.
+
+## Compatibility and limitations
+
+Apostrophes and equals signs remain supported email local-part characters.
+Other detectors, capability contract version 1, the 23/14 entity inventory,
+and finding coordinate semantics remain unchanged. Findings describe raw
+source spans, including SQL doubled-apostrophe escapes. For example,
+`'o''connor=tag@example.com'` redacts to `'[EMAIL]'`.
+
+The source-context policy supports bounded lexical syntax rather than a full
+file parser. SQL backslash escapes, dollar quoting, and encoded email characters
+are outside its interpretation; malformed quotes scan through EOF. See
+[email boundaries](/guides/email-boundaries) for exact grammar and fallback
+behavior. The change does not guarantee syntax preservation for other entity
+types or every SQL dialect.
+
+## Verification
+
+The release gates cover Rust formatting, Clippy, workspace tests, installed
+Python wheel and source-distribution typing, installed Node packages, and
+browser WASM in Chromium. Thirty-six shared regression fixtures assert exact
+email offsets and redact/mask/remove outputs, with legitimate local parts,
+comments, escaped and incomplete quotes, Unicode, and structured scanning.
+The existing detector and transformation conformance suites remain required.
+
+All runtime packages and lockfiles are aligned at **0.4.2**. Runtime publication
+uses `rust-v0.4.2`, `python-v0.4.2`, `node-v0.4.2`, and `wasm-v0.4.2` on the same
+release commit. Publication and clean registry installation are verified
+separately from candidate tests before announcing availability.
