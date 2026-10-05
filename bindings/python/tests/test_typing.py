@@ -42,7 +42,7 @@ config: _TransformationConfig = {
     },
     "allow": {"exact": {"EMAIL": ["safe@example.com"]}, "regex": {"EMAIL": [{"pattern": "safe", "case_sensitive": False}]}},
 }
-findings = scan("jane@example.com", {"locale": "en-US", "detect_uuid": True})
+findings = scan("jane@example.com", {"locale": "en-US", "detect_uuid": True, "format": "env"})
 assert_type(findings, list[Finding])
 finding = findings[0]
 assert_type(finding.entity_type, str)
@@ -127,6 +127,7 @@ INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
 capabilities(1)  # error
 scan(123)  # error
+scan("text", {"format": "yaml"})  # error
 scan("text", {"locale": 123})  # error
 scan("text", {"detect_uuid": "true"})  # error
 scan("text", {"max_bytes": 100})  # error

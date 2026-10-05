@@ -56,8 +56,12 @@ full-match regex values:
 }
 ```
 
-`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean }, transform: ... }` so
+`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean, format?: "text" | "env" | "sql" }, transform: ... }` so
 detection settings remain separate from transformation policy.
+For `.env` assignments or standard SQL quoted strings, select `format: "env"`
+or `format: "sql"` to preserve email boundaries. See the
+[email source-context policy](docs/guides/email-boundaries.mdx) for supported
+syntax, raw escaped spans, and limitations. Default text scanning is unchanged.
 
 ## Packages
 

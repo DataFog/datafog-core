@@ -152,7 +152,11 @@ pub(super) fn detect(text: &str, config: &ScanConfig, candidates: &mut Vec<Candi
         .iter()
         .filter(|detector| detector.activation.enabled(config))
     {
-        (detector.detect)(text, candidates);
+        if detector.labels == [Label::Email] {
+            crate::email_context::detect(text, config.format(), candidates);
+        } else {
+            (detector.detect)(text, candidates);
+        }
     }
 }
 

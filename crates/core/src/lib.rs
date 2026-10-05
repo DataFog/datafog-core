@@ -3,6 +3,7 @@ mod api_key;
 mod bearer_token;
 mod capabilities;
 mod credential_uri;
+mod email_context;
 pub use capabilities::{
     ActivationScanConfig, Capabilities, EntityActivation, EntityCapabilities, LocaleCapabilities,
     capabilities,
@@ -535,15 +536,39 @@ fn json_pointer_segment(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
 }
 
-/// Scanner configuration. Current built-in detectors share the same execution
-/// path; German locale aliases activate German detectors, and UUIDs are opt-in.
+/// Source syntax used to delimit email candidates. Other detectors are unchanged.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ScanFormat {
+    /// Unstructured text; retain the full supported email local-part alphabet.
+    #[default]
+    Text,
+    /// Environment assignments with optional `export` and quoted values.
+    Env,
+    /// SQL strings using standard doubled-quote escaping.
+    Sql,
+}
+
+/// Scanner configuration. German locale aliases activate German detectors,
+/// UUIDs are opt-in, and source format controls email boundaries.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ScanConfig {
     locale: Option<String>,
     detect_uuid: bool,
+    format: ScanFormat,
 }
 
 impl ScanConfig {
+    /// Select source syntax for email boundaries; defaults to unstructured text.
+    pub fn with_format(mut self, format: ScanFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// Source syntax used for email boundaries.
+    pub fn format(&self) -> ScanFormat {
+        self.format
+    }
+
     /// Create scanner configuration using detector defaults.
     pub fn new() -> Self {
         Self::default()
@@ -755,8 +780,11 @@ pub fn parse_scan_and_transform_config(
 /// Parse canonical scanner configuration.
 pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, PrivacyError> {
     let object = require_object(value, "", "scan configuration must be an object")?;
-    reject_unknown_fields(object, &["locale", "detect_uuid"], "")?;
+    reject_unknown_fields(object, &["locale", "detect_uuid", "format"], "")?;
     let mut config = ScanConfig::new();
+    if let Some(format) = object.get("format") {
+        config = config.with_format(parse_scan_format(format)?);
+    }
     if let Some(enabled) = object.get("detect_uuid") {
         config = config.with_uuid_detection(parse_uuid_detection(enabled)?);
     }
@@ -765,6 +793,20 @@ pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, Privac
         config = config.with_locale(locale)?;
     }
     Ok(config)
+}
+
+fn parse_scan_format(value: &serde_json::Value) -> Result<ScanFormat, PrivacyError> {
+    let format = require_string(value, "/format", "scan format must be a string")?;
+    match format.as_str() {
+        "text" => Ok(ScanFormat::Text),
+        "env" => Ok(ScanFormat::Env),
+        "sql" => Ok(ScanFormat::Sql),
+        _ => Err(PrivacyError::invalid_configuration(
+            PrivacyErrorReason::InvalidValue,
+            "/format",
+            "scan format must be text, env, or sql",
+        )),
+    }
 }
 
 fn parse_uuid_detection(value: &serde_json::Value) -> Result<bool, PrivacyError> {

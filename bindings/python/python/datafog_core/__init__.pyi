@@ -9,6 +9,7 @@ _JsonValue: TypeAlias = (
 _JsonDocument: TypeAlias = list[_JsonValue] | dict[str, _JsonValue]
 
 class _ScanConfig(TypedDict, total=False):
+    format: Literal["text", "env", "sql"]
     locale: str
     detect_uuid: bool
 

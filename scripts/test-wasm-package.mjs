@@ -96,7 +96,9 @@ import {
 } from "@datafog/wasm";
 
 const ready: Promise<void> = init();
-const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true});
+// @ts-expect-error Unsupported source format.
+scan("", {format: "yaml"});
+const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env"});
 const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
@@ -201,7 +203,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -215,6 +217,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"api-key-conformance.mjs"), readFileSync(path.join(root,"scripts/api-key-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"synthetic-fixtures.mjs"), readFileSync(path.join(root,"scripts/synthetic-fixtures.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"email-context-conformance.mjs"), readFileSync(path.join(root,"scripts/email-context-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
@@ -277,6 +280,8 @@ try {
     const {verifyUuid} = await import("/uuid-conformance.mjs");
     const uuidRecords = (await fetch("/uuid.jsonl").then(r=>r.text())).trim().split("\n").map(JSON.parse);
     verifyUuid(germanApi,uuidRecords);
+    const {verifyEmailContext} = await import("/email-context-conformance.mjs");
+    verifyEmailContext(germanApi, (await fetch("/email-context.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
     for (const row of [...germanRecords,...jwtRecords,...bearerRecords,...privateKeyRecords,...apiKeyRecords].filter(r => r.sample)) {
       for (const strategy of [{strategy:"pseudonymize",key_ref:"german"},{strategy:"tokenize",token_ref:"german"}]) {
         let rejected = false;
