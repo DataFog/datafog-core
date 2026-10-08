@@ -59,6 +59,19 @@ full-match regex values:
 `scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean }, transform: ... }` so
 detection settings remain separate from transformation policy.
 
+## Credit-card detection and decimal numbers
+
+To reduce decimal false positives, `CREDIT_CARD` detection suppresses contiguous
+digit candidates immediately after a digit followed by `.` or `,`, such as
+`3.4111111111111111` and `3,4111111111111111`. Cards containing spaces or hyphens,
+such as `3.4111-1111-1111-1111`, still undergo the normal card checks.
+
+In plain text, `3,4111111111111111` could also be two CSV fields: `3` and a card
+number. The detector cannot distinguish that structure from a comma-decimal
+number, so it suppresses the card candidate. For CSV input, parse the CSV and
+scan each field separately so a card value is checked without the preceding
+field and delimiter.
+
 ## Packages
 
 | Runtime | Distribution | Import | Status |

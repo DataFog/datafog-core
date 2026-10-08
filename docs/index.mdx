@@ -52,6 +52,15 @@ Structured scans also discover `PERSON` in supported name fields. See
 [structured person discovery](/guides/person-discovery) for field mappings.
 
 <Note>
+  **Credit cards and decimal numbers:** contiguous card candidates immediately
+  after a digit followed by `.` or `,` are suppressed to reduce decimal false
+  positives. Formatted cards containing spaces or hyphens still undergo normal
+  card checks. Plain text such as `3,4111111111111111` is ambiguous: it could be
+  a comma-decimal number or two CSV fields, so the card candidate is suppressed.
+  Parse CSV input and scan each field separately to preserve field boundaries.
+</Note>
+
+<Note>
   **German coverage (0.4.0+):** an explicit German locale adds `DE_IBAN`,
   `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`,
   `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. See the
