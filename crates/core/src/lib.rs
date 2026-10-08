@@ -4324,6 +4324,82 @@ mod tests {
     }
 
     #[test]
+    fn preserves_permissive_plus_phone_detection() {
+        for phone in [
+            "+1234567",
+            "+1-555-1002",
+            "+1-112-555-0100",
+            "+1-212-155-0100",
+            "+44 20 7946 0958",
+            "+999222333444555",
+        ] {
+            let text = format!("Call {phone}.");
+            assert_eq!(
+                scan(&text),
+                vec![expected_ascii_finding(
+                    "PHONE",
+                    phone,
+                    5,
+                    5 + phone.len(),
+                    "datafog-core/phone",
+                )],
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_plus_phone_candidates_outside_length_or_boundary_rules() {
+        for text in [
+            "Call +123456.",
+            "Call +9992223334445556.",
+            "order+44 20 7946 0958",
+            "Call +44 20 7946 0958x",
+        ] {
+            assert!(scan(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn reports_phone_ranges_in_unicode_text() {
+        for phone in ["212-555-0100", "1-212-555-0100", "+1-555-1002"] {
+            let text = format!("☎👋 {phone}。");
+            let findings = scan(&text);
+            assert_eq!(
+                findings,
+                vec![expected_finding(
+                    "PHONE",
+                    phone,
+                    (8, 8 + phone.len()),
+                    (3, 3 + phone.len()),
+                    "datafog-core/phone",
+                )],
+                "{text}"
+            );
+            let finding = &findings[0];
+            assert_eq!(
+                &text[finding.byte_range.start..finding.byte_range.end],
+                phone
+            );
+            assert_eq!(
+                text.chars()
+                    .skip(finding.codepoint_range.start)
+                    .take(finding.codepoint_range.end - finding.codepoint_range.start)
+                    .collect::<String>(),
+                phone
+            );
+            assert_eq!(
+                utf16_range(&text, finding.byte_range).unwrap(),
+                TextRange {
+                    start: 4,
+                    end: 4 + phone.len(),
+                }
+            );
+        }
+        assert!(scan("☎👋 1800005580。").is_empty());
+    }
+
+    #[test]
     fn detects_dashed_ssn() {
         assert_eq!(
             scan("SSN: 123-45-6789"),

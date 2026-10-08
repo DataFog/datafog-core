@@ -15,6 +15,13 @@ existing detectors and returns field paths plus string-local findings. No model
 or dictionary download is needed. See [person-field discovery](docs/guides/person-discovery.mdx)
 for `scan_structured` / `scanStructured` and structured transformation APIs.
 
+Phone candidates without `+` are interpreted as North American numbers: ten
+digits, optionally preceded by `1`, with area and exchange codes starting with
+`2` through `9`. Candidates starting with `+` retain the existing permissive
+7–15 digit check, including shortened synthetic examples such as `+1-555-1002`.
+These checks do not validate country calling codes or assigned phone numbers,
+and numeric identifiers that fit the accepted patterns can still match `PHONE`.
+
 Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
 UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
 detectors currently report no confidence score. Node.js and browser WASM also
