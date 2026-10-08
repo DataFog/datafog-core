@@ -56,7 +56,7 @@ full-match regex values:
 }
 ```
 
-`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean, format?: "text" | "env" | "sql" }, transform: ... }` so
+`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean, format?: "text" | "env" | "sql", entities?: string[] }, transform: ... }` so
 detection settings remain separate from transformation policy.
 For `.env` assignments or standard SQL quoted strings, select `format: "env"`
 or `format: "sql"` to preserve email boundaries. See the
@@ -304,6 +304,26 @@ coverage. See the [German entity reference](docs/reference/german-entities.mdx)
 and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
 The higher-level Python adapter and its dependency update were merged in
 [PR #179](https://github.com/DataFog/datafog-python/pull/179). Its package release is separate from Core.
+
+## Text detector selection
+
+Pass `{"entities":["EMAIL","SSN"]}` to a text scan to run only those
+selected detectors, rather than detecting every type and filtering findings
+later. In Rust, use `ScanConfig::new().with_entities(vec!["EMAIL".into(),
+"SSN".into()])?`. The same selection works inside `scan_and_transform`'s
+`scan` configuration; transformation selection remains independent.
+
+Omitting `entities` preserves existing detection. An explicit selection must be
+a nonempty array of unique, exact canonical text entity names. Unknown names,
+lowercase names, duplicates, and structured-only `PERSON` are rejected using
+configuration errors with `/entities` or `/entities/<index>` paths. Consult
+`capabilities().entities` for types with the `text` scope.
+
+Selection narrows enabled detectors: selecting `UUID` still requires
+`detect_uuid=true`, and German types still require a German locale. Text format
+handling, finding order, and byte/codepoint ranges are unchanged. Structured
+scans do not accept this option. It avoids unselected detector work and findings,
+but does not cap the selected findings or bound the size of a scan response.
 
 ## UUID identifiers
 
