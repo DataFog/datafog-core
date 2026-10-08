@@ -3157,10 +3157,30 @@ fn is_valid_phone(candidate: &str) -> bool {
         .collect();
 
     if candidate.starts_with('+') {
-        (7..=15).contains(&digits.len())
-    } else {
-        digits.len() == 10 || (digits.len() == 11 && digits.starts_with('1'))
+        return (7..=15).contains(&digits.len());
     }
+
+    let national_number = match digits.len() {
+        10 => digits.as_str(),
+        11 if digits.starts_with('1') => &digits[1..],
+        _ => return false,
+    };
+
+    follows_nanp_rule(national_number.as_bytes())
+}
+
+/// Checks that the 1st and 4th digits of a 10-digit North American number are
+/// between 2 and 9. These are the first digits of the area code and the
+/// exchange code, and the North American Numbering Plan does not allow either
+/// to start with 0 or 1.
+///
+/// This is a special case to stop Unix timestamps, such as `1800005580`, being
+/// detected as phone numbers. It only works while timestamps start with 1,
+/// which is true until 2033. It is not full phone number validation. If better
+/// vetting is needed, Google's libphonenumber is a good alternative.
+fn follows_nanp_rule(national_number: &[u8]) -> bool {
+    let is_valid_code_start = |digit: u8| (b'2'..=b'9').contains(&digit);
+    is_valid_code_start(national_number[0]) && is_valid_code_start(national_number[3])
 }
 
 fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
@@ -4363,6 +4383,122 @@ mod tests {
     fn rejects_short_or_embedded_phone_candidates() {
         assert!(scan("Call 555-0100").is_empty());
         assert!(scan("order212-555-0100x").is_empty());
+    }
+
+    #[test]
+    fn detects_phone_numbers_following_nanp_rule() {
+        for phone in [
+            "2125550100",
+            "212-555-0100",
+            "212.555.0100",
+            "1-212-555-0100",
+            "12125550100",
+            "9995550100",
+            "2122220100",
+        ] {
+            let text = format!("Call {phone}.");
+            assert_eq!(
+                scan(&text),
+                vec![expected_ascii_finding(
+                    "PHONE",
+                    phone,
+                    5,
+                    5 + phone.len(),
+                    "datafog-core/phone",
+                )],
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_phone_candidates_breaking_nanp_rule() {
+        for text in [
+            "Call 0125550100.",       // area code starts with 0
+            "Call (112) 555-0100.",   // area code starts with 1
+            "Call 212-055-0100.",     // exchange code starts with 0
+            "Call 1-212-155-0100.",   // exchange code starts with 1
+            "\"start\": 1800005580,", // Unix timestamp
+            "\"end\": 1800021600",    // Unix timestamp
+        ] {
+            assert!(scan(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn preserves_permissive_plus_phone_detection() {
+        for phone in [
+            "+1234567",
+            "+1-555-1002",
+            "+1-112-555-0100",
+            "+1-212-155-0100",
+            "+44 20 7946 0958",
+            "+999222333444555",
+        ] {
+            let text = format!("Call {phone}.");
+            assert_eq!(
+                scan(&text),
+                vec![expected_ascii_finding(
+                    "PHONE",
+                    phone,
+                    5,
+                    5 + phone.len(),
+                    "datafog-core/phone",
+                )],
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_plus_phone_candidates_outside_length_or_boundary_rules() {
+        for text in [
+            "Call +123456.",
+            "Call +9992223334445556.",
+            "order+44 20 7946 0958",
+            "Call +44 20 7946 0958x",
+        ] {
+            assert!(scan(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn reports_phone_ranges_in_unicode_text() {
+        for phone in ["212-555-0100", "1-212-555-0100", "+1-555-1002"] {
+            let text = format!("☎👋 {phone}。");
+            let findings = scan(&text);
+            assert_eq!(
+                findings,
+                vec![expected_finding(
+                    "PHONE",
+                    phone,
+                    (8, 8 + phone.len()),
+                    (3, 3 + phone.len()),
+                    "datafog-core/phone",
+                )],
+                "{text}"
+            );
+            let finding = &findings[0];
+            assert_eq!(
+                &text[finding.byte_range.start..finding.byte_range.end],
+                phone
+            );
+            assert_eq!(
+                text.chars()
+                    .skip(finding.codepoint_range.start)
+                    .take(finding.codepoint_range.end - finding.codepoint_range.start)
+                    .collect::<String>(),
+                phone
+            );
+            assert_eq!(
+                utf16_range(&text, finding.byte_range).unwrap(),
+                TextRange {
+                    start: 4,
+                    end: 4 + phone.len(),
+                }
+            );
+        }
+        assert!(scan("☎👋 1800005580。").is_empty());
     }
 
     #[test]
