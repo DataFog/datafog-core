@@ -1,0 +1,47 @@
+---
+title: "0.4.3"
+description: "Select text detectors before scanning across all runtime packages."
+icon: "tag"
+---
+
+## Text detector selection
+
+Core 0.4.3 adds optional `entities` selection to text scans across Rust, Python,
+Node.js, and browser WASM. Only selected detectors run, avoiding the cost of
+scanning for types the caller does not need. This includes the implementation
+from [PR #47](https://github.com/DataFog/datafog-core/pull/47).
+
+For example, Python callers can scan for email alone:
+
+```python
+from datafog_core import scan
+
+findings = scan("Contact support@example.com", {"entities": ["EMAIL"]})
+```
+
+## Compatibility
+
+- Omit `entities` to preserve existing detector defaults.
+- Use canonical entity names; empty selections, duplicate names, and unsupported
+  names are rejected as configuration errors.
+- Keep explicit activation settings for optional detectors such as UUID and
+  locale-specific types; selection does not enable them automatically.
+- Apply selection to text scans only. Structured scanning is unchanged.
+- Preserve finding order, source offsets, email source-context handling, and the
+  existing capabilities contract.
+
+MCP must adopt this release and pass its selected types into Core to benefit
+from detector selection. Its existing response filtering alone does not avoid
+unselected detector work.
+
+## Verification and publication
+
+Release checks cover version alignment, Rust formatting, Clippy, workspace
+tests, installed Python and Node packages, and browser WASM. Selection
+regressions cover supported types, invalid configurations, optional detector
+activation, source formats, Unicode offsets, and transformations.
+
+All runtime packages and lockfiles are aligned at **0.4.3**. Runtime publication
+uses `rust-v0.4.3`, `python-v0.4.3`, `node-v0.4.3`, and `wasm-v0.4.3` on the same
+release commit. Candidate checks do not establish registry availability;
+publication and clean registry installation must be verified separately.
