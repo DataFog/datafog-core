@@ -45,6 +45,33 @@ import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-co
 import * as germanApi from "@datafog/node";
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
+
+    const selectionText = "👋 jane@example.com SSN 123-45-6789";
+    const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
+    const expectedSelected = scan(selectionText).filter(item => item.entityType === "EMAIL");
+    if (selectedTextFindings.length !== 1 || JSON.stringify(selectedTextFindings) !== JSON.stringify(expectedSelected)) {
+      throw new Error("selected text detectors changed finding offsets or metadata");
+    }
+    const selectedCopy = scanAndTransform(selectionText, {
+      scan: {entities: ["EMAIL"]}, transform: {default: {strategy: "redact"}}
+    });
+    if (!selectedCopy.text.includes("123-45-6789") || selectedCopy.text.includes("jane@example.com")) {
+      throw new Error("selected scan and transform changed an unselected type");
+    }
+    for (const entities of [[], ["EMAIL", "EMAIL"], ["PERSON"], ["email"], [1], "EMAIL"]) {
+      let rejected = false;
+      try { scan(selectionText, {entities}); } catch (error) {
+        rejected = error.code === "invalid_configuration" && error.path.startsWith("/entities");
+      }
+      if (!rejected) throw new Error("invalid entity selection accepted");
+    }
+    const selectedUuid = "550e8400-e29b-41d4-a716-446655440000";
+    if (scan(selectedUuid, {entities: ["UUID"]}).length !== 0 ||
+        scan(selectedUuid, {entities: ["UUID"], detect_uuid: true}).length !== 1 ||
+        scan(selectedUuid, {entities: ["EMAIL"], detect_uuid: true}).length !== 0) {
+      throw new Error("entity selection changed UUID activation");
+    }
+
 const fixturesDirectory = process.argv[2];
 const germanRecords = readFileSync(path.join(fixturesDirectory,"german.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 const credentialOverlapRecords = readFileSync(path.join(fixturesDirectory,"credential-overlaps.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
@@ -519,7 +546,9 @@ import {
 
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
-const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env"});
+// @ts-expect-error Entity selection must be an array.
+scan("", {entities: "EMAIL"});
+const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env", entities: ["EMAIL"]});
 const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };

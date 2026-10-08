@@ -1,5 +1,5 @@
 //! Locale-gated lexical detection, without official identifier validation.
-use crate::{Candidate, Label};
+use crate::{Candidate, Label, ScanConfig};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -71,7 +71,14 @@ fn ascii_boundary(text: &str, start: usize, end: usize) -> bool {
 }
 
 pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
-    for (label, regex) in DETECTORS.iter() {
+    detect_selected(text, &ScanConfig::default(), candidates);
+}
+
+pub(super) fn detect_selected(text: &str, config: &ScanConfig, candidates: &mut Vec<Candidate>) {
+    for (label, regex) in DETECTORS
+        .iter()
+        .filter(|(label, _)| config.includes_entity(label.as_str()))
+    {
         for captures in regex.captures_iter(text) {
             // Both captures are unconditional in the statically compiled expressions.
             let whole = captures.get(0).expect("whole regex match");

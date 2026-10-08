@@ -88,6 +88,14 @@ struct Detector {
 }
 
 impl Detector {
+    fn enabled(&self, config: &ScanConfig) -> bool {
+        self.activation.enabled(config)
+            && self
+                .labels
+                .iter()
+                .any(|label| config.includes_entity(label.as_str()))
+    }
+
     fn single(label: Label, detect: fn(&str, &mut Vec<Candidate>), activation: Activation) -> Self {
         Self {
             labels: vec![label],
@@ -147,13 +155,18 @@ pub(super) fn valid_locale(locale: &str) -> bool {
     locale_activation(locale).is_some()
 }
 
-pub(super) fn detect(text: &str, config: &ScanConfig, candidates: &mut Vec<Candidate>) {
-    for detector in REGISTRY
+pub(super) fn text_entity_supported(entity: &str) -> bool {
+    REGISTRY
         .iter()
-        .filter(|detector| detector.activation.enabled(config))
-    {
+        .any(|detector| detector.labels.iter().any(|label| label.as_str() == entity))
+}
+
+pub(super) fn detect(text: &str, config: &ScanConfig, candidates: &mut Vec<Candidate>) {
+    for detector in REGISTRY.iter().filter(|detector| detector.enabled(config)) {
         if detector.labels == [Label::Email] {
             crate::email_context::detect(text, config.format(), candidates);
+        } else if detector.activation == Activation::German {
+            german::detect_selected(text, config, candidates);
         } else {
             (detector.detect)(text, candidates);
         }
@@ -216,5 +229,40 @@ pub fn capabilities() -> Capabilities {
         default_entities,
         locales,
         entities,
+    }
+}
+
+#[cfg(test)]
+mod selection_dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn dispatch_skips_every_registry_detector_without_a_selected_label() {
+        let activated = ScanConfig::new()
+            .with_locale("de")
+            .unwrap()
+            .with_uuid_detection(true);
+        for entity in capabilities()
+            .supported_entities
+            .iter()
+            .filter(|name| name.as_str() != "PERSON")
+        {
+            let selected = activated
+                .clone()
+                .with_entities(vec![entity.clone()])
+                .unwrap();
+            let enabled: Vec<_> = REGISTRY
+                .iter()
+                .filter(|detector| detector.enabled(&selected))
+                .collect();
+            assert_eq!(enabled.len(), 1, "{entity}");
+            assert!(
+                enabled[0]
+                    .labels
+                    .iter()
+                    .any(|label| label.as_str() == entity)
+            );
+        }
+        assert!(REGISTRY.iter().all(|detector| detector.enabled(&activated)));
     }
 }

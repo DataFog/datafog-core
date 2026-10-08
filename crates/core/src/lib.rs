@@ -555,9 +555,54 @@ pub struct ScanConfig {
     locale: Option<String>,
     detect_uuid: bool,
     format: ScanFormat,
+    entities: Option<BTreeSet<String>>,
 }
 
 impl ScanConfig {
+    /// Restrict text scanning to exact canonical entity types. Selection only
+    /// narrows enabled detectors; locale and UUID activation remain independent.
+    pub fn with_entities(mut self, entities: Vec<String>) -> Result<Self, PrivacyError> {
+        if entities.is_empty() {
+            return Err(PrivacyError::invalid_configuration(
+                PrivacyErrorReason::EmptyValue,
+                "/entities",
+                "entities must contain at least one entity type",
+            ));
+        }
+        let mut selected = BTreeSet::new();
+        for (index, entity) in entities.into_iter().enumerate() {
+            let path = format!("/entities/{index}");
+            validate_entity_name(&entity, &path)?;
+            if !capabilities::text_entity_supported(&entity) {
+                return Err(PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::InvalidValue,
+                    &path,
+                    "entity type is not supported by text scanning",
+                ));
+            }
+            if !selected.insert(entity) {
+                return Err(PrivacyError::invalid_configuration(
+                    PrivacyErrorReason::DuplicateValue,
+                    path,
+                    "entity selection contains a duplicate entity type",
+                ));
+            }
+        }
+        self.entities = Some(selected);
+        Ok(self)
+    }
+
+    /// Explicit text entity selection, or None for the existing detector defaults.
+    pub fn entities(&self) -> Option<&BTreeSet<String>> {
+        self.entities.as_ref()
+    }
+
+    pub(crate) fn includes_entity(&self, entity: &str) -> bool {
+        self.entities
+            .as_ref()
+            .is_none_or(|entities| entities.contains(entity))
+    }
+
     /// Select source syntax for email boundaries; defaults to unstructured text.
     pub fn with_format(mut self, format: ScanFormat) -> Self {
         self.format = format;
@@ -780,8 +825,20 @@ pub fn parse_scan_and_transform_config(
 /// Parse canonical scanner configuration.
 pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, PrivacyError> {
     let object = require_object(value, "", "scan configuration must be an object")?;
-    reject_unknown_fields(object, &["locale", "detect_uuid", "format"], "")?;
+    reject_unknown_fields(object, &["locale", "detect_uuid", "format", "entities"], "")?;
     let mut config = ScanConfig::new();
+    if let Some(entities) = object.get("entities") {
+        let entities = require_array(entities, "/entities", "entities must be an array")?;
+        let mut parsed = Vec::with_capacity(entities.len());
+        for (index, entity) in entities.iter().enumerate() {
+            parsed.push(require_string(
+                entity,
+                &format!("/entities/{index}"),
+                "entity type must be a string",
+            )?);
+        }
+        config = config.with_entities(parsed)?;
+    }
     if let Some(format) = object.get("format") {
         config = config.with_format(parse_scan_format(format)?);
     }
@@ -3660,6 +3717,9 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
 
 #[cfg(test)]
 mod selection_tests;
+
+#[cfg(test)]
+mod scan_selection_tests;
 
 #[cfg(test)]
 mod tests {
