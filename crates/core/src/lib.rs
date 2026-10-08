@@ -3249,7 +3249,8 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
     (last_digit_end, digits)
 }
 
-/// Digits after `3.` or `3,` are the fractional part of a decimal number, not a card.
+/// A contiguous digit run after `3.` or `3,` may be a decimal fraction.
+/// Comma-separated fields are ambiguous without structured input context.
 fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
 }
@@ -3259,9 +3260,7 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let mut start = 0;
 
     while start < bytes.len() {
-        if !bytes[start].is_ascii_digit()
-            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
-            || follows_decimal_separator(bytes, start)
+        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
         {
             start += 1;
             continue;
@@ -3269,7 +3268,10 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
 
         let (end, digits) = card_parts_at(bytes, start);
 
-        if end == start || (end < bytes.len() && bytes[end].is_ascii_alphanumeric()) {
+        if end == start
+            || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
+            || (follows_decimal_separator(bytes, start) && end - start == digits.len())
+        {
             start += 1;
             continue;
         }
@@ -4332,6 +4334,34 @@ mod tests {
                         digits,
                         prefix.len(),
                         prefix.len() + digits.len(),
+                        "datafog-core/credit-card",
+                    )],
+                    "{text}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn detects_formatted_credit_card_after_digit_and_separator() {
+        for prefix in ["3.", "3,"] {
+            for card in [
+                "4222-2222-22222",
+                "4111-1111-1111-1111",
+                "4111 1111 1111 1111",
+                "4111-1111-1111-1111110",
+            ] {
+                let text = format!("{prefix}{card}");
+                assert_eq!(
+                    scan(&text)
+                        .into_iter()
+                        .filter(|finding| finding.entity_type == "CREDIT_CARD")
+                        .collect::<Vec<_>>(),
+                    vec![expected_ascii_finding(
+                        "CREDIT_CARD",
+                        card,
+                        prefix.len(),
+                        prefix.len() + card.len(),
                         "datafog-core/credit-card",
                     )],
                     "{text}"
