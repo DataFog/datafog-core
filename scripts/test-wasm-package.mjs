@@ -98,7 +98,9 @@ import {
 const ready: Promise<void> = init();
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
-const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env"});
+// @ts-expect-error Entity selection must be an array.
+scan("", {entities: "EMAIL"});
+const findings: Finding[] = scan("Email jane@example.com", {detect_uuid: true, format: "env", entities: ["EMAIL"]});
 const suppliedFinding: FindingInput = findings[0];
 const entityType: EntityType = findings[0]?.entityType ?? "CUSTOM_ENTITY";
 const range: TextRange = findings[0]?.byteRange ?? { start: 0, end: 0 };
@@ -418,6 +420,33 @@ for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tok
 let restoreRejected = false;
 try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
 if (!restoreRejected) throw new Error("structured restore accepted in WASM");
+
+    const selectionText = "👋 jane@example.com SSN 123-45-6789";
+    const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
+    const expectedSelected = scan(selectionText).filter(item => item.entityType === "EMAIL");
+    if (selectedTextFindings.length !== 1 || JSON.stringify(selectedTextFindings) !== JSON.stringify(expectedSelected)) {
+      throw new Error("selected text detectors changed finding offsets or metadata");
+    }
+    const selectedCopy = scanAndTransform(selectionText, {
+      scan: {entities: ["EMAIL"]}, transform: {default: {strategy: "redact"}}
+    });
+    if (!selectedCopy.text.includes("123-45-6789") || selectedCopy.text.includes("jane@example.com")) {
+      throw new Error("selected scan and transform changed an unselected type");
+    }
+    for (const entities of [[], ["EMAIL", "EMAIL"], ["PERSON"], ["email"], [1], "EMAIL"]) {
+      let rejected = false;
+      try { scan(selectionText, {entities}); } catch (error) {
+        rejected = error.code === "invalid_configuration" && error.path.startsWith("/entities");
+      }
+      if (!rejected) throw new Error("invalid entity selection accepted");
+    }
+    const selectedUuid = "550e8400-e29b-41d4-a716-446655440000";
+    if (scan(selectedUuid, {entities: ["UUID"]}).length !== 0 ||
+        scan(selectedUuid, {entities: ["UUID"], detect_uuid: true}).length !== 1 ||
+        scan(selectedUuid, {entities: ["EMAIL"], detect_uuid: true}).length !== 0) {
+      throw new Error("entity selection changed UUID activation");
+    }
+
     const emojiFinding = scan("👋 jane@example.com")[0];
     if (
       JSON.stringify(emojiFinding.byteRange) !== JSON.stringify({ start: 5, end: 21 }) ||

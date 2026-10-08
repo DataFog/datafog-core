@@ -42,7 +42,7 @@ config: _TransformationConfig = {
     },
     "allow": {"exact": {"EMAIL": ["safe@example.com"]}, "regex": {"EMAIL": [{"pattern": "safe", "case_sensitive": False}]}},
 }
-findings = scan("jane@example.com", {"locale": "en-US", "detect_uuid": True, "format": "env"})
+findings = scan("jane@example.com", {"locale": "en-US", "detect_uuid": True, "format": "env", "entities": ["EMAIL"]})
 assert_type(findings, list[Finding])
 finding = findings[0]
 assert_type(finding.entity_type, str)
@@ -131,6 +131,8 @@ scan("text", {"format": "yaml"})  # error
 scan("text", {"locale": 123})  # error
 scan("text", {"detect_uuid": "true"})  # error
 scan("text", {"max_bytes": 100})  # error
+scan("text", {"entities": "EMAIL"})  # error
+scan_structured({"email": "jane@example.com"}, {"entities": ["EMAIL"]})  # error
 scan("text")[0].entity_type = "OTHER"  # error
 scan("text")[0].byte_range.start = 1  # error
 transform("text", ["not a finding"], {"default": {"strategy": "redact"}})  # error

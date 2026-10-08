@@ -49,6 +49,9 @@ export interface TransformationConfig {
 }
 
 export interface ScanConfig {
+  /** Nonempty unique text entity types to run; omission runs all activated detectors.
+   * Selection does not activate locale-dependent types or UUID detection. */
+  readonly entities?: readonly EntityType[];
   /** Source syntax for email boundaries; defaults to text. */
   readonly format?: "text" | "env" | "sql";
   readonly locale?: string;

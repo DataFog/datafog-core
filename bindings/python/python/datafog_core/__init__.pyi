@@ -8,10 +8,14 @@ _JsonValue: TypeAlias = (
 )
 _JsonDocument: TypeAlias = list[_JsonValue] | dict[str, _JsonValue]
 
-class _ScanConfig(TypedDict, total=False):
+class _CommonScanConfig(TypedDict, total=False):
     format: Literal["text", "env", "sql"]
     locale: str
     detect_uuid: bool
+
+class _ScanConfig(_CommonScanConfig, total=False):
+    # Select activated text detectors; omission preserves the default scan.
+    entities: list[str] | tuple[str, ...]
 
 class _CapabilityActivationRequired(TypedDict):
     kind: Literal["default", "locale", "config", "structured"]
@@ -33,7 +37,7 @@ class _Capabilities(TypedDict):
     locales: dict[str, _LocaleCapability]
     entities: dict[str, _EntityCapability]
 
-class _StructuredScanConfig(_ScanConfig, total=False):
+class _StructuredScanConfig(_CommonScanConfig, total=False):
     discover_person: bool
     mappings: dict[str, Literal["PERSON"]]
     exclude: list[str] | tuple[str, ...]

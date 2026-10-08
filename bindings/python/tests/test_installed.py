@@ -126,7 +126,44 @@ def verify_structured() -> None:
             raise AssertionError("invalid structured input accepted")
 
 
+def verify_text_selection() -> None:
+    text = "👋 jane@example.com SSN 123-45-6789"
+    complete = scan(text)
+    selected = scan(text, {"entities": ["EMAIL"]})
+    expected = [finding for finding in complete if finding.entity_type == "EMAIL"]
+    assert len(selected) == len(expected) == 1
+    assert selected[0].codepoint_range.start == expected[0].codepoint_range.start
+    assert selected[0].byte_range.start == expected[0].byte_range.start
+    assert selected[0].matched_text == "jane@example.com"
+    transformed = scan_and_transform(text, {
+        "scan": {"entities": ["EMAIL"]},
+        "transform": {"default": {"strategy": "redact"}},
+    })
+    assert "123-45-6789" in transformed.text
+    assert "jane@example.com" not in transformed.text
+    for entities in ([], ["EMAIL", "EMAIL"], ["PERSON"], ["email"], [1], "EMAIL"):
+        try:
+            scan(text, {"entities": entities})
+        except DataFogConfigurationError as error:
+            assert error.code == "invalid_configuration"
+            assert error.path.startswith("/entities")
+        else:
+            raise AssertionError(f"invalid selection accepted: {entities!r}")
+    uuid = "550e8400-e29b-41d4-a716-446655440000"
+    assert not scan(uuid, {"entities": ["UUID"]})
+    assert [item.entity_type for item in scan(uuid, {"entities": ["UUID"], "detect_uuid": True})] == ["UUID"]
+    assert not scan(uuid, {"entities": ["EMAIL"], "detect_uuid": True})
+    assert scan("contact=jane@example.com", {"format": "env", "entities": ["EMAIL"]})[0].matched_text == "jane@example.com"
+    try:
+        scan_structured({"email": "jane@example.com"}, {"entities": ["EMAIL"]})
+    except DataFogConfigurationError as error:
+        assert error.reason == "unknown_field"
+    else:
+        raise AssertionError("text selection was accepted in structured scan")
+
+
 def main() -> None:
+    verify_text_selection()
     capabilities_conformance.verify()
     german_conformance.verify()
     credential_overlap_conformance.verify()
