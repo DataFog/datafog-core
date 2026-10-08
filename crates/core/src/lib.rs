@@ -3368,6 +3368,12 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
     (last_digit_end, digits)
 }
 
+/// A contiguous digit run after `3.` or `3,` may be a decimal fraction.
+/// Comma-separated fields are ambiguous without structured input context.
+fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
+    start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut start = 0;
@@ -3381,7 +3387,10 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
 
         let (end, digits) = card_parts_at(bytes, start);
 
-        if end == start || (end < bytes.len() && bytes[end].is_ascii_alphanumeric()) {
+        if end == start
+            || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
+            || (follows_decimal_separator(bytes, start) && end - start == digits.len())
+        {
             start += 1;
             continue;
         }
@@ -4552,10 +4561,69 @@ mod tests {
     }
 
     #[test]
+    fn detects_credit_card_after_separator_without_leading_digit() {
+        for prefix in [".", ",", "no.", "no,"] {
+            for digits in ["4222222222222", "4111111111111111", "4111111111111111110"] {
+                let text = format!("{prefix}{digits}");
+                assert_eq!(
+                    scan(&text),
+                    vec![expected_ascii_finding(
+                        "CREDIT_CARD",
+                        digits,
+                        prefix.len(),
+                        prefix.len() + digits.len(),
+                        "datafog-core/credit-card",
+                    )],
+                    "{text}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn detects_formatted_credit_card_after_digit_and_separator() {
+        for prefix in ["3.", "3,"] {
+            for card in [
+                "4222-2222-22222",
+                "4111-1111-1111-1111",
+                "4111 1111 1111 1111",
+                "4111-1111-1111-1111110",
+            ] {
+                let text = format!("{prefix}{card}");
+                assert_eq!(
+                    scan(&text)
+                        .into_iter()
+                        .filter(|finding| finding.entity_type == "CREDIT_CARD")
+                        .collect::<Vec<_>>(),
+                    vec![expected_ascii_finding(
+                        "CREDIT_CARD",
+                        card,
+                        prefix.len(),
+                        prefix.len() + card.len(),
+                        "datafog-core/credit-card",
+                    )],
+                    "{text}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn rejects_invalid_credit_card_candidates() {
         assert!(scan("4111-1111-1111-1112").is_empty()); // bad Luhn checksum
         assert!(scan("1234-5678-9012-3452").is_empty()); // unsupported prefix
         assert!(scan("x4111-1111-1111-1111y").is_empty()); // embedded
+        for fraction in [
+            "4222222222222",
+            "4111111111111111",
+            "4111111111111111110",
+            "41111111111111111100",
+        ] {
+            for separator in [".", ","] {
+                let text = format!("3{separator}{fraction}");
+                assert!(scan(&text).is_empty(), "{text}"); // decimal fraction
+            }
+        }
     }
 
     #[test]
