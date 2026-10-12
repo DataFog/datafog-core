@@ -1,0 +1,35 @@
+---
+title: "0.4.4"
+description: "Reduce phone and credit-card false positives in numeric data."
+icon: "tag"
+---
+
+## Detection fixes
+
+- Reject unprefixed North American phone candidates whose area or exchange code
+  starts with 0 or 1. This suppresses common Unix timestamp false positives
+  ([PR #41](https://github.com/DataFog/datafog-core/pull/41)).
+- Reject credit-card candidates embedded in serialized decimal numbers while
+  retaining formatted card detection after decimal-like prefixes
+  ([PR #40](https://github.com/DataFog/datafog-core/pull/40)).
+
+## Compatibility and limitations
+
+These fixes apply to Rust, Python, Node.js, and browser WASM. Public APIs,
+detector selection, and finding offset semantics are unchanged.
+
+Phone detection remains permissive for candidates beginning with `+`; the
+North American rule is not full international numbering-plan validation.
+Numeric identifiers can still resemble real phone numbers. Metadata-based
+validation remains tracked in
+[issue #49](https://github.com/DataFog/datafog-core/issues/49).
+
+The credit-card decimal guard cannot resolve every ambiguous numeric or CSV
+context. Keep application-provided field context and detector selection explicit.
+
+## Verification and publication
+
+All runtime packages and lockfiles are aligned at **0.4.4**. Publication uses
+`rust-v0.4.4`, `python-v0.4.4`, `node-v0.4.4`, and `wasm-v0.4.4` on the same
+release commit. Candidate checks do not establish registry availability;
+publication and clean registry installations must be verified separately.
