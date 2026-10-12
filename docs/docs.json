@@ -194,5 +194,13 @@
     "codeblocks": {
       "theme": "github-dark"
     }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "DataFog home",
+        "href": "https://datafog.ai"
+      }
+    ]
   }
 }
