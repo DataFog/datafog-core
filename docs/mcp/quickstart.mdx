@@ -1,0 +1,56 @@
+---
+title: "MCP quickstart"
+description: "Check local files for personal data and credentials before your agent opens them."
+icon: "shield-halved"
+---
+
+DataFog MCP connects DataFog Core to Claude Code through five tools. Scan local
+files, then create redacted, masked, or removed copies. Tool responses contain
+counts, locations, and copy paths, without file contents or matched values.
+
+## Install and connect
+
+You need **Python 3.10 or later**, [uv](https://docs.astral.sh/uv/getting-started/installation/),
+and Claude Code running on the machine that holds your files.
+
+<Steps>
+  <Step title="Install DataFog MCP">
+    ```bash
+    uv tool install datafog-mcp
+    ```
+  </Step>
+  <Step title="Choose the folders DataFog can access">
+    ```bash
+    datafog-mcp roots --edit
+    ```
+
+    Replace the initial `~` entry with the folders you want to allow, one per line:
+
+    ```text
+    ~/Downloads/customer-exports
+    ```
+
+    Check the active roots:
+
+    ```bash
+    datafog-mcp roots
+    ```
+
+    With no roots file or override, access defaults to your home directory.
+    Narrow the roots before connecting the agent. An empty roots file refuses
+    every path. Changes take effect immediately.
+  </Step>
+  <Step title="Connect Claude Code">
+    ```bash
+    claude mcp add datafog --scope user -- "$(command -v datafog-mcp)"
+    ```
+
+    Start a new Claude Code session to use the tools.
+  </Step>
+</Steps>
+
+## Next steps
+
+- [Scan and transform files](/mcp/scanning-and-transformations)
+- [Configure allowed folders and copy destinations](/mcp/configuration)
+- [Understand detection coverage and privacy boundaries](/mcp/privacy-and-coverage)

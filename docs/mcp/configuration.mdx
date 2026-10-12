@@ -1,0 +1,59 @@
+---
+title: "Configuration"
+description: "Choose the folders DataFog MCP can access and where protected copies are saved."
+icon: "sliders"
+---
+
+## Allowed folders
+
+Inspect or edit the roots used by every scan and write:
+
+```bash
+datafog-mcp roots
+datafog-mcp roots --edit
+```
+
+The file is `~/.config/datafog/allowed_roots`. List one absolute path per line;
+`~` is expanded. Changes take effect immediately. Without a roots file or an
+override, the default is your home directory. An empty or malformed configured
+policy refuses every path instead of falling back to that default.
+
+`DATAFOG_MCP_ALLOWED_ROOTS` overrides the file when set. It contains
+colon-separated directories. Setting it to an empty value refuses every path.
+
+Allowed roots restrict DataFog's access, not the agent's other tools.
+Credential directories such as `.ssh`, `.aws`, and `.kube` remain refused even
+when they are inside an allowed root.
+
+## Copy destination
+
+By default, transformed copies are created beside the input. To choose an
+output directory, create it first, include it in your allowed roots, and edit
+the owner policy:
+
+```bash
+datafog-mcp policy --edit
+datafog-mcp policy
+```
+
+Set the destination in `~/.config/datafog/policy.toml`:
+
+```toml
+version = 1
+
+[output]
+directory = "~/Documents/datafog-copies"
+```
+
+The directory must already exist. Configuring a destination grants no
+additional access. Existing output files are never overwritten.
+
+## Scope and workflow guidance
+
+The owner policy can also configure routine scanning scope, exact allowlists,
+and how the agent should respond to findings. Scope selects files inside the
+allowed roots; it does not grant access. Workflow guidance is advisory and
+does not enforce the agent's behavior.
+
+See the [complete owner-policy reference](https://github.com/DataFog/datafog-mcp/blob/main/docs/policy.md)
+for these settings and their examples.

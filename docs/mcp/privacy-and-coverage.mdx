@@ -1,0 +1,39 @@
+---
+title: "Coverage and privacy"
+description: "Understand what DataFog MCP checks and what its tools keep out of agent responses."
+icon: "shield-halved"
+---
+
+## Know what is checked
+
+Default checks cover email, SSN, credit cards, labeled US routing numbers and
+NPIs, and supported credentials. Phone, date, ZIP code, and IP address checks
+are available but off by default. Plain-text names and street addresses are not detected.
+
+An explicit `entity_types` selection **replaces the defaults**. Include every
+type you want to check or transform. A clean scan means no selected detectors
+matched; it does not prove anonymity.
+
+Supported inputs are UTF-8 text files up to **10 MB**, including CSV, TSV, JSON,
+logs, ENV, and SQL. CSV/TSV headers are preserved and not scanned by default;
+use `has_header=false` when the first record must be checked. PDF, DOCX, XLSX,
+images, and archives are not parsed. A refused scan means the file was not checked.
+
+## Understand the privacy boundary
+
+The running server processes file contents locally and makes no network
+requests. Tool responses omit file contents and matched values, including when
+an operation fails. Paths and metadata still enter the agent's context and may
+reach its model provider.
+
+Allowed roots restrict DataFog's access. They do not restrict the agent's other
+tools, and asking it to scan first does not enforce that workflow. The agent
+can still open a file directly. Other MCP clients and Windows have not been validated.
+
+## Further reading
+
+- [Allowed roots, copy destinations, and owner policy](https://github.com/DataFog/datafog-mcp/blob/main/docs/policy.md)
+- [Detection coverage and copy behavior](https://github.com/DataFog/datafog-mcp/blob/main/docs/detection.md)
+- [Supported file formats](https://github.com/DataFog/datafog-mcp/blob/main/docs/file-formats.md)
+- [Privacy and security boundaries](https://github.com/DataFog/datafog-mcp/blob/main/docs/privacy.md)
+- [Uninstall DataFog MCP](https://github.com/DataFog/datafog-mcp/blob/main/docs/uninstall.md)
