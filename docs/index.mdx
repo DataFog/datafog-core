@@ -1,71 +1,41 @@
 ---
-title: "DataFog Core"
-description: "Detect PII and apply explicit privacy transformations from Rust, Python, Node.js, and browsers."
-icon: "shield-halved"
+title: "DataFog documentation"
+description: "Guides for MCP and Core SDK. Detect sensitive information and create redacted copies locally, with your AI agent or in your application."
+icon: "book-open"
+sidebarTitle: "Overview"
 ---
 
-DataFog Core is a multi-runtime engine for detecting sensitive text and applying
-privacy transformations. The implementation lives in Rust, with thin bindings
-for Python, Node.js, and browser WebAssembly.
-
-<Note>
-  DataFog Core is distributed as `datafog-core`. It is separate from the
-  established `datafog` Python package and does not reproduce its legacy API.
-  Existing users should follow [Migrate from DataFog
-  Python](/guides/migrating-from-datafog-python).
-</Note>
-
-## What it does
+Choose the path that matches how you want to use DataFog.
 
 <Columns cols={2}>
-  <Card title="Detect PII" icon="magnifying-glass" href="/concepts/findings-and-ranges">
-    Scan text for structured findings with explicit ranges and detector provenance.
+  <Card title="Use DataFog MCP" icon="shield-halved" href="/mcp/quickstart">
+    Check local files before your agent opens them. Connect Claude Code, scan
+    for personal data and credentials, and create protected copies.
   </Card>
-  <Card title="Transform text" icon="wand-magic-sparkles" href="/concepts/privacy-transformations">
-    Redact, mask, remove, pseudonymize, or tokenize selected findings.
-  </Card>
-  <Card title="Control selection" icon="sliders" href="/guides/configuration">
-    Select entity types, apply per-entity overrides, and exempt approved values.
-  </Card>
-  <Card title="Restore tokens" icon="rotate-left" href="/guides/tokenization-and-restoration">
-    Restore provider-issued tokens atomically under an exact authorization scope.
+  <Card title="Build with DataFog Core" icon="code" href="/get-started/quickstart">
+    Add detection and privacy transformations to your application with the
+    Rust, Python, Node.js, or browser SDK.
   </Card>
 </Columns>
 
-## Supported entities
+## Use MCP with your agent
 
-The built-in detector recognizes:
+[Start with the MCP setup guide](/mcp/quickstart): install the server, choose
+allowed folders, and connect Claude Code. Then learn how to
+[scan and transform files](/mcp/scanning-and-transformations).
 
-- `EMAIL`
-- `PHONE`
-- `SSN`
-- `CREDIT_CARD`
-- `IP_ADDRESS`
-- `DATE`
-- `ZIP_CODE`
+DataFog MCP uses Core for detection. You do not need to write SDK code to use it.
 
-Built-in entity names are uppercase. The finding contract remains extensible so
-custom detectors can introduce additional entity names in the future.
+## Build with the Core SDK
 
-## Operation model
+[Run the Core quickstart](/get-started/quickstart) to detect and redact an email
+address in your runtime. For package choices, see [installation](/get-started/installation).
+For the engine's capabilities and operation model, see the [Core overview](/core).
 
-```text
-scan(text)                    -> findings
-transform(text, findings, …) -> transformed text + records
-scan_and_transform(text, …)  -> scan, then transform
-restore(text, context)       -> restored text + records
-```
+Already using the older `datafog` Python package? Follow the
+[migration guide](/guides/migrating-from-datafog-python).
 
-`transform` never scans implicitly. Use `scan_and_transform` when you want the
-explicit scan-then-transform convenience operation.
+## Explore the research
 
-## Start here
-
-<Columns cols={2}>
-  <Card title="Install a package" icon="download" href="/get-started/installation">
-    Choose the distribution for your runtime.
-  </Card>
-  <Card title="Run the quickstart" icon="play" href="/get-started/quickstart">
-    Detect and redact an email address in a few lines.
-  </Card>
-</Columns>
+The [local PII model research preview](/research/local-pii-model) covers a
+separate experimental detector, its evaluation results, and its limitations.

@@ -1,20 +1,21 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "DataFog Core",
-  "description": "PII detection and privacy transformations for Rust, Python, Node.js, and browsers",
+  "name": "DataFog",
+  "description": "Local file protection with DataFog MCP and privacy SDKs with DataFog Core",
   "colors": {
-    "primary": "#795900",
-    "light": "#F7BE36",
-    "dark": "#795900"
+    "primary": "#8A5D00",
+    "light": "#8A5D00",
+    "dark": "#F7CE7A"
   },
   "appearance": {
-    "default": "dark"
+    "default": "light",
+    "strict": true
   },
   "background": {
     "color": {
-      "light": "#E5E2E1",
-      "dark": "#131313"
+      "light": "#F2F0EB",
+      "dark": "#1B1A17"
     }
   },
   "logo": {
@@ -25,77 +26,155 @@
   "fonts": {
     "heading": {
       "family": "Hanken Grotesk",
-      "weight": 600
+      "weight": 600,
+      "source": "/fonts/hanken-grotesk-latin.woff2",
+      "format": "woff2"
     },
     "body": {
-      "family": "Inter"
+      "family": "Hanken Grotesk",
+      "weight": 400,
+      "source": "/fonts/hanken-grotesk-latin.woff2",
+      "format": "woff2"
     }
   },
   "seo": {
     "metatags": {
-      "og:image": "https://datafog.ai/datafog-icon-512.png",
-      "twitter:image": "https://datafog.ai/datafog-icon-512.png",
-      "twitter:card": "summary"
+      "og:image": "https://docs.datafog.ai/images/og-docs.png",
+      "twitter:image": "https://docs.datafog.ai/images/og-docs.png",
+      "twitter:card": "summary_large_image",
+      "theme-color": "#F2F0EB",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "og:image:type": "image/png",
+      "og:image:alt": "DataFog documentation \u2014 Guides for MCP and Core SDK.",
+      "twitter:image:alt": "DataFog documentation \u2014 Guides for MCP and Core SDK.",
+      "og:site_name": "DataFog documentation"
     }
   },
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get started",
+        "tab": "Overview",
         "pages": [
-          "index",
-          "get-started/installation",
-          "get-started/quickstart"
+          "index"
         ]
       },
       {
-        "group": "Core concepts",
-        "pages": [
-          "concepts/findings-and-ranges",
-          "concepts/privacy-transformations"
+        "tab": "MCP",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "mcp/quickstart"
+            ]
+          },
+          {
+            "group": "Use DataFog MCP",
+            "pages": [
+              "mcp/scanning-and-transformations",
+              "mcp/configuration",
+              "mcp/privacy-and-coverage"
+            ]
+          }
         ]
       },
       {
-        "group": "Guides",
-        "pages": [
-          "guides/migrating-from-datafog-python",
-          "guides/configuration",
-          "guides/pseudonymization",
-          "guides/tokenization-and-restoration",
-          "guides/person-discovery"
+        "tab": "Core SDK",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "core/index",
+              "get-started/installation",
+              "get-started/quickstart"
+            ]
+          },
+          {
+            "group": "Core concepts",
+            "pages": [
+              "concepts/findings-and-ranges",
+              "concepts/privacy-transformations"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/migrating-from-datafog-python",
+              "guides/configuration",
+              "guides/pseudonymization",
+              "guides/tokenization-and-restoration",
+              "guides/person-discovery"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              {
+                "group": "SDK reference",
+                "pages": [
+                  "reference/rust",
+                  "reference/python",
+                  "reference/node",
+                  "reference/browser-wasm",
+                  "reference/errors"
+                ],
+                "expanded": false
+              },
+              {
+                "group": "Detection coverage",
+                "expanded": false,
+                "pages": []
+              }
+            ]
+          },
+          {
+            "group": "Project",
+            "pages": [
+              {
+                "group": "Releases",
+                "pages": [
+                  "releases/0-3-1",
+                  "releases/0-3-0"
+                ],
+                "expanded": false
+              },
+              {
+                "group": "Contributing",
+                "expanded": false,
+                "pages": [
+                  "development"
+                ]
+              }
+            ]
+          }
         ]
       },
       {
-        "group": "SDK reference",
-        "pages": [
-          "reference/rust",
-          "reference/python",
-          "reference/node",
-          "reference/browser-wasm",
-          "reference/errors"
+        "tab": "Research",
+        "groups": [
+          {
+            "group": "Research",
+            "pages": [
+              "research/local-pii-model",
+              "research/local-pii-methodology"
+            ]
+          }
         ]
-      },
-      {
-        "group": "Releases",
-        "pages": ["releases/0-3-1", "releases/0-3-0"]
-      },
-      {
-        "group": "Research",
-        "pages": ["research/local-pii-model", "research/local-pii-methodology"]
-      },
-      {
-        "group": "Contributing",
-        "pages": ["development"]
       }
     ],
     "global": {
       "anchors": [
         {
           "anchor": "GitHub",
-          "href": "https://github.com/DataFog/datafog-core",
+          "href": "https://github.com/DataFog",
           "icon": "github"
         }
       ]
+    }
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": "github-dark"
     }
   }
 }
