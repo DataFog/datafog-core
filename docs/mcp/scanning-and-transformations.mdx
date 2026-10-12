@@ -1,0 +1,49 @@
+---
+title: "Scan and transform files"
+description: "Check local files, then create a redacted, masked, or removed copy."
+icon: "magnifying-glass"
+---
+
+[Connect DataFog MCP to Claude Code](/mcp/quickstart) before following these examples.
+
+## Scan before opening a file
+
+Put a CSV or text file inside an allowed folder. Ask Claude Code:
+
+> Scan customers.csv with DataFog before opening it. Tell me what types of
+> sensitive data you find, without reading the file into the conversation.
+
+Use an absolute path if the file is outside the agent's current directory.
+The scan returns counts by entity type and finding locations. CSV/TSV findings
+include record and column numbers; text findings include character offsets.
+
+You can try the [fictional customer CSV](https://github.com/DataFog/datafog-mcp/blob/main/docs/demo/customers.csv)
+from the MCP repository. Save it inside an allowed folder first.
+
+## Create a protected copy
+
+After scanning, ask:
+
+> Create a redacted copy of customers.csv with DataFog. Use the default checks,
+> leave the original unchanged, and tell me the copy's path. Do not open either file.
+
+The original stays intact. By default, copies are saved beside it; existing
+copies are never overwritten. Configure a different destination with
+`datafog-mcp policy --edit`.
+
+| Tool | Purpose |
+| --- | --- |
+| `datafog_policy` | Inspect allowed roots, routine scanning scope, and copy destination. |
+| `datafog_scan` | Return finding types, counts, and locations. |
+| `datafog_redact` | Replace matched values with labels such as `[EMAIL]`. |
+| `datafog_mask` | Replace each matched value with same-length masking characters. |
+| `datafog_remove` | Remove matched values from a copy. |
+
+## Detection coverage
+
+Default checks cover email, SSN, credit cards, labeled US routing numbers and
+NPIs, and supported credentials. An explicit `entity_types` selection replaces
+the defaults. Review [coverage and file limits](/mcp/privacy-and-coverage) before
+choosing which types to include.
+
+For custom output folders, see [configuration](/mcp/configuration).
