@@ -1,9 +1,59 @@
 use super::*;
 use datafog_core::models as core;
 use napi::Task;
-use napi::bindgen_prelude::AsyncTask;
+use napi::bindgen_prelude::Object;
 use std::sync::Arc;
 use std::time::Instant;
+
+type Resolver<Value> = Box<dyn FnOnce(Env) -> napi::Result<Value> + Send>;
+
+/// Model operations use an admitted thread, avoiding unrelated libuv work queues.
+/// Core starts deadlines before dispatch and still owns cancellation and cleanup.
+fn dispatch<'env, T: Task + 'static>(env: &'env Env, mut task: T) -> napi::Result<Object<'env>>
+where
+    T::JsValue: 'static,
+{
+    let (send, receive) =
+        std::sync::mpsc::sync_channel::<napi::JsDeferred<T::JsValue, Resolver<T::JsValue>>>(1);
+    std::thread::Builder::new()
+        .name("datafog-model-call".into())
+        .spawn(move || {
+            let Ok(deferred) = receive.recv() else {
+                return;
+            };
+            let value = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| task.compute()))
+                .unwrap_or_else(|_| {
+                    Err(error(core::ModelError {
+                        code: "model_session_failed".into(),
+                        reason: "failed".into(),
+                        path: "/backend".into(),
+                        finding_index: None,
+                    }))
+                });
+            deferred.resolve(Box::new(move |env| match value {
+                Ok(value) => task.resolve(env, value),
+                Err(value) => task.reject(env, value),
+            }));
+        })
+        .map_err(|_| {
+            error(core::ModelError {
+                code: "model_resource_exhausted".into(),
+                reason: "thread_unavailable".into(),
+                path: "/backend".into(),
+                finding_index: None,
+            })
+        })?;
+    let (deferred, promise) = env.create_deferred::<T::JsValue, Resolver<T::JsValue>>()?;
+    if let Err(failure) = send.send(deferred) {
+        failure.0.reject(error(core::ModelError {
+            code: "model_session_failed".into(),
+            reason: "failed".into(),
+            path: "/backend".into(),
+            finding_index: None,
+        }));
+    }
+    Ok(promise)
+}
 
 fn error(error: core::ModelError) -> Error {
     let mut value = serde_json::to_value(&error)
@@ -255,76 +305,100 @@ impl ModelSessionNative {
         serde_json::to_value(self.session.inspect())
             .map_err(|_| Error::new(Status::GenericFailure, "model inspection failed"))
     }
-    #[napi]
-    pub fn scan(
+    #[napi(ts_return_type = "Promise<ModelScanResult>")]
+    pub fn scan<'env>(
         &self,
+        env: &'env Env,
         text: String,
         mode: String,
         diagnostics: Option<bool>,
         cancellation: Option<&ModelCancellation>,
-    ) -> napi::Result<AsyncTask<ScanTask>> {
+    ) -> napi::Result<Object<'env>> {
         let request = self.session.prepare_request().map_err(error)?;
-        Ok(AsyncTask::new(ScanTask {
-            session: Arc::clone(&self.session),
-            text,
-            mode: parse_mode(&mode)?,
-            diagnostics: diagnostics.unwrap_or(false),
-            request,
-            cancellation: cancellation
-                .map(|v| Arc::clone(&v.cancellation))
-                .unwrap_or_default(),
-        }))
+        dispatch(
+            env,
+            ScanTask {
+                session: Arc::clone(&self.session),
+                text,
+                mode: parse_mode(&mode)?,
+                diagnostics: diagnostics.unwrap_or(false),
+                request,
+                cancellation: cancellation
+                    .map(|v| Arc::clone(&v.cancellation))
+                    .unwrap_or_default(),
+            },
+        )
     }
-    #[napi]
-    pub fn scan_structured(
+    #[napi(ts_return_type = "Promise<ModelStructuredScanResult>")]
+    pub fn scan_structured<'env>(
         &self,
+        env: &'env Env,
         data_json: String,
         mode: String,
         diagnostics: Option<bool>,
         cancellation: Option<&ModelCancellation>,
-    ) -> napi::Result<AsyncTask<StructuredTask>> {
+    ) -> napi::Result<Object<'env>> {
         let request = self.session.prepare_request().map_err(error)?;
         let data = datafog_core::structured::parse_document_json(&data_json)
             .map_err(|e| error(e.into()))?;
-        Ok(AsyncTask::new(StructuredTask {
-            session: Arc::clone(&self.session),
-            data,
-            mode: parse_mode(&mode)?,
-            diagnostics: diagnostics.unwrap_or(false),
-            request,
-            cancellation: cancellation
-                .map(|v| Arc::clone(&v.cancellation))
-                .unwrap_or_default(),
-        }))
+        dispatch(
+            env,
+            StructuredTask {
+                session: Arc::clone(&self.session),
+                data,
+                mode: parse_mode(&mode)?,
+                diagnostics: diagnostics.unwrap_or(false),
+                request,
+                cancellation: cancellation
+                    .map(|v| Arc::clone(&v.cancellation))
+                    .unwrap_or_default(),
+            },
+        )
     }
-    #[napi]
-    pub fn warm_up(&self) -> napi::Result<AsyncTask<LifecycleTask>> {
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn warm_up<'env>(&self, env: &'env Env) -> napi::Result<Object<'env>> {
         let request = self.session.prepare_request().map_err(error)?;
-        Ok(AsyncTask::new(LifecycleTask {
-            session: Arc::clone(&self.session),
-            close: false,
-            request: Some(request),
-        }))
+        dispatch(
+            env,
+            LifecycleTask {
+                session: Arc::clone(&self.session),
+                close: false,
+                request: Some(request),
+            },
+        )
     }
-    #[napi]
-    pub fn health(&self) -> napi::Result<AsyncTask<LifecycleTask>> {
-        self.warm_up()
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn health<'env>(&self, env: &'env Env) -> napi::Result<Object<'env>> {
+        self.warm_up(env)
     }
-    #[napi]
-    pub fn close(&self) -> AsyncTask<LifecycleTask> {
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn close<'env>(&self, env: &'env Env) -> napi::Result<Object<'env>> {
         self.session.request_close();
-        AsyncTask::new(LifecycleTask {
-            session: Arc::clone(&self.session),
-            close: true,
-            request: None,
-        })
+        let result = dispatch(
+            env,
+            LifecycleTask {
+                session: Arc::clone(&self.session),
+                close: true,
+                request: None,
+            },
+        );
+        if result.is_err() {
+            self.session.close().map_err(error)?;
+        }
+        result
     }
 }
 
-#[napi]
-pub fn open_model_session(config: serde_json::Value) -> AsyncTask<OpenTask> {
-    AsyncTask::new(OpenTask {
-        config,
-        started: Instant::now(),
-    })
+#[napi(ts_return_type = "Promise<ModelSessionNative>")]
+pub fn open_model_session<'env>(
+    env: &'env Env,
+    config: serde_json::Value,
+) -> napi::Result<Object<'env>> {
+    dispatch(
+        env,
+        OpenTask {
+            config,
+            started: Instant::now(),
+        },
+    )
 }

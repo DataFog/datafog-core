@@ -22,12 +22,24 @@ def respond(value):
 
 
 def main():
+    # Private JSONL is UTF-8 on every host, independent of Windows' console locale.
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
+    loaded = False
     try:
         actual = {name: version(name).split("+")[0] for name in RUNTIME}
         if actual != RUNTIME:
             respond({"error": "runtime_incompatible"})
             return 1
-        bundle = Path(sys.argv[1])
+        bundle_name = sys.argv[1]
+        # Rust canonicalization uses Windows extended paths. Some upstream
+        # tokenizer/config loaders interpret that spelling as a Hub identifier.
+        if sys.platform == "win32":
+            if bundle_name.startswith("\\\\?\\UNC\\"):
+                bundle_name = "\\\\" + bundle_name[8:]
+            elif bundle_name.startswith("\\\\?\\"):
+                bundle_name = bundle_name[4:]
+        bundle = Path(bundle_name)
         settings = json.loads(sys.argv[2])
         # Offline loading of pinned built-in DeBERTa config needs no repository code.
         with redirect_stdout(sys.stderr):
@@ -46,6 +58,7 @@ def main():
             labels = {item["label"]: {"description": item["description"]}
                       if item.get("description") else {} for item in settings["labels"]}
             schema = model.create_schema().entities(labels)
+        loaded = True
         for line in sys.stdin:
             request = json.loads(line)
             text = request["text"]
@@ -65,9 +78,12 @@ def main():
         return 0
     except MemoryError:
         respond({"error": "resource_exhausted"})
-    except Exception:
-        # The parent sanitizes this stable code and retires the worker atomically.
-        respond({"error": "inference_failed"})
+    except Exception as error:
+        # Only a bounded category is sent; never include exception text or tracebacks.
+        category = type(error).__name__
+        if category not in {"OSError", "ValueError", "ImportError", "RuntimeError", "AttributeError"}:
+            category = "BackendError"
+        respond({"error": "inference_failed" if loaded else "load_failed", "category": category})
     return 1
 
 

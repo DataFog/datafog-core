@@ -353,3 +353,29 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     drop(next);
     session.close().unwrap();
 }
+
+#[test]
+fn native_seven_label_mapping_preserves_names_and_identifier_meaning() {
+    for (native, canonical) in [
+        ("first_name", "FIRST_NAME"),
+        ("last_name", "LAST_NAME"),
+        ("email", "EMAIL"),
+        ("phone_number", "PHONE"),
+        ("street_address", "STREET_ADDRESS"),
+        ("customer_id", "CUSTOMER_ID"),
+        ("account_number", "ACCOUNT_NUMBER"),
+    ] {
+        let mut candidate = span(0, 6);
+        candidate.native_label = native.into();
+        let result = convert(
+            "sample",
+            BackendResult {
+                spans: vec![candidate],
+            },
+            &descriptor(),
+        )
+        .unwrap();
+        assert_eq!(result[0].0.entity_type, canonical);
+        assert_eq!(result[0].1.native_label.as_deref(), Some(native));
+    }
+}
