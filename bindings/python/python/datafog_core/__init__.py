@@ -1,6 +1,10 @@
 """Fast structured PII detection implemented in Rust."""
 
 from .datafog_core import (
+    DataFogModelError as DataFogModelError,
+    ModelSession as ModelSession,
+    ModelScanResult as ModelScanResult,
+    ModelStructuredScanResult as ModelStructuredScanResult,
     DataFogConfigurationError as DataFogConfigurationError,
     DataFogFindingError as DataFogFindingError,
     DataFogInternalError as DataFogInternalError,
@@ -30,6 +34,10 @@ from .datafog_core import (
 )
 
 __all__ = [
+    "DataFogModelError",
+    "ModelSession",
+    "ModelScanResult",
+    "ModelStructuredScanResult",
     "DataFogConfigurationError",
     "DataFogFindingError",
     "DataFogInternalError",

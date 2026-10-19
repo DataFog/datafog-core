@@ -1,0 +1,99 @@
+name: DataFog model qualification
+
+# Model assets are explicit qualification inputs, never default workspace tests.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-model:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+          - os: macos-14
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-x86_64
+          - os: windows-latest
+            platform: windows-x86_64
+    defaults:
+      run:
+        shell: bash
+    env:
+      DATAFOG_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install build and explicit provisioning tools
+        run: python -m pip install 'maturin>=1.9.4,<2.0' 'huggingface_hub==1.27.0'
+      - name: Download immutable native archive
+        run: |
+          hf download DataFog/pii-en-65m \
+            "runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
+            --revision 7cadd41e21f59b2a149e31378d073cf6ca057531 --local-dir "$RUNNER_TEMP/model-download"
+      - name: Verify and provision separately from inference
+        run: |
+          python scripts/provision-datafog-model.py \
+            --archive "$RUNNER_TEMP/model-download/runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
+            --destination "$RUNNER_TEMP/model-bundle"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          bundle = root / "model-bundle"
+          # Explicit CI fixture budgets, not library defaults or performance guarantees.
+          config = dict(bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
+                        limits=dict(max_input_bytes=65536, max_response_bytes=1048576, max_findings=1024, timeout_ms=30000, cleanup_timeout_ms=1000))
+          (root / "model-session.json").write_text(json.dumps(config))
+          with open(os.environ["GITHUB_ENV"], "a") as stream:
+              stream.write(f"DATAFOG_MODEL_CONFIG={root / 'model-session.json'}\nHF_HUB_OFFLINE=1\n")
+          PY
+      - name: Execute actual model through Rust
+        run: cargo test -p datafog-core --features models --test model_datafog --release -- --ignored
+      - name: Build and verify installed Python wheel
+        run: |
+          maturin build --manifest-path bindings/python/Cargo.toml --release --out dist
+          python -m pip install --force-reinstall dist/*.whl
+          python -I bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
+          python bindings/python/tests/test_installed.py
+      - name: Build Node package
+        run: |
+          npm ci --prefix bindings/node
+          npm run build --prefix bindings/node
+      - name: Verify installed Node tarball
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/model-node-consumer"
+          (cd bindings/node && npm pack --ignore-scripts --pack-destination ../../dist)
+          npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE"/dist/*.tgz
+          node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
+          npm run test:package --prefix bindings/node -- --prebuilt
+      - name: Record exact backend identity and host
+        run: |
+          python - <<'PY'
+          import json, os, platform
+          from datafog_core import ModelSession
+          with ModelSession.open(json.load(open(os.environ["DATAFOG_MODEL_CONFIG"]))) as session:
+              report = {"host": platform.platform(), "python": platform.python_version(), "session": session.inspect()}
+          with open("dist/model-evidence.json", "w") as stream:
+              json.dump(report, stream, indent=2)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datafog-model-${{ matrix.platform }}
+          path: dist/

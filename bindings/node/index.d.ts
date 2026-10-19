@@ -1,6 +1,40 @@
 /** Canonical built-in values are uppercase, but custom detectors may add values. */
 export type EntityType = string;
 
+export interface ModelSessionConfig {
+  bundle: string;
+  manifest_sha256: string;
+  limits: {
+    max_input_bytes: number;
+    max_response_bytes: number;
+    max_findings: number;
+    timeout_ms: number;
+    cleanup_timeout_ms: number;
+  };
+  rules?: ScanConfig;
+  structured?: StructuredScanConfig;
+}
+export interface ModelFindingEvidence {
+  finding_index: number;
+  sources: Array<{
+    detector_name: string;
+    detector_version: string | null;
+    native_label: string | null;
+    raw_score: {value: number; scale_id: string} | null;
+    calibrated_confidence: number | null;
+  }>;
+}
+export declare class ModelSession {
+  private constructor();
+  static open(config: ModelSessionConfig): Promise<ModelSession>;
+  inspect(): Record<string, unknown>;
+  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelScanResult>;
+  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelStructuredScanResult>;
+  warmUp(): Promise<void>;
+  health(): Promise<void>;
+  close(): Promise<void>;
+}
+
 export type TransformationStrategy =
   | "redact"
   | "mask"
@@ -187,6 +221,15 @@ export declare function scanAndTransformStructured(data: JsonDocument, config: S
 
 export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
 export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }
+export declare class ModelSessionNative {
+  inspect(): any
+  scan(text: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
+  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
+  warmUp(): Promise<unknown>
+  health(): Promise<unknown>
+  close(): Promise<unknown>
+}
+
 export declare function discoverFields(dataJson: JsonDocument, config?: StructuredScanConfig | undefined): Array<FieldMapping>
 
 export interface FieldMapping {
@@ -224,6 +267,25 @@ export interface KeySelector {
   readonly path: string
 }
 
+export interface ModelScanResult {
+  contractVersion: number
+  configurationId: string
+  mode: string
+  findings: Array<Finding>
+  evidence: ModelFindingEvidence[]
+  diagnostics?: Array<Finding>
+}
+
+export interface ModelStructuredScanResult {
+  contractVersion: number
+  configurationId: string
+  mode: string
+  findings: Array<StructuredFinding>
+  evidence: ModelFindingEvidence[]
+  mappings: any
+  diagnostics?: Array<StructuredFinding>
+}
+
 export interface NativeStructuredRestoreResult {
   dataJson: string
   restorations: Array<StructuredRestoration>
@@ -233,6 +295,8 @@ export interface NativeStructuredTransformResult {
   dataJson: string
   transformations: Array<StructuredTransformation>
 }
+
+export declare function openModelSession(config: any): Promise<unknown>
 
 export interface PreparedScanAndTransform {
   readonly findings: Array<Finding>

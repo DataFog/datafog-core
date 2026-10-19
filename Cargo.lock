@@ -99,6 +99,7 @@ dependencies = [
  "datafog-core",
  "pyo3",
  "pyo3-async-runtimes",
+ "serde",
  "serde_json",
 ]
 

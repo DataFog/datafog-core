@@ -10,6 +10,8 @@ pub use capabilities::{
 };
 mod german;
 mod jwt;
+#[cfg(all(feature = "models", not(target_arch = "wasm32")))]
+pub mod models;
 mod npi;
 mod offsets;
 mod private_key;
@@ -30,7 +32,7 @@ use zeroize::Zeroize;
 
 /// A zero-based, end-exclusive range in the coordinate system named by its
 /// containing field.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct TextRange {
     /// Inclusive start offset.
     pub start: usize,
@@ -75,7 +77,7 @@ fn validate_utf8_range(text: &str, byte_range: TextRange) -> Result<(), Utf16Ran
 }
 
 /// A piece of potentially sensitive content detected in an input string.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Finding {
     /// Canonical PII type, such as `EMAIL` or `SSN`.
     pub entity_type: String,

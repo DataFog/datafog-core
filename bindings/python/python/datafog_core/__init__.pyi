@@ -8,6 +8,73 @@ _JsonValue: TypeAlias = (
 )
 _JsonDocument: TypeAlias = list[_JsonValue] | dict[str, _JsonValue]
 
+class _ModelLimits(TypedDict):
+    max_input_bytes: int
+    max_response_bytes: int
+    max_findings: int
+    timeout_ms: int
+    cleanup_timeout_ms: int
+
+class _ModelConfigRequired(TypedDict):
+    bundle: str
+    manifest_sha256: str
+    limits: _ModelLimits
+
+class _ModelConfig(_ModelConfigRequired, total=False):
+    rules: _ScanConfig
+    structured: _StructuredScanConfig
+
+class DataFogModelError(RuntimeError):
+    code: str
+    reason: str
+    path: str
+    finding_index: int | None
+
+@final
+class ModelScanResult:
+    @property
+    def contract_version(self) -> int: ...
+    @property
+    def configuration_id(self) -> str: ...
+    @property
+    def mode(self) -> Literal["model_only", "combined"]: ...
+    @property
+    def findings(self) -> list[Finding]: ...
+    @property
+    def evidence(self) -> list[dict[str, object]]: ...
+    @property
+    def diagnostics(self) -> list[Finding] | None: ...
+
+@final
+class ModelStructuredScanResult:
+    @property
+    def contract_version(self) -> int: ...
+    @property
+    def configuration_id(self) -> str: ...
+    @property
+    def mode(self) -> Literal["model_only", "combined"]: ...
+    @property
+    def mappings(self) -> list[FieldMapping]: ...
+    @property
+    def findings(self) -> list[StructuredFinding]: ...
+    @property
+    def evidence(self) -> list[dict[str, object]]: ...
+    @property
+    def diagnostics(self) -> list[StructuredFinding] | None: ...
+
+@final
+class ModelSession:
+    @staticmethod
+    def open(config: _ModelConfig) -> ModelSession: ...
+    def inspect(self) -> dict[str, object]: ...
+    def scan(self, text: str, mode: Literal["model_only", "combined"], *, diagnostics: bool = False) -> ModelScanResult: ...
+    def scan_structured(self, data: _JsonDocument, mode: Literal["model_only", "combined"], *, diagnostics: bool = False) -> ModelStructuredScanResult: ...
+    def warm_up(self) -> None: ...
+    def health(self) -> None: ...
+    def close(self) -> None: ...
+    def __enter__(self) -> ModelSession: ...
+    def __exit__(self, kind: object, value: object, traceback: object) -> bool: ...
+
 class _CommonScanConfig(TypedDict, total=False):
     format: Literal["text", "env", "sql"]
     locale: str
