@@ -74,44 +74,47 @@ def reject(call, code):
 with ThreadPoolExecutor(max_workers=1) as executor:
     session, worker, processes = open_worker()
     try:
-        reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1), "combined"), "invalid_configuration")
-        assert session.inspect()["state"] == "ready"
+        reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1)), "invalid_configuration")
         cancellation = ModelCancellation()
         baseline = cpu_time(processes)
-        pending = executor.submit(session.scan, long_text, "combined", cancellation=cancellation)
+        pending = executor.submit(session.scan, long_text, cancellation=cancellation)
         await_inference(processes, baseline, pending)
-        reject(lambda: session.scan("private@example.test", "combined"), "model_busy")
+        reject(lambda: session.scan("private@example.test"), "model_busy")
         stopped_at = time.monotonic()
         cancellation.cancel()
         reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
-        assert session.inspect()["state"] == "failed"
         assert_stopped(processes, stopped_at)
-        reject(lambda: session.scan("private@example.test", "combined"), "model_session_failed")
+        reject(lambda: session.scan("private@example.test"), "model_session_failed")
     finally:
         session.close()
-    assert session.inspect()["state"] == "closed"
 
     session, worker, processes = open_worker()
     try:
         stopped_at = time.monotonic()
         worker.kill()
         # Core, the process owner, performs the reap; psutil must not consume its exit status.
-        reject(lambda: session.scan("private@example.test", "combined"), "model_inference_failed")
-        assert session.inspect()["state"] == "failed"
+        reject(lambda: session.scan("private@example.test"), "model_inference_failed")
         assert_stopped(processes, stopped_at)
     finally:
         session.close()
 
     session, worker, processes = open_worker()
     baseline = cpu_time(processes)
-    pending = executor.submit(session.scan, long_text, "combined")
+    pending = executor.submit(session.scan, long_text)
     await_inference(processes, baseline, pending)
     stopped_at = time.monotonic()
     session.close()
     reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
     assert_stopped(processes, stopped_at)
-    assert session.inspect()["state"] == "closed"
     session.close()
+
+if "gliner2" in config:
+    # The Core test interpreter has the runner but no optional model dependencies.
+    missing_runtime = dict(config, gliner2=dict(config["gliner2"], python=sys.executable))
+    reject(lambda: ModelSession.open(missing_runtime), "model_load_failed")
+    missing_python = str(Path(config["bundle"]) / "missing-python-executable")
+    bad_interpreter = dict(config, gliner2=dict(config["gliner2"], python=missing_python))
+    reject(lambda: ModelSession.open(bad_interpreter), "model_load_failed")
 
 bad = dict(config, manifest_sha256="0" * 64)
 reject(lambda: ModelSession.open(bad), "model_load_failed")

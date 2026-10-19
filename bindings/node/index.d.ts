@@ -18,8 +18,6 @@ export interface ModelSessionConfig {
     chunk_size: number;
     chunk_overlap: number;
   };
-  rules?: ScanConfig;
-  structured?: StructuredScanConfig;
 }
 export interface ModelFindingEvidence {
   finding_index: number;
@@ -34,11 +32,7 @@ export interface ModelFindingEvidence {
 export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
-  inspect(): Record<string, unknown>;
-  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelScanResult>;
-  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelStructuredScanResult>;
-  warmUp(): Promise<void>;
-  health(): Promise<void>;
+  scan(text: string, options?: {cancellation?: ModelCancellation}): Promise<ModelScanResult>;
   close(): Promise<void>;
 }
 
@@ -234,11 +228,7 @@ export declare class ModelCancellation {
 }
 
 export declare class ModelSessionNative {
-  inspect(): any
-  scan(text: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>
-  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelStructuredScanResult>
-  warmUp(): Promise<void>
-  health(): Promise<void>
+  scan(text: string, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>
   close(): Promise<void>
 }
 
@@ -281,21 +271,9 @@ export interface KeySelector {
 
 export interface ModelScanResult {
   contractVersion: number
-  configurationId: string
-  mode: string
+  model: string
   findings: Array<Finding>
   evidence: ModelFindingEvidence[]
-  diagnostics?: Array<Finding>
-}
-
-export interface ModelStructuredScanResult {
-  contractVersion: number
-  configurationId: string
-  mode: string
-  findings: Array<StructuredFinding>
-  evidence: ModelFindingEvidence[]
-  mappings: any
-  diagnostics?: Array<StructuredFinding>
 }
 
 export interface NativeStructuredRestoreResult {

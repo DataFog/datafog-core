@@ -38,7 +38,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-          components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: actions/setup-node@v4
         with:

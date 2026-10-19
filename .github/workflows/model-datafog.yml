@@ -47,7 +47,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -134,13 +133,14 @@ jobs:
             ${{ runner.temp }}/model-download
             ${{ runner.temp }}/gliner2-download
           key: ${{ steps.model-assets.outputs.cache-primary-key }}
-      - name: Install qualified CPU worker dependencies
+      - name: Install optional GLiNER2 dependencies
         if: matrix.backend == 'gliner2'
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             "$WORKER_PYTHON" -m pip install 'torch==2.12.0' --index-url https://download.pytorch.org/whl/cpu
           fi
-          "$WORKER_PYTHON" -m pip install candidate-common/datafog_gliner2_worker-*.whl
+          worker_wheel="$(find candidate-native -name '*.whl')"
+          "$WORKER_PYTHON" -m pip install "${worker_wheel}[gliner2]"
           mkdir -p dist
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
       - name: Execute packaged Rust model integration
@@ -153,9 +153,6 @@ jobs:
         run: |
           mkdir -p dist
           python -m pip install --force-reinstall candidate-native/*.whl
-          if [[ "$MODEL_BACKEND" == "datafog" ]]; then
-            python -I -X utf8 bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
-          fi
           python -I -X utf8 scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json
           python bindings/python/tests/test_installed.py
       - name: Verify final assembled Node artifacts
@@ -164,12 +161,8 @@ jobs:
           package="$(find candidate-node -maxdepth 1 -name 'datafog-node-0*.tgz')"
           platform_package="$(find candidate-node -maxdepth 1 -name 'datafog-node-${{ matrix.npm_platform }}-*.tgz')"
           npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE/$package" "$GITHUB_WORKSPACE/$platform_package"
-          if [[ "$MODEL_BACKEND" == "datafog" ]]; then
-            node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
-            UV_THREADPOOL_SIZE=1 node scripts/model-node-scheduling.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
-          else
-            node scripts/model-gliner2-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
-          fi
+          node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
+          UV_THREADPOOL_SIZE=1 node scripts/model-node-scheduling.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
           node scripts/test-node-package.mjs --prebuilt --tarball "$package" --platform-tarball "$platform_package"
       - name: Qualify actual worker faults and cancellation
         run: python -I -X utf8 scripts/model-fault-conformance.py "$DATAFOG_MODEL_CONFIG"
