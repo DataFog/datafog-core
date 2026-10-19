@@ -21,17 +21,29 @@ def open_worker():
     session = ModelSession.open(config)
     workers = [p for p in parent.children() if p.pid not in previous]
     assert len(workers) == 1
-    return session, workers[0]
+    worker = workers[0]
+    # Windows venv launchers run Python in a child; observe inference and cleanup
+    # across the process tree rather than measuring the idle launcher's CPU.
+    processes = [worker, *worker.children(recursive=True)]
+    return session, worker, processes
 
 
-def await_inference(worker, baseline, future):
+def cpu_time(processes):
+    total = 0.0
+    for process in processes:
+        times = process.cpu_times()
+        total += times.user + times.system
+    return total
+
+
+def await_inference(processes, baseline, future):
     deadline = time.monotonic() + limits["timeout_ms"] / 1000
     while time.monotonic() < deadline:
-        times = worker.cpu_times()
-        if times.user + times.system > baseline:
-            return
         if future.done():
+            future.result()
             raise AssertionError("fixture completed before active cancellation could be exercised")
+        if cpu_time(processes) > baseline:
+            return
         time.sleep(0.001)
     raise AssertionError("worker did not begin inference within its configured deadline")
 
@@ -47,41 +59,41 @@ def reject(call, code):
 
 
 with ThreadPoolExecutor(max_workers=1) as executor:
-    session, worker = open_worker()
+    session, worker, processes = open_worker()
     try:
         reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1), "combined"), "invalid_configuration")
         assert session.inspect()["state"] == "ready"
         cancellation = ModelCancellation()
-        cpu = worker.cpu_times(); baseline = cpu.user + cpu.system
+        baseline = cpu_time(processes)
         pending = executor.submit(session.scan, long_text, "combined", cancellation=cancellation)
-        await_inference(worker, baseline, pending)
+        await_inference(processes, baseline, pending)
         reject(lambda: session.scan("private@example.test", "combined"), "model_busy")
         cancellation.cancel()
         reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
         assert session.inspect()["state"] == "failed"
-        assert not worker.is_running()
+        assert all(not process.is_running() for process in processes)
         reject(lambda: session.scan("private@example.test", "combined"), "model_session_failed")
     finally:
         session.close()
     assert session.inspect()["state"] == "closed"
 
-    session, worker = open_worker()
+    session, worker, processes = open_worker()
     try:
         worker.kill()
         # Core, the process owner, performs the reap; psutil must not consume its exit status.
         reject(lambda: session.scan("private@example.test", "combined"), "model_inference_failed")
         assert session.inspect()["state"] == "failed"
-        assert not worker.is_running()
+        assert all(not process.is_running() for process in processes)
     finally:
         session.close()
 
-    session, worker = open_worker()
-    cpu = worker.cpu_times(); baseline = cpu.user + cpu.system
+    session, worker, processes = open_worker()
+    baseline = cpu_time(processes)
     pending = executor.submit(session.scan, long_text, "combined")
-    await_inference(worker, baseline, pending)
+    await_inference(processes, baseline, pending)
     session.close()
     reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
-    assert not worker.is_running() and session.inspect()["state"] == "closed"
+    assert all(not process.is_running() for process in processes) and session.inspect()["state"] == "closed"
     session.close()
 
 bad = dict(config, manifest_sha256="0" * 64)
