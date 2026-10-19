@@ -3,6 +3,7 @@ use datafog_core::models as core;
 use napi::Task;
 use napi::bindgen_prelude::AsyncTask;
 use std::sync::Arc;
+use std::time::Instant;
 
 fn error(error: core::ModelError) -> Error {
     let mut value = serde_json::to_value(&error)
@@ -84,18 +85,36 @@ pub struct ModelStructuredScanResult {
 }
 
 #[napi]
+#[derive(Default)]
+pub struct ModelCancellation {
+    cancellation: Arc<core::Cancellation>,
+}
+#[napi]
+impl ModelCancellation {
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+    #[napi]
+    pub fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+}
+
+#[napi]
 pub struct ModelSessionNative {
     session: Arc<core::ModelSession>,
 }
 pub struct OpenTask {
     config: serde_json::Value,
+    started: Instant,
 }
 impl Task for OpenTask {
     type Output = core::ModelSession;
     type JsValue = ModelSessionNative;
     fn compute(&mut self) -> napi::Result<Self::Output> {
         let config = core::parse_config(&self.config).map_err(error)?;
-        core::ModelSession::open(config).map_err(error)
+        core::ModelSession::open_started(config, self.started).map_err(error)
     }
     fn resolve(&mut self, _: Env, session: Self::Output) -> napi::Result<Self::JsValue> {
         Ok(ModelSessionNative {
@@ -108,17 +127,20 @@ pub struct ScanTask {
     text: String,
     mode: core::ScanMode,
     diagnostics: bool,
+    request: core::ModelRequest,
+    cancellation: Arc<core::Cancellation>,
 }
 impl Task for ScanTask {
     type Output = core::ModelScanResult;
     type JsValue = ModelScanResult;
     fn compute(&mut self) -> napi::Result<Self::Output> {
         self.session
-            .scan(
+            .scan_request(
+                &self.request,
                 &self.text,
                 self.mode,
                 self.diagnostics,
-                &core::Cancellation::default(),
+                &self.cancellation,
             )
             .map_err(error)
     }
@@ -131,17 +153,20 @@ pub struct StructuredTask {
     data: serde_json::Value,
     mode: core::ScanMode,
     diagnostics: bool,
+    request: core::ModelRequest,
+    cancellation: Arc<core::Cancellation>,
 }
 impl Task for StructuredTask {
     type Output = core::ModelStructuredScanResult;
     type JsValue = ModelStructuredScanResult;
     fn compute(&mut self) -> napi::Result<Self::Output> {
         self.session
-            .scan_structured(
+            .scan_structured_request(
+                &self.request,
                 &self.data,
                 self.mode,
                 self.diagnostics,
-                &core::Cancellation::default(),
+                &self.cancellation,
             )
             .map_err(error)
     }
@@ -190,6 +215,7 @@ impl Task for StructuredTask {
 pub struct LifecycleTask {
     session: Arc<core::ModelSession>,
     close: bool,
+    request: Option<core::ModelRequest>,
 }
 impl Task for LifecycleTask {
     type Output = ();
@@ -198,7 +224,23 @@ impl Task for LifecycleTask {
         if self.close {
             self.session.close()
         } else {
-            self.session.warm_up()
+            let request = self.request.as_ref().ok_or_else(|| {
+                error(core::ModelError {
+                    code: "model_session_failed".into(),
+                    reason: "failed".into(),
+                    path: "/backend".into(),
+                    finding_index: None,
+                })
+            })?;
+            self.session
+                .scan_request(
+                    request,
+                    "",
+                    core::ScanMode::ModelOnly,
+                    false,
+                    &core::Cancellation::default(),
+                )
+                .map(|_| ())
         }
         .map_err(error)
     }
@@ -219,12 +261,18 @@ impl ModelSessionNative {
         text: String,
         mode: String,
         diagnostics: Option<bool>,
+        cancellation: Option<&ModelCancellation>,
     ) -> napi::Result<AsyncTask<ScanTask>> {
+        let request = self.session.prepare_request().map_err(error)?;
         Ok(AsyncTask::new(ScanTask {
             session: Arc::clone(&self.session),
             text,
             mode: parse_mode(&mode)?,
             diagnostics: diagnostics.unwrap_or(false),
+            request,
+            cancellation: cancellation
+                .map(|v| Arc::clone(&v.cancellation))
+                .unwrap_or_default(),
         }))
     }
     #[napi]
@@ -233,7 +281,9 @@ impl ModelSessionNative {
         data_json: String,
         mode: String,
         diagnostics: Option<bool>,
+        cancellation: Option<&ModelCancellation>,
     ) -> napi::Result<AsyncTask<StructuredTask>> {
+        let request = self.session.prepare_request().map_err(error)?;
         let data = datafog_core::structured::parse_document_json(&data_json)
             .map_err(|e| error(e.into()))?;
         Ok(AsyncTask::new(StructuredTask {
@@ -241,29 +291,40 @@ impl ModelSessionNative {
             data,
             mode: parse_mode(&mode)?,
             diagnostics: diagnostics.unwrap_or(false),
+            request,
+            cancellation: cancellation
+                .map(|v| Arc::clone(&v.cancellation))
+                .unwrap_or_default(),
         }))
     }
     #[napi]
-    pub fn warm_up(&self) -> AsyncTask<LifecycleTask> {
-        AsyncTask::new(LifecycleTask {
+    pub fn warm_up(&self) -> napi::Result<AsyncTask<LifecycleTask>> {
+        let request = self.session.prepare_request().map_err(error)?;
+        Ok(AsyncTask::new(LifecycleTask {
             session: Arc::clone(&self.session),
             close: false,
-        })
+            request: Some(request),
+        }))
     }
     #[napi]
-    pub fn health(&self) -> AsyncTask<LifecycleTask> {
+    pub fn health(&self) -> napi::Result<AsyncTask<LifecycleTask>> {
         self.warm_up()
     }
     #[napi]
     pub fn close(&self) -> AsyncTask<LifecycleTask> {
+        self.session.request_close();
         AsyncTask::new(LifecycleTask {
             session: Arc::clone(&self.session),
             close: true,
+            request: None,
         })
     }
 }
 
 #[napi]
 pub fn open_model_session(config: serde_json::Value) -> AsyncTask<OpenTask> {
-    AsyncTask::new(OpenTask { config })
+    AsyncTask::new(OpenTask {
+        config,
+        started: Instant::now(),
+    })
 }

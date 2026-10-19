@@ -106,12 +106,14 @@ diagnostics explicitly to retain all original detector findings.
 One session admits one request at a time, with no waiting queue. Concurrent
 calls fail with `model_busy`; callers needing parallel inference construct
 separate sessions and account for their separate memory. Rust callers can
-share a `Cancellation` handle with another thread. Python/Node can explicitly
-close a session to interrupt active work; their first bindings do not yet expose
-per-request cancellation handles.
-The current Node task uses libuv scheduling before Core admission; including
-that scheduling delay in the caller-visible deadline is still a required
-beta lifecycle task, not a completed guarantee of this first slice.
+share a `Cancellation` handle with another thread. Python and Node expose `ModelCancellation`: construct a handle, pass it as the
+scan's `cancellation` option, and call `cancel()` from the controlling thread or
+event loop. Handles are one-shot; a cancelled handle stays cancelled.
+Core reserves admission before Node schedules blocking work, so a second request
+fails immediately with `model_busy`. The request deadline includes executor wait;
+a request that expires or is cancelled before execution never enters inference
+and leaves the session reusable. Cancellation after inference starts retires the
+worker. `close()` signals cancellation before scheduling cleanup.
 
 Timeout or malformed native output retires the worker and marks the session
 failed; there is no automatic retry or successful rule-only fallback.
@@ -149,7 +151,6 @@ The explicit `DataFog model qualification` workflow runs all three native
 interfaces on all five required targets and retains installed artifacts and
 identity evidence. It is a release requirement, not a completed qualification
 claim. Remaining beta work includes its actual all-host execution, broader
-fault/contention/cancellation evidence, scheduling-inclusive binding deadlines,
-measured resource profiles, GLiNER2,
+fault/resource-exhaustion evidence, measured resource profiles, GLiNER2,
 full supported-version qualification and the coordinated prerelease version
 bump/publish checks. No platform is removed or deferred from the beta matrix.

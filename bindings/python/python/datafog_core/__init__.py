@@ -3,6 +3,7 @@
 from .datafog_core import (
     DataFogModelError as DataFogModelError,
     ModelSession as ModelSession,
+    ModelCancellation as ModelCancellation,
     ModelScanResult as ModelScanResult,
     ModelStructuredScanResult as ModelStructuredScanResult,
     DataFogConfigurationError as DataFogConfigurationError,
@@ -36,6 +37,7 @@ from .datafog_core import (
 __all__ = [
     "DataFogModelError",
     "ModelSession",
+    "ModelCancellation",
     "ModelScanResult",
     "ModelStructuredScanResult",
     "DataFogConfigurationError",

@@ -23,7 +23,7 @@ import {
 } from "./native.js";
 
 // Native transport entry points accompany their generated declarations.
-export { ModelSessionNative, openModelSession } from "./native.js";
+export { ModelCancellation, ModelSessionNative, openModelSession } from "./native.js";
 
 /** Explicit offline model session. Inference and cleanup run outside the event loop. */
 export class ModelSession {
@@ -35,14 +35,14 @@ export class ModelSession {
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
   inspect() { return this.#native.inspect(); }
-  async scan(text, mode, { diagnostics = false } = {}) {
+  async scan(text, mode, { diagnostics = false, cancellation } = {}) {
     if (typeof text !== "string") throw new TypeError("model scan text must be a string");
-    try { return await this.#native.scan(text, mode, diagnostics); }
+    try { return await this.#native.scan(text, mode, diagnostics, cancellation); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
-  async scanStructured(data, mode, { diagnostics = false } = {}) {
+  async scanStructured(data, mode, { diagnostics = false, cancellation } = {}) {
     const json = structuredJson(data);
-    try { return await this.#native.scanStructured(json, mode, diagnostics); }
+    try { return await this.#native.scanStructured(json, mode, diagnostics, cancellation); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
   async warmUp() { try { await this.#native.warmUp(); } catch (error) { throw normalizeError(error, "internal_error"); } }

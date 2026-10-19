@@ -28,8 +28,8 @@ export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
   inspect(): Record<string, unknown>;
-  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelScanResult>;
-  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelStructuredScanResult>;
+  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelScanResult>;
+  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelStructuredScanResult>;
   warmUp(): Promise<void>;
   health(): Promise<void>;
   close(): Promise<void>;
@@ -221,10 +221,15 @@ export declare function scanAndTransformStructured(data: JsonDocument, config: S
 
 export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
 export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }
+export declare class ModelCancellation {
+  constructor()
+  cancel(): void
+}
+
 export declare class ModelSessionNative {
   inspect(): any
-  scan(text: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
-  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
+  scan(text: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<unknown>
+  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<unknown>
   warmUp(): Promise<unknown>
   health(): Promise<unknown>
   close(): Promise<unknown>

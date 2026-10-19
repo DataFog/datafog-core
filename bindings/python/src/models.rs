@@ -1,5 +1,6 @@
 use super::*;
 use ::datafog_core::models;
+use std::sync::Arc;
 
 create_exception!(datafog_core, DataFogModelError, PyRuntimeError);
 
@@ -118,6 +119,23 @@ impl From<models::ModelStructuredScanResult> for ModelStructuredScanResult {
     }
 }
 
+/// Share between threads to cancel one request without waiting for the GIL.
+#[pyclass(frozen)]
+#[derive(Default)]
+pub(super) struct ModelCancellation {
+    cancellation: Arc<models::Cancellation>,
+}
+#[pymethods]
+impl ModelCancellation {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+    fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+}
+
 #[pyclass(frozen)]
 pub(super) struct ModelSession {
     session: models::ModelSession,
@@ -141,44 +159,61 @@ fn parse_mode(py: Python<'_>, mode: &str) -> PyResult<models::ScanMode> {
 impl ModelSession {
     #[staticmethod]
     fn open(py: Python<'_>, config: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let started = std::time::Instant::now();
         let value = py_to_json(py, config, "")?;
         let config = models::parse_config(&value).map_err(|error| model_error(py, error))?;
-        py.detach(|| models::ModelSession::open(config))
+        py.detach(|| models::ModelSession::open_started(config, started))
             .map(|session| Self { session })
             .map_err(|error| model_error(py, error))
     }
     fn inspect(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         json_object(py, &self.session.inspect())
     }
-    #[pyo3(signature = (text, mode, *, diagnostics=false))]
+    #[pyo3(signature = (text, mode, *, diagnostics=false, cancellation=None))]
     fn scan(
         &self,
         py: Python<'_>,
         text: String,
         mode: &str,
         diagnostics: bool,
+        cancellation: Option<PyRef<'_, ModelCancellation>>,
     ) -> PyResult<ModelScanResult> {
+        let request = self
+            .session
+            .prepare_request()
+            .map_err(|error| model_error(py, error))?;
+        let cancellation = cancellation
+            .map(|v| Arc::clone(&v.cancellation))
+            .unwrap_or_default();
         let mode = parse_mode(py, mode)?;
         py.detach(|| {
             self.session
-                .scan(&text, mode, diagnostics, &models::Cancellation::default())
+                .scan_request(&request, &text, mode, diagnostics, &cancellation)
         })
         .map(ModelScanResult::from)
         .map_err(|error| model_error(py, error))
     }
-    #[pyo3(signature = (data, mode, *, diagnostics=false))]
+    #[pyo3(signature = (data, mode, *, diagnostics=false, cancellation=None))]
     fn scan_structured(
         &self,
         py: Python<'_>,
         data: &Bound<'_, PyAny>,
         mode: &str,
         diagnostics: bool,
+        cancellation: Option<PyRef<'_, ModelCancellation>>,
     ) -> PyResult<ModelStructuredScanResult> {
+        let request = self
+            .session
+            .prepare_request()
+            .map_err(|error| model_error(py, error))?;
+        let cancellation = cancellation
+            .map(|v| Arc::clone(&v.cancellation))
+            .unwrap_or_default();
         let mode = parse_mode(py, mode)?;
         let data = structured_data(py, data)?;
         py.detach(|| {
             self.session
-                .scan_structured(&data, mode, diagnostics, &models::Cancellation::default())
+                .scan_structured_request(&request, &data, mode, diagnostics, &cancellation)
         })
         .map(ModelStructuredScanResult::from)
         .map_err(|error| model_error(py, error))
@@ -215,6 +250,7 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<DataFogModelError>(),
     )?;
     module.add_class::<ModelSession>()?;
+    module.add_class::<ModelCancellation>()?;
     module.add_class::<ModelScanResult>()?;
     module.add_class::<ModelStructuredScanResult>()?;
     Ok(())

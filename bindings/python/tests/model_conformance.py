@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 from datafog_core import (
-    DataFogModelError, ModelSession, transform, transform_structured, scan,
+    DataFogModelError, ModelSession, ModelCancellation, transform, transform_structured, scan,
 )
 
 config = json.loads(Path(sys.argv[1]).read_text())
@@ -28,6 +28,15 @@ reference = subprocess.run(
 )
 reference = [json.loads(line)["findings"] for line in reference.stdout.splitlines()]
 with ModelSession.open(config) as session:
+    cancellation = ModelCancellation()
+    cancellation.cancel()
+    try:
+        session.scan("private@example.test", "combined", cancellation=cancellation)
+    except DataFogModelError as error:
+        assert error.code == "model_cancelled"
+    else:
+        raise AssertionError("cancelled request returned findings")
+    assert session.inspect()["state"] == "ready"
     identity = session.inspect()["configuration_id"]
     session.warm_up()
     for text, native in zip(texts, reference, strict=True):

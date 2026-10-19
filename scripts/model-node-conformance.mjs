@@ -5,7 +5,8 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const config = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const { ModelSession, transform, transformStructured } = await import(pathToFileURL(process.argv[3]).href);
+const api = await import(pathToFileURL(process.argv[3]).href);
+const { ModelSession, transform, transformStructured } = api;
 const texts = [
   "John Smith lives at 123 Main Street, Boston, MA 02110. Email john@example.com.",
   "The weather is clear.",
@@ -61,3 +62,16 @@ await session.close();
 await assert.rejects(session.scan("", "combined"), error => error.code === "model_session_closed");
 await assert.rejects(ModelSession.open({...config, manifest_sha256: "0".repeat(64)}), error => error.reason === "integrity_mismatch");
 console.log("Installed Node pinned-model parity, negatives, Unicode, long input, reuse, structured composition and cleanup passed.");
+
+const {ModelCancellation} = api;
+const lifecycle = await api.ModelSession.open(config);
+try {
+  const cancellation = new ModelCancellation();
+  cancellation.cancel();
+  await assert.rejects(lifecycle.scan("private@example.test", "combined", {cancellation}),
+    error => error.code === "model_cancelled");
+  assert.equal(lifecycle.inspect().state, "ready");
+  const first = lifecycle.scan("John Smith lives at 123 Main Street.", "model_only");
+  await assert.rejects(lifecycle.scan("second", "model_only"), error => error.code === "model_busy");
+  await first;
+} finally { await lifecycle.close(); }

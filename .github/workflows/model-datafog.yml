@@ -3,6 +3,13 @@ name: DataFog model qualification
 # Model assets are explicit qualification inputs, never default workspace tests.
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "crates/core/src/models/**"
+      - "crates/core/src/models.rs"
+      - "bindings/**"
+      - "scripts/*model*"
+      - ".github/workflows/model-datafog.yml"
 
 permissions:
   contents: read

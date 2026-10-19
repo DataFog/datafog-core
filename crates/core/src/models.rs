@@ -304,6 +304,18 @@ impl Cancellation {
     }
 }
 
+/// A single admitted request. Dropping it releases admission, including before execution.
+/// The deadline starts at admission, before a binding schedules blocking work.
+pub struct ModelRequest {
+    admitted: Arc<AtomicBool>,
+    deadline: Instant,
+}
+impl Drop for ModelRequest {
+    fn drop(&mut self) {
+        self.admitted.store(false, Ordering::Release);
+    }
+}
+
 struct SessionInner {
     worker: Option<process::Worker>,
 }
@@ -315,12 +327,20 @@ pub struct ModelSession {
     closing: AtomicBool,
     state: AtomicU8,
     cleanup_failed: Arc<AtomicBool>,
+    admitted: Arc<AtomicBool>,
 }
 
 impl ModelSession {
     pub fn open(config: ModelSessionConfig) -> Result<Self, ModelError> {
+        Self::open_started(config, Instant::now())
+    }
+
+    /// Include binding scheduling and decoding time in the loading deadline.
+    pub fn open_started(config: ModelSessionConfig, started: Instant) -> Result<Self, ModelError> {
         config.limits.validate()?;
-        let deadline = deadline(config.limits.timeout_ms)?;
+        let deadline = started
+            .checked_add(Duration::from_millis(config.limits.timeout_ms))
+            .ok_or_else(ModelError::timeout)?;
         let rules = crate::parse_scan_config(&config.rules)
             .map_err(|error| ModelError::from(error.prefixed("/rules")))?;
         let structured = structured::parse_scan_config(&config.structured)
@@ -377,6 +397,7 @@ impl ModelSession {
             closing: AtomicBool::new(false),
             state: AtomicU8::new(0),
             cleanup_failed,
+            admitted: Arc::new(AtomicBool::new(false)),
         };
         {
             let mut inner = session.lock()?;
@@ -499,6 +520,33 @@ impl ModelSession {
         Ok(())
     }
 
+    /// Reserve the session immediately; concurrent callers never enter a binding queue.
+    pub fn prepare_request(&self) -> Result<ModelRequest, ModelError> {
+        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        self.check("", deadline, &Cancellation::default())?;
+        if self.state.load(Ordering::Acquire) == 2 {
+            return Err(ModelError::new(
+                "model_session_failed",
+                "failed",
+                "/backend",
+            ));
+        }
+        self.admitted
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| ModelError::new("model_busy", "busy", "/backend"))?;
+        Ok(ModelRequest {
+            admitted: Arc::clone(&self.admitted),
+            deadline,
+        })
+    }
+
+    fn request_deadline(&self, request: &ModelRequest) -> Result<Instant, ModelError> {
+        if !Arc::ptr_eq(&self.admitted, &request.admitted) {
+            return Err(ModelError::config("invalid_value", "/request"));
+        }
+        Ok(request.deadline)
+    }
+
     pub fn scan(
         &self,
         text: &str,
@@ -506,7 +554,19 @@ impl ModelSession {
         diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
-        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        let request = self.prepare_request()?;
+        self.scan_request(&request, text, mode, diagnostics, cancellation)
+    }
+
+    pub fn scan_request(
+        &self,
+        request: &ModelRequest,
+        text: &str,
+        mode: ScanMode,
+        diagnostics: bool,
+        cancellation: &Cancellation,
+    ) -> Result<ModelScanResult, ModelError> {
+        let deadline = self.request_deadline(request)?;
         self.check(text, deadline, cancellation)?;
         let mut inner = self.lock()?;
         self.scan_locked(&mut inner, text, mode, diagnostics, deadline, cancellation)
@@ -615,7 +675,20 @@ impl ModelSession {
         diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelStructuredScanResult, ModelError> {
-        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        let request = self.prepare_request()?;
+        self.scan_structured_request(&request, data, mode, diagnostics, cancellation)
+    }
+
+    pub fn scan_structured_request(
+        &self,
+        request: &ModelRequest,
+        data: &serde_json::Value,
+        mode: ScanMode,
+        diagnostics: bool,
+        cancellation: &Cancellation,
+    ) -> Result<ModelStructuredScanResult, ModelError> {
+        let deadline = self.request_deadline(request)?;
+        self.check("", deadline, cancellation)?;
         bounded_json(data, self.descriptor.limits.max_input_bytes, "/data")?;
         let leaves = structured::leaves(data)?;
         let bytes = leaves
@@ -720,6 +793,10 @@ impl ModelSession {
 
     pub fn health(&self) -> Result<(), ModelError> {
         self.warm_up()
+    }
+
+    pub fn request_close(&self) {
+        self.closing.store(true, Ordering::Release);
     }
 
     pub fn close(&self) -> Result<(), ModelError> {

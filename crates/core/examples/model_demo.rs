@@ -1,5 +1,5 @@
 //! Run with --features models and an explicitly provisioned session configuration.
-#[cfg(feature = "models")]
+#[cfg(all(feature = "models", not(target_arch = "wasm32")))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use datafog_core::models::{Cancellation, ModelSession, ModelSessionConfig, ScanMode};
     let config = std::env::args()
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not(feature = "models"))]
+#[cfg(any(not(feature = "models"), target_arch = "wasm32"))]
 fn main() {
     eprintln!("This example requires --features models.");
 }
