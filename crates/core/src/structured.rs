@@ -27,7 +27,7 @@ pub struct FieldMapping {
 }
 
 /// A text finding located inside a JSON string value.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct StructuredFinding {
     pub path: String,
     pub finding: Finding,
@@ -183,13 +183,13 @@ fn person_alias(key: &str) -> Option<&'static str> {
     })
 }
 
-struct Leaf<'a> {
-    path: String,
+pub(crate) struct Leaf<'a> {
+    pub(crate) path: String,
     key: Option<&'a str>,
-    text: &'a str,
+    pub(crate) text: &'a str,
 }
 
-fn leaves(data: &Value) -> Result<Vec<Leaf<'_>>, PrivacyError> {
+pub(crate) fn leaves(data: &Value) -> Result<Vec<Leaf<'_>>, PrivacyError> {
     if !data.is_object() && !data.is_array() {
         return Err(invalid_data());
     }

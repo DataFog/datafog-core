@@ -1,5 +1,4 @@
 name: Publish WASM package
-
 on:
   push:
     tags:
@@ -7,39 +6,41 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Build and verify the package without publishing
+        description: Verify retained qualified artifacts without publishing
         type: boolean
         default: true
-
 permissions:
   contents: read
-
+  actions: read
 jobs:
   publish:
-    name: Publish @datafog/wasm to npm
     runs-on: ubuntu-latest
     environment: npm
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check-release.py wasm
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Require complete model qualification for this source
+        id: qualified
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/download-artifact@v4
         with:
-          toolchain: 1.88.0
-          targets: wasm32-unknown-unknown
+          name: wasm-model-candidate
+          run-id: ${{ steps.qualified.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
-      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
-      - run: npm ci --prefix bindings/wasm
-      - run: npx --prefix bindings/wasm playwright install --with-deps chromium
-      - run: npm run test:package --prefix bindings/wasm
-      - run: npm publish --dry-run --ignore-scripts
-        working-directory: bindings/wasm
-      - run: npm publish
+      - name: Inspect qualified npm archives
+        run: node scripts/publish-npm-candidates.mjs candidate --dry-run
+      - name: Publish qualified npm archives
         if: github.event_name == 'push' || !inputs.dry_run
-        working-directory: bindings/wasm
+        run: node scripts/publish-npm-candidates.mjs candidate
