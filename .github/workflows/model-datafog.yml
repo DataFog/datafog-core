@@ -1,4 +1,4 @@
-name: DataFog model qualification
+name: Model qualification
 
 # Model assets are explicit qualification inputs, never default workspace tests.
 on:
@@ -9,6 +9,7 @@ on:
       - "crates/core/src/models.rs"
       - "bindings/**"
       - "scripts/*model*"
+      - "workers/gliner2/**"
       - ".github/workflows/model-datafog.yml"
 
 permissions:
@@ -20,6 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        backend: [datafog, gliner2]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-latest]
         include:
           - os: ubuntu-24.04
             platform: linux-x86_64
@@ -36,11 +39,13 @@ jobs:
         shell: bash
     env:
       DATAFOG_PLATFORM: ${{ matrix.platform }}
+      MODEL_BACKEND: ${{ matrix.backend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
+          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -48,13 +53,15 @@ jobs:
         with:
           node-version: 24
       - name: Install build and explicit provisioning tools
-        run: python -m pip install 'maturin>=1.9.4,<2.0' 'huggingface_hub==1.27.0'
+        run: python -m pip install 'maturin>=1.9.4,<2.0' 'huggingface_hub==1.27.0' 'psutil==7.2.2' 'build==1.4.0'
       - name: Download immutable native archive
+        if: matrix.backend == 'datafog'
         run: |
           hf download DataFog/pii-en-65m \
             "runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
             --revision 7cadd41e21f59b2a149e31378d073cf6ca057531 --local-dir "$RUNNER_TEMP/model-download"
       - name: Verify and provision separately from inference
+        if: matrix.backend == 'datafog'
         run: |
           python scripts/provision-datafog-model.py \
             --archive "$RUNNER_TEMP/model-download/runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
@@ -71,13 +78,46 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as stream:
               stream.write(f"DATAFOG_MODEL_CONFIG={root / 'model-session.json'}\nHF_HUB_OFFLINE=1\n")
           PY
+      - name: Provision pinned GLiNER2 and isolated local worker
+        if: matrix.backend == 'gliner2'
+        run: |
+          hf download fastino/gliner2-privacy-filter-PII-multi \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
+            --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
+          python scripts/provision-gliner2-model.py --source "$RUNNER_TEMP/gliner2-download" --destination "$RUNNER_TEMP/model-bundle"
+          python -m build workers/gliner2 --outdir dist
+          python -m venv "$RUNNER_TEMP/gliner2-worker"
+          python - <<'PYTHON'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          interpreter=root / "gliner2-worker" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+          bundle=root / "model-bundle"
+          config=dict(bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
+            gliner2=dict(python=str(interpreter), labels=[dict(label="street_address",threshold=0.5)],intra_threads=1,chunk_size=384,chunk_overlap=64),
+            limits=dict(max_input_bytes=65536,max_response_bytes=16777216,max_findings=65536,timeout_ms=120000,cleanup_timeout_ms=5000))
+          (root / "model-session.json").write_text(json.dumps(config),encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"],"a") as stream:
+            stream.write(f"WORKER_PYTHON={interpreter}\nDATAFOG_MODEL_CONFIG={root / 'model-session.json'}\nHF_HUB_OFFLINE=1\n")
+          PYTHON
+      - name: Install qualified CPU worker dependencies
+        if: matrix.backend == 'gliner2'
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            "$WORKER_PYTHON" -m pip install 'torch==2.12.0' --index-url https://download.pytorch.org/whl/cpu
+          fi
+          "$WORKER_PYTHON" -m pip install dist/datafog_gliner2_worker-*.whl
+          "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
       - name: Execute actual model through Rust
         run: cargo test -p datafog-core --features models --test model_datafog --release -- --ignored
       - name: Build and verify installed Python wheel
         run: |
           maturin build --manifest-path bindings/python/Cargo.toml --release --out dist
           python -m pip install --force-reinstall dist/*.whl
-          python -I bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
+          if [[ "$MODEL_BACKEND" == "datafog" ]]; then
+            python -I bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
+          fi
+          python -I scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json --warm-runs 100
           python bindings/python/tests/test_installed.py
       - name: Build Node package
         run: |
@@ -88,7 +128,11 @@ jobs:
           mkdir -p dist "$RUNNER_TEMP/model-node-consumer"
           (cd bindings/node && npm pack --ignore-scripts --pack-destination ../../dist)
           npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE"/dist/*.tgz
-          node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
+          if [[ "$MODEL_BACKEND" == "datafog" ]]; then
+            node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
+          else
+            node scripts/model-gliner2-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
+          fi
           npm run test:package --prefix bindings/node -- --prebuilt
       - name: Record exact backend identity and host
         run: |
@@ -97,10 +141,10 @@ jobs:
           from datafog_core import ModelSession
           with ModelSession.open(json.load(open(os.environ["DATAFOG_MODEL_CONFIG"]))) as session:
               report = {"host": platform.platform(), "python": platform.python_version(), "session": session.inspect()}
-          with open("dist/model-evidence.json", "w") as stream:
+          with open("dist/model-identity.json", "w") as stream:
               json.dump(report, stream, indent=2)
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: datafog-model-${{ matrix.platform }}
+          name: model-${{ matrix.backend }}-${{ matrix.platform }}
           path: dist/

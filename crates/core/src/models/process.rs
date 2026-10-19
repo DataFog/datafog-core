@@ -26,9 +26,16 @@ impl Worker {
         bundle: &std::path::Path,
         limits: &ResourceLimits,
     ) -> Result<Self, ModelError> {
-        let mut child = Command::new(executable)
-            .arg(bundle)
-            .env_remove("ORT_DYLIB_PATH")
+        let mut command = Command::new(executable);
+        command.arg(bundle).env_remove("ORT_DYLIB_PATH");
+        Self::spawn_command(&mut command, limits)
+    }
+
+    pub(super) fn spawn_command(
+        command: &mut Command,
+        limits: &ResourceLimits,
+    ) -> Result<Self, ModelError> {
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

@@ -154,3 +154,11 @@ claim. Remaining beta work includes its actual all-host execution, broader
 fault/resource-exhaustion evidence, measured resource profiles, GLiNER2,
 full supported-version qualification and the coordinated prerelease version
 bump/publish checks. No platform is removed or deferred from the beta matrix.
+
+## GLiNER2 backend
+
+A session configuration can explicitly select the separately installed official
+GLiNER2 Python runtime using the `gliner2` settings. See
+[GLiNER2 provisioning and behavior](gliner2-model.md). It reuses the same Core
+session lifecycle, canonical findings and transformations. Its raw scores are
+uncalibrated and never populate `Finding.confidence`.

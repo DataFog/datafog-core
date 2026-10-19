@@ -1,6 +1,8 @@
 //! Explicit offline model sessions. The initial adapter runs the pinned DataFog
 //! native executable; no model assets or inference libraries are loaded by default.
+mod gliner2;
 mod process;
+pub use gliner2::{Gliner2Config, Gliner2Label};
 #[cfg(test)]
 mod tests;
 
@@ -117,6 +119,8 @@ impl ResourceLimits {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSessionConfig {
+    #[serde(default)]
+    pub gliner2: Option<Gliner2Config>,
     pub bundle: PathBuf,
     pub manifest_sha256: String,
     pub limits: ResourceLimits,
@@ -134,7 +138,14 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
     let object = crate::require_object(value, "", "model configuration must be an object")?;
     crate::reject_unknown_fields(
         object,
-        &["bundle", "manifest_sha256", "limits", "rules", "structured"],
+        &[
+            "bundle",
+            "manifest_sha256",
+            "limits",
+            "rules",
+            "structured",
+            "gliner2",
+        ],
         "",
     )?;
     let required = |key: &str| {
@@ -173,6 +184,10 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
             .map_err(|_| ModelError::config("invalid_value", &format!("/limits/{name}")))
     };
     Ok(ModelSessionConfig {
+        gliner2: object
+            .get("gliner2")
+            .map(gliner2::parse_config)
+            .transpose()?,
         bundle: bundle.into(),
         manifest_sha256,
         limits: ResourceLimits {
@@ -286,8 +301,11 @@ pub struct ModelSessionDescriptor {
     pub queue_capacity: usize,
     pub max_length: usize,
     pub stride: usize,
-    pub calibration_sha256: String,
-    pub threshold: f64,
+    pub calibration_sha256: Option<String>,
+    pub threshold: Option<f64>,
+    pub score_scale: String,
+    pub thresholds: BTreeMap<String, f64>,
+    pub label_descriptions: BTreeMap<String, String>,
 }
 
 /// A cancellation handle can be shared with another thread.
@@ -345,6 +363,9 @@ impl ModelSession {
             .map_err(|error| ModelError::from(error.prefixed("/rules")))?;
         let structured = structured::parse_scan_config(&config.structured)
             .map_err(|error| ModelError::from(error.prefixed("/structured")))?;
+        if config.gliner2.is_some() {
+            return gliner2::open(config, rules, structured, deadline);
+        }
         let (bundle, platform, threshold) = validate_bundle(&config, deadline)?;
         let identity = serde_json::json!({
             "contract_version": 1, "core": env!("CARGO_PKG_VERSION"), "adapter": ADAPTER_VERSION,
@@ -385,9 +406,13 @@ impl ModelSession {
                 queue_capacity: 0,
                 max_length: 512,
                 stride: 42,
-                calibration_sha256:
+                calibration_sha256: Some(
                     "75a946908fdc07549d81c7b72a2c1774da39e0755b88f7083a2492c70a8f1f53".into(),
-                threshold,
+                ),
+                threshold: Some(threshold),
+                score_scale: "normalized_token_softmax_min".into(),
+                thresholds: BTreeMap::new(),
+                label_descriptions: BTreeMap::new(),
             },
             rules,
             structured,
@@ -487,7 +512,13 @@ impl ModelSession {
             .exchange(text, deadline, || {
                 self.closing.load(Ordering::Acquire) || cancellation.is_cancelled()
             })
-            .and_then(|bytes| decode_datafog(&bytes, self.descriptor.limits.max_findings));
+            .and_then(|bytes| {
+                if self.descriptor.backend == "gliner2_worker" {
+                    gliner2::decode(&bytes, self.descriptor.limits.max_findings)
+                } else {
+                    decode_datafog(&bytes, self.descriptor.limits.max_findings)
+                }
+            });
         match result {
             Ok(result) => Ok(result),
             Err(error) => {
@@ -922,7 +953,7 @@ fn convert(
 ) -> Result<Vec<(Finding, SourceEvidence)>, ModelError> {
     let mut offsets = TextIndex::new(text);
     let mut matched_bytes = 0usize;
-    result
+    let converted: Result<Vec<_>, ModelError> = result
         .spans
         .into_iter()
         .enumerate()
@@ -950,7 +981,7 @@ fn convert(
             if span
                 .raw_score
                 .as_ref()
-                .is_some_and(|s| s.scale_id != "normalized_token_softmax_min")
+                .is_some_and(|s| s.scale_id != descriptor.score_scale)
             {
                 return Err(invalid());
             }
@@ -986,9 +1017,16 @@ fn convert(
             {
                 return Err(invalid());
             }
-            let detector_name = format!("datafog-core/model/datafog/{}", span.native_label);
-            let detector_version =
-                Some(format!("{ADAPTER_VERSION}:{}", descriptor.configuration_id));
+            let backend_name = if descriptor.backend == "gliner2_worker" {
+                "gliner2"
+            } else {
+                "datafog"
+            };
+            let detector_name = format!("datafog-core/model/{backend_name}/{}", span.native_label);
+            let detector_version = Some(format!(
+                "{}:{}",
+                descriptor.adapter_version, descriptor.configuration_id
+            ));
             let finding = Finding {
                 entity_type: entity.clone(),
                 matched_text: matched_text.into(),
@@ -1014,7 +1052,21 @@ fn convert(
                 },
             ))
         })
-        .collect()
+        .collect();
+    let mut converted = converted?;
+    converted.retain(|(_, evidence)| {
+        evidence
+            .native_label
+            .as_ref()
+            .and_then(|label| descriptor.thresholds.get(label))
+            .is_none_or(|threshold| {
+                evidence
+                    .raw_score
+                    .as_ref()
+                    .is_some_and(|score| score.value >= *threshold)
+            })
+    });
+    Ok(converted)
 }
 
 #[derive(Deserialize)]

@@ -20,7 +20,22 @@ class _ModelConfigRequired(TypedDict):
     manifest_sha256: str
     limits: _ModelLimits
 
+class _Gliner2LabelRequired(TypedDict):
+    label: str
+    threshold: float
+
+class _Gliner2Label(_Gliner2LabelRequired, total=False):
+    description: str
+
+class _Gliner2Config(TypedDict):
+    python: str
+    labels: list[_Gliner2Label]
+    intra_threads: int
+    chunk_size: int
+    chunk_overlap: int
+
 class _ModelConfig(_ModelConfigRequired, total=False):
+    gliner2: _Gliner2Config
     rules: _ScanConfig
     structured: _StructuredScanConfig
 
