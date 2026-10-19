@@ -1,6 +1,6 @@
 # ADR 003: Optional model inference through reusable Core sessions
 
-- **Status:** Proposed; not implemented
+- **Status:** Accepted; implementation and release qualification tracked in #56, #45 and #55
 - **Date:** 2026-10-19
 - **Target release:** 0.4.5-beta.1
 - **Tracks:** [#56](https://github.com/DataFog/datafog-core/issues/56)
@@ -11,7 +11,7 @@
 
 ## Context
 
-This draft was checked against Core main at
+The initial proposal was checked against Core main at
 `cab95117bfce9ddfdeec89ea736ba42107c71d21`. The package manifests are at
 0.4.4; main's changes since the 0.4.4 release concern documentation.
 The user has requested one published beta containing #56, #45 and #55 to
@@ -594,8 +594,8 @@ both canonical confidence and evidence-only scores.
 
 The release includes these three Core issues; downstream MCP adoption, model
 training/evolution, generic plugins, browser inference and authorization of
-disclosures remain outside this decision. The user's release intent does not
-turn this proposed ADR into an accepted or implemented feature.
+disclosures remain outside this decision. Acceptance of this decision does not establish completed implementation or
+qualification; the backend issues retain those release gates.
 
 ## Reviewed references
 

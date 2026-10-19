@@ -20,7 +20,22 @@ class _ModelConfigRequired(TypedDict):
     manifest_sha256: str
     limits: _ModelLimits
 
+class _Gliner2LabelRequired(TypedDict):
+    label: str
+    threshold: float
+
+class _Gliner2Label(_Gliner2LabelRequired, total=False):
+    description: str
+
+class _Gliner2Config(TypedDict):
+    python: str
+    labels: list[_Gliner2Label]
+    intra_threads: int
+    chunk_size: int
+    chunk_overlap: int
+
 class _ModelConfig(_ModelConfigRequired, total=False):
+    gliner2: _Gliner2Config
     rules: _ScanConfig
     structured: _StructuredScanConfig
 
@@ -63,12 +78,17 @@ class ModelStructuredScanResult:
     def diagnostics(self) -> list[StructuredFinding] | None: ...
 
 @final
+class ModelCancellation:
+    def __init__(self) -> None: ...
+    def cancel(self) -> None: ...
+
+@final
 class ModelSession:
     @staticmethod
     def open(config: _ModelConfig) -> ModelSession: ...
     def inspect(self) -> dict[str, object]: ...
-    def scan(self, text: str, mode: Literal["model_only", "combined"], *, diagnostics: bool = False) -> ModelScanResult: ...
-    def scan_structured(self, data: _JsonDocument, mode: Literal["model_only", "combined"], *, diagnostics: bool = False) -> ModelStructuredScanResult: ...
+    def scan(self, text: str, mode: Literal["model_only", "combined"], *, diagnostics: bool = False, cancellation: ModelCancellation | None = None) -> ModelScanResult: ...
+    def scan_structured(self, data: _JsonDocument, mode: Literal["model_only", "combined"], *, diagnostics: bool = False, cancellation: ModelCancellation | None = None) -> ModelStructuredScanResult: ...
     def warm_up(self) -> None: ...
     def health(self) -> None: ...
     def close(self) -> None: ...

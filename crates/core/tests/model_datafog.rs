@@ -5,7 +5,7 @@ use datafog_core::models::{Cancellation, ModelSession, ModelSessionConfig, ScanM
 /// Run --ignored with DATAFOG_MODEL_CONFIG; missing assets/config fail the test.
 #[test]
 #[ignore = "explicit installed pinned-model qualification"]
-fn pinned_datafog_execution() {
+fn pinned_model_execution() {
     let config = std::env::var("DATAFOG_MODEL_CONFIG")
         .expect("DATAFOG_MODEL_CONFIG must name a verified local session config");
     let config: ModelSessionConfig =

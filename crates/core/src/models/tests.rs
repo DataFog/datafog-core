@@ -1,6 +1,6 @@
 use super::*;
 
-fn descriptor() -> ModelSessionDescriptor {
+pub(super) fn descriptor() -> ModelSessionDescriptor {
     ModelSessionDescriptor {
         contract_version: 1,
         configuration_id: "test".into(),
@@ -30,8 +30,11 @@ fn descriptor() -> ModelSessionDescriptor {
         queue_capacity: 0,
         max_length: 512,
         stride: 42,
-        calibration_sha256: "b".repeat(64),
-        threshold: 0.5,
+        calibration_sha256: Some("b".repeat(64)),
+        threshold: Some(0.5),
+        score_scale: "normalized_token_softmax_min".into(),
+        thresholds: BTreeMap::new(),
+        label_descriptions: BTreeMap::new(),
     }
 }
 
@@ -156,6 +159,7 @@ fn composition_keeps_provenance_and_reindexes_duplicate_evidence() {
         closing: AtomicBool::new(false),
         state: AtomicU8::new(1),
         cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
     };
     let text = "May may@example.test";
     let mut entries = convert(
@@ -232,6 +236,7 @@ fn busy_and_oversized_calls_fail_without_rule_only_fallback() {
         closing: AtomicBool::new(false),
         state: AtomicU8::new(1),
         cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
     };
     let held = session.inner.lock().unwrap();
     assert_eq!(
@@ -286,4 +291,91 @@ fn process_timeout_cancellation_and_oversized_output_are_reaped() {
     assert_eq!(result.unwrap_err().code, "model_cancelled");
     worker.stop().unwrap();
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer() {
+    let session = ModelSession {
+        descriptor: descriptor(),
+        rules: ScanConfig::default(),
+        structured: structured::StructuredScanConfig::default(),
+        inner: Mutex::new(SessionInner { worker: None }),
+        closing: AtomicBool::new(false),
+        state: AtomicU8::new(1),
+        cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
+    };
+    let mut request = session.prepare_request().unwrap();
+    assert_eq!(session.prepare_request().err().unwrap().code, "model_busy");
+    request.deadline = Instant::now();
+    assert_eq!(
+        session
+            .scan_request(
+                &request,
+                "secret",
+                ScanMode::Combined,
+                false,
+                &Cancellation::default()
+            )
+            .unwrap_err()
+            .code,
+        "model_timeout"
+    );
+    // Queued work never touched the worker; the session remains reusable.
+    assert_eq!(session.inspect().state, "ready");
+    drop(request);
+    let request = session.prepare_request().unwrap();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    assert_eq!(
+        session
+            .scan_request(&request, "secret", ScanMode::Combined, false, &cancellation)
+            .unwrap_err()
+            .code,
+        "model_cancelled"
+    );
+    drop(request);
+    let next = session.prepare_request().unwrap();
+    session.request_close();
+    assert_eq!(
+        session
+            .scan_request(
+                &next,
+                "",
+                ScanMode::ModelOnly,
+                false,
+                &Cancellation::default()
+            )
+            .unwrap_err()
+            .code,
+        "model_cancelled"
+    );
+    drop(next);
+    session.close().unwrap();
+}
+
+#[test]
+fn native_seven_label_mapping_preserves_names_and_identifier_meaning() {
+    for (native, canonical) in [
+        ("first_name", "FIRST_NAME"),
+        ("last_name", "LAST_NAME"),
+        ("email", "EMAIL"),
+        ("phone_number", "PHONE"),
+        ("street_address", "STREET_ADDRESS"),
+        ("customer_id", "CUSTOMER_ID"),
+        ("account_number", "ACCOUNT_NUMBER"),
+    ] {
+        let mut candidate = span(0, 6);
+        candidate.native_label = native.into();
+        let result = convert(
+            "sample",
+            BackendResult {
+                spans: vec![candidate],
+            },
+            &descriptor(),
+        )
+        .unwrap();
+        assert_eq!(result[0].0.entity_type, canonical);
+        assert_eq!(result[0].1.native_label.as_deref(), Some(native));
+    }
 }

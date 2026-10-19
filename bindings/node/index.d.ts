@@ -11,6 +11,13 @@ export interface ModelSessionConfig {
     timeout_ms: number;
     cleanup_timeout_ms: number;
   };
+  gliner2?: {
+    python: string;
+    labels: Array<{label: string; threshold: number; description?: string}>;
+    intra_threads: number;
+    chunk_size: number;
+    chunk_overlap: number;
+  };
   rules?: ScanConfig;
   structured?: StructuredScanConfig;
 }
@@ -28,8 +35,8 @@ export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
   inspect(): Record<string, unknown>;
-  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelScanResult>;
-  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelStructuredScanResult>;
+  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelScanResult>;
+  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelStructuredScanResult>;
   warmUp(): Promise<void>;
   health(): Promise<void>;
   close(): Promise<void>;
@@ -221,13 +228,18 @@ export declare function scanAndTransformStructured(data: JsonDocument, config: S
 
 export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
 export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }
+export declare class ModelCancellation {
+  constructor()
+  cancel(): void
+}
+
 export declare class ModelSessionNative {
   inspect(): any
-  scan(text: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
-  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null): Promise<unknown>
-  warmUp(): Promise<unknown>
-  health(): Promise<unknown>
-  close(): Promise<unknown>
+  scan(text: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>
+  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelStructuredScanResult>
+  warmUp(): Promise<void>
+  health(): Promise<void>
+  close(): Promise<void>
 }
 
 export declare function discoverFields(dataJson: JsonDocument, config?: StructuredScanConfig | undefined): Array<FieldMapping>
@@ -296,7 +308,7 @@ export interface NativeStructuredTransformResult {
   transformations: Array<StructuredTransformation>
 }
 
-export declare function openModelSession(config: any): Promise<unknown>
+export declare function openModelSession(config: any): Promise<ModelSessionNative>
 
 export interface PreparedScanAndTransform {
   readonly findings: Array<Finding>

@@ -12,3 +12,8 @@ node_modules/
 /bindings/node/npm/
 /bindings/node/artifacts/
 /bindings/wasm/dist/
+
+# Optional Python worker build products
+workers/**/build/
+workers/**/*.egg-info/
+workers/**/__pycache__/

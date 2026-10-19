@@ -1,6 +1,8 @@
 //! Explicit offline model sessions. The initial adapter runs the pinned DataFog
 //! native executable; no model assets or inference libraries are loaded by default.
+mod gliner2;
 mod process;
+pub use gliner2::{Gliner2Config, Gliner2Label};
 #[cfg(test)]
 mod tests;
 
@@ -113,10 +115,12 @@ impl ResourceLimits {
     }
 }
 
-/// Local DataFog assets and immutable expected manifest identity. No download occurs.
+/// Local model assets and immutable expected manifest identity. No download occurs.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSessionConfig {
+    #[serde(default)]
+    pub gliner2: Option<Gliner2Config>,
     pub bundle: PathBuf,
     pub manifest_sha256: String,
     pub limits: ResourceLimits,
@@ -134,7 +138,14 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
     let object = crate::require_object(value, "", "model configuration must be an object")?;
     crate::reject_unknown_fields(
         object,
-        &["bundle", "manifest_sha256", "limits", "rules", "structured"],
+        &[
+            "bundle",
+            "manifest_sha256",
+            "limits",
+            "rules",
+            "structured",
+            "gliner2",
+        ],
         "",
     )?;
     let required = |key: &str| {
@@ -173,6 +184,10 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
             .map_err(|_| ModelError::config("invalid_value", &format!("/limits/{name}")))
     };
     Ok(ModelSessionConfig {
+        gliner2: object
+            .get("gliner2")
+            .map(gliner2::parse_config)
+            .transpose()?,
         bundle: bundle.into(),
         manifest_sha256,
         limits: ResourceLimits {
@@ -286,8 +301,11 @@ pub struct ModelSessionDescriptor {
     pub queue_capacity: usize,
     pub max_length: usize,
     pub stride: usize,
-    pub calibration_sha256: String,
-    pub threshold: f64,
+    pub calibration_sha256: Option<String>,
+    pub threshold: Option<f64>,
+    pub score_scale: String,
+    pub thresholds: BTreeMap<String, f64>,
+    pub label_descriptions: BTreeMap<String, String>,
 }
 
 /// A cancellation handle can be shared with another thread.
@@ -304,6 +322,18 @@ impl Cancellation {
     }
 }
 
+/// A single admitted request. Dropping it releases admission, including before execution.
+/// The deadline starts at admission, before a binding schedules blocking work.
+pub struct ModelRequest {
+    admitted: Arc<AtomicBool>,
+    deadline: Instant,
+}
+impl Drop for ModelRequest {
+    fn drop(&mut self) {
+        self.admitted.store(false, Ordering::Release);
+    }
+}
+
 struct SessionInner {
     worker: Option<process::Worker>,
 }
@@ -315,16 +345,27 @@ pub struct ModelSession {
     closing: AtomicBool,
     state: AtomicU8,
     cleanup_failed: Arc<AtomicBool>,
+    admitted: Arc<AtomicBool>,
 }
 
 impl ModelSession {
     pub fn open(config: ModelSessionConfig) -> Result<Self, ModelError> {
+        Self::open_started(config, Instant::now())
+    }
+
+    /// Include binding scheduling and decoding time in the loading deadline.
+    pub fn open_started(config: ModelSessionConfig, started: Instant) -> Result<Self, ModelError> {
         config.limits.validate()?;
-        let deadline = deadline(config.limits.timeout_ms)?;
+        let deadline = started
+            .checked_add(Duration::from_millis(config.limits.timeout_ms))
+            .ok_or_else(ModelError::timeout)?;
         let rules = crate::parse_scan_config(&config.rules)
             .map_err(|error| ModelError::from(error.prefixed("/rules")))?;
         let structured = structured::parse_scan_config(&config.structured)
             .map_err(|error| ModelError::from(error.prefixed("/structured")))?;
+        if config.gliner2.is_some() {
+            return gliner2::open(config, rules, structured, deadline);
+        }
         let (bundle, platform, threshold) = validate_bundle(&config, deadline)?;
         let identity = serde_json::json!({
             "contract_version": 1, "core": env!("CARGO_PKG_VERSION"), "adapter": ADAPTER_VERSION,
@@ -365,9 +406,13 @@ impl ModelSession {
                 queue_capacity: 0,
                 max_length: 512,
                 stride: 42,
-                calibration_sha256:
+                calibration_sha256: Some(
                     "75a946908fdc07549d81c7b72a2c1774da39e0755b88f7083a2492c70a8f1f53".into(),
-                threshold,
+                ),
+                threshold: Some(threshold),
+                score_scale: "normalized_token_softmax_min".into(),
+                thresholds: BTreeMap::new(),
+                label_descriptions: BTreeMap::new(),
             },
             rules,
             structured,
@@ -377,6 +422,7 @@ impl ModelSession {
             closing: AtomicBool::new(false),
             state: AtomicU8::new(0),
             cleanup_failed,
+            admitted: Arc::new(AtomicBool::new(false)),
         };
         {
             let mut inner = session.lock()?;
@@ -466,7 +512,13 @@ impl ModelSession {
             .exchange(text, deadline, || {
                 self.closing.load(Ordering::Acquire) || cancellation.is_cancelled()
             })
-            .and_then(|bytes| decode_datafog(&bytes, self.descriptor.limits.max_findings));
+            .and_then(|bytes| {
+                if self.descriptor.backend == "gliner2_worker" {
+                    gliner2::decode(&bytes, self.descriptor.limits.max_findings)
+                } else {
+                    decode_datafog(&bytes, self.descriptor.limits.max_findings)
+                }
+            });
         match result {
             Ok(result) => Ok(result),
             Err(error) => {
@@ -499,6 +551,33 @@ impl ModelSession {
         Ok(())
     }
 
+    /// Reserve the session immediately; concurrent callers never enter a binding queue.
+    pub fn prepare_request(&self) -> Result<ModelRequest, ModelError> {
+        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        self.check("", deadline, &Cancellation::default())?;
+        if self.state.load(Ordering::Acquire) == 2 {
+            return Err(ModelError::new(
+                "model_session_failed",
+                "failed",
+                "/backend",
+            ));
+        }
+        self.admitted
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| ModelError::new("model_busy", "busy", "/backend"))?;
+        Ok(ModelRequest {
+            admitted: Arc::clone(&self.admitted),
+            deadline,
+        })
+    }
+
+    fn request_deadline(&self, request: &ModelRequest) -> Result<Instant, ModelError> {
+        if !Arc::ptr_eq(&self.admitted, &request.admitted) {
+            return Err(ModelError::config("invalid_value", "/request"));
+        }
+        Ok(request.deadline)
+    }
+
     pub fn scan(
         &self,
         text: &str,
@@ -506,7 +585,19 @@ impl ModelSession {
         diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
-        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        let request = self.prepare_request()?;
+        self.scan_request(&request, text, mode, diagnostics, cancellation)
+    }
+
+    pub fn scan_request(
+        &self,
+        request: &ModelRequest,
+        text: &str,
+        mode: ScanMode,
+        diagnostics: bool,
+        cancellation: &Cancellation,
+    ) -> Result<ModelScanResult, ModelError> {
+        let deadline = self.request_deadline(request)?;
         self.check(text, deadline, cancellation)?;
         let mut inner = self.lock()?;
         self.scan_locked(&mut inner, text, mode, diagnostics, deadline, cancellation)
@@ -615,7 +706,20 @@ impl ModelSession {
         diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelStructuredScanResult, ModelError> {
-        let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+        let request = self.prepare_request()?;
+        self.scan_structured_request(&request, data, mode, diagnostics, cancellation)
+    }
+
+    pub fn scan_structured_request(
+        &self,
+        request: &ModelRequest,
+        data: &serde_json::Value,
+        mode: ScanMode,
+        diagnostics: bool,
+        cancellation: &Cancellation,
+    ) -> Result<ModelStructuredScanResult, ModelError> {
+        let deadline = self.request_deadline(request)?;
+        self.check("", deadline, cancellation)?;
         bounded_json(data, self.descriptor.limits.max_input_bytes, "/data")?;
         let leaves = structured::leaves(data)?;
         let bytes = leaves
@@ -720,6 +824,10 @@ impl ModelSession {
 
     pub fn health(&self) -> Result<(), ModelError> {
         self.warm_up()
+    }
+
+    pub fn request_close(&self) {
+        self.closing.store(true, Ordering::Release);
     }
 
     pub fn close(&self) -> Result<(), ModelError> {
@@ -845,7 +953,7 @@ fn convert(
 ) -> Result<Vec<(Finding, SourceEvidence)>, ModelError> {
     let mut offsets = TextIndex::new(text);
     let mut matched_bytes = 0usize;
-    result
+    let converted: Result<Vec<_>, ModelError> = result
         .spans
         .into_iter()
         .enumerate()
@@ -873,7 +981,7 @@ fn convert(
             if span
                 .raw_score
                 .as_ref()
-                .is_some_and(|s| s.scale_id != "normalized_token_softmax_min")
+                .is_some_and(|s| s.scale_id != descriptor.score_scale)
             {
                 return Err(invalid());
             }
@@ -909,9 +1017,16 @@ fn convert(
             {
                 return Err(invalid());
             }
-            let detector_name = format!("datafog-core/model/datafog/{}", span.native_label);
-            let detector_version =
-                Some(format!("{ADAPTER_VERSION}:{}", descriptor.configuration_id));
+            let backend_name = if descriptor.backend == "gliner2_worker" {
+                "gliner2"
+            } else {
+                "datafog"
+            };
+            let detector_name = format!("datafog-core/model/{backend_name}/{}", span.native_label);
+            let detector_version = Some(format!(
+                "{}:{}",
+                descriptor.adapter_version, descriptor.configuration_id
+            ));
             let finding = Finding {
                 entity_type: entity.clone(),
                 matched_text: matched_text.into(),
@@ -937,7 +1052,21 @@ fn convert(
                 },
             ))
         })
-        .collect()
+        .collect();
+    let mut converted = converted?;
+    converted.retain(|(_, evidence)| {
+        evidence
+            .native_label
+            .as_ref()
+            .and_then(|label| descriptor.thresholds.get(label))
+            .is_none_or(|threshold| {
+                evidence
+                    .raw_score
+                    .as_ref()
+                    .is_some_and(|score| score.value >= *threshold)
+            })
+    });
+    Ok(converted)
 }
 
 #[derive(Deserialize)]

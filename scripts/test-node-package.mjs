@@ -626,6 +626,8 @@ void structuredManagerResult;
 
 let tarball;
 let platformTarball;
+const suppliedTarball = process.argv.indexOf("--tarball");
+const suppliedPlatform = process.argv.indexOf("--platform-tarball");
 
 try {
   if (!process.argv.includes("--prebuilt")) {
@@ -641,13 +643,18 @@ try {
     platformTarball = path.join(platformDirectory, packed[0].filename);
   }
 
-  const packed = JSON.parse(
-    execFileSync("npm", ["pack", "--json"], {
-      cwd: nodePackage,
-      encoding: "utf8",
-    }),
-  );
-  tarball = path.join(nodePackage, packed[0].filename);
+  if (suppliedPlatform !== -1) platformTarball = path.resolve(process.argv[suppliedPlatform + 1]);
+  if (suppliedTarball !== -1) {
+    tarball = path.resolve(process.argv[suppliedTarball + 1]);
+  } else {
+    const packed = JSON.parse(
+      execFileSync("npm", ["pack", "--json"], {
+        cwd: nodePackage,
+        encoding: "utf8",
+      }),
+    );
+    tarball = path.join(nodePackage, packed[0].filename);
+  }
 
   const nodePackageJson = JSON.parse(
     readFileSync(path.join(nodePackage, "package.json"), "utf8"),
@@ -704,10 +711,10 @@ try {
     temporaryDirectory,
   );
 } finally {
-  if (tarball) {
+  if (tarball && suppliedTarball === -1) {
     rmSync(tarball, { force: true });
   }
-  if (platformTarball) {
+  if (platformTarball && suppliedPlatform === -1) {
     rmSync(platformTarball, { force: true });
   }
   rmSync(temporaryDirectory, { recursive: true, force: true });

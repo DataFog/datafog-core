@@ -11,6 +11,13 @@ export interface ModelSessionConfig {
     timeout_ms: number;
     cleanup_timeout_ms: number;
   };
+  gliner2?: {
+    python: string;
+    labels: Array<{label: string; threshold: number; description?: string}>;
+    intra_threads: number;
+    chunk_size: number;
+    chunk_overlap: number;
+  };
   rules?: ScanConfig;
   structured?: StructuredScanConfig;
 }
@@ -28,8 +35,8 @@ export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
   inspect(): Record<string, unknown>;
-  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelScanResult>;
-  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean}): Promise<ModelStructuredScanResult>;
+  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelScanResult>;
+  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelStructuredScanResult>;
   warmUp(): Promise<void>;
   health(): Promise<void>;
   close(): Promise<void>;
