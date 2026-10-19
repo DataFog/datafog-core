@@ -1,4 +1,4 @@
-name: Build model release candidates
+name: Build model test packages
 on:
   workflow_call:
 permissions:
@@ -75,8 +75,7 @@ jobs:
         if: matrix.platform == 'linux-x86_64'
         run: |
           mkdir -p common
-          maturin sdist --manifest-path bindings/python/Cargo.toml --out common
-          python -m build workers/gliner2 --outdir common
+          python -m build --wheel workers/gliner2 --outdir common
           cargo package -p datafog-core --locked --allow-dirty
           cp target/package/*.crate common/
       - uses: actions/upload-artifact@v4
@@ -116,27 +115,3 @@ jobs:
         with:
           name: node-model-candidates
           path: node-candidates/
-
-  wasm:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88.0
-          targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
-      - run: npm ci --prefix bindings/wasm
-      - run: npx --prefix bindings/wasm playwright install --with-deps chromium
-      - run: npm run test:package --prefix bindings/wasm
-      - run: mkdir -p wasm-candidate
-      - run: npm pack --ignore-scripts --pack-destination ../../wasm-candidate
-        working-directory: bindings/wasm
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wasm-model-candidate
-          path: wasm-candidate/

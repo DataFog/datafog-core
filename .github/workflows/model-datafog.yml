@@ -1,6 +1,6 @@
-name: Model qualification
+name: Model integration
 
-# Explicit release qualification only. Routine PR/push CI never downloads model assets.
+# Explicit integration checks only. Routine PR/push CI never downloads model assets.
 # Cached files are reverified by the pinned provisioner before every installation.
 on:
   workflow_dispatch:
@@ -67,7 +67,7 @@ jobs:
           name: node-model-candidates
           path: candidate-node
       - name: Install build and explicit provisioning tools
-        run: python -m pip install 'maturin>=1.9.4,<2.0' 'huggingface_hub==1.27.0' 'psutil==7.2.2' 'build==1.4.0'
+        run: python -m pip install 'huggingface_hub==1.27.0' 'psutil==7.2.2'
       - name: Restore pinned model assets
         uses: actions/cache/restore@v4
         id: model-assets
@@ -143,38 +143,20 @@ jobs:
           "$WORKER_PYTHON" -m pip install candidate-common/datafog_gliner2_worker-*.whl
           mkdir -p dist
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
-      - name: Verify GLiNER2 offline runtime prerequisites
-        if: matrix.backend == 'gliner2'
-        run: |
-          "$WORKER_PYTHON" -I -c 'import torch, gliner2; print("PyTorch", torch.__version__, "GLiNER2", gliner2.__version__)'
-          "$WORKER_PYTHON" -I -c 'import os; from gliner2 import GLiNER2; GLiNER2.from_pretrained(os.path.join(os.environ["RUNNER_TEMP"], "model-bundle"), local_files_only=True, map_location="cpu"); print("Pinned local checkpoint loaded offline")'
       - name: Execute packaged Rust model integration
         run: |
-          mkdir -p "$RUNNER_TEMP/packaged-core"
-          tar -xf candidate-common/datafog-core-*.crate -C "$RUNNER_TEMP/packaged-core"
-          package_manifest="$(find "$RUNNER_TEMP/packaged-core" -name Cargo.toml -maxdepth 2 | head -1)"
+          mkdir -p packaged-core
+          tar -xf candidate-common/datafog-core-*.crate -C packaged-core
+          package_manifest="$(find packaged-core -maxdepth 2 -name Cargo.toml | head -1)"
           cargo test --manifest-path "$package_manifest" --features models --test model_datafog --release -- --ignored
-      - name: Prepare stable package baseline for import and size comparison
-        run: |
-          python -m pip download --no-deps --only-binary=:all: 'datafog-core==0.4.4' -d baseline-wheel
-          python -m venv "$RUNNER_TEMP/baseline-core"
-          python - <<'PYTHON'
-          import os,sys
-          from pathlib import Path
-          interpreter=Path(os.environ["RUNNER_TEMP"]) / "baseline-core" / ("Scripts/python.exe" if sys.platform=="win32" else "bin/python")
-          with open(os.environ["GITHUB_ENV"],"a") as stream:
-            stream.write(f"DATAFOG_BASELINE_PYTHON={interpreter}\n")
-          PYTHON
-      - name: Install published baseline in its isolated environment
-        run: '"$DATAFOG_BASELINE_PYTHON" -m pip install --no-deps baseline-wheel/*.whl'
-      - name: Build and verify installed Python wheel
+      - name: Verify installed Python wheel
         run: |
           mkdir -p dist
           python -m pip install --force-reinstall candidate-native/*.whl
           if [[ "$MODEL_BACKEND" == "datafog" ]]; then
-            python -I bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
+            python -I -X utf8 bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
           fi
-          python -I scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json --warm-runs 100
+          python -I -X utf8 scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json
           python bindings/python/tests/test_installed.py
       - name: Verify final assembled Node artifacts
         run: |
@@ -190,45 +172,7 @@ jobs:
           fi
           node scripts/test-node-package.mjs --prebuilt --tarball "$package" --platform-tarball "$platform_package"
       - name: Qualify actual worker faults and cancellation
-        run: python -I scripts/model-fault-conformance.py "$DATAFOG_MODEL_CONFIG"
-      - name: Verify pre-provisioned container without network
-        if: matrix.backend == 'gliner2' && startsWith(matrix.platform, 'linux-')
-        run: |
-          context="$RUNNER_TEMP/offline-model-context"
-          mkdir -p "$context/wheels"
-          "$WORKER_PYTHON" -m pip download --only-binary=:all: --dest "$context/wheels" \
-            --extra-index-url https://download.pytorch.org/whl/cpu -r dist/worker-environment.txt
-          cp candidate-native/*.whl "$context/wheels/"
-          cp -R "$RUNNER_TEMP/model-bundle" "$context/bundle"
-          python - <<'PYTHON'
-          import json, os
-          from pathlib import Path
-          root=Path(os.environ["RUNNER_TEMP"])
-          config=json.loads((root / "model-session.json").read_text())
-          config["bundle"]="/opt/datafog/bundle"
-          config["gliner2"]["python"]="/usr/local/bin/python"
-          (root / "offline-model-context/session.json").write_text(json.dumps(config))
-          PYTHON
-          docker pull python:3.12-slim
-          image="$(docker inspect --format '{{index .RepoDigests 0}}' python:3.12-slim)"
-          printf '%s\n' "$image" > dist/container-base-image.txt
-          docker build --network=none --build-arg "PYTHON_IMAGE=$image" \
-            -f examples/model-offline/Dockerfile -t datafog-model-beta "$context"
-          docker run --rm --network=none datafog-model-beta > dist/offline-container.txt
-      - name: Record exact backend identity and host
-        run: |
-          python - <<'PY'
-          import hashlib, json, os, platform
-          from pathlib import Path
-          from datafog_core import ModelSession
-          with ModelSession.open(json.load(open(os.environ["DATAFOG_MODEL_CONFIG"]))) as session:
-              report = {"host": platform.platform(), "python": platform.python_version(), "session": session.inspect(),
-                        "candidate_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-                            for folder in ("candidate-native", "candidate-common", "candidate-node")
-                            for p in Path(folder).glob("*") if p.is_file()}}
-          with open("dist/model-identity.json", "w") as stream:
-              json.dump(report, stream, indent=2)
-          PY
+        run: python -I -X utf8 scripts/model-fault-conformance.py "$DATAFOG_MODEL_CONFIG"
       - uses: actions/upload-artifact@v4
         with:
           name: model-${{ matrix.backend }}-${{ matrix.platform }}

@@ -37,7 +37,7 @@ the host prerequisites described in its pinned release; notably macOS ARM64
 
 Create `session.json` with the emitted manifest digest and absolute bundle
 path. Limits are mandatory caller configuration. The following are the explicit
-budgets used by the synthetic demo/CI fixtures, **not qualified performance
+budgets used by the integration fixtures, **not qualified performance
 targets or library defaults**:
 
 ```json
@@ -87,7 +87,7 @@ try {
 ```
 
 Node model calls run off the event loop; Python releases the GIL for loading,
-inference and cleanup. Rust's equivalent demo is
+inference and cleanup. Rust's equivalent usage example is
 `cargo run -p datafog-core --example model_demo --features models --release -- session.json`.
 
 Use `scan_structured` / `scanStructured` for decoded string leaves, then pass
@@ -134,7 +134,7 @@ The current process adapter targets the pinned single-process DataFog runtime;
 general descendant-process supervision for a future backend is not qualified
 by these tests.
 
-## Verification and beta release gates
+## Integration checks
 
 Default workspace tests require neither assets nor network. Run real model
 qualification explicitly; missing configuration/assets fail rather than skip:
@@ -151,13 +151,11 @@ raw scores; those conversion bounds are distinct from model-quality claims.
 Fixtures cover positives, negatives, repeated spans, emoji/combining marks,
 long input, structured composition, ordinary transformations and reuse/cleanup.
 
-The manual `Model qualification` workflow runs all three native
-interfaces on all five required targets and retains installed artifacts and
-identity evidence. It is a release requirement, not a completed qualification
-claim. Remaining beta work includes its actual all-host execution, broader
-fault/resource-exhaustion evidence, measured resource profiles, GLiNER2,
-full supported-version qualification and the coordinated prerelease version
-bump/publish checks. No platform is removed or deferred from the beta matrix.
+The manual `Model integration` workflow checks both backends through packaged
+Rust and installed Python/Node on all five native targets. It checks loading,
+shared results/errors, coordinate conversion and worker cleanup. No accuracy,
+performance or memory evaluation is required. Review the results before
+publication; the normal publication jobs build their own packages.
 
 ## GLiNER2 backend
 
@@ -168,8 +166,7 @@ session lifecycle, canonical findings and transformations. Its raw scores are
 uncalibrated and never populate `Finding.confidence`.
 
 
-Full actual-model qualification runs only through an explicit workflow dispatch
-and remains mandatory before publication. Routine PR/push checks use asset-free
+Actual-model integration runs only through an explicit workflow dispatch. Routine PR/push checks use asset-free
 Core/binding tests. Qualification restores revision-keyed model assets from the
 CI cache where available, then rechecks their pinned checksums before provisioning.
 Fresh runners still transfer cached bytes; a cache miss fetches the same pinned

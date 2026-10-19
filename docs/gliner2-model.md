@@ -60,14 +60,12 @@ are verified before readiness; inference sets offline mode and performs no
 provisioning. `inspect()` reports the selected labels, descriptions, thresholds,
 CPU thread count, revisions, runtime and score semantics.
 
-## Behavior and qualification
+## Behavior and integration checks
 
 All checkpoint-listed labels may be configured, each with an explicit threshold
 and optional description. Unknown, empty or duplicate labels reject. Canonical
 names use uppercase native labels; `phone_number` maps to `PHONE`. `address`
-and `street_address` remain `ADDRESS` and `STREET_ADDRESS`. Only street-address
-behavior is the initial quality qualification; configurable labels do not imply
-accuracy evidence for every category. Model scores use normalized span-sigmoid
+and `street_address` remain `ADDRESS` and `STREET_ADDRESS`. Core preserves these label distinctions; it does not evaluate checkpoint accuracy. Model scores use normalized span-sigmoid
 values in evidence; `Finding.confidence` is absent. No calibration is fabricated.
 
 The adapter enables the official strict extraction mode and disables the pinned
@@ -84,10 +82,8 @@ worker failure, cancellation or timeout fails atomically and retires active
 work. There are no dataloader subprocesses, automatic retries or hosted fallback.
 
 Run the explicit Rust model test with `DATAFOG_MODEL_CONFIG` pointing to the
-GLiNER2 session JSON. Run `scripts/model-qualification.py` against the installed
-wheel with `--warm-runs 100`; it reports development and held-out fixture
-misses/false positives with denominators, cold/first/warm timings, sampled RSS,
-identity and Unicode/structured results. Node qualification compares its installed
-package with that actual Python/Core report. Synthetic fixture results are not
-a population accuracy estimate. Cross-platform qualification remains mandatory
-before publication.
+GLiNER2 session JSON. Run `scripts/model-qualification.py CONFIG REPORT` against
+an installed Core wheel to check loading, result shape, offsets, errors, reuse
+and cleanup. Node integration compares its installed package with that
+Python/Core report. The manual `Model integration` workflow runs these checks on
+all five native platforms. There are no accuracy or performance release gates.

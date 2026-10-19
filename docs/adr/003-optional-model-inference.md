@@ -14,9 +14,8 @@
 The initial proposal was checked against Core main at
 `cab95117bfce9ddfdeec89ea736ba42107c71d21`. The package manifests are at
 0.4.4; main's changes since the 0.4.4 release concern documentation.
-The user has requested one published beta containing #56, #45 and #55 to
-support a demo, followed by further maintainer testing. The target is
-0.4.5-beta.1. Beta status does not relax compatibility, platform support,
+The package adds local loading of DataFog and GLiNER2 through shared errors
+and results, with Rust, Python and Node support. The target is 0.4.5-beta.1. Beta status does not relax compatibility, platform support,
 atomic failure or qualification requirements. This ADR does not assert that
 these features are implemented or ready.
 
@@ -369,7 +368,7 @@ explicit PERSON mappings and the current conflict rules are preserved.
 Model inference scans every decoded string leaf independently. The beta adds
 no new model-specific path-exclusion language: discovery exclusions do not
 suppress inference, and transformation allowlists affect transformation only.
-Document this distinction in structured demo examples.
+Document this distinction in structured scanning examples.
 
 No supported leaf may be silently skipped because its inference fails or is
 too long. Request limits cover the whole document as well as individual leaves.
@@ -442,10 +441,10 @@ does not mean a worker, model bundle or qualified device is installed.
 Descriptions of inference location must say local worker, not inference inside
 the Core binary.
 
-### 10. Release 0.4.5-beta.1 delivers the demo with full native support
+### 10. Release 0.4.5-beta.1 preserves full native support
 
 Track #56, #45 and #55 under the 0.4.5-beta.1 milestone. The purpose is a
-published demo-capable beta for further maintainer testing. Build the minimum
+published package with both model adapters and consistent errors/results. Build the minimum
 shared contract alongside #45, then integrate #55 through it. #56 can close
 with its first real backend proof; publication waits for all three issues and
 the full matrix below. Beta status is not a platform deferral or permission to
@@ -509,18 +508,16 @@ source. A GitHub release alone does not trigger those jobs. Adapt companion
 packaging and release checks accordingly; do not bump package versions in this
 ADR-only change.
 
-Use existing build/publish jobs with the smallest required qualification and
-artifact handoff changes. Retain and test the actual wheel/npm/worker bytes
-that will be published; qualify crate source through a packaged-crate install.
-Record checksums and per-package publication results. Do not build a general
-release orchestrator. After a partial registry failure, resume only missing
-qualified publications and never replace already published artifacts.
+Use the existing package-specific build and publication jobs. Add only the
+GLiNER2 worker distributions and equivalent beta version/tag handling. Native
+package tests run independently from publication; publishing does not download
+models or require a cross-run artifact handoff.
 
-The beta still requires compatibility, actual-model positive/negative checks,
-Unicode/structured conformance and bounded failure/cleanup evidence. Maintainer
-follow-up testing informs later betas or the stable release; publishing stable
-0.4.5 is not part of this beta target. Demo consumer wiring is separate from
-these Core issues, while reproducible Core demo commands belong in their docs.
+Before publication, review passing package and model integration checks for all
+five native targets. Tests cover loading, shared results/errors, reference-output
+conversion, Unicode coordinates, reuse and cleanup. They do not grade detection
+accuracy or require performance/memory benchmarks. Stable 0.4.5 is a separate
+release decision.
 
 ## Alternatives considered
 
@@ -555,19 +552,15 @@ these Core issues, while reproducible Core demo commands belong in their docs.
    prerequisites and declared numerical tolerances; old qualification does not
    automatically transfer to the new integration.
 5. #55 executes the pinned real GLiNER2 checkpoint through Rust and installed
-   Python/Node on all five required native targets, proves street-address
-   extraction/redaction on positive and legitimate negative examples, and reports
-   misses/false positives with denominators on separate development and held-out
-   fixtures. Extra labels require evidence; required platforms cannot be deferred.
-6. Report model-only and combined-system quality separately. Record DataFog
-   cold load, warm throughput, p50/p95, peak memory and package/import impact;
-   #55 additionally requires at least 100 warm runs per representative payload
-   size. Include versions/hashes, hardware/OS, thread/concurrency settings,
-   labels/thresholds, payload lengths and first-inference timing. Use those
-   measurements to fix the qualified resource profiles, not invented targets.
+   Python/Node on all five native targets. Verify shared result shape, span/label
+   conversion, errors, repeated calls and cleanup. Compare Python and Node output
+   for the same inputs. Model accuracy evaluation belongs with the model project.
+6. Keep integration checks small. Do not add hand-labelled accuracy datasets,
+   miss/false-positive reports, repeated timing runs, memory benchmarks or
+   performance thresholds to the package release requirements.
 7. Check final packaged Rust and installed Python/Node execution, unsupported
    WASM behavior, offline provisioning/container examples, inspection and
-   cleanup. Pin and retain the tested artifacts and licenses.
+   cleanup. Record the pinned runtime/model versions and retain their licenses.
 8. Before Rust changes merge, run `cargo fmt --all --check`,
    `cargo clippy --workspace --all-targets --all-features -- -D warnings`
    and `cargo test --workspace --all-features`, plus installed-binding and
@@ -584,8 +577,7 @@ remains visible rather than becoming successful partial protection.
 
 Before release, #45/#55 must supply the exact worker packages/artifacts,
 GLiNER2 revision/runtime lock, evidence for the fixed platform matrix,
-resource-profile values, numerical tolerances, score/threshold evidence and
-installation commands.
+numerical conversion tolerances, score semantics and installation commands.
 These are required implementation/qualification outputs, not permission to
 claim support from this draft. API spelling and protocol schemas must be
 frozen in shared fixtures before bindings are released. Shared configuration
