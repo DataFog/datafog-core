@@ -11,12 +11,16 @@ on:
       - "scripts/*model*"
       - "workers/gliner2/**"
       - ".github/workflows/model-datafog.yml"
+      - ".github/workflows/model-candidates.yml"
 
 permissions:
   contents: read
 
 jobs:
+  candidates:
+    uses: ./.github/workflows/model-candidates.yml
   installed-model:
+    needs: candidates
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,20 +30,26 @@ jobs:
         include:
           - os: ubuntu-24.04
             platform: linux-x86_64
+            npm_platform: linux-x64-gnu
           - os: ubuntu-24.04-arm
             platform: linux-aarch64
+            npm_platform: linux-arm64-gnu
           - os: macos-14
             platform: macos-arm64
+            npm_platform: darwin-arm64
           - os: macos-15-intel
             platform: macos-x86_64
+            npm_platform: darwin-x64
           - os: windows-latest
             platform: windows-x86_64
+            npm_platform: win32-x64-msvc
     defaults:
       run:
         shell: bash
     env:
       DATAFOG_PLATFORM: ${{ matrix.platform }}
       MODEL_BACKEND: ${{ matrix.backend }}
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -52,6 +62,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-candidates-${{ matrix.platform }}
+          path: candidate-native
+      - uses: actions/download-artifact@v4
+        with:
+          name: common-model-candidates
+          path: candidate-common
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-model-candidates
+          path: candidate-node
       - name: Install build and explicit provisioning tools
         run: python -m pip install 'maturin>=1.9.4,<2.0' 'huggingface_hub==1.27.0' 'psutil==7.2.2' 'build==1.4.0'
       - name: Download immutable native archive
@@ -85,7 +107,6 @@ jobs:
             config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
             --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
           python scripts/provision-gliner2-model.py --source "$RUNNER_TEMP/gliner2-download" --destination "$RUNNER_TEMP/model-bundle"
-          python -m build workers/gliner2 --outdir dist
           python -m venv "$RUNNER_TEMP/gliner2-worker"
           python - <<'PYTHON'
           import hashlib, json, os, sys
@@ -106,46 +127,76 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             "$WORKER_PYTHON" -m pip install 'torch==2.12.0' --index-url https://download.pytorch.org/whl/cpu
           fi
-          "$WORKER_PYTHON" -m pip install dist/datafog_gliner2_worker-*.whl
+          "$WORKER_PYTHON" -m pip install candidate-common/datafog_gliner2_worker-*.whl
+          mkdir -p dist
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
       - name: Verify GLiNER2 offline runtime prerequisites
         if: matrix.backend == 'gliner2'
         run: |
           "$WORKER_PYTHON" -I -c 'import torch, gliner2; print("PyTorch", torch.__version__, "GLiNER2", gliner2.__version__)'
           "$WORKER_PYTHON" -I -c 'import os; from gliner2 import GLiNER2; GLiNER2.from_pretrained(os.path.join(os.environ["RUNNER_TEMP"], "model-bundle"), local_files_only=True, map_location="cpu"); print("Pinned local checkpoint loaded offline")'
-      - name: Execute actual model through Rust
-        run: cargo test -p datafog-core --features models --test model_datafog --release -- --ignored
+      - name: Execute packaged Rust model integration
+        run: |
+          mkdir -p "$RUNNER_TEMP/packaged-core"
+          tar -xf candidate-common/datafog-core-*.crate -C "$RUNNER_TEMP/packaged-core"
+          package_manifest="$(find "$RUNNER_TEMP/packaged-core" -name Cargo.toml -maxdepth 2 | head -1)"
+          cargo test --manifest-path "$package_manifest" --features models --test model_datafog --release -- --ignored
       - name: Build and verify installed Python wheel
         run: |
-          maturin build --manifest-path bindings/python/Cargo.toml --release --out dist
-          python -m pip install --force-reinstall dist/*.whl
+          mkdir -p dist
+          python -m pip install --force-reinstall candidate-native/*.whl
           if [[ "$MODEL_BACKEND" == "datafog" ]]; then
             python -I bindings/python/tests/model_conformance.py "$DATAFOG_MODEL_CONFIG"
           fi
           python -I scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json --warm-runs 100
           python bindings/python/tests/test_installed.py
-      - name: Build Node package
+      - name: Verify final assembled Node artifacts
         run: |
-          npm ci --prefix bindings/node
-          npm run build --prefix bindings/node
-      - name: Verify installed Node tarball
-        run: |
-          mkdir -p dist "$RUNNER_TEMP/model-node-consumer"
-          (cd bindings/node && npm pack --ignore-scripts --pack-destination ../../dist)
-          npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE"/dist/*.tgz
+          mkdir -p "$RUNNER_TEMP/model-node-consumer"
+          package="$(find candidate-node -maxdepth 1 -name 'datafog-node-0*.tgz')"
+          platform_package="$(find candidate-node -maxdepth 1 -name 'datafog-node-${{ matrix.npm_platform }}-*.tgz')"
+          npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE/$package" "$GITHUB_WORKSPACE/$platform_package"
           if [[ "$MODEL_BACKEND" == "datafog" ]]; then
             node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
           else
             node scripts/model-gliner2-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
           fi
-          npm run test:package --prefix bindings/node -- --prebuilt
+          node scripts/test-node-package.mjs --prebuilt --tarball "$package" --platform-tarball "$platform_package"
+      - name: Verify pre-provisioned container without network
+        if: matrix.backend == 'gliner2' && startsWith(matrix.platform, 'linux-')
+        run: |
+          context="$RUNNER_TEMP/offline-model-context"
+          mkdir -p "$context/wheels"
+          "$WORKER_PYTHON" -m pip download --only-binary=:all: --dest "$context/wheels" \
+            --extra-index-url https://download.pytorch.org/whl/cpu -r dist/worker-environment.txt
+          cp candidate-native/*.whl "$context/wheels/"
+          cp -R "$RUNNER_TEMP/model-bundle" "$context/bundle"
+          python - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          config=json.loads((root / "model-session.json").read_text())
+          config["bundle"]="/opt/datafog/bundle"
+          config["gliner2"]["python"]="/usr/local/bin/python"
+          (root / "offline-model-context/session.json").write_text(json.dumps(config))
+          PYTHON
+          docker pull python:3.12-slim
+          image="$(docker inspect --format '{{index .RepoDigests 0}}' python:3.12-slim)"
+          printf '%s\n' "$image" > dist/container-base-image.txt
+          docker build --network=none --build-arg "PYTHON_IMAGE=$image" \
+            -f examples/model-offline/Dockerfile -t datafog-model-beta "$context"
+          docker run --rm --network=none datafog-model-beta > dist/offline-container.txt
       - name: Record exact backend identity and host
         run: |
           python - <<'PY'
-          import json, os, platform
+          import hashlib, json, os, platform
+          from pathlib import Path
           from datafog_core import ModelSession
           with ModelSession.open(json.load(open(os.environ["DATAFOG_MODEL_CONFIG"]))) as session:
-              report = {"host": platform.platform(), "python": platform.python_version(), "session": session.inspect()}
+              report = {"host": platform.platform(), "python": platform.python_version(), "session": session.inspect(),
+                        "candidate_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for folder in ("candidate-native", "candidate-common", "candidate-node")
+                            for p in Path(folder).glob("*") if p.is_file()}}
           with open("dist/model-identity.json", "w") as stream:
               json.dump(report, stream, indent=2)
           PY
