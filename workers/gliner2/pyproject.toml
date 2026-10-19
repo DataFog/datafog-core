@@ -8,6 +8,7 @@ version = "0.4.5b1"
 description = "Optional offline GLiNER2 worker for DataFog Core model sessions"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
   "gliner2[local]==2.1.0",
   "transformers==5.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
