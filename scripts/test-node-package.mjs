@@ -12,8 +12,20 @@ const temporaryDirectory = mkdtempSync(
   path.join(os.tmpdir(), "datafog-node-package-"),
 );
 
+function npm(arguments_, options) {
+  // Windows ships npm as a .cmd wrapper; invoke its CLI without a shell.
+  if (process.platform === "win32") {
+    return execFileSync(process.execPath, [
+      path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+      ...arguments_,
+    ], options);
+  }
+  return execFileSync("npm", arguments_, options);
+}
+
 function run(command, arguments_, cwd) {
-  execFileSync(command, arguments_, { cwd, stdio: "inherit" });
+  if (command === "npm") return npm(arguments_, { cwd, stdio: "inherit" });
+  return execFileSync(command, arguments_, { cwd, stdio: "inherit" });
 }
 
 function fixtureRecords(name) {
@@ -636,7 +648,7 @@ try {
   const platformArgument = process.argv.indexOf("--platform-package");
   if (platformArgument !== -1) {
     const platformDirectory = path.resolve(nodePackage, process.argv[platformArgument + 1]);
-    const packed = JSON.parse(execFileSync("npm", ["pack", "--json"], {
+    const packed = JSON.parse(npm(["pack", "--json"], {
       cwd: platformDirectory,
       encoding: "utf8",
     }));
@@ -648,7 +660,7 @@ try {
     tarball = path.resolve(process.argv[suppliedTarball + 1]);
   } else {
     const packed = JSON.parse(
-      execFileSync("npm", ["pack", "--json"], {
+      npm(["pack", "--json"], {
         cwd: nodePackage,
         encoding: "utf8",
       }),
@@ -706,8 +718,8 @@ try {
   );
 
   run(
-    path.join(temporaryDirectory, "node_modules", ".bin", "tsc"),
-    ["--project", "tsconfig.json"],
+    process.execPath,
+    [path.join(temporaryDirectory, "node_modules", "typescript", "bin", "tsc"), "--project", "tsconfig.json"],
     temporaryDirectory,
   );
 } finally {
