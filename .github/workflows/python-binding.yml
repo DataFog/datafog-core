@@ -17,10 +17,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Test publication check without downloading models
+        if: matrix.python-version == '3.12'
+        run: python scripts/test-model-publish-check.py
       - run: python -m pip install maturin
       - run: maturin build --manifest-path bindings/python/Cargo.toml --release
       - run: |

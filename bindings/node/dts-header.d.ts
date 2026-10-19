@@ -18,8 +18,6 @@ export interface ModelSessionConfig {
     chunk_size: number;
     chunk_overlap: number;
   };
-  rules?: ScanConfig;
-  structured?: StructuredScanConfig;
 }
 export interface ModelFindingEvidence {
   finding_index: number;
@@ -34,11 +32,7 @@ export interface ModelFindingEvidence {
 export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
-  inspect(): Record<string, unknown>;
-  scan(text: string, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelScanResult>;
-  scanStructured(data: JsonDocument, mode: "model_only" | "combined", options?: {diagnostics?: boolean; cancellation?: ModelCancellation}): Promise<ModelStructuredScanResult>;
-  warmUp(): Promise<void>;
-  health(): Promise<void>;
+  scan(text: string, options?: {cancellation?: ModelCancellation}): Promise<ModelScanResult>;
   close(): Promise<void>;
 }
 

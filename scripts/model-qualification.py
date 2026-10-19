@@ -1,82 +1,69 @@
-"""Installed-package checks for loading, result conversion, errors and cleanup.
-
-Uses real local models to check integration. It does not grade model accuracy
-or run performance benchmarks.
-"""
-import argparse
+"""Check installed model loading, result conversion and errors; no accuracy grading."""
 import json
 from pathlib import Path
-import platform
+import subprocess
 import sys
 
-from datafog_core import DataFogModelError, ModelCancellation, ModelSession, transform
+from datafog_core import DataFogModelError, ModelCancellation, ModelSession
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("config", type=Path)
-parser.add_argument("report", type=Path)
-args = parser.parse_args()
-config = json.loads(args.config.read_text(encoding="utf-8"))
+config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert not any(name in sys.modules for name in ("torch", "gliner2", "transformers", "onnxruntime"))
 texts = [
     "John Smith lives at 123 Main Street, Boston, MA 02110. Email john@example.com.",
-    "The weather is clear.",
-    "",
+    "", "The weather is clear.",
     "👋 e\u0301 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
     "ordinary " * 505 + "John Smith lives at 123 Main Street.",
 ]
-report = {"host": platform.platform(), "python": platform.python_version(), "cases": []}
+reference = None
+if "gliner2" not in config:
+    executable = Path(config["bundle"]) / ("datafog-pii.exe" if sys.platform == "win32" else "datafog-pii")
+    native = subprocess.run([str(executable), config["bundle"]],
+        input="".join(json.dumps({"text": text}) + "\n" for text in texts),
+        text=True, encoding="utf-8", capture_output=True, check=True,
+        timeout=config["limits"]["timeout_ms"] / 1000)
+    reference = [json.loads(line)["findings"] for line in native.stdout.splitlines()]
+    assert len(reference) == len(texts)
+report = {"cases": []}
 with ModelSession.open(config) as session:
-    report["session"] = session.inspect()
-    identity = report["session"]["configuration_id"]
-    assert report["session"]["state"] == "ready"
-    session.warm_up()
-    for value in texts:
-        result = session.scan(value, "model_only")
-        assert result.contract_version == 1
-        assert result.configuration_id == identity
-        assert result.mode == "model_only" and result.diagnostics is None
+    for case_index, text in enumerate(texts):
+        result = session.scan(text)
+        assert result.contract_version == 1 and result.model
         assert len(result.evidence) == len(result.findings)
         for index, (finding, evidence) in enumerate(zip(result.findings, result.evidence, strict=True)):
-            assert value[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
-            assert value.encode()[finding.byte_range.start:finding.byte_range.end].decode() == finding.matched_text
+            assert text[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
+            assert text.encode()[finding.byte_range.start:finding.byte_range.end].decode() == finding.matched_text
             assert evidence["finding_index"] == index
             assert finding.entity_type and evidence["sources"]
-            for source in evidence["sources"]:
-                assert source["native_label"]
-                assert 0 <= source["raw_score"]["value"] <= 1
-            if "gliner2" in config:
+            source = evidence["sources"][0]
+            assert source["native_label"] and 0 <= source["raw_score"]["value"] <= 1
+            if reference is not None:
+                expected = reference[case_index][index]
+                assert (finding.byte_range.start, finding.byte_range.end) == (expected["start"], expected["end"])
+                assert source["native_label"] == expected["label"]
+                assert abs(source["raw_score"]["value"] - expected["raw_score"]) <= 2 ** -52
+                assert abs(finding.confidence - expected["confidence"]) <= 2 ** -24
+            else:
                 assert finding.confidence is None
-        report["cases"].append({"text": value, "findings": [
+        if reference is not None:
+            assert len(result.findings) == len(reference[case_index])
+        report["cases"].append({"text": text, "model": result.model, "findings": [
             {"entity": f.entity_type, "text": f.matched_text, "start": f.codepoint_range.start,
              "end": f.codepoint_range.end, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
             for f in result.findings], "evidence": result.evidence})
-    # Nonempty output proves that returned spans passed through the adapter.
-    # There is no hand-labelled truth set or required detection rate.
-    assert report["cases"][0]["findings"]
-    assert report["cases"][2]["findings"] == []
-    text = texts[0]
-    combined = session.scan(text, "combined")
-    assert combined.contract_version == 1 and combined.mode == "combined"
-    assert combined.configuration_id == identity
-    protected = transform(text, combined.findings, {"default": {"strategy": "redact"}})
-    assert protected.text != text
-    structured = session.scan_structured({"note": text, "keep": 12}, "model_only")
-    assert structured.contract_version == 1 and structured.configuration_id == identity
-    assert len(structured.evidence) == len(structured.findings)
-    assert all(f.path == "/note" for f in structured.findings)
+    assert report["cases"][0]["findings"]  # Exercise conversion of actual returned spans.
+    assert report["cases"][1]["findings"] == []
     cancellation = ModelCancellation()
     cancellation.cancel()
     try:
-        session.scan(text, "model_only", cancellation=cancellation)
+        session.scan(texts[0], cancellation=cancellation)
     except DataFogModelError as error:
         assert error.code == "model_cancelled"
     else:
         raise AssertionError("cancelled request returned findings")
-    session.health()
-assert session.inspect()["state"] == "closed"
+    assert session.scan("").findings == []  # Cancellation before execution permits reuse.
 session.close()
 try:
-    session.scan("", "model_only")
+    session.scan("")
 except DataFogModelError as error:
     assert error.code == "model_session_closed"
 else:
@@ -88,7 +75,7 @@ except DataFogModelError as error:
     assert config["bundle"] not in str(error)
 else:
     raise AssertionError("invalid model identity accepted")
-report["state_after_close"] = session.inspect()["state"]
-args.report.parent.mkdir(parents=True, exist_ok=True)
-args.report.write_text(json.dumps(report, indent=2), encoding="utf-8")
-print("Installed Python model loading, result shape, offsets, errors, reuse and cleanup passed.")
+output = Path(sys.argv[2])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(report), encoding="utf-8")
+print("Installed Python model loading, results, offsets, errors and cleanup passed.")

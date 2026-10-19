@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build-wheels:
@@ -58,11 +59,6 @@ jobs:
         with:
           command: sdist
           args: --manifest-path bindings/python/Cargo.toml --out dist
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: python -m pip install 'build==1.4.0'
-      - run: python -m build workers/gliner2 --outdir dist
       - uses: actions/upload-artifact@v4
         with:
           name: source-distribution
@@ -74,8 +70,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      contents: read
+      actions: read
       id-token: write
     steps:
+      - uses: actions/checkout@v4
+      - name: Require passing model integration for this commit
+        run: python3 scripts/check-model-integration.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/download-artifact@v4
         with:
           pattern: "*"
@@ -85,3 +88,4 @@ jobs:
         if: github.event_name == 'push' || !inputs.dry_run
         with:
           packages-dir: dist
+          skip-existing: true

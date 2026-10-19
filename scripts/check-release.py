@@ -15,7 +15,6 @@ for relative in (
     "bindings/node/Cargo.toml",
     "bindings/wasm/Cargo.toml",
     "bindings/python/pyproject.toml",
-    "workers/gliner2/pyproject.toml",
 ):
     document = tomllib.loads((root / relative).read_text())
     versions[relative] = document.get("package", document.get("project"))["version"]
@@ -40,7 +39,7 @@ if len(set(normalized.values())) != 1:
 version = next(iter(normalized.values()))
 if "-beta." in version:
     python_version = version.replace("-beta.", "b")
-    for relative in ("bindings/python/pyproject.toml", "workers/gliner2/pyproject.toml"):
+    for relative in ("bindings/python/pyproject.toml",):
         if versions[relative] != python_version:
             raise SystemExit(f"Expected PEP 440 beta version {python_version}: {relative}")
     for binding in ("node", "wasm"):

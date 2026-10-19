@@ -2,18 +2,9 @@ use super::*;
 
 pub(super) fn descriptor() -> ModelSessionDescriptor {
     ModelSessionDescriptor {
-        contract_version: 1,
-        configuration_id: "test".into(),
-        state: "ready".into(),
         backend: "datafog_native".into(),
         model: "DataFog/pii-en-65m".into(),
-        model_version: "0.1.0".into(),
-        model_revision: MODEL_REVISION.into(),
-        runtime_version: "0.2.0".into(),
-        runtime_revision: RUNTIME_REVISION.into(),
         adapter_version: ADAPTER_VERSION.into(),
-        manifest_sha256: "a".repeat(64),
-        platform: host_platform().unwrap().into(),
         labels: LABELS
             .iter()
             .map(|(k, v)| ((*k).into(), (*v).into()))
@@ -25,16 +16,8 @@ pub(super) fn descriptor() -> ModelSessionDescriptor {
             timeout_ms: 1000,
             cleanup_timeout_ms: 1000,
         },
-        device: "cpu".into(),
-        intra_threads: 1,
-        queue_capacity: 0,
-        max_length: 512,
-        stride: 42,
-        calibration_sha256: Some("b".repeat(64)),
-        threshold: Some(0.5),
         score_scale: "normalized_token_softmax_min".into(),
         thresholds: BTreeMap::new(),
-        label_descriptions: BTreeMap::new(),
     }
 }
 
@@ -150,11 +133,9 @@ fn native_error_messages_are_not_forwarded_or_unknown_labels_discarded() {
 }
 
 #[test]
-fn composition_keeps_provenance_and_reindexes_duplicate_evidence() {
+fn results_keep_scores_and_reindex_duplicate_evidence() {
     let session = ModelSession {
         descriptor: descriptor(),
-        rules: ScanConfig::default(),
-        structured: structured::StructuredScanConfig::default(),
         inner: Mutex::new(SessionInner { worker: None }),
         closing: AtomicBool::new(false),
         state: AtomicU8::new(1),
@@ -170,22 +151,17 @@ fn composition_keeps_provenance_and_reindexes_duplicate_evidence() {
         &session.descriptor,
     )
     .unwrap();
-    entries.extend(crate::scan(text).into_iter().map(rule_entry));
     entries.push(entries[0].clone());
-    let result = session.compose(entries, ScanMode::Combined, false).unwrap();
-    assert_eq!(result.findings.len(), 2);
+    let result = session.compose(entries).unwrap();
+    assert_eq!(result.findings.len(), 1);
     assert_eq!(result.evidence[0].sources.len(), 2);
-    assert_eq!(result.evidence[1].finding_index, 1);
-    assert!(result.diagnostics.is_none());
-    assert_eq!(result.findings[1].confidence, None);
+    assert_eq!(result.evidence[0].finding_index, 0);
+    assert_eq!(result.model, "DataFog/pii-en-65m");
     session.close().unwrap();
     session.close().unwrap();
-    assert_eq!(session.inspect().state, "closed");
+    assert_eq!(session.state.load(Ordering::Acquire), 3);
     assert_eq!(
-        session
-            .scan("", ScanMode::Combined, false, &Cancellation::default())
-            .unwrap_err()
-            .code,
+        session.scan("", &Cancellation::default()).unwrap_err().code,
         "model_session_closed"
     );
 }
@@ -217,21 +193,19 @@ fn configuration_errors_are_shared_precise_and_value_free() {
         parse_config(&malformed).err().unwrap().reason,
         "invalid_type"
     );
-    let mut rules = valid.clone();
-    rules["rules"] = serde_json::json!({"entities":["STREET_ADDRESS"]});
-    let error = ModelSession::open(parse_config(&rules).unwrap())
-        .err()
-        .unwrap();
-    assert_eq!(error.path, "/rules/entities/0");
-    assert!(!format!("{error:?}").contains("sensitive"));
+    for removed in ["rules", "structured"] {
+        let mut bad = valid.clone();
+        bad[removed] = serde_json::json!({});
+        let error = parse_config(&bad).err().unwrap();
+        assert_eq!(error.reason, "unknown_field");
+        assert_eq!(error.path, format!("/{removed}"));
+    }
 }
 
 #[test]
 fn busy_and_oversized_calls_fail_without_rule_only_fallback() {
     let session = ModelSession {
         descriptor: descriptor(),
-        rules: ScanConfig::default(),
-        structured: structured::StructuredScanConfig::default(),
         inner: Mutex::new(SessionInner { worker: None }),
         closing: AtomicBool::new(false),
         state: AtomicU8::new(1),
@@ -241,12 +215,7 @@ fn busy_and_oversized_calls_fail_without_rule_only_fallback() {
     let held = session.inner.lock().unwrap();
     assert_eq!(
         session
-            .scan(
-                "may@example.test",
-                ScanMode::Combined,
-                false,
-                &Cancellation::default()
-            )
+            .scan("may@example.test", &Cancellation::default())
             .unwrap_err()
             .code,
         "model_busy"
@@ -255,12 +224,12 @@ fn busy_and_oversized_calls_fail_without_rule_only_fallback() {
     let text = "x".repeat(session.descriptor.limits.max_input_bytes + 1);
     assert_eq!(
         session
-            .scan(&text, ScanMode::Combined, false, &Cancellation::default())
+            .scan(&text, &Cancellation::default())
             .unwrap_err()
             .reason,
         "limit_exceeded"
     );
-    assert_eq!(session.inspect().state, "ready");
+    assert_eq!(session.state.load(Ordering::Acquire), 1);
     assert!(bounded_json(&serde_json::json!({"long_key":"x"}), 3, "/data").is_err());
 }
 
@@ -297,8 +266,6 @@ fn process_timeout_cancellation_and_oversized_output_are_reaped() {
 fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer() {
     let session = ModelSession {
         descriptor: descriptor(),
-        rules: ScanConfig::default(),
-        structured: structured::StructuredScanConfig::default(),
         inner: Mutex::new(SessionInner { worker: None }),
         closing: AtomicBool::new(false),
         state: AtomicU8::new(1),
@@ -310,26 +277,20 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     request.deadline = Instant::now();
     assert_eq!(
         session
-            .scan_request(
-                &request,
-                "secret",
-                ScanMode::Combined,
-                false,
-                &Cancellation::default()
-            )
+            .scan_request(&request, "secret", &Cancellation::default())
             .unwrap_err()
             .code,
         "model_timeout"
     );
     // Queued work never touched the worker; the session remains reusable.
-    assert_eq!(session.inspect().state, "ready");
+    assert_eq!(session.state.load(Ordering::Acquire), 1);
     drop(request);
     let request = session.prepare_request().unwrap();
     let cancellation = Cancellation::default();
     cancellation.cancel();
     assert_eq!(
         session
-            .scan_request(&request, "secret", ScanMode::Combined, false, &cancellation)
+            .scan_request(&request, "secret", &cancellation)
             .unwrap_err()
             .code,
         "model_cancelled"
@@ -339,13 +300,7 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     session.request_close();
     assert_eq!(
         session
-            .scan_request(
-                &next,
-                "",
-                ScanMode::ModelOnly,
-                false,
-                &Cancellation::default()
-            )
+            .scan_request(&next, "", &Cancellation::default())
             .unwrap_err()
             .code,
         "model_cancelled"

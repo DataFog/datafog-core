@@ -40,14 +40,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: python -m pip install 'maturin>=1.9.4,<2.0' 'build==1.4.0'
+      - run: python -m pip install 'maturin>=1.9.4,<2.0'
       - uses: PyO3/maturin-action@v1
         with:
           command: build
@@ -71,11 +70,10 @@ jobs:
           path: |
             bindings/node/native.js
             bindings/node/index.d.ts
-      - name: Build common source and worker candidates
+      - name: Build Rust test package
         if: matrix.platform == 'linux-x86_64'
         run: |
           mkdir -p common
-          python -m build --wheel workers/gliner2 --outdir common
           cargo package -p datafog-core --locked --allow-dirty
           cp target/package/*.crate common/
       - uses: actions/upload-artifact@v4
