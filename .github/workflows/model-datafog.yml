@@ -108,6 +108,11 @@ jobs:
           fi
           "$WORKER_PYTHON" -m pip install dist/datafog_gliner2_worker-*.whl
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
+      - name: Verify GLiNER2 offline runtime prerequisites
+        if: matrix.backend == 'gliner2'
+        run: |
+          "$WORKER_PYTHON" -I -c 'import torch, gliner2; print("PyTorch", torch.__version__, "GLiNER2", gliner2.__version__)'
+          "$WORKER_PYTHON" -I -c 'import os; from gliner2 import GLiNER2; GLiNER2.from_pretrained(os.path.join(os.environ["RUNNER_TEMP"], "model-bundle"), local_files_only=True, map_location="cpu"); print("Pinned local checkpoint loaded offline")'
       - name: Execute actual model through Rust
         run: cargo test -p datafog-core --features models --test model_datafog --release -- --ignored
       - name: Build and verify installed Python wheel

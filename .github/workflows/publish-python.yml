@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build-wheels:
@@ -31,6 +32,10 @@ jobs:
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py python
       - uses: PyO3/maturin-action@v1
         with:
@@ -48,6 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py python
       - uses: PyO3/maturin-action@v1
         with:
@@ -58,9 +67,29 @@ jobs:
           name: source-distribution
           path: dist
 
+  build-worker:
+    name: Build optional GLiNER2 worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: python3 scripts/check-release.py python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'build==1.4.0'
+      - run: python -m build workers/gliner2 --outdir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gliner2-worker-distributions
+          path: dist
+
   publish:
     name: Publish to PyPI
-    needs: [build-wheels, build-sdist]
+    needs: [build-wheels, build-sdist, build-worker]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

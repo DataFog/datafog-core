@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   publish:
@@ -16,6 +17,10 @@ jobs:
     environment: crates-io
     steps:
       - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py rust
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish --package datafog-core --locked

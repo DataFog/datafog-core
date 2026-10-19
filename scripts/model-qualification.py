@@ -34,9 +34,6 @@ texts = [case["text"] for group in fixtures.values() for case in group]
 texts += ["", "👋 e\u0301 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
           "Ordinary words without private details. " * 160 + "John Smith lives at 123 Main Street."]
 text = texts[0]
-started = time.perf_counter()
-session = ModelSession.open(config)
-cold_load_ms = (time.perf_counter() - started) * 1000
 memory_stop = threading.Event()
 peak_rss = [0]
 def sample_memory():
@@ -48,6 +45,13 @@ def sample_memory():
             pass
 sampler = threading.Thread(target=sample_memory)
 sampler.start()
+started = time.perf_counter()
+try:
+    session = ModelSession.open(config)
+except BaseException:
+    memory_stop.set(); sampler.join()
+    raise
+cold_load_ms = (time.perf_counter() - started) * 1000
 report = {"host": platform.platform(), "machine": platform.machine(), "python": platform.python_version(),
           "cold_load_ms": cold_load_ms, "fixture_sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
           "fixture_kind": "synthetic integration fixtures; no population accuracy claim", "cases": [], "benchmarks": []}

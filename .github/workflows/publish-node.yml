@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
@@ -39,6 +40,10 @@ jobs:
             build_args: ""
     steps:
       - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py node
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -72,9 +77,14 @@ jobs:
     environment: npm
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Require complete model qualification for this source
+        run: python3 scripts/check-model-qualification.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -108,4 +118,8 @@ jobs:
       - name: Publish
         if: github.event_name == 'push' || !inputs.dry_run
         working-directory: bindings/node
-        run: npm publish
+        run: |
+          for package in npm/*; do
+            (cd "$package" && npm publish --tag beta --ignore-scripts)
+          done
+          npm publish --tag beta --ignore-scripts
