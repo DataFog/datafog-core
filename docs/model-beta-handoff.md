@@ -28,7 +28,7 @@ the published calibration. Preserve first/last-name distinctions.
 
 ## Release checklist
 
-- Pass the complete two-backend/five-native-platform qualification against the
+- Explicitly dispatch the complete two-backend/five-native-platform qualification against the
   intended release source, plus all existing supported-language binding checks.
 - Qualify packaged Rust source and installed Python/Node artifacts; retain the
   exact artifacts, source identity, dependency versions, checksums and reports.

@@ -1,11 +1,12 @@
-# DataFog model sessions: first beta implementation slice
+# Offline model sessions for 0.4.5-beta.1
 
 Tracks [#56](https://github.com/DataFog/datafog-core/issues/56) and the first
 [DataFog integration in #45](https://github.com/DataFog/datafog-core/issues/45),
 using [ADR 003](adr/003-optional-model-inference.md).
-The release target remains **0.4.5-beta.1**. This slice does not publish a beta,
-complete GLiNER2, or establish qualification on hosts that have not run the
-installed-package suite.
+The release target is **0.4.5-beta.1**. Both DataFog and the optional
+[GLiNER2 worker](gliner2-model.md) have working integrations. Publication and
+support claims still require the complete installed-package qualification;
+unexecuted hosts are not counted as qualified.
 
 The new Rust `models` feature is off by default. Python and Node native builds
 include the small supervisor but do not install/download model weights, ONNX
@@ -109,8 +110,11 @@ separate sessions and account for their separate memory. Rust callers can
 share a `Cancellation` handle with another thread. Python and Node expose `ModelCancellation`: construct a handle, pass it as the
 scan's `cancellation` option, and call `cancel()` from the controlling thread or
 event loop. Handles are one-shot; a cancelled handle stays cancelled.
-Core reserves admission before Node schedules blocking work, so a second request
-fails immediately with `model_busy`. The request deadline includes executor wait;
+Core reserves admission before Node dispatches blocking work, so a second request
+fails immediately with `model_busy`. Each admitted Node model operation uses a
+separate standard-library thread rather than the shared libuv pool; unrelated
+Node filesystem/crypto work cannot delay model inference or cleanup. The request
+deadline starts before dispatch;
 a request that expires or is cancelled before execution never enters inference
 and leaves the session reusable. Cancellation after inference starts retires the
 worker. `close()` signals cancellation before scheduling cleanup.
@@ -147,7 +151,7 @@ raw scores; those conversion bounds are distinct from model-quality claims.
 Fixtures cover positives, negatives, repeated spans, emoji/combining marks,
 long input, structured composition, ordinary transformations and reuse/cleanup.
 
-The explicit `DataFog model qualification` workflow runs all three native
+The manual `Model qualification` workflow runs all three native
 interfaces on all five required targets and retains installed artifacts and
 identity evidence. It is a release requirement, not a completed qualification
 claim. Remaining beta work includes its actual all-host execution, broader
@@ -162,3 +166,11 @@ GLiNER2 Python runtime using the `gliner2` settings. See
 [GLiNER2 provisioning and behavior](gliner2-model.md). It reuses the same Core
 session lifecycle, canonical findings and transformations. Its raw scores are
 uncalibrated and never populate `Finding.confidence`.
+
+
+Full actual-model qualification runs only through an explicit workflow dispatch
+and remains mandatory before publication. Routine PR/push checks use asset-free
+Core/binding tests. Qualification restores revision-keyed model assets from the
+CI cache where available, then rechecks their pinned checksums before provisioning.
+Fresh runners still transfer cached bytes; a cache miss fetches the same pinned
+release from Hugging Face. Models are never upgraded by a CI check.

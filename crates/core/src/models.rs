@@ -115,7 +115,7 @@ impl ResourceLimits {
     }
 }
 
-/// Local DataFog assets and immutable expected manifest identity. No download occurs.
+/// Local model assets and immutable expected manifest identity. No download occurs.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSessionConfig {
