@@ -20,6 +20,8 @@ texts = [
     "👋 Contact May Smith at 123 Main Street, Boston, MA 02110.",
     "e\u0301 👋 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
     "Ordinary words without private details. " * 160 + "John Smith lives at 123 Main Street.",
+    "ordinary " * 505 + "John Smith lives at 123 Main Street, Boston, MA 02110.",
+    "Customer ID CUST-12345, account number ACC-987654. Call John Smith at (212) 555-0100.",
 ]
 executable = bundle / ("datafog-pii.exe" if sys.platform == "win32" else "datafog-pii")
 reference = subprocess.run(
@@ -27,6 +29,15 @@ reference = subprocess.run(
     text=True, encoding="utf-8", capture_output=True, check=True, timeout=config["limits"]["timeout_ms"] / 1000,
 )
 reference = [json.loads(line)["findings"] for line in reference.stdout.splitlines()]
+# Verify that this fixture really crosses the pinned runtime's first token window.
+window_text = texts[-2]
+debug = subprocess.run([str(executable), str(bundle), "--debug"],
+    input=json.dumps({"text": window_text}) + "\n", text=True, encoding="utf-8",
+    capture_output=True, check=True, timeout=config["limits"]["timeout_ms"] / 1000)
+first_window = json.loads(debug.stdout)["windows"][0]
+boundary = max(end for start, end in first_window["offsets"])
+address_start = window_text.index("123 Main Street")
+assert address_start < boundary < address_start + len("123 Main Street")
 with ModelSession.open(config) as session:
     cancellation = ModelCancellation()
     cancellation.cancel()

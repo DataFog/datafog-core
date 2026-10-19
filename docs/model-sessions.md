@@ -1,11 +1,12 @@
-# DataFog model sessions: first beta implementation slice
+# Offline model sessions for 0.4.5-beta.1
 
 Tracks [#56](https://github.com/DataFog/datafog-core/issues/56) and the first
 [DataFog integration in #45](https://github.com/DataFog/datafog-core/issues/45),
 using [ADR 003](adr/003-optional-model-inference.md).
-The release target remains **0.4.5-beta.1**. This slice does not publish a beta,
-complete GLiNER2, or establish qualification on hosts that have not run the
-installed-package suite.
+The release target is **0.4.5-beta.1**. Both DataFog and the optional
+[GLiNER2 worker](gliner2-model.md) have working integrations. Publication and
+support claims still require the complete installed-package qualification;
+unexecuted hosts are not counted as qualified.
 
 The new Rust `models` feature is off by default. Python and Node native builds
 include the small supervisor but do not install/download model weights, ONNX
