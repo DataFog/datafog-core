@@ -2,7 +2,7 @@
 
 - **Status:** Proposed; not implemented
 - **Date:** 2026-10-19
-- **Target release:** 0.4.5, provisional until compatibility and qualification gates pass
+- **Target release:** 0.4.5-beta.1
 - **Tracks:** [#56](https://github.com/DataFog/datafog-core/issues/56)
 - **Backends:** [#45: DataFog](https://github.com/DataFog/datafog-core/issues/45),
   [#55: GLiNER2](https://github.com/DataFog/datafog-core/issues/55)
@@ -14,8 +14,11 @@
 This draft was checked against Core main at
 `cab95117bfce9ddfdeec89ea736ba42107c71d21`. The package manifests are at
 0.4.4; main's changes since the 0.4.4 release concern documentation.
-The user has requested one published release containing #56, #45 and #55.
-0.4.5 is the proposed target, not an assertion that these features are ready.
+The user has requested one published beta containing #56, #45 and #55 to
+support a demo, followed by further maintainer testing. The target is
+0.4.5-beta.1. Beta status does not relax compatibility, platform support,
+atomic failure or qualification requirements. This ADR does not assert that
+these features are implemented or ready.
 
 The current implementation gives this decision several constraints:
 
@@ -54,10 +57,10 @@ Use supervised local child processes for both initial backends:
 
 | Backend | Proposed execution component | Detection responsibilities |
 | --- | --- | --- |
-| DataFog pii-en-65m | An optional project-owned Rust worker crate, factored from the pinned reference runtime | Preserve tokenizer, BIO decoding, windows, fragments and calibration; return native labels and spans. |
+| DataFog pii-en-65m | Core-owned Rust adapter around the pinned native executable initially | Preserve tokenizer, BIO decoding, windows, fragments and calibration; convert native output into the shared result contract. |
 | GLiNER2 | An optional project-owned Python worker distribution around the pinned official local runtime | Load the qualified span checkpoint, invoke official extraction with spans/scores and expose its documented window behavior. |
 
-These are proposed additions, not existing workspace packages. Worker source
+The adapter and GLiNER2 worker are proposed additions. Worker/adapter source
 belongs to this project, outside language-binding implementation code.
 The GLiNER2 shim serializes native runtime output; canonical label mapping,
 validation and policy stay in Rust. There is no runtime plugin discovery,
@@ -78,13 +81,13 @@ PyTorch in the Python extension or add ONNX Runtime to the base Core library.
 The Rust supervisor uses existing serde/serde_json, sha2 and standard process,
 thread and synchronization facilities where sufficient. Any process-tree or
 platform resource-control dependency must justify a specific portability gap.
-ONNX/tokenizer dependencies belong to the optional DataFog worker; official
+ONNX/tokenizer dependencies remain in the optional DataFog runtime; official
 GLiNER2/PyTorch dependencies belong to the optional GLiNER2 worker distribution.
 
 Native Python wheels enable the lightweight Core supervisor at build time,
 while base installation and import install/load neither worker runtime nor
-model weights. Distribute the DataFog Rust worker as a pinned platform archive
-installed by the explicit provisioner. Distribute the GLiNER2 shim as a separate
+model weights. Provision the existing pinned DataFog native archive rather than
+requiring a replacement executable. Distribute the GLiNER2 shim as a separate
 `datafog-core-gliner2` Python package, installed through the opt-in
 `datafog-core[gliner2]` extra and pinned to the matching Core release.
 The worker package pins its qualified official GLiNER2/PyTorch dependencies.
@@ -92,8 +95,9 @@ The extra installs code/dependencies, never downloads weights or starts inferenc
 Rust callers configure the provisioned DataFog executable directly; Core does
 not search PATH or invoke a shell to resolve a worker. The GLiNER2 backend
 selects a verified Python environment/module with the same explicit ownership.
-Core/Python versions outside the qualified model-runtime matrix remain valid
-for rule-only use.
+The same Rust supervisor is enabled in Node native packages; asynchronous Node
+calls snapshot inputs and execute away from the event loop. No Python-only
+or Node-only detector adapters are introduced.
 
 A separately invoked provisioner resolves immutable revisions, verifies
 archive paths and all manifest assets, and atomically installs into a
@@ -171,7 +175,7 @@ Do not invoke providers until the complete requested scan has succeeded.
 
 A session progresses through `loading -> ready -> failed/closed`;
 `failed -> closed` is allowed and `closed` is terminal. Construction returns
-only after validation and the ready handshake; loading is observable through
+only after validation and a backend readiness check; loading is observable through
 the construction operation, not a partially usable scanner. Warm-up is explicit
 and uses synthetic input. Health reports verified worker/session status, not
 just that a PID exists. Invalid caller configuration/input does not poison a
@@ -182,21 +186,28 @@ DataFog runtime's mutable detector and serialized request protocol; concurrency
 uses explicitly constructed sessions with separately measured memory.
 No hidden worker pool or global model cache is introduced.
 
-Use a versioned, bounded UTF-8 JSONL protocol over private stdin/stdout pipes:
-handshake/ready, infer, health and close messages carry protocol version and
-request IDs. Ready echoes the verified backend, artifact, schema and runtime
-identity. Inference returns coordinate units, native labels, native ranges,
-declared score semantics and complete-coverage status. Reject unknown/mismatched
-IDs, versions, labels, malformed records and excess response size/count.
-Newlines inside input are JSON-escaped; stdout contains protocol messages only.
-Do not enable the reference runtime's debug output or forward its redacted text.
-Rust constructs matched text from validated original ranges; if a worker also
-returns text, compare it exactly and reject a mismatch.
+Keep one request in flight per worker and correlate requests in the Rust
+supervisor. Backend adapters translate their native transport into the shared
+Core result contract below. Do not require every executable to implement a new
+universal handshake, health, close or request-ID protocol.
 
-The old DataFog executable's JSONL output lacks this handshake/identity/error
-contract and includes redacted text and free-form errors. Factor its inference
-implementation into the new worker protocol while preserving native inference
-behavior; do not claim the old executable already conforms.
+Initially use DataFog's existing JSONL transport. Verify executable/bundle
+identity locally, establish readiness with a bounded synthetic inference,
+and sanitize native errors without forwarding their messages. Disable debug
+output, bound response decoding and discard native redacted-text output.
+The GLiNER2 shim uses a small versioned JSONL schema with explicit spans and
+scores. Newlines in input remain JSON-escaped; stdout is machine-readable only.
+Unexpected, malformed or excess responses retire the worker; never reuse a
+stream after a timeout.
+
+Before replacing the pinned DataFog executable, #45 must demonstrate a specific
+gap that its Rust adapter cannot meet, such as threshold override support or a
+required resource control. Record that gap and the smallest worker change.
+If replacement is necessary, give it a new artifact/runtime identity, retain the
+original release bytes as the compatibility oracle and rerun equivalence and
+all-platform qualification. Do not fork/rewrite inference merely to standardize
+transport. Metadata for legacy transports is derived from the verified bundle
+and qualified adapter, not invented as a worker handshake response.
 
 Use finite admission queues with byte/count accounting and explicit limits for
 input bytes, output bytes/findings, queued bytes/requests, CPU threads, startup,
@@ -233,11 +244,49 @@ of arbitrary framework memory.
 
 ### 5. Ordinary findings plus inspectable evidence
 
-Preserve the public `Finding` struct and binding constructor. A new result
-envelope carries `contract_version`, session/configuration identity, mode,
-ordinary `findings`, per-detector results and finding-to-source evidence.
-Structured results additionally retain discovery mappings and path-qualified
-findings. Result types live in Core; bindings only represent them.
+Preserve the public `Finding` struct and binding constructor. Before backend
+implementation, #56 defines these minimum Core-owned types and shared fixtures:
+
+```text
+NativeSpan {
+  native_label,
+  start, end, coordinate_unit: utf8_byte | unicode_codepoint,
+  raw_score?: { value, scale_id },
+  calibrated_confidence?,
+  matched_text?
+}
+BackendResult { spans: [NativeSpan], coverage: complete }
+ModelScanResult {
+  contract_version, configuration_id, mode,
+  findings: [Finding],
+  evidence: [{ finding_index, sources: [SourceEvidence] }]
+}
+SourceEvidence {
+  detector_name, detector_version,
+  native_label?, raw_score?, calibrated_confidence?
+}
+```
+
+The verified backend descriptor defines label mappings, each score scale and
+its permitted range, calibration identity and chunking/coverage guarantees.
+Native start/end offsets are zero-based and half-open into the exact text sent
+to the adapter; adapters rebase chunk-local ranges before returning them.
+Coverage means that all input windows were processed successfully, not that all
+PII was detected. A qualified adapter establishes coverage from its runtime
+behavior; it must not assert completeness for a truncating execution path.
+
+Evidence indexes address the final findings array, cover every finding and
+contain every source contributing to an exact-duplicate group. They are
+rebuilt after ordering/deduplication, never left pointing at pre-merge indexes.
+Structured results add discovery mappings and `{path, finding}` entries;
+evidence indexes address that ordered entry array and cannot cross leaf paths.
+
+Default results retain source labels/scores through compact evidence, without
+copying every original finding into a second detector-results collection.
+An explicit diagnostics option returns original per-detector findings when
+needed for evaluation, including duplicate losers. It is off by default and
+counts toward the same output limits. Both backends use these types; transport
+schemas are adapter details, not a public plugin framework.
 
 Every model finding uses a stable backend/native-label detector name and a
 detector version containing the adapter version and immutable session identity.
@@ -252,14 +301,23 @@ is needed. Do not encode paths, input text or credentials in these fields.
 Compute the configuration identity with SHA-256 over a versioned canonical
 serialization of verified content digests and effective settings, including
 Core/adapter/protocol versions. Specify field ordering, numeric encoding and
-omission rules and test them across bindings. Local asset paths, timestamps,
-PIDs, request IDs and payloads are excluded. Per-request mode is recorded
+omission rules once in Rust. Bindings return Core's identity and test parity;
+they do not implement separate canonical serializers. Local asset paths,
+timestamps, PIDs, request IDs and payloads are excluded. Per-request mode is recorded
 separately; identical configuration identity does not promise bit-identical
 floating-point execution across hosts.
 
 Validate native output atomically before publishing findings: known labels,
 integral in-bounds non-empty ranges, valid UTF-8 boundaries after conversion,
-consistent exact matched text and finite declared scores. Use `TextIndex`
+consistent exact matched text and scores within their descriptor-declared
+scale. Reject NaN/infinity and finite values outside that scale before applying
+thresholds or publishing evidence. Normalized scores and calibrated confidence
+must lie in inclusive 0..=1; logits may use an explicitly declared unbounded
+finite scale and must not be passed off as normalized confidence. Reuse Core
+finding validation for calibrated confidence; evidence-only raw scores require
+their own scale validation. Include negative fixtures for -0.1 and 1.4 on
+normalized scales, including GLiNER2 with `Finding.confidence` absent.
+Use `TextIndex`
 for Python code-point-to-byte conversion and derived public ranges. Never
 locate repeated values with string search, normalize text or trim span edges.
 One malformed record fails the entire request, including earlier valid leaves.
@@ -278,8 +336,9 @@ probability, fabricate confidence for composed spans or give rules a score.
 `combined` runs the unchanged enabled rule pipeline and that model, validates
 both, then creates a deterministically ordered union. Keep meaningful overlaps
 until transformation. Collapse exact duplicates with the existing ADR 001
-preference; retain all detector-specific originals and source links in the
-result envelope so provenance and evaluation remain possible.
+preference; preserve contributing source evidence for each retained finding.
+The explicit diagnostics option retains detector-specific originals for
+evaluation. Default composition does not duplicate matched text for diagnostics.
 
 Reuse Core's duplicate/overlap implementation rather than reimplementing it in
 the supervisor or bindings. Ordering uses source start, decreasing end, entity
@@ -307,12 +366,10 @@ fields, array elements, records or requests.
 
 Existing `exclude` continues to suppress automatic PERSON discovery only;
 explicit PERSON mappings and the current conflict rules are preserved.
-Add `model_exclude` only to the new session's structured policy: exact non-root
-RFC 6901 leaf paths, with no wildcard or inherited container exclusion.
-Omission or an empty list scans every string leaf with the model. Duplicate or
-invalid paths reject configuration; valid absent/non-string paths have no
-effect, matching current mapping behavior. This control is independent of
-discovery exclusions and transformation allowlists.
+Model inference scans every decoded string leaf independently. The beta adds
+no new model-specific path-exclusion language: discovery exclusions do not
+suppress inference, and transformation allowlists affect transformation only.
+Document this distinction in structured demo examples.
 
 No supported leaf may be silently skipped because its inference fails or is
 too long. Request limits cover the whole document as well as individual leaves.
@@ -385,49 +442,85 @@ does not mean a worker, model bundle or qualified device is installed.
 Descriptions of inference location must say local worker, not inference inside
 the Core binary.
 
-### 10. Release 0.4.5 carries the combined feature
+### 10. Release 0.4.5-beta.1 delivers the demo with full native support
 
-Track #56, #45 and #55 together under a provisional 0.4.5 milestone. Build the
-shared contract and minimum supervisor alongside #45's Rust/Python vertical
-slice, then integrate #55 against that boundary. #56 can close when its shared
-contract and first real backend proof pass; it need not wait for all GLiNER2
-qualification. Publishing the combined release waits for all three issues.
+Track #56, #45 and #55 under the 0.4.5-beta.1 milestone. The purpose is a
+published demo-capable beta for further maintainer testing. Build the minimum
+shared contract alongside #45, then integrate #55 through it. #56 can close
+with its first real backend proof; publication waits for all three issues and
+the full matrix below. Beta status is not a platform deferral or permission to
+break existing APIs.
 
-The minimum model execution matrix is:
+Both backends must execute through Rust, installed Python and installed Node
+on every existing native target:
 
-| Binding | DataFog backend | GLiNER2 backend |
-| --- | --- | --- |
-| Rust | Required with optional models feature and qualified worker | No support claim until separately qualified |
-| Installed Python | Required with optional DataFog worker | Required with optional official-runtime worker |
-| Node native | Existing rule/structured APIs; model execution only if qualified in this release | Same qualification rule |
-| Browser WASM | Existing rule/structured APIs; local worker inference unsupported | Local worker inference unsupported |
+| Platform | Rust target / native package target |
+| --- | --- |
+| Linux x86_64 GNU | `x86_64-unknown-linux-gnu` |
+| Linux ARM64 GNU | `aarch64-unknown-linux-gnu` |
+| macOS Apple Silicon | `aarch64-apple-darwin` |
+| macOS Intel | `x86_64-apple-darwin` |
+| Windows x86_64 MSVC | `x86_64-pc-windows-msvc` |
 
-Unsupported bindings must not silently emulate models through a hosted API.
-Any exposed model-construction entry point on those paths returns a structured
-unsupported-platform/runtime error. Do not extend old scan configuration to
-accept a model option that is ignored.
+Rust uses the optional models feature. Python and Node use the same Core
+supervisor. GLiNER2 remains a local Python worker even when called from Rust
+or Node; its explicitly installed environment is a documented prerequisite.
+No row/backend/binding may be silently omitted, marked optional or counted as
+passing through skipped real-model tests. Pin the supported host/runtime
+prerequisites and exercise the installed packages on their actual hosts;
+cross-compilation alone does not qualify model execution.
 
-Publish the existing aligned Core crate/Python/Node/WASM packages from one
-verified source revision, with accurate capability differences in release
-notes. Include the new optional worker artifacts/distributions and pinned
-installation metadata in the coordinated release process; extend release
-checks/workflows to cover them. Preserve separately versioned upstream model
-artifacts: Core 0.4.5 does not rename model 0.1.0 or upstream runtime 0.2.0.
+Preserve existing Rust/Python/Node public APIs, Python constructors/typing,
+Node event-loop behavior, coordinate semantics and supported base-package
+language/toolchain ranges. Resolve runtime-version compatibility across that
+existing supported range during qualification; do not narrow base-package
+support to accommodate a model dependency. Optional workers remain separately
+installed and their requirements explicit. A dependency/platform blocker must
+be resolved before publishing this beta rather than deferring that platform.
 
-The current publish tags are `rust-v*`, `python-v*`, `node-v*` and
-`wasm-v*`. A `v0.4.5` GitHub release alone does not trigger those jobs.
-All publish refs must resolve to the qualified source, and installed-package
-proof must cover the actual artifacts. Current Python/Rust publish jobs do not
-provide a coordinated model-qualification barrier; add a build/qualify/publish
-handoff that publishes the retained bytes, rather than rebuilding after proof.
-Publication across registries cannot be atomic; retain per-package status and
-resume only the missing qualified publications after a partial failure.
+Browser WASM retains its existing rule/structured APIs, defaults and package
+support. Local-process model execution remains explicitly unsupported, as in
+#45/#55; no new browser model port or hosted fallback is implied. If an exposed
+model entry point is invoked there, return a structured unsupported-platform
+error. Never accept and ignore model configuration in an existing scan API.
 
-0.4.5 is appropriate only while these APIs remain additive and existing
-contracts remain intact. If implementation requires changes to existing
-Finding construction, capability meaning or transformation behavior, revise
-this decision and the release version before publishing. Do not make those
-changes incidental to a patch release.
+Publish the aligned existing Core crate/Python/Node/WASM packages, GLiNER2
+companion and any demonstrably necessary worker additions from the verified
+source. Keep the pinned DataFog release and upstream model/runtime identities
+unchanged when using their original artifacts.
+
+Use these equivalent prerelease versions and channels:
+
+| Surface | Version / publication setting |
+| --- | --- |
+| Cargo packages and npm packages | `0.4.5-beta.1` |
+| Python distribution metadata, including the companion | `0.4.5b1` (PEP 440) |
+| GitHub release | `v0.4.5-beta.1`, marked prerelease |
+| npm publication | Explicit `beta` dist-tag; do not move `latest` |
+
+See the [Python prerelease specification](https://packaging.python.org/en/latest/specifications/version-specifiers/#pre-releases)
+and [npm dist-tag guidance](https://docs.npmjs.com/adding-dist-tags-to-packages/).
+
+Update `scripts/check-release.py` to compare the same logical beta release
+across these spellings and validate each ecosystem's expected tag. The current
+language publish refs become `rust-v0.4.5-beta.1`, `python-v0.4.5-beta.1`,
+`node-v0.4.5-beta.1` and `wasm-v0.4.5-beta.1`, all resolving to the qualified
+source. A GitHub release alone does not trigger those jobs. Adapt companion
+packaging and release checks accordingly; do not bump package versions in this
+ADR-only change.
+
+Use existing build/publish jobs with the smallest required qualification and
+artifact handoff changes. Retain and test the actual wheel/npm/worker bytes
+that will be published; qualify crate source through a packaged-crate install.
+Record checksums and per-package publication results. Do not build a general
+release orchestrator. After a partial registry failure, resume only missing
+qualified publications and never replace already published artifacts.
+
+The beta still requires compatibility, actual-model positive/negative checks,
+Unicode/structured conformance and bounded failure/cleanup evidence. Maintainer
+follow-up testing informs later betas or the stable release; publishing stable
+0.4.5 is not part of this beta target. Demo consumer wiring is separate from
+these Core issues, while reproducible Core demo commands belong in their docs.
 
 ## Alternatives considered
 
@@ -456,23 +549,23 @@ changes incidental to a patch release.
    failures, corruption, missing runtimes/devices, exhaustion, worker death and
    verified process/task cleanup on each supported OS. Include queued versus
    active cancellation and cross-request leakage checks.
-4. #45 executes the pinned real model in Rust and installed Python, matches the
-   reference runtime including calibration/window boundaries, and qualifies
-   every advertised native target with zero actual-model skips. Start from the
-   five reference architectures, recording ABI/host prerequisites and declared
-   numerical tolerances rather than assuming old qualification transfers.
-5. #55 executes the pinned real GLiNER2 checkpoint through installed Python,
-   proves street-address extraction/redaction on positive and legitimate
-   negative examples, and reports misses/false positives with denominators on
-   separate development and held-out fixtures. Additional advertised labels
-   and platforms require their own evidence.
+4. #45 executes the pinned real model through Rust and installed Python/Node
+   on all five required native targets, matching the reference runtime including
+   calibration/window boundaries with zero actual-model skips. Record ABI/host
+   prerequisites and declared numerical tolerances; old qualification does not
+   automatically transfer to the new integration.
+5. #55 executes the pinned real GLiNER2 checkpoint through Rust and installed
+   Python/Node on all five required native targets, proves street-address
+   extraction/redaction on positive and legitimate negative examples, and reports
+   misses/false positives with denominators on separate development and held-out
+   fixtures. Extra labels require evidence; required platforms cannot be deferred.
 6. Report model-only and combined-system quality separately. Record DataFog
    cold load, warm throughput, p50/p95, peak memory and package/import impact;
    #55 additionally requires at least 100 warm runs per representative payload
    size. Include versions/hashes, hardware/OS, thread/concurrency settings,
    labels/thresholds, payload lengths and first-inference timing. Use those
    measurements to fix the qualified resource profiles, not invented targets.
-7. Check final installed Rust/Python/advertised Node execution, unsupported
+7. Check final packaged Rust and installed Python/Node execution, unsupported
    WASM behavior, offline provisioning/container examples, inspection and
    cleanup. Pin and retain the tested artifacts and licenses.
 8. Before Rust changes merge, run `cargo fmt --all --check`,
@@ -490,11 +583,14 @@ and each additional session can duplicate model memory. Complete model failure
 remains visible rather than becoming successful partial protection.
 
 Before release, #45/#55 must supply the exact worker packages/artifacts,
-GLiNER2 revision/runtime lock, platform matrix, resource-profile values,
-numerical tolerances, score/threshold evidence and installation commands.
+GLiNER2 revision/runtime lock, evidence for the fixed platform matrix,
+resource-profile values, numerical tolerances, score/threshold evidence and
+installation commands.
 These are required implementation/qualification outputs, not permission to
 claim support from this draft. API spelling and protocol schemas must be
-frozen in shared fixtures before bindings are released.
+frozen in shared fixtures before bindings are released. Shared configuration
+identity is computed only in Core, and normalized-score rejection tests cover
+both canonical confidence and evidence-only scores.
 
 The release includes these three Core issues; downstream MCP adoption, model
 training/evolution, generic plugins, browser inference and authorization of
