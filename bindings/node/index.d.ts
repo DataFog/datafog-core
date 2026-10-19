@@ -235,11 +235,11 @@ export declare class ModelCancellation {
 
 export declare class ModelSessionNative {
   inspect(): any
-  scan(text: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<unknown>
-  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<unknown>
-  warmUp(): Promise<unknown>
-  health(): Promise<unknown>
-  close(): Promise<unknown>
+  scan(text: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>
+  scanStructured(dataJson: string, mode: string, diagnostics?: boolean | undefined | null, cancellation?: ModelCancellation | undefined | null): Promise<ModelStructuredScanResult>
+  warmUp(): Promise<void>
+  health(): Promise<void>
+  close(): Promise<void>
 }
 
 export declare function discoverFields(dataJson: JsonDocument, config?: StructuredScanConfig | undefined): Array<FieldMapping>
@@ -308,7 +308,7 @@ export interface NativeStructuredTransformResult {
   transformations: Array<StructuredTransformation>
 }
 
-export declare function openModelSession(config: any): Promise<unknown>
+export declare function openModelSession(config: any): Promise<ModelSessionNative>
 
 export interface PreparedScanAndTransform {
   readonly findings: Array<Finding>
