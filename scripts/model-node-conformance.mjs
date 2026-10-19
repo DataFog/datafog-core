@@ -13,6 +13,8 @@ const texts = [
   "👋 Contact May Smith at 123 Main Street, Boston, MA 02110.",
   "e\u0301 👋 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
   "Ordinary words without private details. ".repeat(160) + "John Smith lives at 123 Main Street.",
+  "ordinary ".repeat(505) + "John Smith lives at 123 Main Street, Boston, MA 02110.",
+  "Customer ID CUST-12345, account number ACC-987654. Call John Smith at (212) 555-0100.",
 ];
 const executable = config.bundle + (process.platform === "win32" ? "/datafog-pii.exe" : "/datafog-pii");
 const reference = spawnSync(executable, [config.bundle], {

@@ -32,7 +32,9 @@ config = json.loads(args.config.read_text())
 fixture_path = Path(__file__).with_name("model-fixtures.json")
 fixtures = json.loads(fixture_path.read_text())
 texts = [case["text"] for group in fixtures.values() for case in group]
-texts += ["", "👋 e\u0301 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
+texts += ["", "Customer ID CUST-12345, account number ACC-987654. Call John Smith at (212) 555-0100.", "👋 e\u0301 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
+          "ordinary " * 383 + "John Smith lives at 123 Main Street.",
+          "ordinary " * 505 + "John Smith lives at 123 Main Street.",
           "Ordinary words without private details. " * 160 + "John Smith lives at 123 Main Street."]
 text = texts[0]
 def import_evidence(interpreter):
