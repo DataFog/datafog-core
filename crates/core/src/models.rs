@@ -6,7 +6,7 @@ pub use gliner2::{Gliner2Config, Gliner2Label};
 #[cfg(test)]
 mod tests;
 
-use crate::{Finding, PrivacyError, ScanConfig, TextIndex, TextRange, structured};
+use crate::{Finding, PrivacyError, TextIndex, TextRange};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -124,13 +124,6 @@ pub struct ModelSessionConfig {
     pub bundle: PathBuf,
     pub manifest_sha256: String,
     pub limits: ResourceLimits,
-    #[serde(default = "empty_object")]
-    pub rules: serde_json::Value,
-    #[serde(default = "empty_object")]
-    pub structured: serde_json::Value,
-}
-fn empty_object() -> serde_json::Value {
-    serde_json::json!({})
 }
 
 /// Parse binding configuration once in Core, retaining precise value-free paths.
@@ -138,14 +131,7 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
     let object = crate::require_object(value, "", "model configuration must be an object")?;
     crate::reject_unknown_fields(
         object,
-        &[
-            "bundle",
-            "manifest_sha256",
-            "limits",
-            "rules",
-            "structured",
-            "gliner2",
-        ],
+        &["bundle", "manifest_sha256", "limits", "gliner2"],
         "",
     )?;
     let required = |key: &str| {
@@ -197,19 +183,7 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
             timeout_ms: number("timeout_ms")?,
             cleanup_timeout_ms: number("cleanup_timeout_ms")?,
         },
-        rules: object.get("rules").cloned().unwrap_or_else(empty_object),
-        structured: object
-            .get("structured")
-            .cloned()
-            .unwrap_or_else(empty_object),
     })
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ScanMode {
-    ModelOnly,
-    Combined,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -262,50 +236,18 @@ pub struct FindingEvidence {
 #[derive(Debug, Serialize)]
 pub struct ModelScanResult {
     pub contract_version: u32,
-    pub configuration_id: String,
-    pub mode: ScanMode,
+    pub model: String,
     pub findings: Vec<Finding>,
     pub evidence: Vec<FindingEvidence>,
-    pub diagnostics: Option<Vec<Finding>>,
 }
-#[derive(Serialize)]
-pub struct ModelStructuredScanResult {
-    pub contract_version: u32,
-    pub configuration_id: String,
-    pub mode: ScanMode,
-    pub mappings: Vec<structured::FieldMapping>,
-    pub findings: Vec<structured::StructuredFinding>,
-    pub evidence: Vec<FindingEvidence>,
-    pub diagnostics: Option<Vec<structured::StructuredFinding>>,
-}
-
-/// Inspection contains immutable identities, never local paths or request text.
-#[derive(Clone, Debug, Serialize)]
-pub struct ModelSessionDescriptor {
-    pub contract_version: u32,
-    pub configuration_id: String,
-    pub state: String,
-    pub backend: String,
-    pub model: String,
-    pub model_version: String,
-    pub model_revision: String,
-    pub runtime_version: String,
-    pub runtime_revision: String,
-    pub adapter_version: String,
-    pub manifest_sha256: String,
-    pub platform: String,
-    pub labels: BTreeMap<String, String>,
-    pub limits: ResourceLimits,
-    pub device: String,
-    pub intra_threads: u32,
-    pub queue_capacity: usize,
-    pub max_length: usize,
-    pub stride: usize,
-    pub calibration_sha256: Option<String>,
-    pub threshold: Option<f64>,
-    pub score_scale: String,
-    pub thresholds: BTreeMap<String, f64>,
-    pub label_descriptions: BTreeMap<String, String>,
+struct ModelSessionDescriptor {
+    backend: String,
+    model: String,
+    adapter_version: String,
+    labels: BTreeMap<String, String>,
+    limits: ResourceLimits,
+    score_scale: String,
+    thresholds: BTreeMap<String, f64>,
 }
 
 /// A cancellation handle can be shared with another thread.
@@ -339,8 +281,6 @@ struct SessionInner {
 }
 pub struct ModelSession {
     descriptor: ModelSessionDescriptor,
-    rules: ScanConfig,
-    structured: structured::StructuredScanConfig,
     inner: Mutex<SessionInner>,
     closing: AtomicBool,
     state: AtomicU8,
@@ -359,22 +299,10 @@ impl ModelSession {
         let deadline = started
             .checked_add(Duration::from_millis(config.limits.timeout_ms))
             .ok_or_else(ModelError::timeout)?;
-        let rules = crate::parse_scan_config(&config.rules)
-            .map_err(|error| ModelError::from(error.prefixed("/rules")))?;
-        let structured = structured::parse_scan_config(&config.structured)
-            .map_err(|error| ModelError::from(error.prefixed("/structured")))?;
         if config.gliner2.is_some() {
-            return gliner2::open(config, rules, structured, deadline);
+            return gliner2::open(config, deadline);
         }
-        let (bundle, platform, threshold) = validate_bundle(&config, deadline)?;
-        let identity = serde_json::json!({
-            "contract_version": 1, "core": env!("CARGO_PKG_VERSION"), "adapter": ADAPTER_VERSION,
-            "manifest": config.manifest_sha256, "limits": config.limits,
-            "rules": config.rules, "structured": config.structured,
-        });
-        let configuration_id = digest(
-            &serde_json::to_vec(&identity).map_err(|_| ModelError::config("invalid_value", ""))?,
-        );
+        let (bundle, _, _) = validate_bundle(&config, deadline)?;
         let executable = bundle.join(if cfg!(windows) {
             "datafog-pii.exe"
         } else {
@@ -384,38 +312,17 @@ impl ModelSession {
         let cleanup_failed = Arc::clone(&worker.cleanup_failed);
         let session = Self {
             descriptor: ModelSessionDescriptor {
-                contract_version: 1,
-                configuration_id,
-                state: "loading".into(),
                 backend: "datafog_native".into(),
                 model: "DataFog/pii-en-65m".into(),
-                model_version: "0.1.0".into(),
-                model_revision: MODEL_REVISION.into(),
-                runtime_version: "0.2.0".into(),
-                runtime_revision: RUNTIME_REVISION.into(),
                 adapter_version: ADAPTER_VERSION.into(),
-                manifest_sha256: config.manifest_sha256,
-                platform,
                 labels: LABELS
                     .iter()
                     .map(|(k, v)| ((*k).into(), (*v).into()))
                     .collect(),
                 limits: config.limits,
-                device: "cpu".into(),
-                intra_threads: 1,
-                queue_capacity: 0,
-                max_length: 512,
-                stride: 42,
-                calibration_sha256: Some(
-                    "75a946908fdc07549d81c7b72a2c1774da39e0755b88f7083a2492c70a8f1f53".into(),
-                ),
-                threshold: Some(threshold),
                 score_scale: "normalized_token_softmax_min".into(),
                 thresholds: BTreeMap::new(),
-                label_descriptions: BTreeMap::new(),
             },
-            rules,
-            structured,
             inner: Mutex::new(SessionInner {
                 worker: Some(worker),
             }),
@@ -433,22 +340,6 @@ impl ModelSession {
         }
         session.state.store(1, Ordering::Release);
         Ok(session)
-    }
-
-    pub fn inspect(&self) -> ModelSessionDescriptor {
-        let mut descriptor = self.descriptor.clone();
-        if self.cleanup_failed.load(Ordering::Acquire) {
-            descriptor.state = "failed".into();
-            return descriptor;
-        }
-        descriptor.state = match self.state.load(Ordering::Acquire) {
-            0 => "loading",
-            1 => "ready",
-            2 => "failed",
-            _ => "closed",
-        }
-        .into();
-        descriptor
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, SessionInner>, ModelError> {
@@ -482,6 +373,9 @@ impl ModelSession {
         deadline: Instant,
         cancellation: &Cancellation,
     ) -> Result<(), ModelError> {
+        if self.cleanup_failed.load(Ordering::Acquire) {
+            return Err(ModelError::cleanup());
+        }
         if self.state.load(Ordering::Acquire) == 3 {
             return Err(ModelError::closed());
         }
@@ -581,56 +475,42 @@ impl ModelSession {
     pub fn scan(
         &self,
         text: &str,
-        mode: ScanMode,
-        diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
         let request = self.prepare_request()?;
-        self.scan_request(&request, text, mode, diagnostics, cancellation)
+        self.scan_request(&request, text, cancellation)
     }
 
     pub fn scan_request(
         &self,
         request: &ModelRequest,
         text: &str,
-        mode: ScanMode,
-        diagnostics: bool,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
         let deadline = self.request_deadline(request)?;
         self.check(text, deadline, cancellation)?;
         let mut inner = self.lock()?;
-        self.scan_locked(&mut inner, text, mode, diagnostics, deadline, cancellation)
+        self.scan_locked(&mut inner, text, deadline, cancellation)
     }
 
     fn scan_locked(
         &self,
         inner: &mut SessionInner,
         text: &str,
-        mode: ScanMode,
-        diagnostics: bool,
         deadline: Instant,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
         let native = self.native(inner, text, deadline, cancellation)?;
         let converted = convert(text, native, &self.descriptor);
-        let mut entries = match converted {
+        let entries = match converted {
             Ok(entries) => entries,
             Err(error) => {
                 self.retire(inner)?;
                 return Err(error);
             }
         };
-        if mode == ScanMode::Combined {
-            entries.splice(
-                0..0,
-                crate::scan_with_config(text, &self.rules)
-                    .into_iter()
-                    .map(rule_entry),
-            );
-        }
         self.active_check(inner, text, deadline, cancellation)?;
-        let result = self.compose(entries, mode, diagnostics)?;
+        let result = self.compose(entries)?;
         bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
         self.active_check(inner, text, deadline, cancellation)?;
         Ok(result)
@@ -639,8 +519,6 @@ impl ModelSession {
     fn compose(
         &self,
         entries: Vec<(Finding, SourceEvidence)>,
-        mode: ScanMode,
-        diagnostics: bool,
     ) -> Result<ModelScanResult, ModelError> {
         if entries.len() > self.descriptor.limits.max_findings {
             return Err(ModelError::new(
@@ -649,8 +527,6 @@ impl ModelSession {
                 "/data",
             ));
         }
-        let diagnostics =
-            diagnostics.then(|| entries.iter().map(|(finding, _)| finding.clone()).collect());
         let mut groups: BTreeMap<(usize, usize, String), (Finding, Vec<SourceEvidence>)> =
             BTreeMap::new();
         for (finding, source) in entries {
@@ -691,139 +567,10 @@ impl ModelSession {
         }
         Ok(ModelScanResult {
             contract_version: 1,
-            configuration_id: self.descriptor.configuration_id.clone(),
-            mode,
+            model: self.descriptor.model.clone(),
             findings,
             evidence,
-            diagnostics,
         })
-    }
-
-    pub fn scan_structured(
-        &self,
-        data: &serde_json::Value,
-        mode: ScanMode,
-        diagnostics: bool,
-        cancellation: &Cancellation,
-    ) -> Result<ModelStructuredScanResult, ModelError> {
-        let request = self.prepare_request()?;
-        self.scan_structured_request(&request, data, mode, diagnostics, cancellation)
-    }
-
-    pub fn scan_structured_request(
-        &self,
-        request: &ModelRequest,
-        data: &serde_json::Value,
-        mode: ScanMode,
-        diagnostics: bool,
-        cancellation: &Cancellation,
-    ) -> Result<ModelStructuredScanResult, ModelError> {
-        let deadline = self.request_deadline(request)?;
-        self.check("", deadline, cancellation)?;
-        bounded_json(data, self.descriptor.limits.max_input_bytes, "/data")?;
-        let leaves = structured::leaves(data)?;
-        let bytes = leaves
-            .iter()
-            .try_fold(0usize, |size, leaf| size.checked_add(leaf.text.len()))
-            .ok_or_else(|| ModelError::config("limit_exceeded", "/data"))?;
-        if bytes > self.descriptor.limits.max_input_bytes {
-            return Err(ModelError::config("limit_exceeded", "/data"));
-        }
-        let mut inner = self.lock()?;
-        self.active_check(&mut inner, "", deadline, cancellation)?;
-        let baseline = if mode == ScanMode::Combined {
-            Some(structured::scan(data, &self.structured)?)
-        } else {
-            None
-        };
-        let mappings = if let Some(ref baseline) = baseline {
-            baseline.mappings.clone()
-        } else {
-            structured::discover_fields(data, &self.structured)?
-        };
-        let mut rules: BTreeMap<String, Vec<Finding>> = BTreeMap::new();
-        if let Some(baseline) = baseline {
-            for located in baseline.findings {
-                rules.entry(located.path).or_default().push(located.finding);
-            }
-        }
-        let mut result = ModelStructuredScanResult {
-            contract_version: 1,
-            configuration_id: self.descriptor.configuration_id.clone(),
-            mode,
-            mappings,
-            findings: Vec::new(),
-            evidence: Vec::new(),
-            diagnostics: diagnostics.then(Vec::new),
-        };
-        for leaf in leaves {
-            let model = self.native(&mut inner, leaf.text, deadline, cancellation)?;
-            let mut entries = match convert(leaf.text, model, &self.descriptor) {
-                Ok(entries) => entries,
-                Err(error) => {
-                    self.retire(&mut inner)?;
-                    return Err(error);
-                }
-            };
-            entries.splice(
-                0..0,
-                rules
-                    .remove(&leaf.path)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(rule_entry),
-            );
-            let composed = self.compose(entries, mode, diagnostics)?;
-            for mut evidence in composed.evidence {
-                evidence.finding_index += result.findings.len();
-                result.evidence.push(evidence);
-            }
-            result
-                .findings
-                .extend(composed.findings.into_iter().map(|finding| {
-                    structured::StructuredFinding {
-                        path: leaf.path.clone(),
-                        finding,
-                    }
-                }));
-            if let (Some(output), Some(originals)) = (&mut result.diagnostics, composed.diagnostics)
-            {
-                output.extend(
-                    originals
-                        .into_iter()
-                        .map(|finding| structured::StructuredFinding {
-                            path: leaf.path.clone(),
-                            finding,
-                        }),
-                );
-            }
-            if result.findings.len() > self.descriptor.limits.max_findings
-                || result
-                    .diagnostics
-                    .as_ref()
-                    .is_some_and(|v| v.len() > self.descriptor.limits.max_findings)
-            {
-                return Err(ModelError::new(
-                    "model_resource_exhausted",
-                    "limit_exceeded",
-                    "/data",
-                ));
-            }
-            bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
-            self.active_check(&mut inner, "", deadline, cancellation)?;
-        }
-        bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
-        self.active_check(&mut inner, "", deadline, cancellation)?;
-        Ok(result)
-    }
-
-    pub fn warm_up(&self) -> Result<(), ModelError> {
-        self.scan("", ScanMode::ModelOnly, false, &Cancellation::default())
-            .map(|_| ())
-    }
-
-    pub fn health(&self) -> Result<(), ModelError> {
-        self.warm_up()
     }
 
     pub fn request_close(&self) {
@@ -886,17 +633,6 @@ fn deadline(milliseconds: u64) -> Result<Instant, ModelError> {
     Instant::now()
         .checked_add(Duration::from_millis(milliseconds))
         .ok_or_else(|| ModelError::config("invalid_value", "/limits/timeout_ms"))
-}
-
-fn rule_entry(finding: Finding) -> (Finding, SourceEvidence) {
-    let source = SourceEvidence {
-        detector_name: finding.detector_name.clone(),
-        detector_version: finding.detector_version.clone(),
-        native_label: None,
-        raw_score: None,
-        calibrated_confidence: finding.confidence.map(f64::from),
-    };
-    (finding, source)
 }
 
 #[derive(Deserialize)]
@@ -1025,7 +761,7 @@ fn convert(
             let detector_name = format!("datafog-core/model/{backend_name}/{}", span.native_label);
             let detector_version = Some(format!(
                 "{}:{}",
-                descriptor.adapter_version, descriptor.configuration_id
+                descriptor.adapter_version, descriptor.model
             ));
             let finding = Finding {
                 entity_type: entity.clone(),

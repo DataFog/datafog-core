@@ -22,7 +22,6 @@ import {
   transformWithProviderResults as nativeTransformWithProviderResults,
 } from "./native.js";
 
-// Native transport entry points accompany their generated declarations.
 export { ModelCancellation, ModelSessionNative, openModelSession } from "./native.js";
 
 /** Explicit offline model session. Inference and cleanup run outside the event loop. */
@@ -34,19 +33,11 @@ export class ModelSession {
     try { return new ModelSession(await nativeOpenModelSession(snapshot)); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
-  inspect() { return this.#native.inspect(); }
-  async scan(text, mode, { diagnostics = false, cancellation } = {}) {
+  async scan(text, { cancellation } = {}) {
     if (typeof text !== "string") throw new TypeError("model scan text must be a string");
-    try { return await this.#native.scan(text, mode, diagnostics, cancellation); }
+    try { return await this.#native.scan(text, cancellation); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
-  async scanStructured(data, mode, { diagnostics = false, cancellation } = {}) {
-    const json = structuredJson(data);
-    try { return await this.#native.scanStructured(json, mode, diagnostics, cancellation); }
-    catch (error) { throw normalizeError(error, "internal_error"); }
-  }
-  async warmUp() { try { await this.#native.warmUp(); } catch (error) { throw normalizeError(error, "internal_error"); } }
-  async health() { try { await this.#native.health(); } catch (error) { throw normalizeError(error, "internal_error"); } }
   async close() { try { await this.#native.close(); } catch (error) { throw normalizeError(error, "internal_error"); } }
 }
 

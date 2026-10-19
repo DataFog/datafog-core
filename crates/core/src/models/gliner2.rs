@@ -3,7 +3,6 @@ use super::*;
 use std::process::Command;
 
 pub const MODEL: &str = "fastino/gliner2-privacy-filter-PII-multi";
-pub const REVISION: &str = "1cb4166094dc58fa8d836429f060d6c95f62b495";
 const ADAPTER: &str = "gliner2-worker-v1";
 const SCALE: &str = "normalized_span_sigmoid";
 const LABELS: &str = "person full_name first_name middle_name last_name date_of_birth email phone_number address street_address city state_or_region postal_code country government_id national_id_number passport_number drivers_license_number license_number tax_id tax_number bank_account account_number routing_number iban payment_card card_number card_expiry card_cvv username ip_address account_id sensitive_account_id password secret api_key access_token recovery_code sensitive_date document_date expiration_date transaction_date";
@@ -118,8 +117,6 @@ fn runtime() -> BTreeMap<String, String> {
 
 pub(super) fn open(
     config: ModelSessionConfig,
-    rules: ScanConfig,
-    structured: structured::StructuredScanConfig,
     deadline: Instant,
 ) -> Result<ModelSession, ModelError> {
     let options = config
@@ -127,7 +124,7 @@ pub(super) fn open(
         .as_ref()
         .ok_or_else(|| ModelError::config("missing_field", "/gliner2"))?;
     validate_config(options)?;
-    let platform = host_platform()
+    host_platform()
         .ok_or_else(|| ModelError::new("model_unavailable", "unsupported_platform", "/bundle"))?;
     let invalid = || ModelError::new("model_load_failed", "integrity_mismatch", "/bundle");
     let bundle = config
@@ -166,22 +163,9 @@ pub(super) fn open(
             return Err(invalid());
         }
     }
-    let mut identity_options = serde_json::to_value(options).map_err(|_| invalid())?;
-    identity_options
-        .as_object_mut()
-        .ok_or_else(invalid)?
-        .remove("python");
-    let configuration_id = digest(
-        &serde_json::to_vec(&serde_json::json!({
-            "contract_version":1, "core":env!("CARGO_PKG_VERSION"), "adapter":ADAPTER,
-            "manifest":config.manifest_sha256, "runtime":runtime(), "gliner2":identity_options,
-            "rules":config.rules, "structured":config.structured, "limits":config.limits,
-        }))
-        .map_err(|_| invalid())?,
-    );
     let mut command = Command::new(&options.python);
     command
-        .args(["-I", "-u", "-m", "datafog_gliner2_worker"])
+        .args(["-I", "-u", "-m", "datafog_core._gliner2_worker"])
         .arg(&bundle)
         .arg(serde_json::to_string(options).map_err(|_| invalid())?)
         .env("HF_HUB_OFFLINE", "1")
@@ -193,45 +177,22 @@ pub(super) fn open(
     let cleanup_failed = Arc::clone(&worker.cleanup_failed);
     let session = ModelSession {
         descriptor: ModelSessionDescriptor {
-            contract_version: 1,
-            configuration_id,
-            state: "loading".into(),
             backend: "gliner2_worker".into(),
             model: MODEL.into(),
-            model_version: REVISION.into(),
-            model_revision: REVISION.into(),
-            runtime_version: "2.1.0".into(),
-            runtime_revision: serde_json::to_string(&runtime()).map_err(|_| invalid())?,
             adapter_version: ADAPTER.into(),
-            manifest_sha256: config.manifest_sha256,
-            platform: platform.into(),
             labels: options
                 .labels
                 .iter()
                 .map(|l| (l.label.clone(), mapping(&l.label)))
                 .collect(),
             limits: config.limits,
-            device: "cpu".into(),
-            intra_threads: options.intra_threads,
-            queue_capacity: 0,
-            max_length: options.chunk_size,
-            stride: options.chunk_overlap,
-            calibration_sha256: None,
-            threshold: None,
             score_scale: SCALE.into(),
             thresholds: options
                 .labels
                 .iter()
                 .map(|l| (l.label.clone(), l.threshold))
                 .collect(),
-            label_descriptions: options
-                .labels
-                .iter()
-                .filter_map(|l| l.description.as_ref().map(|d| (l.label.clone(), d.clone())))
-                .collect(),
         },
-        rules,
-        structured,
         inner: Mutex::new(SessionInner {
             worker: Some(worker),
         }),

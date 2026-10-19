@@ -1,4 +1,5 @@
 name: Publish Node package
+
 on:
   push:
     tags:
@@ -6,41 +7,116 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Verify retained qualified artifacts without publishing
+        description: Build and verify packages without publishing
         type: boolean
         default: true
+
 permissions:
   contents: read
   actions: read
+
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment: npm
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            build_args: ""
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            build_args: ""
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build_args: "--use-napi-cross"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build_args: "--use-napi-cross"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            build_args: ""
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check-release.py node
-      - name: Require complete model qualification for this source
-        id: qualified
-        run: python3 scripts/check-model-qualification.py
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: bindings/node/package-lock.json
+      - run: npm ci --prefix bindings/node
+      - run: npm run build --prefix bindings/node -- --target ${{ matrix.target }} ${{ matrix.build_args }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: bindings/node/datafog.*.node
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        with:
+          name: node-wrapper
+          path: |
+            bindings/node/native.js
+            bindings/node/index.d.ts
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require passing model integration for this commit
+        run: python3 scripts/check-model-integration.py
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: node-model-candidates
-          run-id: ${{ steps.qualified.outputs.run_id }}
-          github-token: ${{ github.token }}
-          path: candidate
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
-      - name: Inspect qualified npm archives
-        run: node scripts/publish-npm-candidates.mjs candidate --dry-run
-      - name: Publish qualified npm archives
+      - run: npm ci --prefix bindings/node
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bindings-*
+          path: bindings/node/artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-wrapper
+          path: bindings/node
+      - name: Assemble platform packages
+        working-directory: bindings/node
+        run: |
+          npx napi create-npm-dirs
+          npx napi artifacts --output-dir artifacts
+          npx napi prepublish -t npm --no-gh-release --skip-optional-publish
+      - name: Verify assembled package and native dependency
+        working-directory: bindings/node
+        run: npm run test:package -- --prebuilt --platform-package npm/linux-x64-gnu
+      - name: Check all package contents without publishing
+        working-directory: bindings/node
+        run: |
+          for package in npm/*; do
+            (cd "$package" && npm publish --dry-run --ignore-scripts)
+          done
+          npm publish --dry-run --ignore-scripts
+      - name: Publish
         if: github.event_name == 'push' || !inputs.dry_run
-        run: node scripts/publish-npm-candidates.mjs candidate
+        working-directory: bindings/node
+        run: |
+          tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
+          for package in npm/*; do
+            (cd "$package" && npm publish --ignore-scripts --tag "$tag")
+          done
+          npm publish --ignore-scripts --tag "$tag"

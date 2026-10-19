@@ -1,45 +1,37 @@
-# Optional GLiNER2 model sessions
+# GLiNER2 setup
 
-GLiNER2 executes in a separately installed local Python worker, including when
-called from Rust or Node. Core owns offsets, normalized-score validation,
-per-label thresholds, canonical mapping, composition and transformations.
-Rule-only package installation never installs or imports this worker or PyTorch.
+GLiNER2 needs model weights and the official Python runtime that processes them.
+Its private runner ships inside `datafog-core`; there is no separate worker
+package. Python, Node and Rust use that same runner through a selected local
+Python interpreter. Installing ordinary Core does not install GLiNER2 or PyTorch.
 
-## Pinned setup
-
-Use Python 3.12 for the optional worker environment. This does not narrow the
-base binding's supported Python range. The initial checkpoint is
-`fastino/gliner2-privacy-filter-PII-multi` at revision
-`1cb4166094dc58fa8d836429f060d6c95f62b495`. It is a span checkpoint with maximum
-span width eight word tokens; it is not GLiNER2.5. The model card declares
-Apache-2.0 and is retained verbatim in the verified installation. Retain the
-worker, GLiNER2, PyTorch and Transformers licenses in deployment artifacts.
+Use Python 3.12 for the GLiNER2 environment. From this checkout:
 
 ```sh
+python3.12 -m venv /opt/datafog/gliner2-env
+/opt/datafog/gliner2-env/bin/python -m pip install './bindings/python[gliner2]'
 hf download fastino/gliner2-privacy-filter-PII-multi \
   config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
   --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir /tmp/gliner2-download
 python scripts/provision-gliner2-model.py \
   --source /tmp/gliner2-download --destination /opt/datafog/gliner2
-python3.12 -m venv /opt/datafog/gliner2-worker
-/opt/datafog/gliner2-worker/bin/python -m pip install ./workers/gliner2
 ```
 
-On Windows use the environment's `Scripts/python.exe`. For Linux CPU-only
-provisioning install `torch==2.12.0` from the official PyTorch CPU index before
-the worker. The worker pins GLiNER2 2.1.0, Transformers 5.8.0 and PyTorch 2.12.0;
-Intel macOS uses Transformers 4.57.6/PyTorch 2.2.2 because newer PyTorch releases
-have no Intel macOS wheel. Its pinned NumPy and protobuf dependencies allow the
-published checkpoint's tokenizer metadata to load through the official
-compatibility path. This platform-specific stack needs its own actual-model
-qualification; successful Apple Silicon execution does not establish it.
+After publication, install `datafog-core[gliner2]==0.4.5b1` instead of the local
+checkout. On Windows use the environment's `Scripts/python.exe`. On Linux, a
+CPU-only installation can first install `torch==2.12.0` from the official
+PyTorch CPU index. Retain model and dependency licenses in deployments.
 
-Add `gliner2` to a normal [session configuration](model-sessions.md), with the
-provisioner's manifest digest:
+The extra installs GLiNER2 2.1.0 and compatible dependencies. Intel macOS retains
+its supported PyTorch 2.2.2/Transformers 4.57.6 stack; other platforms use
+PyTorch 2.12.0/Transformers 5.8.0. Core's base Python range remains unchanged.
+
+Use the provisioned bundle and manifest digest in the normal
+[session configuration](model-sessions.md), adding:
 
 ```json
-{
-  "python": "/opt/datafog/gliner2-worker/bin/python",
+"gliner2": {
+  "python": "/opt/datafog/gliner2-env/bin/python",
   "labels": [{"label": "street_address", "threshold": 0.5}],
   "intra_threads": 1,
   "chunk_size": 384,
@@ -47,47 +39,15 @@ provisioner's manifest digest:
 }
 ```
 
-These word-window settings follow the official runtime defaults. The example
-threshold follows the model card; it is not a calibrated probability or a
-promise of accuracy. Limits remain mandatory caller settings. Qualification
-uses explicit synthetic-workload budgets recorded in the workflow and evidence;
-they are not universal production defaults. Native unfiltered candidate output
-is larger than final findings, so response/finding limits apply before filtering.
+The shown window settings follow the runtime defaults. Thresholds are explicit
+caller choices; scores are raw span-sigmoid values, not calibrated confidence.
+The integration workflow uses `max_input_bytes=65536`,
+`max_response_bytes=16777216`, `max_findings=65536`, `timeout_ms=120000` and
+`cleanup_timeout_ms=5000`. These are test budgets, not required production limits.
 
-The same `ModelSession.open`, model-only/combined scans, decoded structured
-leaves, cancellation and transformations work with this configuration. Assets
-are verified before readiness; inference sets offline mode and performs no
-provisioning. `inspect()` reports the selected labels, descriptions, thresholds,
-CPU thread count, revisions, runtime and score semantics.
-
-## Behavior and qualification
-
-All checkpoint-listed labels may be configured, each with an explicit threshold
-and optional description. Unknown, empty or duplicate labels reject. Canonical
-names use uppercase native labels; `phone_number` maps to `PHONE`. `address`
-and `street_address` remain `ADDRESS` and `STREET_ADDRESS`. Only street-address
-behavior is the initial quality qualification; configurable labels do not imply
-accuracy evidence for every category. Model scores use normalized span-sigmoid
-values in evidence; `Finding.confidence` is absent. No calibration is fabricated.
-
-The adapter enables the official strict extraction mode and disables the pinned
-processor's punctuation-appending hook. This is necessary to keep spans inside
-the exact original input, including a single unpunctuated structured leaf.
-It does not rewrite tokenization, decoding or the official overlap-window
-merger. Core validates every returned candidate before applying thresholds.
-Repeated values use supplied code-point coordinates, never substring search.
-
-The official overlapping word windows cover the complete input and retain
-meaningful overlapping spans. Whitespace remains unchanged. Empty/whitespace
-input has no model findings. A malformed result, oversize native response,
-worker failure, cancellation or timeout fails atomically and retires active
-work. There are no dataloader subprocesses, automatic retries or hosted fallback.
-
-Run the explicit Rust model test with `DATAFOG_MODEL_CONFIG` pointing to the
-GLiNER2 session JSON. Run `scripts/model-qualification.py` against the installed
-wheel with `--warm-runs 100`; it reports development and held-out fixture
-misses/false positives with denominators, cold/first/warm timings, sampled RSS,
-identity and Unicode/structured results. Node qualification compares its installed
-package with that actual Python/Core report. Synthetic fixture results are not
-a population accuracy estimate. Cross-platform qualification remains mandatory
-before publication.
+All checkpoint-listed labels can be selected, with a threshold and optional
+description. Unknown or duplicate labels fail. Labels use uppercase names;
+`phone_number` becomes `PHONE`. `ADDRESS` and `STREET_ADDRESS` remain distinct.
+Core validates spans before threshold filtering and preserves original Unicode
+positions. Empty/whitespace input returns no findings. Model processing uses
+local files only and does not download assets or fall back to a hosted service.

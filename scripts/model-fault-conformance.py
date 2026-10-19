@@ -21,19 +21,44 @@ def open_worker():
     session = ModelSession.open(config)
     workers = [p for p in parent.children() if p.pid not in previous]
     assert len(workers) == 1
-    return session, workers[0]
+    worker = workers[0]
+    # Windows venv launchers run Python in a child; observe inference and cleanup
+    # across the process tree rather than measuring the idle launcher's CPU.
+    processes = [worker, *worker.children(recursive=True)]
+    return session, worker, processes
 
 
-def await_inference(worker, baseline, future):
+def cpu_time(processes):
+    total = 0.0
+    for process in processes:
+        times = process.cpu_times()
+        total += times.user + times.system
+    return total
+
+
+def await_inference(processes, baseline, future):
     deadline = time.monotonic() + limits["timeout_ms"] / 1000
     while time.monotonic() < deadline:
-        times = worker.cpu_times()
-        if times.user + times.system > baseline:
-            return
         if future.done():
+            future.result()
             raise AssertionError("fixture completed before active cancellation could be exercised")
+        if cpu_time(processes) > baseline:
+            return
         time.sleep(0.001)
     raise AssertionError("worker did not begin inference within its configured deadline")
+
+
+def assert_stopped(processes, started):
+    # Windows process termination is asynchronous. Verify the existing cleanup
+    # deadline instead of requiring every descendant PID to disappear instantly.
+    deadline = started + limits["cleanup_timeout_ms"] / 1000
+    while True:
+        remaining = [process for process in processes if process.is_running()]
+        if time.monotonic() > deadline:
+            raise AssertionError(f"cleanup deadline exceeded; remaining worker PIDs: {[p.pid for p in remaining]}")
+        if not remaining:
+            return
+        time.sleep(0.001)
 
 
 def reject(call, code):
@@ -47,42 +72,49 @@ def reject(call, code):
 
 
 with ThreadPoolExecutor(max_workers=1) as executor:
-    session, worker = open_worker()
+    session, worker, processes = open_worker()
     try:
-        reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1), "combined"), "invalid_configuration")
-        assert session.inspect()["state"] == "ready"
+        reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1)), "invalid_configuration")
         cancellation = ModelCancellation()
-        cpu = worker.cpu_times(); baseline = cpu.user + cpu.system
-        pending = executor.submit(session.scan, long_text, "combined", cancellation=cancellation)
-        await_inference(worker, baseline, pending)
-        reject(lambda: session.scan("private@example.test", "combined"), "model_busy")
+        baseline = cpu_time(processes)
+        pending = executor.submit(session.scan, long_text, cancellation=cancellation)
+        await_inference(processes, baseline, pending)
+        reject(lambda: session.scan("private@example.test"), "model_busy")
+        stopped_at = time.monotonic()
         cancellation.cancel()
         reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
-        assert session.inspect()["state"] == "failed"
-        assert not worker.is_running()
-        reject(lambda: session.scan("private@example.test", "combined"), "model_session_failed")
+        assert_stopped(processes, stopped_at)
+        reject(lambda: session.scan("private@example.test"), "model_session_failed")
     finally:
         session.close()
-    assert session.inspect()["state"] == "closed"
 
-    session, worker = open_worker()
+    session, worker, processes = open_worker()
     try:
+        stopped_at = time.monotonic()
         worker.kill()
         # Core, the process owner, performs the reap; psutil must not consume its exit status.
-        reject(lambda: session.scan("private@example.test", "combined"), "model_inference_failed")
-        assert session.inspect()["state"] == "failed"
-        assert not worker.is_running()
+        reject(lambda: session.scan("private@example.test"), "model_inference_failed")
+        assert_stopped(processes, stopped_at)
     finally:
         session.close()
 
-    session, worker = open_worker()
-    cpu = worker.cpu_times(); baseline = cpu.user + cpu.system
-    pending = executor.submit(session.scan, long_text, "combined")
-    await_inference(worker, baseline, pending)
+    session, worker, processes = open_worker()
+    baseline = cpu_time(processes)
+    pending = executor.submit(session.scan, long_text)
+    await_inference(processes, baseline, pending)
+    stopped_at = time.monotonic()
     session.close()
     reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
-    assert not worker.is_running() and session.inspect()["state"] == "closed"
+    assert_stopped(processes, stopped_at)
     session.close()
+
+if "gliner2" in config:
+    # The Core test interpreter has the runner but no optional model dependencies.
+    missing_runtime = dict(config, gliner2=dict(config["gliner2"], python=sys.executable))
+    reject(lambda: ModelSession.open(missing_runtime), "model_load_failed")
+    missing_python = str(Path(config["bundle"]) / "missing-python-executable")
+    bad_interpreter = dict(config, gliner2=dict(config["gliner2"], python=missing_python))
+    reject(lambda: ModelSession.open(bad_interpreter), "model_load_failed")
 
 bad = dict(config, manifest_sha256="0" * 64)
 reject(lambda: ModelSession.open(bad), "model_load_failed")
