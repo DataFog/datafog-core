@@ -1,6 +1,6 @@
 use super::*;
 
-fn descriptor() -> ModelSessionDescriptor {
+pub(super) fn descriptor() -> ModelSessionDescriptor {
     ModelSessionDescriptor {
         contract_version: 1,
         configuration_id: "test".into(),
@@ -30,8 +30,11 @@ fn descriptor() -> ModelSessionDescriptor {
         queue_capacity: 0,
         max_length: 512,
         stride: 42,
-        calibration_sha256: "b".repeat(64),
-        threshold: 0.5,
+        calibration_sha256: Some("b".repeat(64)),
+        threshold: Some(0.5),
+        score_scale: "normalized_token_softmax_min".into(),
+        thresholds: BTreeMap::new(),
+        label_descriptions: BTreeMap::new(),
     }
 }
 

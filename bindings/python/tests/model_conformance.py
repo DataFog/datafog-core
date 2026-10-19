@@ -24,7 +24,7 @@ texts = [
 executable = bundle / ("datafog-pii.exe" if sys.platform == "win32" else "datafog-pii")
 reference = subprocess.run(
     [str(executable), str(bundle)], input="".join(json.dumps({"text": t}) + "\n" for t in texts),
-    text=True, capture_output=True, check=True, timeout=config["limits"]["timeout_ms"] / 1000,
+    text=True, encoding="utf-8", capture_output=True, check=True, timeout=config["limits"]["timeout_ms"] / 1000,
 )
 reference = [json.loads(line)["findings"] for line in reference.stdout.splitlines()]
 with ModelSession.open(config) as session:

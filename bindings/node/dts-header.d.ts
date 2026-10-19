@@ -11,6 +11,13 @@ export interface ModelSessionConfig {
     timeout_ms: number;
     cleanup_timeout_ms: number;
   };
+  gliner2?: {
+    python: string;
+    labels: Array<{label: string; threshold: number; description?: string}>;
+    intra_threads: number;
+    chunk_size: number;
+    chunk_overlap: number;
+  };
   rules?: ScanConfig;
   structured?: StructuredScanConfig;
 }

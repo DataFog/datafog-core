@@ -1,0 +1,75 @@
+"""Private local transport around the official pinned GLiNER2 span runtime.
+
+Core owns label mapping, threshold filtering, validation, composition and policy.
+The official runtime owns tokenization, span decoding and overlapping word windows.
+Never write input, native exceptions or local paths to the response protocol.
+"""
+from contextlib import redirect_stdout
+from importlib.metadata import version
+import json
+import platform
+from pathlib import Path
+import sys
+
+__version__ = "0.4.5b1"
+RUNTIME = {"gliner2": "2.1.0", "transformers": "5.8.0", "torch": "2.12.0"}
+if sys.platform == "darwin" and platform.machine() == "x86_64":
+    RUNTIME.update(transformers="4.57.6", torch="2.2.2")
+
+
+def respond(value):
+    print(json.dumps(value, ensure_ascii=True, allow_nan=False), flush=True)
+
+
+def main():
+    try:
+        actual = {name: version(name).split("+")[0] for name in RUNTIME}
+        if actual != RUNTIME:
+            respond({"error": "runtime_incompatible"})
+            return 1
+        bundle = Path(sys.argv[1])
+        settings = json.loads(sys.argv[2])
+        # Offline loading of pinned built-in DeBERTa config needs no repository code.
+        with redirect_stdout(sys.stderr):
+            import torch
+            from gliner2 import GLiNER2
+            torch.set_num_threads(settings["intra_threads"])
+            torch.set_num_interop_threads(1)
+            model = GLiNER2.from_pretrained(str(bundle), local_files_only=True, map_location="cpu")
+            model.eval()
+            # Keep the official strict mode explicit: never accept per-sample failures as empty findings.
+            model.strict_extraction = True
+            # The pinned processor otherwise appends punctuation, creating spans
+            # outside the original leaf (e.g. "John." for input "John").
+            # Disable that preprocessing hook; never trim/reconstruct returned spans.
+            model.processor._normalize_text = lambda text: text
+            labels = {item["label"]: {"description": item["description"]}
+                      if item.get("description") else {} for item in settings["labels"]}
+            schema = model.create_schema().entities(labels)
+        for line in sys.stdin:
+            request = json.loads(line)
+            text = request["text"]
+            with redirect_stdout(sys.stderr), torch.inference_mode():
+                output = model.extract_long(
+                    text, schema, threshold=0.0,
+                    chunk_size=settings["chunk_size"], chunk_overlap=settings["chunk_overlap"],
+                    batch_size=1, num_workers=0, include_confidence=True, include_spans=True,
+                    overlap_policy="allow",
+                ) if text.strip() else {"entities": {}}
+            findings = []
+            for label, spans in output["entities"].items():
+                for span in spans:
+                    findings.append({"label": label, "start": span["start"], "end": span["end"],
+                                     "text": span["text"], "raw_score": span["confidence"]})
+            respond({"findings": findings, "runtime": actual, "worker_version": __version__})
+        return 0
+    except MemoryError:
+        respond({"error": "resource_exhausted"})
+    except Exception:
+        # The parent sanitizes this stable code and retires the worker atomically.
+        respond({"error": "inference_failed"})
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
