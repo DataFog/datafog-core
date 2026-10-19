@@ -279,6 +279,9 @@ pub(super) fn decode(bytes: &[u8], max_findings: usize) -> Result<BackendResult,
             "resource_exhausted" => {
                 ModelError::new("model_resource_exhausted", "resource_exhausted", "/backend")
             }
+            "load_failed" => {
+                ModelError::new("model_load_failed", "runtime_load_failed", "/backend")
+            }
             "runtime_incompatible" => ModelError::new(
                 "model_unavailable",
                 "runtime_incompatible",

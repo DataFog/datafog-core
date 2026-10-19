@@ -1,0 +1,142 @@
+name: Build model release candidates
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+            manylinux: "2_28"
+            node_args: "--use-napi-cross"
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+            manylinux: "2_28"
+            node_args: "--use-napi-cross"
+          - os: macos-14
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+            node_args: ""
+          - os: macos-15-intel
+            platform: macos-x86_64
+            target: x86_64-apple-darwin
+            node_args: ""
+          - os: windows-latest
+            platform: windows-x86_64
+            target: x86_64-pc-windows-msvc
+            node_args: ""
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: python -m pip install 'maturin>=1.9.4,<2.0' 'build==1.4.0'
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --locked --compatibility pypi --manifest-path bindings/python/Cargo.toml --out dist
+      - run: npm ci --prefix bindings/node
+      - run: npm run build --prefix bindings/node -- --target ${{ matrix.target }} ${{ matrix.node_args }}
+      - name: Stage native candidates
+        run: |
+          mkdir -p candidate
+          cp dist/*.whl bindings/node/*.node candidate/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-candidates-${{ matrix.platform }}
+          path: candidate/
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'linux-x86_64'
+        with:
+          name: candidate-node-wrapper
+          path: |
+            bindings/node/native.js
+            bindings/node/index.d.ts
+      - name: Build common source and worker candidates
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          mkdir -p common
+          maturin sdist --manifest-path bindings/python/Cargo.toml --out common
+          python -m build workers/gliner2 --outdir common
+          cargo package -p datafog-core --locked --allow-dirty
+          cp target/package/*.crate common/
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'linux-x86_64'
+        with:
+          name: common-model-candidates
+          path: common/
+  node:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-candidates-*
+          path: candidates
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-node-wrapper
+          path: bindings/node
+      - run: npm ci --prefix bindings/node
+      - name: Assemble and pack final npm artifacts
+        working-directory: bindings/node
+        run: |
+          npx napi create-npm-dirs
+          npx napi artifacts --output-dir ../../candidates
+          npx napi prepublish -t npm --no-gh-release --skip-optional-publish
+          mkdir -p ../../node-candidates
+          for package in npm/*; do
+            (cd "$package" && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/node-candidates")
+          done
+          npm pack --ignore-scripts --pack-destination ../../node-candidates
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-model-candidates
+          path: node-candidates/
+
+  wasm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: npm ci --prefix bindings/wasm
+      - run: npx --prefix bindings/wasm playwright install --with-deps chromium
+      - run: npm run test:package --prefix bindings/wasm
+      - run: mkdir -p wasm-candidate
+      - run: npm pack --ignore-scripts --pack-destination ../../wasm-candidate
+        working-directory: bindings/wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-model-candidate
+          path: wasm-candidate/

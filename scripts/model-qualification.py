@@ -52,7 +52,9 @@ except BaseException:
     memory_stop.set(); sampler.join()
     raise
 cold_load_ms = (time.perf_counter() - started) * 1000
-report = {"host": platform.platform(), "machine": platform.machine(), "python": platform.python_version(),
+report = {"host": platform.platform(), "machine": platform.machine(), "cpu": platform.processor(),
+          "logical_cpu_count": psutil.cpu_count(), "physical_cpu_count": psutil.cpu_count(logical=False),
+          "python": platform.python_version(),
           "cold_load_ms": cold_load_ms, "fixture_sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
           "fixture_kind": "synthetic integration fixtures; no population accuracy claim", "cases": [], "benchmarks": []}
 try:
