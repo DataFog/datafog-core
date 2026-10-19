@@ -38,6 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
+          components: rustfmt, clippy
       - uses: actions/setup-node@v4
         with:
           node-version: 24
