@@ -145,9 +145,9 @@ jobs:
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
       - name: Execute packaged Rust model integration
         run: |
-          mkdir -p packaged-core
-          tar -xf candidate-common/datafog-core-*.crate -C packaged-core
-          package_manifest="$(find packaged-core -maxdepth 2 -name Cargo.toml | head -1)"
+          package_root="$(mktemp -d)"
+          tar -xf candidate-common/datafog-core-*.crate -C "$package_root"
+          package_manifest="$(find "$package_root" -maxdepth 2 -name Cargo.toml | head -1)"
           cargo test --manifest-path "$package_manifest" --features models --test model_datafog --release -- --ignored
       - name: Verify installed Python wheel
         run: |
