@@ -15,7 +15,8 @@ platforms = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-14", "macos-15-intel", "
 class PublicationCheck(unittest.TestCase):
     def run_check(self, runs=None, jobs=None, commits=None, ancestor_runs=None):
         if runs is None:
-            runs = [{"id": 1, "head_sha": "release", "conclusion": "success", "html_url": "https://example.test/run"}]
+            runs = [{"id": 1, "head_sha": "release", "status": "completed", "conclusion": "success",
+                     "html_url": "https://example.test/run"}]
         if jobs is None:
             jobs = [{"name": f"installed-model ({backend}, {platform})", "conclusion": "success"}
                     for backend in ("datafog", "gliner2") for platform in platforms]
@@ -48,22 +49,48 @@ class PublicationCheck(unittest.TestCase):
 
     @staticmethod
     def successful_run(revision):
-        return [{"id": 1, "head_sha": revision, "conclusion": "success", "html_url": "https://example.test/run"}]
+        return [{"id": 1, "head_sha": revision, "status": "completed", "conclusion": "success",
+                 "html_url": "https://example.test/run"}]
 
     def test_both_models_all_five_platforms_pass(self):
         self.run_check()
 
-    def test_missing_failed_unfinished_cancelled_and_wrong_commit_block(self):
-        cases = [[], [{"head_sha": "old", "conclusion": "success"}]]
-        cases += [[{"head_sha": "release", "conclusion": conclusion}] for conclusion in (None, "failure", "cancelled", "skipped")]
+    def test_missing_failed_cancelled_and_wrong_commit_block(self):
+        cases = [[], [{"id": 1, "head_sha": "old", "status": "completed", "conclusion": "success"}]]
+        cases += [[{"id": 1, "head_sha": "release", "status": "completed", "conclusion": conclusion}]
+                  for conclusion in (None, "failure", "cancelled", "skipped")]
         for runs in cases:
             with self.subTest(runs=runs), self.assertRaises(SystemExit):
                 self.run_check(runs=runs)
 
-    def test_each_missing_failed_or_skipped_platform_blocks(self):
+    def test_unfinished_run_counts_only_once_every_required_job_passed(self):
+        running = [{"id": 1, "head_sha": "release", "status": "in_progress", "conclusion": None,
+                    "html_url": "https://example.test/run"}]
+        advisory_pending = [{"name": f"installed-model ({backend}, {platform})",
+                             "conclusion": None if platform == "macos-15-intel" else "success"}
+                            for backend in ("datafog", "gliner2") for platform in platforms]
+        self.run_check(runs=running, jobs=advisory_pending)
+        required_pending = [dict(job) for job in advisory_pending]
+        required_pending[0]["conclusion"] = None
+        with self.assertRaises(SystemExit):
+            self.run_check(runs=running, jobs=required_pending)
+
+    def test_intel_macos_jobs_are_advisory(self):
+        for conclusion in (None, "failure", "cancelled", "skipped", "missing"):
+            jobs = [{"name": f"installed-model ({backend}, {platform})",
+                     "conclusion": conclusion if platform == "macos-15-intel" else "success"}
+                    for backend in ("datafog", "gliner2") for platform in platforms]
+            if conclusion == "missing":
+                jobs = [job for job in jobs if "macos-15-intel" not in job["name"]]
+            with self.subTest(conclusion=conclusion):
+                self.run_check(jobs=jobs)
+
+    def test_each_missing_failed_or_skipped_required_platform_blocks(self):
         jobs = [{"name": f"installed-model ({backend}, {platform})", "conclusion": "success"}
                 for backend in ("datafog", "gliner2") for platform in platforms]
         for index in range(len(jobs)):
+            if "macos-15-intel" in jobs[index]["name"]:
+                continue
             for conclusion in (None, "failure", "skipped", "cancelled"):
                 bad = [dict(job) for job in jobs]
                 bad[index]["conclusion"] = conclusion
@@ -74,8 +101,8 @@ class PublicationCheck(unittest.TestCase):
 
     def test_newer_failed_run_is_not_replaced_by_older_success(self):
         with self.assertRaises(SystemExit):
-            self.run_check(runs=[{"head_sha": "release", "conclusion": "failure"},
-                                 {"head_sha": "release", "conclusion": "success"}])
+            self.run_check(runs=[{"id": 1, "head_sha": "release", "status": "completed", "conclusion": "failure"},
+                                 {"id": 2, "head_sha": "release", "status": "completed", "conclusion": "success"}])
 
     def test_api_failure_blocks(self):
         with patch("subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "gh")):

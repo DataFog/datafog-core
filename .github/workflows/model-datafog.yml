@@ -14,6 +14,10 @@ jobs:
   installed-model:
     needs: candidates
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    # Intel macOS checks are advisory: a failure is reported on the job but
+    # does not fail the run, and publication does not require these jobs.
+    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     strategy:
       fail-fast: false
       matrix:
@@ -134,6 +138,17 @@ jobs:
             ${{ runner.temp }}/model-download
             ${{ runner.temp }}/gliner2-download
           key: ${{ steps.model-assets.outputs.cache-primary-key }}
+      - name: Locate the GLiNER2 worker pip cache
+        id: worker-pip
+        if: matrix.backend == 'gliner2'
+        run: echo "dir=$("$WORKER_PYTHON" -m pip cache dir)" >> "$GITHUB_OUTPUT"
+      - name: Reuse downloaded GLiNER2 dependencies
+        if: matrix.backend == 'gliner2'
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.worker-pip.outputs.dir }}
+          # Versions are pinned in pyproject.toml; pip still installs exactly those pins.
+          key: gliner2-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bindings/python/pyproject.toml') }}
       - name: Install optional GLiNER2 dependencies
         if: matrix.backend == 'gliner2'
         run: |

@@ -64,8 +64,11 @@ loading, returned spans and scores, Unicode offsets, reuse, errors, cancellation
 and process cleanup. Do not grade model accuracy or impose speed/memory targets.
 
 Publication must require the latest model integration run for the exact release
-commit to pass every backend/platform job. Missing, failed or unfinished tests
-block publication. Build release packages from source; no cross-run package
+commit to pass every backend/platform job except macOS Intel. Missing, failed
+or unfinished required tests block publication. The macOS Intel jobs are
+advisory: GitHub retires its last Intel macOS runner image in fall 2027, and
+the Intel stack is pinned to an older PyTorch. Intel packages are still built
+and published. Build release packages from source; no cross-run package
 handoff or saved-file publication system is required.
 
 Target `0.4.5-beta.1` for Cargo/npm and `0.4.5b1` for Python. Use npm's `beta`

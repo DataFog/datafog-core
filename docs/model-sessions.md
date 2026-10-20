@@ -135,10 +135,13 @@ options object with a `TypeError`.
 Routine CI does not download models. Manually run the `Model integration`
 workflow for both models on all five native platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.
-Publishing requires the latest run for the release commit to pass all ten
-backend/platform jobs. Later commits may reuse a passing ancestor only if every
-intervening commit has one parent and modifies only `README.md`. Other file
-changes, merges, and failed or unfinished runs still block publication.
+Publishing requires the latest run for the release commit to pass both models'
+jobs on Linux x86_64, Linux ARM64, macOS ARM64 and Windows. The macOS Intel jobs
+still run but are advisory: a failure is reported on the job without failing
+the run, and publishing does not wait for them. Later commits may reuse a
+passing ancestor only if every intervening commit has one parent and modifies
+only `README.md`. Other file changes, merges, failed or cancelled runs, and
+required jobs that have not passed still block publication.
 Release packages build from source.
 
 Review the diff and passing tests before publishing. Target Cargo/npm
