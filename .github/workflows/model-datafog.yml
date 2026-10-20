@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [datafog, gliner2]
+        backend: [datafog, gliner2, gliner2-general]
         os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-latest]
         include:
           - os: ubuntu-24.04
@@ -79,7 +79,8 @@ jobs:
           path: |
             ${{ runner.temp }}/model-download
             ${{ runner.temp }}/gliner2-download
-          key: model-assets-${{ matrix.backend }}-${{ matrix.backend == 'datafog' && matrix.platform || 'portable-cpu' }}-${{ hashFiles('scripts/provision-datafog-model.py', 'scripts/provision-gliner2-model.py', 'crates/core/src/models/gliner2-lock.json') }}
+            ${{ runner.temp }}/gliner2-general-download
+          key: model-assets-${{ matrix.backend }}-${{ matrix.backend == 'datafog' && matrix.platform || 'portable-cpu' }}-${{ hashFiles('scripts/provision-datafog-model.py', 'scripts/provision-gliner2-model.py', 'crates/core/src/models/gliner2-lock.json', '.github/workflows/model-datafog.yml') }}
       - name: Download immutable native archive
         if: matrix.backend == 'datafog' && steps.model-assets.outputs.cache-hit != 'true'
         run: |
@@ -111,11 +112,24 @@ jobs:
           hf download fastino/gliner2-privacy-filter-PII-multi \
             config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
             --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
+      - name: Download immutable general-purpose GLiNER2 files
+        if: matrix.backend == 'gliner2-general' && steps.model-assets.outputs.cache-hit != 'true'
+        run: |
+          hf download fastino/gliner2-base-v1 \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json \
+            added_tokens.json special_tokens_map.json spm.model model.safetensors README.md \
+            --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e --local-dir "$RUNNER_TEMP/gliner2-general-download"
       - name: Provision pinned GLiNER2 and isolated local worker
         id: verified-gliner
-        if: matrix.backend == 'gliner2'
+        if: matrix.backend != 'datafog'
         run: |
-          python scripts/provision-gliner2-model.py --source "$RUNNER_TEMP/gliner2-download" --destination "$RUNNER_TEMP/model-bundle"
+          if [[ "$MODEL_BACKEND" == "gliner2-general" ]]; then
+            python scripts/provision-gliner2-model.py --source "$RUNNER_TEMP/gliner2-general-download" \
+              --model-id fastino/gliner2-base-v1 --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+              --destination "$RUNNER_TEMP/model-bundle"
+          else
+            python scripts/provision-gliner2-model.py --source "$RUNNER_TEMP/gliner2-download" --destination "$RUNNER_TEMP/model-bundle"
+          fi
           python -m venv "$RUNNER_TEMP/gliner2-worker"
           python - <<'PYTHON'
           import hashlib, json, os, sys
@@ -123,8 +137,10 @@ jobs:
           root=Path(os.environ["RUNNER_TEMP"])
           interpreter=root / "gliner2-worker" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
           bundle=root / "model-bundle"
+          labels = ([dict(label="current_employer", description="The organization the person currently works for", threshold=0.5)]
+                    if os.environ["MODEL_BACKEND"] == "gliner2-general" else [dict(label="street_address", threshold=0.5)])
           config=dict(bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
-            gliner2=dict(python=str(interpreter), labels=[dict(label="street_address",threshold=0.5)],intra_threads=1,chunk_size=384,chunk_overlap=64),
+            gliner2=dict(python=str(interpreter), labels=labels,intra_threads=1,chunk_size=384,chunk_overlap=64),
             limits=dict(max_input_bytes=65536,max_response_bytes=16777216,max_findings=65536,timeout_ms=120000,cleanup_timeout_ms=5000))
           (root / "model-session.json").write_text(json.dumps(config),encoding="utf-8")
           with open(os.environ["GITHUB_ENV"],"a") as stream:
@@ -137,20 +153,21 @@ jobs:
           path: |
             ${{ runner.temp }}/model-download
             ${{ runner.temp }}/gliner2-download
+            ${{ runner.temp }}/gliner2-general-download
           key: ${{ steps.model-assets.outputs.cache-primary-key }}
       - name: Locate the GLiNER2 worker pip cache
         id: worker-pip
-        if: matrix.backend == 'gliner2'
+        if: matrix.backend != 'datafog'
         run: echo "dir=$("$WORKER_PYTHON" -m pip cache dir)" >> "$GITHUB_OUTPUT"
       - name: Reuse downloaded GLiNER2 dependencies
-        if: matrix.backend == 'gliner2'
+        if: matrix.backend != 'datafog'
         uses: actions/cache@v4
         with:
           path: ${{ steps.worker-pip.outputs.dir }}
           # Versions are pinned in pyproject.toml; pip still installs exactly those pins.
           key: gliner2-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bindings/python/pyproject.toml') }}
       - name: Install optional GLiNER2 dependencies
-        if: matrix.backend == 'gliner2'
+        if: matrix.backend != 'datafog'
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             "$WORKER_PYTHON" -m pip install 'torch==2.12.0' --index-url https://download.pytorch.org/whl/cpu

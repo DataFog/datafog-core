@@ -1,5 +1,6 @@
 """Check installed model loading, result conversion and errors; no accuracy grading."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,11 @@ texts = [
     "👋 e\u0301 John Smith lives at 123 Main Street. John Smith lives at 123 Main Street.",
     "ordinary " * 505 + "John Smith lives at 123 Main Street.",
 ]
+general = os.environ.get("MODEL_BACKEND") == "gliner2-general"
+model_entity = "CURRENT_EMPLOYER" if general else "STREET_ADDRESS"
+if general:
+    texts = [text.replace("lives at 123 Main Street", "works for Cedar Labs") for text in texts]
+manifest = json.loads((Path(config["bundle"]) / "bundle-manifest.json").read_text(encoding="utf-8"))
 reference = None
 if "gliner2" not in config:
     executable = Path(config["bundle"]) / ("datafog-pii.exe" if sys.platform == "win32" else "datafog-pii")
@@ -28,6 +34,8 @@ with ModelSession.open(config) as session:
     for case_index, text in enumerate(texts):
         result = session.scan_model(text)
         assert result.contract_version == 1 and result.model
+        if "model" in manifest:
+            assert result.model == manifest["model"]["id"]
         assert len(result.evidence) == len(result.findings)
         for index, (finding, evidence) in enumerate(zip(result.findings, result.evidence, strict=True)):
             assert text[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
@@ -35,6 +43,8 @@ with ModelSession.open(config) as session:
             assert evidence["finding_index"] == index
             assert finding.entity_type and evidence["sources"]
             source = evidence["sources"][0]
+            if "model" in manifest:
+                assert manifest["model"]["revision"] in source["detector_version"]
             assert source["native_label"] and 0 <= source["raw_score"]["value"] <= 1
             if reference is not None:
                 expected = reference[case_index][index]
@@ -50,7 +60,8 @@ with ModelSession.open(config) as session:
             {"entity": f.entity_type, "text": f.matched_text, "start": f.codepoint_range.start,
              "end": f.codepoint_range.end, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
             for f in result.findings], "evidence": result.evidence})
-    assert report["cases"][0]["findings"]  # Exercise conversion of actual returned spans.
+    if not general:
+        assert report["cases"][0]["findings"]  # Existing PII fixtures exercise actual spans.
     assert report["cases"][1]["findings"] == []
     cancellation = ModelCancellation()
     cancellation.cancel()
@@ -71,9 +82,9 @@ with ModelSession.open(config) as session:
     assert spans(rules_only.findings) == spans(rule_scan(routed_text, {"entities": ["CREDIT_CARD", "EMAIL"]}))
     assert {f.entity_type for f in rules_only.findings} == {"CREDIT_CARD", "EMAIL"}
     assert all(e["sources"][0]["raw_score"] is None for e in rules_only.evidence)
-    mixed = session.scan(routed_text, {"entities": ["STREET_ADDRESS", "EMAIL"]})
-    assert spans(mixed.findings, "STREET_ADDRESS") == spans(session.scan_model(routed_text).findings, "STREET_ADDRESS")
-    assert {f.entity_type for f in mixed.findings} <= {"STREET_ADDRESS", "EMAIL"}
+    mixed = session.scan(routed_text, {"entities": [model_entity, "EMAIL"]})
+    assert spans(mixed.findings, model_entity) == spans(session.scan_model(routed_text).findings, model_entity)
+    assert {f.entity_type for f in mixed.findings} <= {model_entity, "EMAIL"}
     assert [f.detector_name for f in mixed.findings if f.entity_type == "EMAIL"] == ["datafog-core/email"]
     assert len(mixed.evidence) == len(mixed.findings)
     # Omitting the configuration routes like `{}`: the rule scanner's findings
@@ -85,7 +96,7 @@ with ModelSession.open(config) as session:
     report["default"] = [
         {"entity": f.entity_type, "text": f.matched_text, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
         for f in default.findings]
-    report["routed"] = {"text": routed_text, "entities": ["STREET_ADDRESS", "EMAIL"], "findings": [
+    report["routed"] = {"text": routed_text, "entities": [model_entity, "EMAIL"], "findings": [
         {"entity": f.entity_type, "text": f.matched_text, "start": f.codepoint_range.start,
          "end": f.codepoint_range.end, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
         for f in mixed.findings], "evidence": mixed.evidence}

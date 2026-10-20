@@ -1019,8 +1019,60 @@ fn convert(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BundleManifest {
+    #[serde(default)]
+    schema_version: Option<u32>,
+    #[serde(default)]
+    model: Option<ModelIdentity>,
     platform: String,
     files: BTreeMap<String, AssetIdentity>,
+}
+
+/// A shared identity envelope; adapters still define their supported loading protocol.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ModelIdentity {
+    backend: String,
+    id: String,
+    revision: String,
+}
+
+fn validate_model_identity<'a>(
+    manifest: &'a BundleManifest,
+    backend: &str,
+) -> Result<Option<&'a ModelIdentity>, ModelError> {
+    match (&manifest.model, manifest.schema_version) {
+        (None, None) => Ok(None),
+        (Some(model), Some(1))
+            if model.backend == backend
+                && !model.id.trim().is_empty()
+                && model.id.trim() == model.id
+                && !model.revision.trim().is_empty()
+                && model.revision.trim() == model.revision =>
+        {
+            Ok(Some(model))
+        }
+        _ => Err(ModelError::new(
+            "model_load_failed",
+            "integrity_mismatch",
+            "/bundle",
+        )),
+    }
+}
+
+fn validate_asset_name(name: &str) -> Result<(), ModelError> {
+    if name.is_empty()
+        || name.contains(['\\', ':'])
+        || !Path::new(name)
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+    {
+        return Err(ModelError::new(
+            "model_load_failed",
+            "integrity_mismatch",
+            "/bundle",
+        ));
+    }
+    Ok(())
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1095,6 +1147,11 @@ fn validate_bundle(
         return Err(invalid());
     }
     let manifest: BundleManifest = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if let Some(model) = validate_model_identity(&manifest, "datafog_native")? {
+        if model.id != "DataFog/pii-en-65m" || model.revision != MODEL_REVISION {
+            return Err(invalid());
+        }
+    }
     if Some(manifest.platform.as_str()) != host_platform() {
         return Err(ModelError::new(
             "model_unavailable",
@@ -1103,14 +1160,8 @@ fn validate_bundle(
         ));
     }
     for (name, identity) in &manifest.files {
+        validate_asset_name(name)?;
         let relative = Path::new(name);
-        if name.contains(['\\', ':'])
-            || relative
-                .components()
-                .any(|c| !matches!(c, Component::Normal(_)))
-        {
-            return Err(invalid());
-        }
         let path = root.join(relative);
         let canonical = path.canonicalize().map_err(|_| invalid())?;
         if !canonical.starts_with(&root) || !canonical.is_file() {

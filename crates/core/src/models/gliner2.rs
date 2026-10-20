@@ -1,11 +1,10 @@
-//! Pinned official GLiNER2 span runtime, executed in an explicitly installed Python environment.
+//! Official GLiNER2 span runtime, executed in an explicitly installed Python environment.
 use super::*;
 use std::process::Command;
 
 pub const MODEL: &str = "fastino/gliner2-privacy-filter-PII-multi";
 const ADAPTER: &str = "gliner2-worker-v1";
 const SCALE: &str = "normalized_span_sigmoid";
-const LABELS: &str = "person full_name first_name middle_name last_name date_of_birth email phone_number address street_address city state_or_region postal_code country government_id national_id_number passport_number drivers_license_number license_number tax_id tax_number bank_account account_number routing_number iban payment_card card_number card_expiry card_cvv username ip_address account_id sensitive_account_id password secret api_key access_token recovery_code sensitive_date document_date expiration_date transaction_date";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -64,9 +63,13 @@ fn validate_config(config: &Gliner2Config) -> Result<(), ModelError> {
         return Err(ModelError::config("empty_value", "/gliner2/labels"));
     }
     let mut seen = std::collections::BTreeSet::new();
+    let mut entity_types = std::collections::BTreeSet::new();
     for (index, label) in config.labels.iter().enumerate() {
         let path = format!("/gliner2/labels/{index}");
-        if !LABELS.split_whitespace().any(|name| name == label.label) || !seen.insert(&label.label)
+        if label.label.trim().is_empty()
+            || label.label.trim() != label.label
+            || !seen.insert(&label.label)
+            || !entity_types.insert(mapping(&label.label))
         {
             return Err(ModelError::config(
                 "invalid_value",
@@ -142,24 +145,50 @@ pub(super) fn open(
         return Err(invalid());
     }
     let manifest: BundleManifest = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    let lock: serde_json::Value =
-        serde_json::from_str(include_str!("gliner2-lock.json")).map_err(|_| invalid())?;
-    let expected: BTreeMap<String, AssetIdentity> =
-        serde_json::from_value(lock["files"].clone()).map_err(|_| invalid())?;
-    if manifest.platform != "portable-cpu" || manifest.files.len() != expected.len() {
+    let identity = validate_model_identity(&manifest, "gliner2")?;
+    let model_name = identity.map_or_else(|| MODEL.to_owned(), |model| model.id.clone());
+    let adapter_version = identity.map_or_else(
+        || ADAPTER.to_owned(),
+        |model| format!("{ADAPTER}:{}", model.revision),
+    );
+    if manifest.platform != "portable-cpu" || manifest.files.is_empty() {
         return Err(invalid());
     }
-    for (name, expected) in expected {
-        let identity = manifest.files.get(&name).ok_or_else(invalid)?;
-        if identity.sha256 != expected.sha256 || identity.bytes != expected.bytes {
+    if identity.is_none() {
+        let lock: serde_json::Value =
+            serde_json::from_str(include_str!("gliner2-lock.json")).map_err(|_| invalid())?;
+        let expected: BTreeMap<String, AssetIdentity> =
+            serde_json::from_value(lock["files"].clone()).map_err(|_| invalid())?;
+        if manifest.files.len() != expected.len() {
             return Err(invalid());
         }
+        for (name, expected) in expected {
+            let asset = manifest.files.get(&name).ok_or_else(invalid)?;
+            if asset.sha256 != expected.sha256 || asset.bytes != expected.bytes {
+                return Err(invalid());
+            }
+        }
+    }
+    // The existing worker loads this local, single-file GLiNER2 span-model layout.
+    for required in [
+        "config.json",
+        "encoder_config/config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "model.safetensors",
+    ] {
+        if !manifest.files.contains_key(required) {
+            return Err(invalid());
+        }
+    }
+    for (name, asset) in &manifest.files {
+        validate_asset_name(name)?;
         let path = bundle.join(name).canonicalize().map_err(|_| invalid())?;
         if !path.starts_with(&bundle) || !path.is_file() {
             return Err(invalid());
         }
         let (hash, size) = file_digest(&path, deadline)?;
-        if hash != expected.sha256 || size != expected.bytes {
+        if hash != asset.sha256 || size != asset.bytes {
             return Err(invalid());
         }
     }
@@ -178,8 +207,8 @@ pub(super) fn open(
     let session = ModelSession {
         descriptor: ModelSessionDescriptor {
             backend: "gliner2_worker".into(),
-            model: MODEL.into(),
-            adapter_version: ADAPTER.into(),
+            model: model_name,
+            adapter_version,
             labels: options
                 .labels
                 .iter()
@@ -255,7 +284,7 @@ pub(super) fn decode(bytes: &[u8], max_findings: usize) -> Result<BackendResult,
         serde_json::from_value(value).map_err(|_| ModelError::invalid_output())?;
     let expected = runtime();
     if output.runtime != expected
-        || output.worker_version != "0.4.5b3"
+        || output.worker_version != "0.4.5b4"
         || output.findings.len() > max_findings
     {
         return Err(ModelError::invalid_output());
@@ -303,11 +332,69 @@ mod tests {
         bad.labels.push(bad.labels[0].clone());
         assert!(validate_config(&bad).is_err());
         let mut bad = parsed.clone();
-        bad.labels[0].label = "not_a_checkpoint_label".into();
-        assert!(validate_config(&bad).is_err());
+        bad.labels[0].label = "current_employer".into();
+        bad.labels[0].description = Some("The caller's current employer".into());
+        assert!(validate_config(&bad).is_ok());
+        for label in ["", " ", " employer", "employer "] {
+            bad.labels[0].label = label.into();
+            assert!(validate_config(&bad).is_err());
+        }
         let mut bad = parsed;
         bad.chunk_overlap = bad.chunk_size;
         assert!(validate_config(&bad).is_err());
+    }
+    #[test]
+    fn labels_must_have_distinct_output_types() {
+        for (first, second) in [("employer", "EMPLOYER"), ("phone_number", "phone")] {
+            let config = Gliner2Config {
+                python: std::env::current_exe().unwrap(),
+                labels: [first, second]
+                    .into_iter()
+                    .map(|label| Gliner2Label {
+                        label: label.into(),
+                        threshold: 0.5,
+                        description: None,
+                    })
+                    .collect(),
+                intra_threads: 1,
+                chunk_size: 384,
+                chunk_overlap: 64,
+            };
+            assert!(validate_config(&config).is_err());
+        }
+    }
+
+    #[test]
+    fn custom_model_labels_keep_types_offsets_and_transformation_support() {
+        let text = "👋 Cedar Labs";
+        let mut descriptor = super::super::tests::descriptor();
+        descriptor.backend = "gliner2_worker".into();
+        descriptor.model = "fastino/gliner2-base-v1".into();
+        descriptor.labels = [("current_employer".into(), "CURRENT_EMPLOYER".into())].into();
+        descriptor.thresholds = [("current_employer".into(), 0.5)].into();
+        descriptor.score_scale = SCALE.into();
+        let response = serde_json::json!({
+            "worker_version": "0.4.5b4", "runtime": runtime(),
+            "findings": [{"label": "current_employer", "start": 2, "end": 12,
+                          "text": "Cedar Labs", "raw_score": 0.9}]
+        })
+        .to_string();
+        let entries = convert(text, decode(response.as_bytes(), 1).unwrap(), &descriptor).unwrap();
+        let findings: Vec<_> = entries.into_iter().map(|(finding, _)| finding).collect();
+        assert_eq!(findings[0].entity_type, "CURRENT_EMPLOYER");
+        assert_eq!(findings[0].byte_range, TextRange { start: 5, end: 15 });
+        assert_eq!(findings[0].codepoint_range, TextRange { start: 2, end: 12 });
+        assert_eq!(findings[0].confidence, None);
+        let transformed = crate::transform(
+            text,
+            &findings,
+            &crate::TransformationConfig::new(crate::TransformationStrategy::Redact),
+        )
+        .unwrap();
+        assert_eq!(transformed.text, "👋 [CURRENT_EMPLOYER]");
+        let mut unexpected = descriptor;
+        unexpected.labels.clear();
+        assert!(convert(text, decode(response.as_bytes(), 1).unwrap(), &unexpected).is_err());
     }
     #[test]
     fn uncalibrated_scores_are_validated_before_thresholding_and_rebased() {
@@ -318,7 +405,7 @@ mod tests {
         descriptor.thresholds = [("street_address".into(), 0.5)].into();
         descriptor.score_scale = SCALE.into();
         let response = |score: f64| {
-            serde_json::json!({"worker_version":"0.4.5b3","runtime":runtime(),
+            serde_json::json!({"worker_version":"0.4.5b4","runtime":runtime(),
             "findings":[{"label":"street_address","start":2,"end":17,"text":"123 Main Street","raw_score":score}]}).to_string()
         };
         let valid = decode(response(0.9).as_bytes(), 100).unwrap();
@@ -346,7 +433,7 @@ mod tests {
             .is_empty()
         );
         let corrupt =
-            serde_json::json!({"worker_version":"0.4.5b3","runtime":{},"findings":[]}).to_string();
+            serde_json::json!({"worker_version":"0.4.5b4","runtime":{},"findings":[]}).to_string();
         assert!(decode(corrupt.as_bytes(), 100).is_err());
     }
 }

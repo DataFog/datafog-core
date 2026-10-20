@@ -1,6 +1,6 @@
 [package]
 name = "datafog-node"
-version = "0.4.5-beta.3"
+version = "0.4.5-beta.4"
 edition = "2024"
 rust-version = "1.88"
 description = "Node.js bindings for datafog-core"
@@ -11,7 +11,7 @@ repository = "https://github.com/DataFog/datafog-core"
 crate-type = ["cdylib"]
 
 [dependencies]
-datafog-core = { version = "0.4.5-beta.3", path = "../../crates/core", features = ["models"] }
+datafog-core = { version = "0.4.5-beta.4", path = "../../crates/core", features = ["models"] }
 napi = { version = "=3.12.2", features = ["serde-json"] }
 napi-derive = "=3.6.3"
 serde_json = "1"

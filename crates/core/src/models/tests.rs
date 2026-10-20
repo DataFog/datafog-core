@@ -1,5 +1,74 @@
 use super::*;
 
+#[test]
+fn versioned_manifest_selects_identity_without_a_compiled_model_catalog() {
+    for model_id in ["synthetic/general-a", "synthetic/general-b"] {
+        let value = serde_json::json!({
+            "schema_version": 1,
+            "model": {"backend": "gliner2", "id": model_id, "revision": "fixture"},
+            "platform": "portable-cpu", "files": {}
+        });
+        let manifest: BundleManifest = serde_json::from_value(value).unwrap();
+        let identity = validate_model_identity(&manifest, "gliner2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(identity.id, model_id);
+        assert_eq!(identity.revision, "fixture");
+        assert!(validate_model_identity(&manifest, "datafog_native").is_err());
+    }
+}
+
+#[test]
+fn manifest_identity_requires_a_supported_schema_and_complete_identity() {
+    let valid = serde_json::json!({
+        "schema_version": 1,
+        "model": {"backend": "gliner2", "id": "synthetic/general", "revision": "fixture"},
+        "platform": "portable-cpu", "files": {}
+    });
+    for (pointer, bad_value) in [
+        ("/schema_version", serde_json::json!(2)),
+        ("/model/id", serde_json::json!("")),
+        ("/model/revision", serde_json::json!(" ")),
+        ("/model/backend", serde_json::json!("spacy")),
+    ] {
+        let mut value = valid.clone();
+        *value.pointer_mut(pointer).unwrap() = bad_value;
+        let manifest: BundleManifest = serde_json::from_value(value).unwrap();
+        assert!(validate_model_identity(&manifest, "gliner2").is_err());
+    }
+    let legacy: BundleManifest = serde_json::from_value(serde_json::json!({
+        "platform": "portable-cpu", "files": {}
+    }))
+    .unwrap();
+    assert!(
+        validate_model_identity(&legacy, "gliner2")
+            .unwrap()
+            .is_none()
+    );
+    let mut missing_version = valid;
+    missing_version
+        .as_object_mut()
+        .unwrap()
+        .remove("schema_version");
+    let manifest: BundleManifest = serde_json::from_value(missing_version).unwrap();
+    assert!(validate_model_identity(&manifest, "gliner2").is_err());
+}
+
+#[test]
+fn caller_manifest_paths_must_stay_relative_to_the_bundle() {
+    assert!(validate_asset_name("encoder_config/config.json").is_ok());
+    for name in [
+        "",
+        "../weights",
+        "/weights",
+        "weights/../outside",
+        "C:weights",
+        "a\\b",
+    ] {
+        assert!(validate_asset_name(name).is_err(), "{name}");
+    }
+}
+
 pub(super) fn descriptor() -> ModelSessionDescriptor {
     ModelSessionDescriptor {
         backend: "datafog_native".into(),
