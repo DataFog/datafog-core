@@ -1,358 +1,212 @@
-# DataFog Core
+<p align="center">
+  <a href="https://datafog.ai"><img src="docs/favicon.svg" width="72" height="72" alt="DataFog"></a>
+</p>
 
-Fast structured PII detection, implemented in Rust and exposed for Rust, Python, Node.js, and browsers.
+<h1 align="center">DataFog Core</h1>
 
-It detects `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`. Version 0.4.0 also detects `JWT` tokens by default; see the [JWT reference](docs/reference/jwt.mdx). With an explicit German locale, it also detects `DE_IBAN`, `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`, `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. Complete PEM private-key blocks are also detected as `PRIVATE_KEY` by default; see the [private-key reference](docs/reference/private-keys.mdx). Context-labeled `US_ROUTING_NUMBER` detection is also available; see [the detector rules](docs/reference/us-routing-number.mdx). Context-labeled `NPI` detection is also available; see [the detector rules](docs/reference/npi.mdx). Every binding returns the same finding information:
+<p align="center"><strong>Find and transform sensitive data in your application.</strong></p>
 
-```text
-entity type, matched text, byte range, code-point range,
-optional confidence, detector name, optional detector version
-```
+<p align="center">
+  <a href="https://pypi.org/project/datafog-core/"><img src="https://img.shields.io/pypi/v/datafog-core?style=flat-square&amp;color=E8A84C" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/@datafog/node"><img src="https://img.shields.io/npm/v/%40datafog%2Fnode?style=flat-square&amp;color=E8A84C" alt="npm version"></a>
+  <a href="https://crates.io/crates/datafog-core"><img src="https://img.shields.io/crates/v/datafog-core?style=flat-square&amp;color=E8A84C" alt="crates.io version"></a>
+  <a href="https://github.com/DataFog/datafog-core/actions/workflows/rust-quality.yml"><img src="https://github.com/DataFog/datafog-core/actions/workflows/rust-quality.yml/badge.svg?branch=main" alt="Rust CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-E8A84C?style=flat-square" alt="MIT license"></a>
+</p>
 
-Structured JSON scanning additionally discovers `PERSON` from documented name-field
-aliases or explicit JSON Pointer mappings. It scans every string value with the
-existing detectors and returns field paths plus string-local findings. No model
-or dictionary download is needed. See [person-field discovery](docs/guides/person-discovery.mdx)
-for `scan_structured` / `scanStructured` and structured transformation APIs.
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#detection-coverage">Detection</a> ·
+  <a href="#transformations">Transformations</a> ·
+  <a href="#local-models-beta">Local models</a> ·
+  <a href="#documentation-and-development">Documentation</a>
+</p>
 
-Phone candidates without `+` are interpreted as North American numbers: ten
-digits, optionally preceded by `1`, with area and exchange codes starting with
-`2` through `9`. Candidates starting with `+` retain the existing permissive
-7–15 digit check, including shortened synthetic examples such as `+1-555-1002`.
-These checks do not validate country calling codes or assigned phone numbers,
-and numeric identifiers that fit the accepted patterns can still match `PHONE`.
+DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bindings. Scan text or JSON for personal data and credentials, then redact, mask, remove, pseudonymize, or tokenize matched values. Findings use a consistent format across the bindings.
 
-Both ranges use zero-based, end-exclusive offsets. The byte range addresses the
-UTF-8 input; the code-point range addresses Unicode scalar values. Rule-based
-detectors currently report no confidence score. Node.js and browser WASM also
-return an explicitly named UTF-16 code-unit range that can be passed directly
-to JavaScript `String.prototype.slice`.
+Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add DataFog and GLiNER2 support in Rust, Python, and Node.js.
 
-The transformation strategies are `redact`, `mask`, `remove`, `pseudonymize`,
-and `tokenize` in Rust, Python, and Node.js.
-Redaction uses an unnumbered `[ENTITY_TYPE]` placeholder, masking supports full
-or leading/trailing reveal modes, and removal deletes only the exact finding
-span. Pseudonymization uses provider-resolved 256-bit keys and deterministic
-HMAC-SHA-256 tokens. Tokenization uses an application-supplied asynchronous
-provider to issue opaque `DFTOKENv1(...)` envelopes and restore them under an
-exact request-level scope. Both provider-backed strategies are deliberately
-unsupported in browser WASM.
-`transform` requires explicit findings; `scan_and_transform` (or
-`scanAndTransform` in JavaScript) is the explicit scan-then-transform
-convenience. Results include the transformed text and an ordered record for
-every applied replacement, including its source metadata and output byte and
-code-point ranges. Node.js and browser WASM additionally return source and
-output UTF-16 ranges. Transformation records never include the original
-matched text.
+**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Model beta:** [0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1)
 
-Transformation calls require an envelope with a default strategy. It can also
-select entity types, override the strategy per entity, and exempt exact or
-full-match regex values:
+## Quickstart
 
-```js
-{
-  default: { strategy: "redact" },
-  entities: ["EMAIL", "PHONE"],
-  overrides: {
-    PHONE: { strategy: "mask", reveal: { direction: "last", count: 4 } },
-  },
-  allow: {
-    exact: { EMAIL: ["support@example.com"] },
-    regex: { EMAIL: [{ pattern: ".+@example\\.org" }] },
-  },
-}
-```
+Choose the package for your application:
 
-`scan_and_transform` uses `{ scan?: { locale?: string, detect_uuid?: boolean, format?: "text" | "env" | "sql", entities?: string[] }, transform: ... }` so
-detection settings remain separate from transformation policy.
-For `.env` assignments or standard SQL quoted strings, select `format: "env"`
-or `format: "sql"` to preserve email boundaries. See the
-[email source-context policy](docs/guides/email-boundaries.mdx) for supported
-syntax, raw escaped spans, and limitations. Default text scanning is unchanged.
-
-## Credit-card detection and decimal numbers
-
-To reduce decimal false positives, `CREDIT_CARD` detection suppresses contiguous
-digit candidates immediately after a digit followed by `.` or `,`, such as
-`3.4111111111111111` and `3,4111111111111111`. Cards containing spaces or hyphens,
-such as `3.4111-1111-1111-1111`, still undergo the normal card checks.
-
-In plain text, `3,4111111111111111` could also be two CSV fields: `3` and a card
-number. The detector cannot distinguish that structure from a comma-decimal
-number, so it suppresses the card candidate. For CSV input, parse the CSV and
-scan each field separately so a card value is checked without the preceding
-field and delimiter.
-
-## Packages
-
-| Runtime | Distribution | Import | Status |
-| --- | --- | --- | --- |
-| Rust | [`datafog-core`](https://crates.io/crates/datafog-core) | `datafog_core` | Published |
-| Python | [`datafog-core`](https://pypi.org/project/datafog-core/) | `datafog_core` | Published |
-| Node.js | `@datafog/node` | `@datafog/node` | Published |
-| Browser/WASM | `@datafog/wasm` | `@datafog/wasm` | Published |
-
-## Migrating from DataFog Python
-
-DataFog Core is a separate distribution and canonical API, not a drop-in
-replacement for the established `datafog` Python package.
-
-| DataFog Python 4.8.x | DataFog Core 0.3.x |
-| --- | --- |
-| `pip install datafog` | `pip install datafog-core` |
-| `from datafog.engine import ...` | `from datafog_core import ...` |
-| `scan(...).entities` | `scan(...)` returns `list[Finding]` |
-| `scan_and_redact(...)` | `scan_and_transform(...)` |
-| `result.redacted_text` | `result.text` |
-| `Entity.type`, `.text`, `.start`, `.end` | `Finding.entity_type`, `.matched_text`, `.byte_range`, `.codepoint_range` |
-
-Do not mechanically rename legacy `token` to Core `tokenize`: Core tokenization
-is provider-backed and reversible. For non-reversible output, use `redact`,
-`mask`, or `remove`; use keyed `pseudonymize` when stable linkage is required.
-
-See the dedicated [DataFog Python migration
-guide](docs/guides/migrating-from-datafog-python.mdx) for the API mapping,
-strategy differences, entity names, range semantics, and migration checklist.
-
-## Quick start
-
-### Rust
-
-```bash
-cargo add datafog-core
-```
-
-```rust
-use datafog_core::{
-    scan, scan_and_transform, ScanAndTransformConfig, TransformationConfig,
-    TransformationStrategy,
-};
-
-let findings = scan("Email jane@example.com");
-assert_eq!(findings[0].entity_type, "EMAIL");
-assert_eq!(findings[0].matched_text, "jane@example.com");
-assert_eq!(findings[0].byte_range.start, 6);
-
-let result = scan_and_transform(
-    "Email jane@example.com",
-    &ScanAndTransformConfig::new(TransformationConfig::new(
-        TransformationStrategy::Redact,
-    )),
-).unwrap();
-assert_eq!(result.text, "Email [EMAIL]");
-```
+| SDK | Install stable | Requirements |
+| --- | --- | --- |
+| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core` | Python 3.10+ |
+| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install @datafog/node` | Node.js 24.x |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core` | Rust 1.88+ |
+| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install @datafog/wasm` | Browser with WebAssembly support |
 
 ### Python
 
-```bash
-python -m pip install datafog-core
-```
-
 ```python
-import asyncio
-
-from datafog_core import PrivacyManager, scan, scan_and_transform
+from datafog_core import scan, scan_and_transform
 
 findings = scan("Email jane@example.com")
-print(findings[0].entity_type)       # EMAIL
-print(findings[0].matched_text)      # jane@example.com
-print(findings[0].byte_range.start)  # 6
+print(findings[0].entity_type)   # EMAIL
+print(findings[0].matched_text)  # jane@example.com
 
 result = scan_and_transform(
     "Email jane@example.com",
     {"transform": {"default": {"strategy": "redact"}}},
 )
-assert result.text == "Email [EMAIL]"
-
-masked = scan_and_transform(
-    "Email jane@example.com",
-    {
-        "transform": {
-            "default": {
-                "strategy": "mask",
-                "reveal": {"direction": "last", "count": 4},
-            }
-        }
-    },
-)
-assert masked.text == "Email ************.com"
-
-class KeyProvider:
-    async def resolve_key(self, key_ref, key_version):
-        return {"key": load_32_byte_key(key_ref, key_version), "resolved_version": "7"}
-
-async def pseudonymize():
-    return await PrivacyManager(KeyProvider()).scan_and_transform(
-        "Email jane@example.com",
-        {
-            "transform": {
-                "default": {"strategy": "pseudonymize", "key_ref": "customers/email"}
-            }
-        },
-    )
-
-pseudonymized = asyncio.run(pseudonymize())
-
-# A token provider implements tokenize_batch(scope, items) and
-# restore_batch(scope, items). It owns storage or reversible cryptography,
-# authorization, lifecycle, and audit.
-token_manager = PrivacyManager(None, token_provider=TokenProvider())
-tokenized = asyncio.run(token_manager.scan_and_transform(
-    "Email jane@example.com",
-    {"transform": {"default": {"strategy": "tokenize", "token_ref": "customers/default"}}},
-    {"scope": "tenant-a"},
-))
-restored = asyncio.run(token_manager.restore(tokenized.text, {"scope": "tenant-a"}))
+print(result.text)  # Email [EMAIL]
 ```
 
-### Node.js
-
-Install the native Node.js package:
-
-```bash
-npm install @datafog/node
-```
+<details>
+<summary><strong>Node.js example</strong></summary>
 
 ```js
-import { PrivacyManager, scan, scanAndTransform } from "@datafog/node";
+import { scan, scanAndTransform } from "@datafog/node";
 
-console.log(scan("Email jane@example.com"));
-console.log(
-  scanAndTransform("Email jane@example.com", {
-    transform: { default: { strategy: "redact" } },
-  }).text,
-);
+const findings = scan("Email jane@example.com");
+console.log(findings[0].entityType); // EMAIL
+console.log(findings[0].matchedText); // jane@example.com
 
-const manager = new PrivacyManager({
-  async resolveKey({ keyRef, keyVersion }) {
-    return { key: await load32ByteKey(keyRef, keyVersion), resolvedVersion: "7" };
-  },
+const result = scanAndTransform("Email jane@example.com", {
+  transform: { default: { strategy: "redact" } },
 });
-const pseudonymized = await manager.scanAndTransform("Email jane@example.com", {
-  transform: {
-    default: { strategy: "pseudonymize", key_ref: "customers/email" },
-  },
-});
-
-const tokenManager = new PrivacyManager({ tokenProvider });
-const tokenized = await tokenManager.scanAndTransform(
-  "Email jane@example.com",
-  { transform: { default: { strategy: "tokenize", token_ref: "customers/default" } } },
-  { scope: "tenant-a" },
-);
-const restored = await tokenManager.restore(tokenized.text, { scope: "tenant-a" });
+console.log(result.text); // Email [EMAIL]
 ```
 
-The release includes prebuilt binaries for macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows x64.
+</details>
 
-### Browser / WASM
+<details>
+<summary><strong>Rust example</strong></summary>
 
-Install the browser/WASM package:
+```rust
+use datafog_core::{
+    scan, scan_and_transform, PrivacyError, ScanAndTransformConfig,
+    TransformationConfig, TransformationStrategy,
+};
 
-```bash
-npm install @datafog/wasm
+fn main() -> Result<(), PrivacyError> {
+    let findings = scan("Email jane@example.com");
+    println!("{}", findings[0].entity_type); // EMAIL
+    println!("{}", findings[0].matched_text); // jane@example.com
+
+    let result = scan_and_transform(
+        "Email jane@example.com",
+        &ScanAndTransformConfig::new(TransformationConfig::new(
+            TransformationStrategy::Redact,
+        )),
+    )?;
+    println!("{}", result.text); // Email [EMAIL]
+    Ok(())
+}
 ```
+
+</details>
+
+<details>
+<summary><strong>Browser / WASM example</strong></summary>
 
 ```js
 import { init, scan, scanAndTransform } from "@datafog/wasm";
 
 await init();
 console.log(scan("Email jane@example.com"));
-console.log(
-  scanAndTransform("Email jane@example.com", {
-    transform: { default: { strategy: "redact" } },
-  }).text,
-);
+
+const result = scanAndTransform("Email jane@example.com", {
+  transform: { default: { strategy: "redact" } },
+});
+console.log(result.text); // Email [EMAIL]
 ```
 
-## Development
+</details>
+
+Python and Node.js packages include prebuilt native binaries for Linux x64 and ARM64 (GNU), macOS Intel and Apple Silicon, and Windows x64 (MSVC).
+
+## Detection coverage
+
+| Coverage | Entity types | Activation |
+| --- | --- | --- |
+| Personal and financial data | `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, `ZIP_CODE` | On by default |
+| Credentials | [`API_KEY`](docs/reference/api-keys.mdx), [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), [`JWT`](docs/reference/jwt.mdx), [`PRIVATE_KEY`](docs/reference/private-keys.mdx), [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx) | On by default |
+| Labeled US identifiers | [`US_ROUTING_NUMBER`](docs/reference/us-routing-number.mdx), [`NPI`](docs/reference/npi.mdx) | On by default; requires a supported text label |
+| German identifiers | IBAN, VAT ID, tax ID, social security number, postal code, passport number, residence permit number | Explicit [German locale](docs/reference/german-entities.mdx) |
+| UUIDs | [`UUID`](docs/reference/uuid.mdx) | Explicit `detect_uuid` setting |
+| Names in JSON fields | `PERSON` | [Structured scans](docs/guides/person-discovery.mdx), using name-field aliases or explicit JSON Pointer mappings |
+
+Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, or [local models](#local-models-beta) to detect names and street addresses in prose.
+
+Each finding includes its entity type, matched text, byte and code-point ranges, optional confidence, and detector name/version. Ranges are zero-based and end-exclusive. Node.js and WASM also provide UTF-16 ranges for JavaScript `slice`. Rule-based findings have no confidence score. [Findings and ranges →](docs/concepts/findings-and-ranges.mdx)
+
+For scanning files from AI agents, use [DataFog MCP](https://github.com/DataFog/datafog-mcp).
+
+<details>
+<summary><strong>Detection settings</strong></summary>
+
+- **Select checks:** `scan(text, {"entities": ["EMAIL", "SSN"]})` in Python runs only the selected text detectors. Omit `entities` to use all enabled detectors. Selections must be nonempty, unique, exact entity names. Selecting a German type or UUID does not activate it; set `locale` or `detect_uuid` too.
+- **German locale:** `{"locale": "de"}` enables the seven German detectors. These use format/context rules; IBAN checksums and account existence are not verified. See the [German reference](docs/reference/german-entities.mdx) for detector rules.
+- **ENV and SQL:** choose `format: "env"` or `format: "sql"` to handle email boundaries in assignments and quoted strings. [Source-context rules →](docs/guides/email-boundaries.mdx)
+- **Phone numbers:** numbers without `+` use North American checks: ten digits, optionally preceded by `1`, with area and exchange codes starting with `2`–`9`. Numbers starting with `+` use a permissive 7–15 digit check, including shortened examples such as `+1-555-1002`. Country codes and assigned numbers are not validated; numeric identifiers can still match.
+- **Decimal numbers and CSV:** contiguous card digits after a digit and `.` or `,` are suppressed, so `3.4111111111111111` and `3,4111111111111111` do not produce card findings. Cards containing spaces or hyphens still undergo normal checks. Parse CSV/TSV into cells before scanning so delimiters and adjacent fields do not affect matching.
+
+Use [`capabilities()`](docs/reference/capabilities.mdx) in Rust or Python to discover supported entities and their activation rules.
+
+</details>
+
+## Transformations
+
+| Strategy | Result | Application provider | Browser / WASM |
+| --- | --- | --- | --- |
+| `redact` | Replace with a label such as `[EMAIL]` | None | Supported |
+| `mask` | Replace characters, optionally revealing the first or last characters | None | Supported |
+| `remove` | Delete the matched span | None | Supported |
+| [`pseudonymize`](docs/guides/pseudonymization.mdx) | Create a stable keyed HMAC-SHA-256 pseudonym | Key provider | Unsupported |
+| [`tokenize`](docs/guides/tokenization-and-restoration.mdx) | Issue an opaque token that can be restored under the same scope | Token provider | Unsupported |
+
+Use `transform` with existing findings, or `scan_and_transform` / `scanAndTransform` to scan and transform together. Transformation records include source/output ranges and replacement metadata, without the original matched text.
+
+Keep scan settings under `scan` and transformation policy under `transform`. A default strategy is required; entity selection, per-type overrides, and allowlists are optional. [Configuration guide →](docs/guides/configuration.mdx) · [Strategy details →](docs/concepts/privacy-transformations.mdx)
+
+## Local models (beta)
+
+[0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1) adds local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
+
+Install the beta for your runtime:
 
 ```bash
-cargo test --workspace
+python -m pip install 'datafog-core==0.4.5b1'
+npm install @datafog/node@beta
+cargo add datafog-core@0.4.5-beta.1 --features models
 ```
 
-To exercise an installed binding package locally:
+For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-npm ci --prefix bindings/node
-npm run test:package --prefix bindings/node
-
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.127 --locked
-npm ci --prefix bindings/wasm
-npx --prefix bindings/wasm playwright install chromium
-npm run test:package --prefix bindings/wasm
+python -m pip install 'datafog-core[gliner2]==0.4.5b1'
 ```
 
-## Repository layout
+The GLiNER2 runner ships in the Python package and also serves Node.js and Rust callers. Download and verify model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support.
 
-```text
-crates/core/        Rust scanning library
-bindings/python/    Python extension
-bindings/node/      Node.js native binding
-bindings/wasm/      Browser/WASM binding
-fixtures/           Shared conformance fixtures
+[DataFog setup and session API →](docs/model-sessions.md) · [GLiNER2 setup →](docs/gliner2-model.md)
+
+## Documentation and development
+
+- [Installation and runtime requirements](docs/get-started/installation.mdx)
+- [Python](docs/reference/python.mdx) · [Node.js](docs/reference/node.mdx) · [Rust](docs/reference/rust.mdx) · [Browser / WASM](docs/reference/browser-wasm.mdx) API references
+- [Structured JSON scans and name-field discovery](docs/guides/person-discovery.mdx)
+- [Configuration and allowlists](docs/guides/configuration.mdx)
+- [Errors](docs/reference/errors.mdx) and [0.4.x compatibility](docs/reference/compatibility.mdx)
+- [Build, test, and contribute](docs/development.mdx)
+- [Release notes](https://github.com/DataFog/datafog-core/releases)
+
+For existing `datafog` Python applications, follow the [migration guide](docs/guides/migrating-from-datafog-python.mdx) for changes to imports, results, and transformations.
+
+For Rust development, run:
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 ```
+
+See the [development guide](docs/development.mdx) for the repository layout and Python, Node.js, and WASM package checks.
 
 ## License
 
-[MIT](LICENSE)
-
-## German structured identifiers
-
-Pass `{"locale":"de"}` to text or structured scans. Trimmed, ASCII
-case-insensitive `de`, `de-DE`, and `de_DE` activate all seven German detectors;
-omitted locale and recognized `en-US`/`fr` aliases keep base detection only.
-Version 0.4.0 rejects unsupported explicit locales.
-
-```python
-from datafog_core import scan_and_transform
-
-result = scan_and_transform("IBAN DE44 5001 0517 5407 3249 31", {
-    "scan": {"locale": "de"},
-    "transform": {"default": {"strategy": "redact"}, "entities": ["DE_IBAN"]},
-})
-assert result.text == "IBAN [DE_IBAN]"
-```
-
-These are format/context detectors, not official identifier validators. IBAN
-checksums and account existence are not checked. Digits are ASCII; permitted
-internal separators are space, tab, NBSP and narrow NBSP at specified group
-boundaries, never newlines. Returned text and offsets preserve the source.
-Passport and residence-permit patterns are legacy heuristics with limited
-coverage. See the [German entity reference](docs/reference/german-entities.mdx)
-and [migration differences](docs/guides/migrating-from-datafog-python.mdx).
-The higher-level Python adapter and its dependency update were merged in
-[PR #179](https://github.com/DataFog/datafog-python/pull/179). Its package release is separate from Core.
-
-## Text detector selection
-
-Pass `{"entities":["EMAIL","SSN"]}` to a text scan to run only those
-selected detectors, rather than detecting every type and filtering findings
-later. In Rust, use `ScanConfig::new().with_entities(vec!["EMAIL".into(),
-"SSN".into()])?`. The same selection works inside `scan_and_transform`'s
-`scan` configuration; transformation selection remains independent.
-
-Omitting `entities` preserves existing detection. An explicit selection must be
-a nonempty array of unique, exact canonical text entity names. Unknown names,
-lowercase names, duplicates, and structured-only `PERSON` are rejected using
-configuration errors with `/entities` or `/entities/<index>` paths. Consult
-`capabilities().entities` for types with the `text` scope.
-
-Selection narrows enabled detectors: selecting `UUID` still requires
-`detect_uuid=true`, and German types still require a German locale. Text format
-handling, finding order, and byte/codepoint ranges are unchanged. Structured
-scans do not accept this option. It avoids unselected detector work and findings,
-but does not cap the selected findings or bound the size of a scan response.
-
-## UUID identifiers
-
-Canonical UUID detection is opt-in: pass `{"detect_uuid":true}` to text or
-structured scans, independently of locale. It emits `UUID` findings for versions
-1–8 with the IETF variant and original casing/ranges. UUID syntax does not imply
-sensitivity. See the [UUID reference](docs/reference/uuid.mdx) for boundaries,
-excluded sentinel forms and transformation examples.
-
-**0.4.1 is published** for Rust, Python, Node.js, and WASM. The higher-level Python adapter is integrated in [merged PR #179](https://github.com/DataFog/datafog-python/pull/179); its package release is separate. See the [release notes](docs/releases/0-4-1.mdx), [runtime capabilities](docs/reference/capabilities.mdx), and [0.4.x compatibility policy](docs/reference/compatibility.mdx).
-
-**Core 0.4.1** adds three default detectors: provider-prefixed [`API_KEY`](docs/reference/api-keys.mdx), context-required [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), and whole PostgreSQL [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx). The registry reports 23 supported entities and 14 defaults with capability contract 1. See the [release notes](docs/releases/0-4-1.mdx) for exact scopes, preserved legacy Python overlap behavior, and the passed local exact-wheel Python 4.9 integration gate. Python's default backend is unchanged.
+[MIT](LICENSE). Built by [DataFog](https://datafog.ai).
