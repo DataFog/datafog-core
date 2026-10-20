@@ -255,7 +255,7 @@ pub(super) fn decode(bytes: &[u8], max_findings: usize) -> Result<BackendResult,
         serde_json::from_value(value).map_err(|_| ModelError::invalid_output())?;
     let expected = runtime();
     if output.runtime != expected
-        || output.worker_version != "0.4.5b1"
+        || output.worker_version != "0.4.5b3"
         || output.findings.len() > max_findings
     {
         return Err(ModelError::invalid_output());
@@ -318,7 +318,7 @@ mod tests {
         descriptor.thresholds = [("street_address".into(), 0.5)].into();
         descriptor.score_scale = SCALE.into();
         let response = |score: f64| {
-            serde_json::json!({"worker_version":"0.4.5b1","runtime":runtime(),
+            serde_json::json!({"worker_version":"0.4.5b3","runtime":runtime(),
             "findings":[{"label":"street_address","start":2,"end":17,"text":"123 Main Street","raw_score":score}]}).to_string()
         };
         let valid = decode(response(0.9).as_bytes(), 100).unwrap();
@@ -346,7 +346,7 @@ mod tests {
             .is_empty()
         );
         let corrupt =
-            serde_json::json!({"worker_version":"0.4.5b1","runtime":{},"findings":[]}).to_string();
+            serde_json::json!({"worker_version":"0.4.5b3","runtime":{},"findings":[]}).to_string();
         assert!(decode(corrupt.as_bytes(), 100).is_err());
     }
 }

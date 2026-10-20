@@ -1,27 +1,22 @@
 //! Credential-bearing PostgreSQL URI recognition, without connection validation.
 use crate::{Candidate, Label};
+use regex::Regex;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::sync::LazyLock;
+
+// The longer scheme is preferred where both match, as in the ordered prefix list.
+static SCHEME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i-u:postgres(?:ql)?://)").expect("static credential URI scheme regex")
+});
 
 pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut cursor = 0;
-    while cursor < bytes.len() {
-        if !matches!(bytes[cursor], b'p' | b'P') {
-            cursor += 1;
-            continue;
-        }
-        let remaining = &bytes[cursor..];
-        let prefix = [b"postgresql://".as_slice(), b"postgres://".as_slice()]
-            .into_iter()
-            .find(|prefix| {
-                remaining
-                    .get(..prefix.len())
-                    .is_some_and(|value| value.eq_ignore_ascii_case(prefix))
-            });
-        let Some(prefix) = prefix else {
-            cursor += 1;
-            continue;
-        };
+    // Cursors stay on character boundaries: after an ASCII scheme, or at a
+    // delimiter that ends a URI.
+    while let Some(scheme) = SCHEME.find_at(text, cursor) {
+        cursor = scheme.start();
+        let prefix = scheme.as_str().as_bytes();
         if cursor > 0
             && (bytes[cursor - 1].is_ascii_alphanumeric()
                 || matches!(bytes[cursor - 1], b'_' | b'+' | b'-' | b'.' | b'/' | b':'))
@@ -197,4 +192,117 @@ fn sub_delimiter(byte: u8) -> bool {
 
 fn pchar(byte: u8) -> bool {
     unreserved(byte) || sub_delimiter(byte) || matches!(byte, b':' | b'@')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The previous byte-by-byte scheme search, kept as the reference.
+    fn reference(text: &str) -> Vec<Candidate> {
+        let mut candidates = Vec::new();
+        let candidates = &mut candidates;
+        let bytes = text.as_bytes();
+        let mut cursor = 0;
+        while cursor < bytes.len() {
+            if !matches!(bytes[cursor], b'p' | b'P') {
+                cursor += 1;
+                continue;
+            }
+            let remaining = &bytes[cursor..];
+            let prefix = [b"postgresql://".as_slice(), b"postgres://".as_slice()]
+                .into_iter()
+                .find(|prefix| {
+                    remaining
+                        .get(..prefix.len())
+                        .is_some_and(|value| value.eq_ignore_ascii_case(prefix))
+                });
+            let Some(prefix) = prefix else {
+                cursor += 1;
+                continue;
+            };
+            if cursor > 0
+                && (bytes[cursor - 1].is_ascii_alphanumeric()
+                    || matches!(bytes[cursor - 1], b'_' | b'+' | b'-' | b'.' | b'/' | b':'))
+            {
+                cursor += prefix.len();
+                continue;
+            }
+            let enclosing = cursor.checked_sub(1).map(|index| bytes[index]);
+            let quoted = enclosing == Some(b'\'');
+            let start = cursor;
+            cursor += prefix.len();
+            let mut parentheses = 0usize;
+            let mut brackets = 0usize;
+            let mut userinfo_ended = false;
+            while cursor < bytes.len() {
+                let byte = bytes[cursor];
+                if byte.is_ascii_whitespace()
+                    || (!byte.is_ascii()
+                        && text
+                            .get(cursor..)
+                            .and_then(|suffix| suffix.chars().next())
+                            .is_some_and(char::is_whitespace))
+                    || matches!(byte, b'"' | b'<' | b'>' | b'`' | b'{' | b'}')
+                    || (quoted && byte == b'\'')
+                {
+                    break;
+                }
+                // Closing prose wrappers are excluded; brackets inside IPv6 literals
+                // and balanced parentheses in URI components remain part of the span.
+                match byte {
+                    b'(' => parentheses += 1,
+                    b')' if parentheses == 0 && userinfo_ended && enclosing == Some(b'(') => break,
+                    b')' => parentheses = parentheses.saturating_sub(1),
+                    b'[' => brackets += 1,
+                    b']' if brackets == 0 && userinfo_ended && enclosing == Some(b'[') => break,
+                    b']' => brackets = brackets.saturating_sub(1),
+                    b'@' => userinfo_ended = true,
+                    _ => {}
+                }
+                cursor += 1;
+            }
+            let uri = &bytes[start + prefix.len()..cursor];
+            if valid(uri) {
+                candidates.push(Candidate {
+                    label: Label::CredentialUri,
+                    start_byte: start,
+                    end_byte: cursor,
+                });
+            }
+        }
+        candidates.clone()
+    }
+
+    #[test]
+    fn scheme_search_matches_the_byte_walk() {
+        let uris = [
+            "postgres://app:secret@db.example.com:5432/prod",
+            "POSTGRESQL://app:pw@10.0.0.1/db?sslmode=require",
+            "postgresql:/app:pw@host",
+            "postgres://user@host",
+            "postgres://u:p@[::1]:5432/db",
+            "postgres://u:p@host/db#frag",
+            "postgresql://u:p@h p",
+            "postgres://u:p@h/é",
+        ];
+        for uri in uris {
+            for (before, after) in [
+                ("", ""),
+                (" ", "."),
+                ("'", "'"),
+                ("(", ")"),
+                ("[", "]"),
+                ("x", ""),
+                ("jdbc:", ""),
+                ("é", "\u{2003}tail"),
+                ("postgres://", ""),
+            ] {
+                let text = format!("db {before}{uri}{after} and {uri} pp Postgres");
+                let mut found = Vec::new();
+                detect(&text, &mut found);
+                assert_eq!(found, reference(&text), "{text}");
+            }
+        }
+    }
 }

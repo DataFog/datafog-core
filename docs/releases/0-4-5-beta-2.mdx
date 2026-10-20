@@ -1,0 +1,46 @@
+---
+title: "0.4.5 beta.2"
+description: "Candidate scanner performance improvements and card detection fixes."
+icon: "tag"
+---
+
+This version was withdrawn. Use `0.4.5-beta.3` (Python `0.4.5b3`) instead.
+The notes below describe the withdrawn candidate.
+
+## Performance changes
+
+- Search required prefixes and separators before validating API keys,
+  credential URIs, JWTs, UUIDs, dates, and IP addresses. Digit detectors skip
+  text without ASCII digits, and card candidates use a fixed digit buffer.
+- Cache IPv6 run boundaries and reject runs longer than a valid hexadecimal
+  IPv6 address before parsing, removing repeated scans of long colon runs.
+- Convert ASCII offsets directly, clone only selected findings, and reuse
+  selected structured leaves during transformation.
+- Index token provider results by item ID and group structured tokens by leaf.
+  Restoration counts source and output code points incrementally.
+- Release Python's GIL while the Rust text scanner runs.
+
+## Card detection fix
+
+When a separated digit run fails the existing whole-number card checks, detect
+its longest valid leading card in a supported grouping. This recognizes cases
+such as `4111 1111 1111 1111 123` and `4111 1111 1111 1111 12/25` while excluding
+the trailing digits from the card span. Existing full-run cards, including ones
+starting at a later group, retain their original spans. Issuer, Luhn, grouping,
+and decimal guards still apply.
+
+## Compatibility
+
+Public APIs, finding order, and byte/codepoint/UTF-16 offset semantics are
+unchanged. Card detection adds the fallback described above. No dependencies
+are added. The optional model backends and their runtime requirements are
+inherited from beta.1.
+
+## Release preparation
+
+Cargo and npm packages use `0.4.5-beta.2`; Python uses `0.4.5b2`. The bundled
+GLiNER2 runner and its version check are aligned with the Python package.
+Keep npm publication on the `beta` dist-tag and GitHub releases marked as
+prereleases. The model integration gate requires a successful run for the
+release commit, or a passing ancestor followed only by commits modifying
+`README.md`. Other changes require a new full integration run.

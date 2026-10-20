@@ -11,7 +11,7 @@ import platform
 from pathlib import Path
 import sys
 
-__version__ = "0.4.5b1"
+__version__ = "0.4.5b3"
 RUNTIME = {"gliner2": "2.1.0", "transformers": "5.8.0", "torch": "2.12.0"}
 if sys.platform == "darwin" and platform.machine() == "x86_64":
     RUNTIME.update(transformers="4.57.6", torch="2.2.2")

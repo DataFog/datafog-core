@@ -29,8 +29,10 @@ impl Coordinate {
 /// The index walks text lazily and keeps one checkpoint per 256 code points.
 /// Reuse it when converting many ranges, including overlapping or unordered
 /// ranges. Short strings require no checkpoint allocation. No text is copied.
+/// ASCII text, where every coordinate system agrees, is converted without a walk.
 pub struct TextIndex<'a> {
     text: &'a str,
+    ascii: Option<bool>,
     frontier: Position,
     checkpoints: Vec<Position>,
 }
@@ -40,6 +42,7 @@ impl<'a> TextIndex<'a> {
     pub fn new(text: &'a str) -> Self {
         Self {
             text,
+            ascii: None,
             frontier: Position::default(),
             checkpoints: Vec::new(),
         }
@@ -67,6 +70,15 @@ impl<'a> TextIndex<'a> {
     }
 
     fn locate(&mut self, offset: usize, coordinate: Coordinate) -> Position {
+        // Checked once per index; a walk would stop at the end of the text too.
+        if *self.ascii.get_or_insert_with(|| self.text.is_ascii()) {
+            let offset = offset.min(self.text.len());
+            return Position {
+                byte: offset,
+                codepoint: offset,
+                utf16: offset,
+            };
+        }
         let frontier_offset = coordinate.offset(self.frontier);
         if frontier_offset == offset {
             return self.frontier;
@@ -126,10 +138,12 @@ mod tests {
             assert_eq!(index.byte_offset_at_codepoint(usize::MAX), None);
             assert_eq!(index.byte_offset_at_codepoint(boundaries.len()), None);
             assert_eq!(index.byte_offset_at_codepoint(0), Some(0));
-            assert_eq!(
-                index.checkpoints.len(),
+            let walked = if text.is_ascii() {
+                0
+            } else {
                 (boundaries.len() - 1) / CHECKPOINT_INTERVAL
-            );
+            };
+            assert_eq!(index.checkpoints.len(), walked);
         }
     }
 

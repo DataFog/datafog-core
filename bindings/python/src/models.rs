@@ -91,8 +91,49 @@ impl ModelSession {
             .map(|session| Self { session })
             .map_err(|error| model_error(py, error))
     }
-    #[pyo3(signature = (text, *, cancellation=None))]
+    /// Rule detectors handle the entity types they support and the model runs
+    /// only for requested types it alone provides. Omitting `config` equals
+    /// `{}`: every enabled rule detector plus the model's remaining labels.
+    #[pyo3(signature = (text, config=None, *, cancellation=None))]
     fn scan(
+        &self,
+        py: Python<'_>,
+        text: String,
+        config: Option<&Bound<'_, PyAny>>,
+        cancellation: Option<PyRef<'_, ModelCancellation>>,
+    ) -> PyResult<ModelScanResult> {
+        let routed = match config {
+            Some(config) => {
+                let value = py_to_json(py, config, "")?;
+                self.session
+                    .routed_config(&value)
+                    .map_err(|error| model_error(py, error))?
+            }
+            None => self.session.default_routed_config(),
+        };
+        // Rule-only routing never reserves the model worker.
+        let request = if routed.needs_model() {
+            Some(
+                self.session
+                    .prepare_request()
+                    .map_err(|error| model_error(py, error))?,
+            )
+        } else {
+            None
+        };
+        let cancellation = cancellation
+            .map(|v| Arc::clone(&v.cancellation))
+            .unwrap_or_default();
+        py.detach(|| {
+            self.session
+                .scan_routed_request(request.as_ref(), &text, &routed, &cancellation)
+        })
+        .map(ModelScanResult::from)
+        .map_err(|error| model_error(py, error))
+    }
+    /// Raw model output: every model label, with no rule detectors.
+    #[pyo3(signature = (text, *, cancellation=None))]
+    fn scan_model(
         &self,
         py: Python<'_>,
         text: String,
@@ -105,9 +146,12 @@ impl ModelSession {
         let cancellation = cancellation
             .map(|v| Arc::clone(&v.cancellation))
             .unwrap_or_default();
-        py.detach(|| self.session.scan_request(&request, &text, &cancellation))
-            .map(ModelScanResult::from)
-            .map_err(|error| model_error(py, error))
+        py.detach(|| {
+            self.session
+                .scan_model_request(&request, &text, &cancellation)
+        })
+        .map(ModelScanResult::from)
+        .map_err(|error| model_error(py, error))
     }
     fn close(&self, py: Python<'_>) -> PyResult<()> {
         py.detach(|| self.session.close())

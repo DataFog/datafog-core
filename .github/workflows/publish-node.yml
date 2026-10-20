@@ -19,6 +19,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -70,6 +71,7 @@ jobs:
     name: Publish to npm
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: npm
     permissions:
       actions: read
@@ -107,10 +109,11 @@ jobs:
       - name: Check all package contents without publishing
         working-directory: bindings/node
         run: |
+          tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
           for package in npm/*; do
-            (cd "$package" && npm publish --dry-run --ignore-scripts)
+            (cd "$package" && npm publish --dry-run --ignore-scripts --tag "$tag")
           done
-          npm publish --dry-run --ignore-scripts
+          npm publish --dry-run --ignore-scripts --tag "$tag"
       - name: Publish
         if: github.event_name == 'push' || !inputs.dry_run
         working-directory: bindings/node

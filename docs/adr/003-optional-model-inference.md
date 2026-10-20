@@ -42,10 +42,18 @@ concurrent requests with a busy error. Cancellation and close stop active work
 and clean up its process. Python releases the GIL and Node keeps its event loop
 free while work runs.
 
-Model/rule combination, model scans of JSON documents, diagnostic copies,
-configuration fingerprints, inspection reports, and separate warm-up/health
-methods are outside this change. Existing rule-based JSON and transformation
-APIs remain available.
+`scan` takes the rule scanner's configuration and routes each requested entity
+type to one engine: rule detectors for every type they support, the model only
+for its remaining labels. As with the rule scanner, an omitted configuration
+equals `{}`, so a session returns the rule scanner's findings plus the model's
+other labels. A request that needs no model label does not use or reserve the
+worker. Findings for one entity type never come from both engines, so results
+need no cross-engine merging or confidence reconciliation. `scan_model` returns
+raw model output for evaluation and parity checks.
+
+Model scans of JSON documents, diagnostic copies, configuration fingerprints,
+inspection reports, and separate warm-up/health methods are outside this
+change. Existing rule-based JSON and transformation APIs remain available.
 
 ## Verification and release
 
@@ -56,8 +64,11 @@ loading, returned spans and scores, Unicode offsets, reuse, errors, cancellation
 and process cleanup. Do not grade model accuracy or impose speed/memory targets.
 
 Publication must require the latest model integration run for the exact release
-commit to pass every backend/platform job. Missing, failed or unfinished tests
-block publication. Build release packages from source; no cross-run package
+commit to pass every backend/platform job except macOS Intel. Missing, failed
+or unfinished required tests block publication. The macOS Intel jobs are
+advisory: GitHub retires its last Intel macOS runner image in fall 2027, and
+the Intel stack is pinned to an older PyTorch. Intel packages are still built
+and published. Build release packages from source; no cross-run package
 handoff or saved-file publication system is required.
 
 Target `0.4.5-beta.1` for Cargo/npm and `0.4.5b1` for Python. Use npm's `beta`

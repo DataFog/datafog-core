@@ -2,6 +2,7 @@
 //! the decoded string at the reported RFC 6901 JSON Pointer.
 use super::*;
 use serde_json::Value;
+use std::fmt::Write as _;
 
 pub(super) const PERSON_ENTITY_TYPE: &str = "PERSON";
 
@@ -205,17 +206,20 @@ fn leaves(data: &Value) -> Result<Vec<Leaf<'_>>, PrivacyError> {
                 let mut entries: Vec<_> = object.iter().collect();
                 entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
                 for (key, value) in entries.into_iter().rev() {
-                    pending.push((
-                        format!("{path}/{}", json_pointer_segment(key)),
-                        Some(key.as_str()),
-                        value,
-                        depth + 1,
-                    ));
+                    let mut child = String::with_capacity(path.len() + key.len() + 1);
+                    child.push_str(&path);
+                    child.push('/');
+                    push_json_pointer_segment(&mut child, key);
+                    pending.push((child, Some(key.as_str()), value, depth + 1));
                 }
             }
             Value::Array(array) => {
                 for (index, value) in array.iter().enumerate().rev() {
-                    pending.push((format!("{path}/{index}"), None, value, depth + 1));
+                    let mut child = String::with_capacity(path.len() + 8);
+                    child.push_str(&path);
+                    // Writing to a String cannot fail.
+                    write!(child, "/{index}").expect("writing to a String cannot fail");
+                    pending.push((child, None, value, depth + 1));
                 }
             }
             Value::String(text) => leaves.push(Leaf { path, key, text }),
@@ -350,12 +354,11 @@ fn selected_leaves<'a>(
     let mut grouped: BTreeMap<&str, Vec<Finding>> = BTreeMap::new();
     let mut offsets = BTreeMap::new();
     for (index, located) in findings.iter().enumerate() {
-        if validate_pointer(&located.path, "").is_err()
-            || data
-                .pointer(&located.path)
-                .and_then(Value::as_str)
-                .is_none()
-        {
+        let text = validate_pointer(&located.path, "")
+            .ok()
+            .and_then(|()| data.pointer(&located.path))
+            .and_then(Value::as_str);
+        let Some(text) = text else {
             return Err(PrivacyError {
                 code: PrivacyErrorCode::InvalidFinding,
                 reason: Some(PrivacyErrorReason::InvalidValue),
@@ -363,11 +366,7 @@ fn selected_leaves<'a>(
                 finding_index: Some(index),
                 message: "finding path must select an existing string value".into(),
             });
-        }
-        let text = data
-            .pointer(&located.path)
-            .and_then(Value::as_str)
-            .ok_or_else(invalid_data)?;
+        };
         let field_offsets = offsets
             .entry(located.path.as_str())
             .or_insert_with(|| TextIndex::new(text));
@@ -458,20 +457,37 @@ pub fn transform_with_provider_results(
     token_results: Vec<TokenizeResult>,
 ) -> Result<StructuredTransformResult, PrivacyError> {
     let leaves = selected_leaves(data, findings, config)?;
-    let keys = validate_resolved_keys(leaf_selectors(&leaves, config), keys)?;
+    transform_selected_leaves(data, &leaves, config, context, keys, token_results)
+}
+
+fn transform_selected_leaves(
+    data: &Value,
+    leaves: &[SelectedLeaf<'_>],
+    config: &TransformationConfig,
+    context: Option<&PrivacyContext>,
+    keys: Vec<ResolvedKeyBinding>,
+    token_results: Vec<TokenizeResult>,
+) -> Result<StructuredTransformResult, PrivacyError> {
+    let keys = validate_resolved_keys(leaf_selectors(leaves, config), keys)?;
     let tokens =
-        validate_tokenize_results(&leaf_token_items(&leaves, config, context)?, token_results)?;
+        validate_tokenize_results(&leaf_token_items(leaves, config, context)?, token_results)?;
+    // Item ids are `<leaf index>:<finding index>`; partition them in one pass
+    // rather than filtering every token for every leaf.
+    let mut tokens_by_leaf: BTreeMap<usize, BTreeMap<String, (String, String)>> = BTreeMap::new();
+    for (id, token) in tokens {
+        let (leaf, local) = id
+            .split_once(':')
+            .and_then(|(leaf, local)| Some((leaf.parse().ok()?, local)))
+            .ok_or_else(PrivacyError::invalid_token_material)?;
+        tokens_by_leaf
+            .entry(leaf)
+            .or_default()
+            .insert(local.to_owned(), token);
+    }
     let mut output = data.clone();
     let mut transformations = Vec::new();
     for (index, leaf) in leaves.iter().enumerate() {
-        let prefix = format!("{index}:");
-        let local_tokens = tokens
-            .iter()
-            .filter_map(|(id, token)| {
-                id.strip_prefix(&prefix)
-                    .map(|id| (id.to_owned(), token.clone()))
-            })
-            .collect();
+        let local_tokens = tokens_by_leaf.remove(&index).unwrap_or_default();
         let result =
             apply_transformations(leaf.text, &leaf.findings, config, &keys, &local_tokens)?;
         *output
@@ -497,13 +513,12 @@ pub fn transform(
     findings: &[StructuredFinding],
     config: &TransformationConfig,
 ) -> Result<StructuredTransformResult, PrivacyError> {
-    if let Some(selector) = required_key_selectors(data, findings, config)?
-        .into_iter()
-        .next()
-    {
+    // Select once; key requirements and the transformation share the result.
+    let leaves = selected_leaves(data, findings, config)?;
+    if let Some(selector) = leaf_selectors(&leaves, config).into_iter().next() {
         return Err(PrivacyError::provider_required(selector.path));
     }
-    transform_with_provider_results(data, findings, config, None, Vec::new(), Vec::new())
+    transform_selected_leaves(data, &leaves, config, None, Vec::new(), Vec::new())
 }
 
 /// Reusable detection and transformation configuration for structured data.
@@ -585,7 +600,7 @@ impl<P: KeyProvider, T: TokenProvider> PrivacyManager<P, T> {
                 .await
                 .map_err(PrivacyError::from_token_provider_error)?
         };
-        transform_with_provider_results(data, findings, config, context, keys, tokens)
+        transform_selected_leaves(data, &leaves, config, context, keys, tokens)
     }
 
     pub async fn scan_and_transform_structured(

@@ -1,0 +1,61 @@
+---
+title: "0.4.5 beta.3"
+description: "Faster scanning, broader card detection, and model sessions that route findings between rules and models."
+icon: "tag"
+---
+
+This prerelease replaces the withdrawn `0.4.5-beta.2` and builds on beta.1.
+Use `0.4.5-beta.3` for Cargo and npm, or `0.4.5b3` for Python. npm packages
+remain on the `beta` dist-tag; the stable `latest` release remains `0.4.4`.
+
+## Faster scanning
+
+Text scans are 2.5–5× faster in reported measurements, with identical existing
+findings. The speedup depends on the input and enabled detectors.
+
+- Search required prefixes and separators before validating API keys,
+  credential URIs, JWTs, UUIDs, dates, and IP addresses. Digit detectors skip
+  text without ASCII digits, and card candidates use a fixed digit buffer.
+- Remove three quadratic slowdowns: repeated parsing of long IPv6 colon runs,
+  repeated work during token restoration, and grouping structured tokens by leaf.
+- Convert ASCII offsets directly, clone only selected findings, and reuse
+  selected structured leaves during transformation.
+- Release Python's GIL while the Rust text scanner runs, allowing other Python
+  threads to keep working.
+
+## Cards followed by CVVs or expiry dates
+
+A card number followed by a CVV or expiry is now detected. For example,
+`4111 1111 1111 1111 123` and `4111 1111 1111 1111 12/25` detect the leading
+card without including the trailing digits in its span.
+
+This changes redacted output: it hides cards that `0.4.4` missed in these
+contexts. No `0.4.4` finding is removed. Existing whole-number card checks run
+first, and issuer, Luhn, grouping, and decimal guards still apply.
+
+## Model session routing
+
+A model session's `scan(text, config)` routes each requested entity type to
+rules or the model. In Node.js, pass the scan configuration under
+`scan(text, {config})`.
+
+Omitting configuration equals `{}`: all enabled rule detectors run, together
+with the model's other labels. Rules handle supported entity types even when
+the model also labels them. A rules-only request never uses or reserves the
+model worker and does not return `model_busy`; closed or failed sessions still
+reject requests.
+
+Use `scan_model` in Rust or Python, or `scanModel` in Node.js, for raw model
+output without rule detectors. Node.js rejects unknown scan option keys with
+`TypeError`.
+
+Existing rule scanner APIs, finding order, and byte/codepoint/UTF-16 offset
+semantics are preserved. WASM remains rule-based. See the
+[model session guide](https://github.com/DataFog/datafog-core/blob/release/0.4.5-beta.3/docs/model-sessions.md) for configuration and setup.
+
+## Release validation
+
+Publication requires both model backends to pass installed-package integration
+checks on Linux x86_64, Linux ARM64, macOS ARM64, and Windows for the release
+commit. macOS Intel checks still run and are advisory. Rust, Python, Node.js,
+and WASM publish from the same release commit.

@@ -26,7 +26,7 @@ DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add DataFog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Model beta:** [0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1)
+**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Model beta:** [0.4.5-beta.3](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.3)
 
 ## Quickstart
 
@@ -165,20 +165,20 @@ Keep scan settings under `scan` and transformation policy under `transform`. A d
 
 ## Local models (beta)
 
-[0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1) adds local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
+[0.4.5-beta.3](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.3) adds local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
 
 Install the beta for your runtime:
 
 ```bash
-python -m pip install 'datafog-core==0.4.5b1'
+python -m pip install 'datafog-core==0.4.5b3'
 npm install @datafog/node@beta
-cargo add datafog-core@0.4.5-beta.1 --features models
+cargo add datafog-core@0.4.5-beta.3 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-python -m pip install 'datafog-core[gliner2]==0.4.5b1'
+python -m pip install 'datafog-core[gliner2]==0.4.5b3'
 ```
 
 The GLiNER2 runner ships in the Python package and also serves Node.js and Rust callers. Download and verify model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support.

@@ -535,7 +535,24 @@ fn validate_entity_name(entity_type: &str, path: &str) -> Result<(), PrivacyErro
 }
 
 fn json_pointer_segment(segment: &str) -> String {
-    segment.replace('~', "~0").replace('/', "~1")
+    let mut escaped = String::with_capacity(segment.len());
+    push_json_pointer_segment(&mut escaped, segment);
+    escaped
+}
+
+/// Append one escaped JSON Pointer reference token without an intermediate string.
+fn push_json_pointer_segment(pointer: &mut String, segment: &str) {
+    if !segment.contains(['~', '/']) {
+        pointer.push_str(segment);
+        return;
+    }
+    for character in segment.chars() {
+        match character {
+            '~' => pointer.push_str("~0"),
+            '/' => pointer.push_str("~1"),
+            character => pointer.push(character),
+        }
+    }
 }
 
 /// Source syntax used to delimit email candidates. Other detectors are unchanged.
@@ -2266,22 +2283,19 @@ fn validate_tokenize_results(
     items: &[TokenizeItem],
     results: Vec<TokenizeResult>,
 ) -> Result<BTreeMap<String, (String, String)>, PrivacyError> {
-    let expected = items
-        .iter()
-        .map(|item| item.id.clone())
-        .collect::<BTreeSet<_>>();
+    // The first item with an id is the one a lookup by id has always returned.
+    let mut expected: BTreeMap<&str, &TokenizeItem> = BTreeMap::new();
+    for item in items {
+        expected.entry(item.id.as_str()).or_insert(item);
+    }
     let mut validated = BTreeMap::new();
     for result in results {
-        if !expected.contains(&result.id)
-            || result.payload.is_empty()
-            || result.resolved_version.trim().is_empty()
-        {
+        let Some(item) = expected.get(result.id.as_str()).copied() else {
+            return Err(PrivacyError::invalid_token_material());
+        };
+        if result.payload.is_empty() || result.resolved_version.trim().is_empty() {
             return Err(PrivacyError::invalid_token_material());
         }
-        let item = items
-            .iter()
-            .find(|item| item.id == result.id)
-            .ok_or_else(PrivacyError::invalid_token_material)?;
         let envelope = encode_token(&item.token_ref, &result.resolved_version, &result.payload);
         if validated
             .insert(result.id, (envelope, result.resolved_version))
@@ -2493,10 +2507,19 @@ pub fn restore_with_results(
     let mut output = String::with_capacity(text.len());
     let mut restorations = Vec::with_capacity(tokens.len());
     let mut cursor = 0;
+    // Tokens are ordered and disjoint, so running counts replace a recount of
+    // every prefix for every token.
+    let mut source_codepoints = 0;
+    let mut output_codepoints = 0;
     for token in tokens {
+        let unchanged = text[cursor..token.start].chars().count();
         output.push_str(&text[cursor..token.start]);
+        source_codepoints += unchanged;
+        output_codepoints += unchanged;
         let output_byte_start = output.len();
-        let output_codepoint_start = output.chars().count();
+        let output_codepoint_start = output_codepoints;
+        let source_codepoint_start = source_codepoints;
+        source_codepoints += text[token.start..token.end].chars().count();
         let id = envelope_ids
             .get(&token.envelope)
             .ok_or_else(PrivacyError::invalid_token_material)?;
@@ -2504,14 +2527,15 @@ pub fn restore_with_results(
             .get(id)
             .ok_or_else(PrivacyError::invalid_token_material)?;
         output.push_str(value);
+        output_codepoints += value.chars().count();
         restorations.push(Restoration {
             source_byte_range: TextRange {
                 start: token.start,
                 end: token.end,
             },
             source_codepoint_range: TextRange {
-                start: text[..token.start].chars().count(),
-                end: text[..token.end].chars().count(),
+                start: source_codepoint_start,
+                end: source_codepoints,
             },
             output_byte_range: TextRange {
                 start: output_byte_start,
@@ -2519,7 +2543,7 @@ pub fn restore_with_results(
             },
             output_codepoint_range: TextRange {
                 start: output_codepoint_start,
-                end: output.chars().count(),
+                end: output_codepoints,
             },
             token_ref: token.token_ref,
             resolved_token_version: token.resolved_version,
@@ -2549,7 +2573,8 @@ fn select_findings(
 }
 
 fn select_validated_findings(findings: &[Finding], config: &TransformationConfig) -> Vec<Finding> {
-    let mut selected_findings: Vec<Finding> = Vec::with_capacity(findings.len());
+    // Selection works on references; only the findings that survive are cloned.
+    let mut selected_findings: Vec<&Finding> = Vec::with_capacity(findings.len());
     let mut duplicate_indices = BTreeMap::new();
     for finding in findings
         .iter()
@@ -2565,14 +2590,14 @@ fn select_validated_findings(findings: &[Finding], config: &TransformationConfig
         );
         match duplicate_indices.entry(identity) {
             std::collections::btree_map::Entry::Occupied(entry) => {
-                let existing = &mut selected_findings[*entry.get()];
+                let existing: &mut &Finding = &mut selected_findings[*entry.get()];
                 if duplicate_preference(finding, existing).is_lt() {
-                    *existing = finding.clone();
+                    *existing = finding;
                 }
             }
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(selected_findings.len());
-                selected_findings.push(finding.clone());
+                selected_findings.push(finding);
             }
         }
     }
@@ -2589,6 +2614,9 @@ fn select_validated_findings(findings: &[Finding], config: &TransformationConfig
             ))
     });
     resolve_overlaps(selected_findings)
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
 fn key_selectors(config: &TransformationConfig, selected_findings: &[Finding]) -> Vec<KeySelector> {
@@ -2912,7 +2940,7 @@ fn duplicate_preference(candidate: &Finding, existing: &Finding) -> std::cmp::Or
 }
 
 // Input is validated, deduplicated, and sorted in source order.
-fn resolve_overlaps(mut findings: Vec<Finding>) -> Vec<Finding> {
+fn resolve_overlaps(mut findings: Vec<&Finding>) -> Vec<&Finding> {
     if findings
         .windows(2)
         .all(|pair| pair[0].byte_range.end <= pair[1].byte_range.start)
@@ -2934,8 +2962,8 @@ fn resolve_overlaps(mut findings: Vec<Finding>) -> Vec<Finding> {
         }
     }
 
-    findings.sort_by(overlap_preference);
-    let mut selected: BTreeMap<usize, Finding> = BTreeMap::new();
+    findings.sort_by(|left, right| overlap_preference(left, right));
+    let mut selected: BTreeMap<usize, &Finding> = BTreeMap::new();
     for finding in findings {
         let start = finding.byte_range.start;
         // Accepted intervals never overlap. The closest predecessor and
@@ -2955,19 +2983,18 @@ fn resolve_overlaps(mut findings: Vec<Finding>) -> Vec<Finding> {
     selected.into_values().collect()
 }
 
-fn resolve_overlaps_pairwise(mut remaining: Vec<Finding>) -> Vec<Finding> {
+fn resolve_overlaps_pairwise(mut remaining: Vec<&Finding>) -> Vec<&Finding> {
     let mut selected = Vec::with_capacity(remaining.len());
     while !remaining.is_empty() {
         let mut preferred_index = 0;
         for candidate_index in 1..remaining.len() {
-            if overlap_preference(&remaining[candidate_index], &remaining[preferred_index]).is_lt()
-            {
+            if overlap_preference(remaining[candidate_index], remaining[preferred_index]).is_lt() {
                 preferred_index = candidate_index;
             }
         }
 
         let preferred = remaining.remove(preferred_index);
-        remaining.retain(|finding| !findings_overlap(&preferred, finding));
+        remaining.retain(|finding| !findings_overlap(preferred, finding));
         selected.push(preferred);
     }
 
@@ -3232,6 +3259,51 @@ fn digits_value_u32(digits: &[u8]) -> u32 {
         .fold(0, |value, digit| value * 10 + u32::from(*digit - b'0'))
 }
 
+/// Whether any byte of a little-endian word is an ASCII digit. Each lane is
+/// masked to seven bits first, so the arithmetic never carries between bytes.
+fn word_has_ascii_digit(word: u64) -> bool {
+    const LOW_BITS: u64 = 0x7f7f_7f7f_7f7f_7f7f;
+    const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
+    const LANES: u64 = 0x0101_0101_0101_0101;
+    let low = word & LOW_BITS;
+    // High bit set per lane: byte <= b'9', then byte >= b'0'; ASCII lanes only.
+    let at_most_nine = (LANES * (0x7f + u64::from(b'9') + 1)).wrapping_sub(low);
+    let at_least_zero = low + LANES * (0x80 - u64::from(b'0'));
+    at_most_nine & at_least_zero & !word & HIGH_BITS != 0
+}
+
+fn next_ascii_digit(bytes: &[u8], from: usize) -> Option<usize> {
+    let mut index = from;
+    while let Some(chunk) = bytes.get(index..index + 8) {
+        let word = u64::from_le_bytes(chunk.try_into().ok()?);
+        if word_has_ascii_digit(word) {
+            break;
+        }
+        index += 8;
+    }
+    bytes
+        .get(index..)?
+        .iter()
+        .position(u8::is_ascii_digit)
+        .map(|offset| index + offset)
+}
+
+/// The next ASCII digit at or after `from` that does not continue an ASCII
+/// alphanumeric word. Digit detectors start candidates only there.
+fn next_digit_word_start(bytes: &[u8], mut from: usize) -> Option<usize> {
+    loop {
+        let digit = next_ascii_digit(bytes, from)?;
+        if digit == 0 || !bytes[digit - 1].is_ascii_alphanumeric() {
+            return Some(digit);
+        }
+        // Every later position in this word also follows an alphanumeric byte.
+        from = bytes[digit..]
+            .iter()
+            .position(|byte| !byte.is_ascii_alphanumeric())
+            .map_or(bytes.len(), |offset| digit + offset);
+    }
+}
+
 fn is_valid_ssn(area: u16, group: u16, serial: u16) -> bool {
     area != 0 && area != 666 && area < 900 && group != 0 && serial != 0
 }
@@ -3279,11 +3351,11 @@ fn detect_ssn(text: &str, candidates: &mut Vec<Candidate>) {
     let mut start = 0;
 
     while start < bytes.len() {
-        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
-        {
-            start += 1;
-            continue;
-        }
+        // Positions that are not a digit-word start are rejected unexamined.
+        let Some(next) = next_digit_word_start(bytes, start) else {
+            break;
+        };
+        start = next;
 
         let Some((end, area, group, serial)) = ssn_parts_at(bytes, start) else {
             start += 1;
@@ -3341,21 +3413,25 @@ fn has_supported_card_prefix(digits: &[u8]) -> bool {
     }
 }
 
-fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
+/// A card number has at most 19 digits; they are copied into a fixed buffer
+/// rather than a per-candidate allocation.
+fn card_parts_at(bytes: &[u8], start: usize) -> (usize, [u8; 19], usize) {
     let mut end = start;
     let mut last_digit_end = start;
-    let mut digits = Vec::with_capacity(19);
+    let mut digits = [0; 19];
+    let mut count = 0;
     let mut previous_was_separator = false;
 
     while end < bytes.len() {
         let byte = bytes[end];
 
         if byte.is_ascii_digit() {
-            if digits.len() == 19 {
+            if count == digits.len() {
                 break;
             }
 
-            digits.push(byte);
+            digits[count] = byte;
+            count += 1;
             end += 1;
             last_digit_end = end;
             previous_was_separator = false;
@@ -3367,7 +3443,7 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, Vec<u8>) {
         }
     }
 
-    (last_digit_end, digits)
+    (last_digit_end, digits, count)
 }
 
 /// A contiguous digit run after `3.` or `3,` may be a decimal fraction.
@@ -3376,31 +3452,92 @@ fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
 }
 
+/// The end of a card that spans the whole separated digit run at `start`.
+fn card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let (end, digit_buffer, digit_count) = card_parts_at(bytes, start);
+    let digits = &digit_buffer[..digit_count];
+
+    if end == start
+        || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
+        || (follows_decimal_separator(bytes, start) && end - start == digits.len())
+    {
+        return None;
+    }
+
+    ((13..=19).contains(&digits.len()) && has_supported_card_prefix(digits) && passes_luhn(digits))
+        .then_some(end)
+}
+
+/// Digit-group lengths a formatted card is written in: one contiguous group,
+/// 4-4-4-1, 4-4-4-4, 4-4-4-4 followed by one to three digits, 4-6-5 or 4-6-4.
+fn has_card_grouping(groups: &[usize]) -> bool {
+    match groups {
+        [single] => (13..=19).contains(single),
+        [4, 4, 4, 1] | [4, 4, 4, 4] | [4, 6, 5] | [4, 6, 4] => true,
+        [4, 4, 4, 4, last] => (1..=3).contains(last),
+        _ => false,
+    }
+}
+
+/// A card followed by more digit groups, such as a CVV or an expiry spoken in
+/// the same breath: `4111 1111 1111 1111 123`. The card ends at a separator,
+/// keeps a card grouping, and is used only when no later group in the run
+/// starts a whole-run card, so every card the whole-run rule finds is kept.
+fn leading_card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let (end, digit_buffer, digit_count) = card_parts_at(bytes, start);
+    if digit_count < 14 {
+        return None;
+    }
+    // Separator positions inside the run, with the digit-group lengths before each.
+    let mut boundaries = [(0, 0); 19];
+    let mut boundary_count = 0;
+    let mut groups = [0; 19];
+    let mut group_count = 0;
+    let mut digits = 0;
+    for (position, byte) in bytes.iter().enumerate().take(end).skip(start) {
+        if byte.is_ascii_digit() {
+            if position == start || !bytes[position - 1].is_ascii_digit() {
+                group_count += 1;
+            }
+            groups[group_count - 1] += 1;
+            digits += 1;
+        } else {
+            boundaries[boundary_count] = (position, group_count);
+            boundary_count += 1;
+            if card_end_at(bytes, position + 1).is_some() {
+                return None;
+            }
+        }
+    }
+    debug_assert_eq!(digits, digit_count);
+    boundaries[..boundary_count]
+        .iter()
+        .rev()
+        .find_map(|&(position, kept_groups)| {
+            let kept = &groups[..kept_groups];
+            let card_digits: usize = kept.iter().sum();
+            let digits = &digit_buffer[..card_digits];
+            ((13..=19).contains(&card_digits)
+                && has_card_grouping(kept)
+                && !(follows_decimal_separator(bytes, start) && kept.len() == 1)
+                && has_supported_card_prefix(digits)
+                && passes_luhn(digits))
+            .then_some(position)
+        })
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut start = 0;
 
     while start < bytes.len() {
-        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
-        {
-            start += 1;
-            continue;
-        }
+        // Positions that are not a digit-word start are rejected unexamined.
+        let Some(next) = next_digit_word_start(bytes, start) else {
+            break;
+        };
+        start = next;
 
-        let (end, digits) = card_parts_at(bytes, start);
-
-        if end == start
-            || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
-            || (follows_decimal_separator(bytes, start) && end - start == digits.len())
-        {
-            start += 1;
-            continue;
-        }
-
-        if (13..=19).contains(&digits.len())
-            && has_supported_card_prefix(&digits)
-            && passes_luhn(&digits)
-        {
+        if let Some(end) = card_end_at(bytes, start).or_else(|| leading_card_end_at(bytes, start)) {
             candidates.push(Candidate {
                 label: Label::CreditCard,
                 start_byte: start,
@@ -3464,45 +3601,142 @@ fn numeric_date_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
     None
 }
 
-const MONTH_NAMES: [(&[u8], u8); 23] = [
-    (b"january", 1),
-    (b"jan", 1),
-    (b"february", 2),
-    (b"feb", 2),
-    (b"march", 3),
-    (b"mar", 3),
-    (b"april", 4),
-    (b"apr", 4),
-    (b"may", 5),
-    (b"june", 6),
-    (b"jun", 6),
-    (b"july", 7),
-    (b"jul", 7),
-    (b"august", 8),
-    (b"aug", 8),
-    (b"september", 9),
-    (b"sep", 9),
-    (b"october", 10),
-    (b"oct", 10),
-    (b"november", 11),
-    (b"nov", 11),
-    (b"december", 12),
-    (b"dec", 12),
-];
+// Full name, then abbreviation, keyed by the shared three-letter prefix. May
+// has no separate abbreviation.
+fn month_by_prefix(prefix: [u8; 3]) -> Option<(&'static [u8], u8)> {
+    Some(match &prefix {
+        b"jan" => (b"january", 1),
+        b"feb" => (b"february", 2),
+        b"mar" => (b"march", 3),
+        b"apr" => (b"april", 4),
+        b"may" => (b"may", 5),
+        b"jun" => (b"june", 6),
+        b"jul" => (b"july", 7),
+        b"aug" => (b"august", 8),
+        b"sep" => (b"september", 9),
+        b"oct" => (b"october", 10),
+        b"nov" => (b"november", 11),
+        b"dec" => (b"december", 12),
+        _ => return None,
+    })
+}
 
 fn month_name_at(bytes: &[u8], start: usize) -> Option<(usize, u8)> {
-    for (name, month) in MONTH_NAMES {
-        let end = start + name.len();
+    let prefix = bytes.get(start..start.checked_add(3)?)?;
+    let (name, month) = month_by_prefix([
+        prefix[0].to_ascii_lowercase(),
+        prefix[1].to_ascii_lowercase(),
+        prefix[2].to_ascii_lowercase(),
+    ])?;
+    let ends_word = |end: usize| end == bytes.len() || !bytes[end].is_ascii_alphabetic();
+    let full_end = start + name.len();
+    if bytes
+        .get(start..full_end)
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(name))
+        && ends_word(full_end)
+    {
+        return Some((full_end, month));
+    }
+    ends_word(start + 3).then_some((start + 3, month))
+}
 
-        if end <= bytes.len()
-            && bytes[start..end].eq_ignore_ascii_case(name)
-            && (end == bytes.len() || !bytes[end].is_ascii_alphabetic())
-        {
-            return Some((end, month));
-        }
+#[cfg(test)]
+mod month_name_tests {
+    // The previous ordered table scan, kept as the reference for the lookup.
+    fn reference(bytes: &[u8], start: usize) -> Option<(usize, u8)> {
+        const NAMES: [(&[u8], u8); 23] = [
+            (b"january", 1),
+            (b"jan", 1),
+            (b"february", 2),
+            (b"feb", 2),
+            (b"march", 3),
+            (b"mar", 3),
+            (b"april", 4),
+            (b"apr", 4),
+            (b"may", 5),
+            (b"june", 6),
+            (b"jun", 6),
+            (b"july", 7),
+            (b"jul", 7),
+            (b"august", 8),
+            (b"aug", 8),
+            (b"september", 9),
+            (b"sep", 9),
+            (b"october", 10),
+            (b"oct", 10),
+            (b"november", 11),
+            (b"nov", 11),
+            (b"december", 12),
+            (b"dec", 12),
+        ];
+        NAMES.into_iter().find_map(|(name, month)| {
+            let end = start + name.len();
+            (end <= bytes.len()
+                && bytes[start..end].eq_ignore_ascii_case(name)
+                && (end == bytes.len() || !bytes[end].is_ascii_alphabetic()))
+            .then_some((end, month))
+        })
     }
 
-    None
+    #[test]
+    fn prefix_lookup_matches_the_ordered_table() {
+        let words = [
+            "January",
+            "jan",
+            "JAN.",
+            "janu",
+            "February",
+            "feb",
+            "Febr",
+            "march",
+            "Mar",
+            "marc",
+            "April",
+            "apr",
+            "May",
+            "mayday",
+            "may1",
+            "June",
+            "jun",
+            "junE",
+            "July",
+            "jul",
+            "julyx",
+            "August",
+            "aug",
+            "Sept",
+            "September",
+            "sep",
+            "SEPTEMBER",
+            "October",
+            "oct",
+            "nov",
+            "November",
+            "Dec",
+            "december",
+            "decembers",
+            "de",
+            "j",
+            "",
+            "monday",
+            "decade",
+            "mai",
+            "ja",
+            "feé",
+        ];
+        for word in words {
+            for suffix in ["", " ", "1", "x", ",", "é"] {
+                let text = format!("{word}{suffix}");
+                for start in 0..=text.len() {
+                    assert_eq!(
+                        super::month_name_at(text.as_bytes(), start),
+                        reference(text.as_bytes(), start),
+                        "{text:?} at {start}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn named_date_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
@@ -3542,37 +3776,144 @@ fn date_parts_at(bytes: &[u8], start: usize) -> Option<(usize, u16, u8, u8)> {
     numeric_date_at(bytes, start).or_else(|| named_date_at(bytes, start))
 }
 
+// Numeric dates contain `-` or `/`; named dates place `,` after the day.
+static DATE_SEPARATOR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[-/,]").expect("date separator regex is valid"));
+
+/// Return the end of an accepted date beginning exactly at `start`.
+fn date_at(bytes: &[u8], start: usize) -> Option<usize> {
+    if (!bytes[start].is_ascii_digit() && !bytes[start].is_ascii_alphabetic())
+        || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    let (end, year, month, day) = date_parts_at(bytes, start)?;
+    if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
+        return None;
+    }
+    is_valid_date(year, month, day).then_some(end)
+}
+
+/// Every start `date_at` can accept, derived from the separators it requires:
+/// `YYYY-` places `-` four bytes in, `MM/` and `MM-` two bytes in, and
+/// `<month> <day>,` is the alphabetic word before the space that precedes a
+/// one- or two-digit day.
+fn date_starts(text: &str) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut starts = Vec::new();
+    for separator in DATE_SEPARATOR.find_iter(text) {
+        let at = separator.start();
+        if bytes[at] == b',' {
+            for day_digits in 1..=2 {
+                let Some(space) = at.checked_sub(day_digits + 1) else {
+                    continue;
+                };
+                if bytes[space] == b' ' && bytes[space + 1..at].iter().all(u8::is_ascii_digit) {
+                    let name_start = bytes[..space]
+                        .iter()
+                        .rposition(|byte| !byte.is_ascii_alphabetic())
+                        .map_or(0, |delimiter| delimiter + 1);
+                    if name_start < space {
+                        starts.push(name_start);
+                    }
+                }
+            }
+        } else {
+            if bytes[at] == b'-' {
+                starts.extend(at.checked_sub(4));
+            }
+            starts.extend(at.checked_sub(2));
+        }
+    }
+    starts.sort_unstable();
+    starts.dedup();
+    starts
+}
+
 fn detect_date(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
-    let mut start = 0;
-
-    while start < bytes.len() {
-        if (!bytes[start].is_ascii_digit() && !bytes[start].is_ascii_alphabetic())
-            || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
-        {
-            start += 1;
+    // Accepted dates are consumed, so a later start inside one is skipped.
+    let mut consumed = 0;
+    for start in date_starts(text) {
+        if start < consumed {
             continue;
         }
-
-        let Some((end, year, month, day)) = date_parts_at(bytes, start) else {
-            start += 1;
-            continue;
-        };
-
-        if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
-            start += 1;
-            continue;
-        }
-
-        if is_valid_date(year, month, day) {
+        if let Some(end) = date_at(bytes, start) {
             candidates.push(Candidate {
                 label: Label::Date,
                 start_byte: start,
                 end_byte: end,
             });
-            start = end;
-        } else {
-            start += 1;
+            consumed = end;
+        }
+    }
+}
+
+#[cfg(test)]
+mod date_start_tests {
+    use super::*;
+
+    // The previous walk over every byte, kept as the reference.
+    fn reference(text: &str) -> Vec<Candidate> {
+        let bytes = text.as_bytes();
+        let mut candidates = Vec::new();
+        let mut start = 0;
+        while start < bytes.len() {
+            if let Some(end) = date_at(bytes, start) {
+                candidates.push(Candidate {
+                    label: Label::Date,
+                    start_byte: start,
+                    end_byte: end,
+                });
+                start = end;
+            } else {
+                start += 1;
+            }
+        }
+        candidates
+    }
+
+    #[test]
+    fn separator_starts_match_the_whole_text_walk() {
+        let dates = [
+            "2024-02-29",
+            "2023-02-29",
+            "12/31/2024",
+            "12-31-2024",
+            "13/01/2024",
+            "01/02-2024",
+            "March 5, 2026",
+            "Sept 5, 2026",
+            "sep 15, 2026",
+            "May 1, 2026",
+            "December 31, 1999",
+            "Dec 32, 1999",
+            "June 123, 2026",
+            "June 12,2026",
+            "June  12, 2026",
+            "2024-01-01T10:00:00Z",
+            "2024-01-01-2024-01-02",
+            "12/12/2024/12/12/2024",
+            "1-2-3-4",
+            "x2024-01-01",
+            "2024-01-011",
+            "May 5, 2024-05-05",
+            "1March 5, 2026",
+            "Ümarch 5, 2026",
+        ];
+        for date in dates {
+            for (before, after) in [
+                ("", ""),
+                (" ", "."),
+                ("é", "中"),
+                ("on ", ", then"),
+                ("(", ")"),
+            ] {
+                let text = format!("due {before}{date}{after} and {date}");
+                let mut found = Vec::new();
+                detect_date(&text, &mut found);
+                assert_eq!(found, reference(&text), "{text}");
+            }
         }
     }
 }
@@ -3610,11 +3951,11 @@ fn detect_zip_code(text: &str, candidates: &mut Vec<Candidate>) {
     let mut start = 0;
 
     while start < bytes.len() {
-        if !bytes[start].is_ascii_digit() || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
-        {
-            start += 1;
-            continue;
-        }
+        // Positions that are not a digit-word start are rejected unexamined.
+        let Some(next) = next_digit_word_start(bytes, start) else {
+            break;
+        };
+        start = next;
 
         let Some(end) = zip_end_at(bytes, start) else {
             start += 1;
@@ -3660,6 +4001,8 @@ fn ipv4_end_at(bytes: &[u8], start: usize) -> Option<usize> {
     Some(end)
 }
 
+// Reference for the run-cached IPv6 end in `detect_ip_address_in`.
+#[cfg(test)]
 fn ipv6_end_at(bytes: &[u8], start: usize) -> Option<usize> {
     if !bytes[start].is_ascii_hexdigit() && bytes[start] != b':' {
         return None;
@@ -3695,7 +4038,14 @@ fn is_valid_ipv4(bytes: &[u8], start: usize, end: usize) -> bool {
     candidate.parse::<Ipv4Addr>().is_ok()
 }
 
+// Eight four-digit groups and seven colons; hexadecimal-and-colon text any
+// longer cannot parse, so it is rejected without validating the whole run.
+const MAX_IPV6_HEX_COLON_LENGTH: usize = 39;
+
 fn is_valid_ipv6(bytes: &[u8], start: usize, end: usize) -> bool {
+    if end - start > MAX_IPV6_HEX_COLON_LENGTH {
+        return false;
+    }
     let Ok(candidate) = std::str::from_utf8(&bytes[start..end]) else {
         return false;
     };
@@ -3703,11 +4053,49 @@ fn is_valid_ipv6(bytes: &[u8], start: usize, end: usize) -> bool {
     candidate.parse::<Ipv6Addr>().is_ok()
 }
 
+// IPv4 addresses contain a period and IPv6 addresses a colon.
+static IP_SEPARATOR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[.:]").expect("IP separator regex is valid"));
+
+fn ip_segment_byte(byte: u8) -> bool {
+    byte.is_ascii_hexdigit() || matches!(byte, b'.' | b':')
+}
+
 fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
-    let mut start = 0;
+    let mut search = 0;
+    // Every candidate start and address lies in one maximal run of hexadecimal
+    // digits, periods and colons. Runs without a separator cannot hold an
+    // address, so only runs around a separator are walked.
+    while let Some(separator) = IP_SEPARATOR.find_at(text, search) {
+        let separator = separator.start();
+        let segment_start = bytes[..separator]
+            .iter()
+            .rposition(|byte| !ip_segment_byte(*byte))
+            .map_or(0, |delimiter| delimiter + 1);
+        let segment_end = bytes[separator..]
+            .iter()
+            .position(|byte| !ip_segment_byte(*byte))
+            .map_or(bytes.len(), |delimiter| separator + delimiter);
+        detect_ip_address_in(bytes, segment_start, segment_end, candidates);
+        search = segment_end;
+    }
+}
 
-    while start < bytes.len() {
+fn detect_ip_address_in(
+    bytes: &[u8],
+    segment_start: usize,
+    segment_end: usize,
+    candidates: &mut Vec<Candidate>,
+) {
+    let mut start = segment_start;
+    // The hexadecimal-and-colon run containing `start` and its last colon. Every
+    // start inside one run shares its end, so the run is scanned once, not once
+    // per start; without this a long run of `a:` takes quadratic time.
+    let mut run_end = segment_start;
+    let mut last_colon = None;
+
+    while start < segment_end {
         if (!bytes[start].is_ascii_hexdigit() && bytes[start] != b':')
             || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
         {
@@ -3730,7 +4118,19 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
             }
         }
 
-        if let Some(end) = ipv6_end_at(bytes, start) {
+        if start >= run_end {
+            run_end = bytes[start..]
+                .iter()
+                .position(|byte| !byte.is_ascii_hexdigit() && *byte != b':')
+                .map_or(bytes.len(), |offset| start + offset);
+            last_colon = bytes[start..run_end]
+                .iter()
+                .rposition(|byte| *byte == b':')
+                .map(|offset| start + offset);
+        }
+        let ipv6_end =
+            (run_end > start && last_colon.is_some_and(|colon| colon >= start)).then_some(run_end);
+        if let Some(end) = ipv6_end {
             if has_ip_boundaries(bytes, start, end) && is_valid_ipv6(bytes, start, end) {
                 candidates.push(Candidate {
                     label: Label::IpAddress,
@@ -3743,6 +4143,291 @@ fn detect_ip_address(text: &str, candidates: &mut Vec<Candidate>) {
         }
 
         start += 1;
+    }
+}
+
+#[cfg(test)]
+mod leading_card_tests {
+    use super::*;
+
+    fn cards(text: &str) -> Vec<&str> {
+        scan(text)
+            .into_iter()
+            .filter(|finding| finding.entity_type == "CREDIT_CARD")
+            .map(|finding| &text[finding.byte_range.start..finding.byte_range.end])
+            .collect()
+    }
+
+    #[test]
+    fn detects_a_card_followed_by_a_cvv_or_expiry() {
+        for (text, card) in [
+            ("card 4111 1111 1111 1111 123 ok", "4111 1111 1111 1111"),
+            ("card 4111 1111 1111 1111 12/25 ok", "4111 1111 1111 1111"),
+            ("card 4111-1111-1111-1111 1225 123", "4111-1111-1111-1111"),
+            ("card 4111111111111111 123", "4111111111111111"),
+            ("card 4222 2222 2222 2 123", "4222 2222 2222 2"),
+            ("amex 3782 822463 10005 1234", "3782 822463 10005"),
+        ] {
+            assert_eq!(cards(text), [card], "{text}");
+        }
+        let text = "card 4111 1111 1111 1111 123";
+        let redacted = transform(
+            text,
+            &scan(text),
+            &TransformationConfig::new(TransformationStrategy::Redact),
+        )
+        .unwrap();
+        assert_eq!(redacted.text, "card [CREDIT_CARD] 123");
+    }
+
+    #[test]
+    fn leading_cards_need_a_separator_a_card_grouping_and_a_valid_number() {
+        for text in [
+            // No separator: a longer contiguous number is not cut.
+            "id 4111111111111111123",
+            // Luhn fails for every leading part.
+            "card 4111 1111 1111 1112 123",
+            // `4096 1024 2048 109` passes Luhn, but 4-4-4-3 is a number list.
+            "sizes 4096 1024 2048 109 256 128",
+            // A contiguous leading part after a decimal stays suppressed.
+            "ratio 3.4111111111111111 123",
+        ] {
+            assert!(cards(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn whole_run_cards_later_in_the_run_take_precedence() {
+        // `4008 4111 1111 1111` passes Luhn, but the whole-run card that starts
+        // at the second group was already found and must not be cut short.
+        assert_eq!(
+            cards("ref 4008 4111 1111 1111 1111"),
+            ["4111 1111 1111 1111"]
+        );
+        assert_eq!(
+            cards("card 4111 1111 1111 1111 110"),
+            ["4111 1111 1111 1111 110"]
+        );
+    }
+
+    #[test]
+    fn leading_cards_preserve_unicode_offsets_and_structured_ranges() {
+        let text = "👋 e\u{301} card 4111 1111 1111 1111 12/25 中";
+        let config = ScanConfig::new()
+            .with_entities(vec!["CREDIT_CARD".into()])
+            .unwrap();
+        let findings = scan_with_config(text, &config);
+        assert_eq!(findings.len(), 1);
+        let finding = &findings[0];
+        assert_eq!(finding.matched_text, "4111 1111 1111 1111");
+        assert_eq!(finding.byte_range, TextRange { start: 14, end: 33 });
+        assert_eq!(finding.codepoint_range, TextRange { start: 10, end: 29 });
+        assert_eq!(
+            utf16_range(text, finding.byte_range).unwrap(),
+            TextRange { start: 11, end: 30 }
+        );
+        let data = serde_json::json!({"card": text});
+        let structured =
+            structured::scan(&data, &structured::StructuredScanConfig::default()).unwrap();
+        let cards: Vec<_> = structured
+            .findings
+            .iter()
+            .filter(|located| located.finding.entity_type == "CREDIT_CARD")
+            .collect();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].path, "/card");
+        assert_eq!(&cards[0].finding, finding);
+    }
+
+    #[test]
+    fn card_groupings() {
+        for groups in [
+            &[16][..],
+            &[4, 4, 4, 4],
+            &[4, 4, 4, 1],
+            &[4, 4, 4, 4, 1],
+            &[4, 4, 4, 4, 3],
+            &[4, 6, 5],
+            &[4, 6, 4],
+        ] {
+            assert!(has_card_grouping(groups), "{groups:?}");
+        }
+        for groups in [
+            &[][..],
+            &[12],
+            &[4, 4, 4, 3],
+            &[4, 4, 4, 2],
+            &[4, 4, 4, 4, 4],
+            &[4, 4, 4, 3, 3],
+            &[4, 4, 5],
+            &[3, 4, 4, 4],
+            &[4, 6, 6],
+        ] {
+            assert!(!has_card_grouping(groups), "{groups:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod digit_start_tests {
+    use super::*;
+
+    #[test]
+    fn word_digit_test_is_exact_for_every_byte_in_every_lane() {
+        for lane in 0..8 {
+            for byte in 0..=u8::MAX {
+                let mut word = [b'x'; 8];
+                word[lane] = byte;
+                assert_eq!(
+                    word_has_ascii_digit(u64::from_le_bytes(word)),
+                    byte.is_ascii_digit(),
+                    "lane {lane} byte {byte:#04x}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn digit_word_starts_match_a_byte_by_byte_walk() {
+        let text = "a1 22 b33 4é5 中6 x-7 ..8\n9999999999 ab12cd 0 ~~~~~~~~~~~~~~~~1";
+        let bytes = text.as_bytes();
+        let expected: Vec<_> = (0..bytes.len())
+            .filter(|&index| {
+                bytes[index].is_ascii_digit()
+                    && (index == 0 || !bytes[index - 1].is_ascii_alphanumeric())
+            })
+            .collect();
+        for from in 0..=bytes.len() {
+            let found = next_digit_word_start(bytes, from);
+            assert_eq!(
+                found,
+                expected.iter().copied().find(|&index| index >= from),
+                "{from}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod ip_segment_tests {
+    use super::*;
+
+    // The previous detector: a fresh IPv6 run scan for every start.
+    fn reference(bytes: &[u8]) -> Vec<Candidate> {
+        let mut candidates = Vec::new();
+        let mut start = 0;
+        while start < bytes.len() {
+            if (!bytes[start].is_ascii_hexdigit() && bytes[start] != b':')
+                || (start > 0 && bytes[start - 1].is_ascii_alphanumeric())
+            {
+                start += 1;
+                continue;
+            }
+            if let Some(end) = ipv4_end_at(bytes, start) {
+                if has_ip_boundaries(bytes, start, end)
+                    && !is_part_of_longer_ipv4(bytes, start, end)
+                    && is_valid_ipv4(bytes, start, end)
+                {
+                    candidates.push(Candidate {
+                        label: Label::IpAddress,
+                        start_byte: start,
+                        end_byte: end,
+                    });
+                    start = end;
+                    continue;
+                }
+            }
+            if let Some(end) = ipv6_end_at(bytes, start) {
+                if has_ip_boundaries(bytes, start, end)
+                    && std::str::from_utf8(&bytes[start..end])
+                        .is_ok_and(|candidate| candidate.parse::<Ipv6Addr>().is_ok())
+                {
+                    candidates.push(Candidate {
+                        label: Label::IpAddress,
+                        start_byte: start,
+                        end_byte: end,
+                    });
+                    start = end;
+                    continue;
+                }
+            }
+            start += 1;
+        }
+        candidates
+    }
+
+    #[test]
+    fn cached_runs_match_the_per_start_scan() {
+        for text in [
+            "::1 fe80::1 a:b ::ffff:1.2.3.4 1:2:3:4:5:6:7:8 1:2:3:4:5:6:7:8:9",
+            ":::: a::b::c ff:: ::ff 2001:db8::1:: :a: x:1 1.2.3.4:5 ab:cd.ef",
+            "0000:0000:0000:0000:0000:0000:0000:0001 00000:1::",
+        ] {
+            let mut found = Vec::new();
+            detect_ip_address(text, &mut found);
+            assert_eq!(found, reference(text.as_bytes()), "{text}");
+        }
+    }
+
+    #[test]
+    fn long_colon_runs_are_linear() {
+        // Previously quadratic: 400 KB of `a:` took over 30 seconds.
+        for text in ["a:".repeat(200_000), ":".repeat(400_000)] {
+            let mut found = Vec::new();
+            detect_ip_address(&text, &mut found);
+            let expected = if text.starts_with('a') {
+                Vec::new()
+            } else {
+                vec![Candidate {
+                    label: Label::IpAddress,
+                    start_byte: text.len() - 2,
+                    end_byte: text.len(),
+                }]
+            };
+            assert_eq!(found, expected);
+        }
+    }
+
+    #[test]
+    fn separator_runs_match_the_whole_text_walk() {
+        let addresses = [
+            "192.168.0.1",
+            "10.0.0.256",
+            "1.2.3",
+            "1.2.3.4.5",
+            "::1",
+            "2001:db8::ff00:42:8329",
+            "fe80::1%eth0",
+            "::ffff:192.0.2.1",
+            "12:34:56",
+            "a:b",
+            "deadbeef",
+            "1.2.3.4:8080",
+            "[2001:db8::1]:443",
+            "3.5",
+            "v1.2.3.4",
+            "1.2.3.4a",
+            ":::",
+            "ab.cd",
+        ];
+        for address in addresses {
+            for (before, after) in [
+                ("", ""),
+                (" ", "."),
+                ("x", ""),
+                ("é", "中"),
+                ("ip=", ","),
+                ("(", ")"),
+                ("..", "::"),
+            ] {
+                let text = format!("host {before}{address}{after} cafe {address}");
+                let mut found = Vec::new();
+                detect_ip_address(&text, &mut found);
+                let mut reference = Vec::new();
+                detect_ip_address_in(text.as_bytes(), 0, text.len(), &mut reference);
+                assert_eq!(found, reference, "{text}");
+            }
+        }
     }
 }
 
@@ -5606,7 +6291,7 @@ mod tests {
 
     #[test]
     fn tokenization_round_trips_unicode_with_fresh_tokens_and_exact_ranges() {
-        let text = "👋 jane@example.com jane@example.com";
+        let text = "👋 jane@example.com 中e\u{301} jane@example.com 🎉";
         let config = parse_transformation_config(&json!({
             "default": {"strategy": "tokenize", "token_ref": "customers/default"}
         }))
@@ -5649,6 +6334,28 @@ mod tests {
             assert_eq!(
                 &restored.text[record.output_byte_range.start..record.output_byte_range.end],
                 "jane@example.com",
+            );
+            assert_eq!(
+                record.source_codepoint_range,
+                TextRange {
+                    start: transformed.text[..record.source_byte_range.start]
+                        .chars()
+                        .count(),
+                    end: transformed.text[..record.source_byte_range.end]
+                        .chars()
+                        .count(),
+                },
+            );
+            assert_eq!(
+                record.output_codepoint_range,
+                TextRange {
+                    start: restored.text[..record.output_byte_range.start]
+                        .chars()
+                        .count(),
+                    end: restored.text[..record.output_byte_range.end]
+                        .chars()
+                        .count(),
+                },
             );
             assert_eq!(record.token_ref, "customers/default");
             assert_eq!(record.resolved_token_version, "active-7");

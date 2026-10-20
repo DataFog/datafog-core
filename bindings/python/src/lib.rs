@@ -975,13 +975,11 @@ fn scan(py: Python<'_>, text: &str, config: Option<&Bound<'_, PyAny>>) -> PyResu
     } else {
         core::ScanConfig::default()
     };
-    std::panic::catch_unwind(|| {
-        core::scan_with_config(text, &config)
-            .into_iter()
-            .map(Finding::from)
-            .collect()
-    })
-    .map_err(|_| internal_error(py, "unexpected Rust scan failure"))
+    // Python strings are immutable, so other threads may run during the scan.
+    let findings = py
+        .detach(|| std::panic::catch_unwind(|| core::scan_with_config(text, &config)))
+        .map_err(|_| internal_error(py, "unexpected Rust scan failure"))?;
+    Ok(findings.into_iter().map(Finding::from).collect())
 }
 
 /// Transform explicit findings without scanning implicitly.
