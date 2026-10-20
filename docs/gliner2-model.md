@@ -17,7 +17,7 @@ python scripts/provision-gliner2-model.py \
   --source /tmp/gliner2-download --destination /opt/datafog/gliner2
 ```
 
-After publication, install `datafog-core[gliner2]==0.4.5b1` instead of the local
+After publication, install `datafog-core[gliner2]==0.4.5b2` instead of the local
 checkout. On Windows use the environment's `Scripts/python.exe`. On Linux, a
 CPU-only installation can first install `torch==2.12.0` from the official
 PyTorch CPU index. Retain model and dependency licenses in deployments.

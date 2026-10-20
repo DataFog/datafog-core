@@ -1,0 +1,35 @@
+---
+title: "0.4.5 beta.2"
+description: "Candidate scanner and token transformation performance improvements."
+icon: "tag"
+---
+
+This candidate builds on `v0.4.5-beta.1`. Publication is pending the remaining
+release patch and final validation.
+
+## Performance changes
+
+- Search required prefixes and separators before validating API keys,
+  credential URIs, JWTs, UUIDs, dates, and IP addresses. Digit detectors skip
+  text without ASCII digits, and card candidates use a fixed digit buffer.
+- Cache IPv6 run boundaries and reject runs longer than a valid hexadecimal
+  IPv6 address before parsing, removing repeated scans of long colon runs.
+- Convert ASCII offsets directly, clone only selected findings, and reuse
+  selected structured leaves during transformation.
+- Index token provider results by item ID and group structured tokens by leaf.
+  Restoration counts source and output code points incrementally.
+- Release Python's GIL while the Rust text scanner runs.
+
+## Compatibility
+
+Public APIs, detection policies, finding order, and byte/codepoint/UTF-16 offset
+semantics are unchanged. No dependencies are added. The optional model backends
+and their runtime requirements are inherited from beta.1.
+
+## Release preparation
+
+Cargo and npm packages use `0.4.5-beta.2`; Python uses `0.4.5b2`. The bundled
+GLiNER2 runner and its version check are aligned with the Python package.
+Keep npm publication on the `beta` dist-tag and GitHub releases marked as
+prereleases. The existing model integration gate still requires a successful
+run for the exact release commit before publication.
