@@ -22,11 +22,11 @@
   <a href="#documentation-and-development">Documentation</a>
 </p>
 
-DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bindings. Scan text or JSON for personal data and credentials, then redact, mask, remove, pseudonymize, or tokenize matched values. The Rust core owns detection behavior and returns consistent findings across the bindings.
+DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bindings. Scan text or JSON for personal data and credentials, then redact, mask, remove, pseudonymize, or tokenize matched values. Findings use a consistent format across the bindings.
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add DataFog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable: [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4).** The quickstarts below use stable packages. **Model support: [0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1)**, installed separately as a prerelease; npm's `latest` tag remains on the stable release.
+**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Model beta:** [0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1)
 
 ## Quickstart
 
@@ -124,24 +124,24 @@ Python and Node.js packages include prebuilt native binaries for Linux x64 and A
 | Coverage | Entity types | Activation |
 | --- | --- | --- |
 | Personal and financial data | `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, `ZIP_CODE` | On by default |
-| Credentials | [`API_KEY`](docs/reference/api-keys.mdx), [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), [`JWT`](docs/reference/jwt.mdx), [`PRIVATE_KEY`](docs/reference/private-keys.mdx), [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx) | On by default; type-specific patterns and context apply |
+| Credentials | [`API_KEY`](docs/reference/api-keys.mdx), [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), [`JWT`](docs/reference/jwt.mdx), [`PRIVATE_KEY`](docs/reference/private-keys.mdx), [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx) | On by default |
 | Labeled US identifiers | [`US_ROUTING_NUMBER`](docs/reference/us-routing-number.mdx), [`NPI`](docs/reference/npi.mdx) | On by default; requires a supported text label |
 | German identifiers | IBAN, VAT ID, tax ID, social security number, postal code, passport number, residence permit number | Explicit [German locale](docs/reference/german-entities.mdx) |
 | UUIDs | [`UUID`](docs/reference/uuid.mdx) | Explicit `detect_uuid` setting |
 | Names in JSON fields | `PERSON` | [Structured scans](docs/guides/person-discovery.mdx), using name-field aliases or explicit JSON Pointer mappings |
 
-Rule-based scanning does not find names or street addresses in ordinary prose. Structured name discovery uses field names, not a model. For broader text entity detection, see [local models](#local-models-beta).
+Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, or [local models](#local-models-beta) to detect names and street addresses in prose.
 
 Each finding includes its entity type, matched text, byte and code-point ranges, optional confidence, and detector name/version. Ranges are zero-based and end-exclusive. Node.js and WASM also provide UTF-16 ranges for JavaScript `slice`. Rule-based findings have no confidence score. [Findings and ranges →](docs/concepts/findings-and-ranges.mdx)
 
-Core returns matched values to your application. For AI-agent file workflows that return counts and locations without matched values, see [DataFog MCP](https://github.com/DataFog/datafog-mcp).
+For scanning files from AI agents, use [DataFog MCP](https://github.com/DataFog/datafog-mcp).
 
 <details>
-<summary><strong>Detection settings and limits</strong></summary>
+<summary><strong>Detection settings</strong></summary>
 
-- **Select checks:** `scan(text, {"entities": ["EMAIL", "SSN"]})` in Python runs only the selected text detectors. Omit `entities` to use all enabled detectors. Selections must be nonempty, unique, exact entity names. Selecting a German type or UUID does not activate it; set `locale` or `detect_uuid` too. Structured scans do not accept text detector selection. Selecting fewer types does not cap the number of findings.
-- **German locale:** `{"locale": "de"}` enables the seven German detectors. These use format/context rules; IBAN checksums and account existence are not verified. See the [German reference](docs/reference/german-entities.mdx) for coverage and limitations.
-- **ENV and SQL:** choose `format: "env"` or `format: "sql"` for the supported email boundary handling. These settings do not parse complete files. [Source-context rules →](docs/guides/email-boundaries.mdx)
+- **Select checks:** `scan(text, {"entities": ["EMAIL", "SSN"]})` in Python runs only the selected text detectors. Omit `entities` to use all enabled detectors. Selections must be nonempty, unique, exact entity names. Selecting a German type or UUID does not activate it; set `locale` or `detect_uuid` too.
+- **German locale:** `{"locale": "de"}` enables the seven German detectors. These use format/context rules; IBAN checksums and account existence are not verified. See the [German reference](docs/reference/german-entities.mdx) for detector rules.
+- **ENV and SQL:** choose `format: "env"` or `format: "sql"` to handle email boundaries in assignments and quoted strings. [Source-context rules →](docs/guides/email-boundaries.mdx)
 - **Phone numbers:** numbers without `+` use North American checks: ten digits, optionally preceded by `1`, with area and exchange codes starting with `2`–`9`. Numbers starting with `+` use a permissive 7–15 digit check, including shortened examples such as `+1-555-1002`. Country codes and assigned numbers are not validated; numeric identifiers can still match.
 - **Decimal numbers and CSV:** contiguous card digits after a digit and `.` or `,` are suppressed, so `3.4111111111111111` and `3,4111111111111111` do not produce card findings. Cards containing spaces or hyphens still undergo normal checks. Parse CSV/TSV into cells before scanning so delimiters and adjacent fields do not affect matching.
 
@@ -165,7 +165,7 @@ Keep scan settings under `scan` and transformation policy under `transform`. A d
 
 ## Local models (beta)
 
-[0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1) adds explicit local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms listed above. WASM remains rule-based.
+[0.4.5-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.1) adds local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
 
 Install the beta for your runtime:
 
@@ -181,7 +181,7 @@ For GLiNER2, install its optional dependencies in the Python environment used by
 python -m pip install 'datafog-core[gliner2]==0.4.5b1'
 ```
 
-The runner ships inside the existing Python package; Node.js and Rust use that same installed runner. **Installing packages does not download model weights.** Provision verified model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support. There is no automatic fallback to rule-based scanning.
+The GLiNER2 runner ships in the Python package and also serves Node.js and Rust callers. Download and verify model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support.
 
 [DataFog setup and session API →](docs/model-sessions.md) · [GLiNER2 setup →](docs/gliner2-model.md)
 
@@ -195,7 +195,7 @@ The runner ships inside the existing Python package; Node.js and Rust use that s
 - [Build, test, and contribute](docs/development.mdx)
 - [Release notes](https://github.com/DataFog/datafog-core/releases)
 
-Migrating from the established `datafog` Python package? Core uses `datafog-core` / `datafog_core` and is not a drop-in replacement. Follow the [migration guide](docs/guides/migrating-from-datafog-python.mdx), including the differences between legacy token handling and Core's provider-backed tokenization.
+For existing `datafog` Python applications, follow the [migration guide](docs/guides/migrating-from-datafog-python.mdx) for changes to imports, results, and transformations.
 
 For Rust development, run:
 
@@ -205,7 +205,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-The [development guide](docs/development.mdx) covers the repository layout and installed Python, Node.js, and WASM package checks. Routine CI runs without model downloads; explicit model integration checks both backends on all five native platforms before publication.
+See the [development guide](docs/development.mdx) for the repository layout and Python, Node.js, and WASM package checks.
 
 ## License
 
