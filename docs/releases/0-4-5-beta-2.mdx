@@ -1,11 +1,11 @@
 ---
 title: "0.4.5 beta.2"
-description: "Candidate scanner and token transformation performance improvements."
+description: "Candidate scanner performance improvements and card detection fixes."
 icon: "tag"
 ---
 
-This candidate builds on `v0.4.5-beta.1`. Publication is pending the remaining
-release patch and final validation.
+This candidate builds on `v0.4.5-beta.1`. Publication is pending final release
+validation and approval.
 
 ## Performance changes
 
@@ -20,11 +20,21 @@ release patch and final validation.
   Restoration counts source and output code points incrementally.
 - Release Python's GIL while the Rust text scanner runs.
 
+## Card detection fix
+
+When a separated digit run fails the existing whole-number card checks, detect
+its longest valid leading card in a supported grouping. This recognizes cases
+such as `4111 1111 1111 1111 123` and `4111 1111 1111 1111 12/25` while excluding
+the trailing digits from the card span. Existing full-run cards, including ones
+starting at a later group, retain their original spans. Issuer, Luhn, grouping,
+and decimal guards still apply.
+
 ## Compatibility
 
-Public APIs, detection policies, finding order, and byte/codepoint/UTF-16 offset
-semantics are unchanged. No dependencies are added. The optional model backends
-and their runtime requirements are inherited from beta.1.
+Public APIs, finding order, and byte/codepoint/UTF-16 offset semantics are
+unchanged. Card detection adds the fallback described above. No dependencies
+are added. The optional model backends and their runtime requirements are
+inherited from beta.1.
 
 ## Release preparation
 

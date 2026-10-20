@@ -62,6 +62,19 @@ Structured scans also discover `PERSON` in supported name fields. See
 </Note>
 
 <Note>
+  **Cards followed by more digits (0.4.5-beta.2+):** a card number followed by
+  a CVV or expiry in the same run, such as `4111 1111 1111 1111 123`, is
+  reported without the trailing digits when the full run fails the existing
+  card checks. A full-run card keeps its original span. The leading card part
+  must end at a space or hyphen, be written contiguously or as 4-4-4-1,
+  4-4-4-4, 4-4-4-4 plus one to
+  three digits, 4-6-5 or 4-6-4, and pass the usual issuer and Luhn checks. A
+  full-run card that starts at a later group of the same run is preferred.
+  Trailing digits excluded by the card fallback are not reported as part of
+  that card; other enabled detectors still scan them independently.
+</Note>
+
+<Note>
   **German coverage (0.4.0+):** an explicit German locale adds `DE_IBAN`,
   `DE_VAT_ID`, `DE_TAX_ID`, `DE_SOCIAL_SECURITY_NUMBER`, `DE_POSTAL_CODE`,
   `DE_PASSPORT_NUMBER`, and `DE_RESIDENCE_PERMIT_NUMBER`. See the

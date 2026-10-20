@@ -3452,6 +3452,80 @@ fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
 }
 
+/// The end of a card that spans the whole separated digit run at `start`.
+fn card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let (end, digit_buffer, digit_count) = card_parts_at(bytes, start);
+    let digits = &digit_buffer[..digit_count];
+
+    if end == start
+        || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
+        || (follows_decimal_separator(bytes, start) && end - start == digits.len())
+    {
+        return None;
+    }
+
+    ((13..=19).contains(&digits.len()) && has_supported_card_prefix(digits) && passes_luhn(digits))
+        .then_some(end)
+}
+
+/// Digit-group lengths a formatted card is written in: one contiguous group,
+/// 4-4-4-1, 4-4-4-4, 4-4-4-4 followed by one to three digits, 4-6-5 or 4-6-4.
+fn has_card_grouping(groups: &[usize]) -> bool {
+    match groups {
+        [single] => (13..=19).contains(single),
+        [4, 4, 4, 1] | [4, 4, 4, 4] | [4, 6, 5] | [4, 6, 4] => true,
+        [4, 4, 4, 4, last] => (1..=3).contains(last),
+        _ => false,
+    }
+}
+
+/// A card followed by more digit groups, such as a CVV or an expiry spoken in
+/// the same breath: `4111 1111 1111 1111 123`. The card ends at a separator,
+/// keeps a card grouping, and is used only when no later group in the run
+/// starts a whole-run card, so every card the whole-run rule finds is kept.
+fn leading_card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
+    let (end, digit_buffer, digit_count) = card_parts_at(bytes, start);
+    if digit_count < 14 {
+        return None;
+    }
+    // Separator positions inside the run, with the digit-group lengths before each.
+    let mut boundaries = [(0, 0); 19];
+    let mut boundary_count = 0;
+    let mut groups = [0; 19];
+    let mut group_count = 0;
+    let mut digits = 0;
+    for (position, byte) in bytes.iter().enumerate().take(end).skip(start) {
+        if byte.is_ascii_digit() {
+            if position == start || !bytes[position - 1].is_ascii_digit() {
+                group_count += 1;
+            }
+            groups[group_count - 1] += 1;
+            digits += 1;
+        } else {
+            boundaries[boundary_count] = (position, group_count);
+            boundary_count += 1;
+            if card_end_at(bytes, position + 1).is_some() {
+                return None;
+            }
+        }
+    }
+    debug_assert_eq!(digits, digit_count);
+    boundaries[..boundary_count]
+        .iter()
+        .rev()
+        .find_map(|&(position, kept_groups)| {
+            let kept = &groups[..kept_groups];
+            let card_digits: usize = kept.iter().sum();
+            let digits = &digit_buffer[..card_digits];
+            ((13..=19).contains(&card_digits)
+                && has_card_grouping(kept)
+                && !(follows_decimal_separator(bytes, start) && kept.len() == 1)
+                && has_supported_card_prefix(digits)
+                && passes_luhn(digits))
+            .then_some(position)
+        })
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut start = 0;
@@ -3463,21 +3537,7 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         };
         start = next;
 
-        let (end, digit_buffer, digit_count) = card_parts_at(bytes, start);
-        let digits = &digit_buffer[..digit_count];
-
-        if end == start
-            || (end < bytes.len() && bytes[end].is_ascii_alphanumeric())
-            || (follows_decimal_separator(bytes, start) && end - start == digits.len())
-        {
-            start += 1;
-            continue;
-        }
-
-        if (13..=19).contains(&digits.len())
-            && has_supported_card_prefix(digits)
-            && passes_luhn(digits)
-        {
+        if let Some(end) = card_end_at(bytes, start).or_else(|| leading_card_end_at(bytes, start)) {
             candidates.push(Candidate {
                 label: Label::CreditCard,
                 start_byte: start,
@@ -4083,6 +4143,128 @@ fn detect_ip_address_in(
         }
 
         start += 1;
+    }
+}
+
+#[cfg(test)]
+mod leading_card_tests {
+    use super::*;
+
+    fn cards(text: &str) -> Vec<&str> {
+        scan(text)
+            .into_iter()
+            .filter(|finding| finding.entity_type == "CREDIT_CARD")
+            .map(|finding| &text[finding.byte_range.start..finding.byte_range.end])
+            .collect()
+    }
+
+    #[test]
+    fn detects_a_card_followed_by_a_cvv_or_expiry() {
+        for (text, card) in [
+            ("card 4111 1111 1111 1111 123 ok", "4111 1111 1111 1111"),
+            ("card 4111 1111 1111 1111 12/25 ok", "4111 1111 1111 1111"),
+            ("card 4111-1111-1111-1111 1225 123", "4111-1111-1111-1111"),
+            ("card 4111111111111111 123", "4111111111111111"),
+            ("card 4222 2222 2222 2 123", "4222 2222 2222 2"),
+            ("amex 3782 822463 10005 1234", "3782 822463 10005"),
+        ] {
+            assert_eq!(cards(text), [card], "{text}");
+        }
+        let text = "card 4111 1111 1111 1111 123";
+        let redacted = transform(
+            text,
+            &scan(text),
+            &TransformationConfig::new(TransformationStrategy::Redact),
+        )
+        .unwrap();
+        assert_eq!(redacted.text, "card [CREDIT_CARD] 123");
+    }
+
+    #[test]
+    fn leading_cards_need_a_separator_a_card_grouping_and_a_valid_number() {
+        for text in [
+            // No separator: a longer contiguous number is not cut.
+            "id 4111111111111111123",
+            // Luhn fails for every leading part.
+            "card 4111 1111 1111 1112 123",
+            // `4096 1024 2048 109` passes Luhn, but 4-4-4-3 is a number list.
+            "sizes 4096 1024 2048 109 256 128",
+            // A contiguous leading part after a decimal stays suppressed.
+            "ratio 3.4111111111111111 123",
+        ] {
+            assert!(cards(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn whole_run_cards_later_in_the_run_take_precedence() {
+        // `4008 4111 1111 1111` passes Luhn, but the whole-run card that starts
+        // at the second group was already found and must not be cut short.
+        assert_eq!(
+            cards("ref 4008 4111 1111 1111 1111"),
+            ["4111 1111 1111 1111"]
+        );
+        assert_eq!(
+            cards("card 4111 1111 1111 1111 110"),
+            ["4111 1111 1111 1111 110"]
+        );
+    }
+
+    #[test]
+    fn leading_cards_preserve_unicode_offsets_and_structured_ranges() {
+        let text = "👋 e\u{301} card 4111 1111 1111 1111 12/25 中";
+        let config = ScanConfig::new()
+            .with_entities(vec!["CREDIT_CARD".into()])
+            .unwrap();
+        let findings = scan_with_config(text, &config);
+        assert_eq!(findings.len(), 1);
+        let finding = &findings[0];
+        assert_eq!(finding.matched_text, "4111 1111 1111 1111");
+        assert_eq!(finding.byte_range, TextRange { start: 14, end: 33 });
+        assert_eq!(finding.codepoint_range, TextRange { start: 10, end: 29 });
+        assert_eq!(
+            utf16_range(text, finding.byte_range).unwrap(),
+            TextRange { start: 11, end: 30 }
+        );
+        let data = serde_json::json!({"card": text});
+        let structured =
+            structured::scan(&data, &structured::StructuredScanConfig::default()).unwrap();
+        let cards: Vec<_> = structured
+            .findings
+            .iter()
+            .filter(|located| located.finding.entity_type == "CREDIT_CARD")
+            .collect();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].path, "/card");
+        assert_eq!(&cards[0].finding, finding);
+    }
+
+    #[test]
+    fn card_groupings() {
+        for groups in [
+            &[16][..],
+            &[4, 4, 4, 4],
+            &[4, 4, 4, 1],
+            &[4, 4, 4, 4, 1],
+            &[4, 4, 4, 4, 3],
+            &[4, 6, 5],
+            &[4, 6, 4],
+        ] {
+            assert!(has_card_grouping(groups), "{groups:?}");
+        }
+        for groups in [
+            &[][..],
+            &[12],
+            &[4, 4, 4, 3],
+            &[4, 4, 4, 2],
+            &[4, 4, 4, 4, 4],
+            &[4, 4, 4, 3, 3],
+            &[4, 4, 5],
+            &[3, 4, 4, 4],
+            &[4, 6, 6],
+        ] {
+            assert!(!has_card_grouping(groups), "{groups:?}");
+        }
     }
 }
 
