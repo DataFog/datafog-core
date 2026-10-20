@@ -41,5 +41,6 @@ inherited from beta.1.
 Cargo and npm packages use `0.4.5-beta.2`; Python uses `0.4.5b2`. The bundled
 GLiNER2 runner and its version check are aligned with the Python package.
 Keep npm publication on the `beta` dist-tag and GitHub releases marked as
-prereleases. The existing model integration gate still requires a successful
-run for the exact release commit before publication.
+prereleases. The model integration gate requires a successful run for the
+release commit, or a passing ancestor followed only by commits modifying
+`README.md`. Other changes require a new full integration run.

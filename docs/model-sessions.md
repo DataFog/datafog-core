@@ -93,8 +93,11 @@ cancellation and cleanup failures never return partial findings or rule fallback
 Routine CI does not download models. Manually run the `Model integration`
 workflow for both models on all five native platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.
-Publishing is blocked unless the latest run for the exact release commit passes
-all ten backend/platform jobs. Release packages build from source.
+Publishing requires the latest run for the release commit to pass all ten
+backend/platform jobs. Later commits may reuse a passing ancestor only if every
+intervening commit has one parent and modifies only `README.md`. Other file
+changes, merges, and failed or unfinished runs still block publication.
+Release packages build from source.
 
 Review the diff and passing tests before publishing. Target Cargo/npm
 `0.4.5-beta.2` and Python `0.4.5b2`; keep npm on the `beta` tag and GitHub releases
