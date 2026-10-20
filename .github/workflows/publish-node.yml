@@ -20,8 +20,6 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     environment: npm
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
       actions: read
       contents: read
@@ -39,7 +37,6 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
-      - run: npm whoami
       - run: npm ci --prefix bindings/node
       - uses: actions/download-artifact@v4
         with:
@@ -75,7 +72,9 @@ jobs:
         working-directory: bindings/node
         run: |
           tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
+          test "$(npm view @datafog/node-darwin-arm64@0.4.5-beta.1 dist.shasum)" = "49e08c6e6c157ae2353ab28841eacf853ea8d70f"
           for package in npm/*; do
+            if [ "$package" = "npm/darwin-arm64" ]; then continue; fi
             (cd "$package" && npm publish --ignore-scripts --tag "$tag")
           done
           npm publish --ignore-scripts --tag "$tag"
