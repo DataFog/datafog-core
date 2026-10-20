@@ -9,7 +9,7 @@ const api=await import(pathToFileURL(packagePath).href);
 const session=await api.ModelSession.open(config);
 try {
   for (const fixture of report.cases) {
-    const result=await session.scan(fixture.text);
+    const result=await session.scanModel(fixture.text);
     assert.equal(result.contractVersion,1);
     assert.equal(result.model,fixture.model);
     assert.deepEqual(result.evidence,fixture.evidence);
@@ -22,10 +22,22 @@ try {
       if (config.gliner2) assert.equal(f.confidence,undefined);
     }
   }
+  const routed=await session.scan(report.routed.text,{config:{entities:report.routed.entities}});
+  assert.deepEqual(routed.evidence,report.routed.evidence);
+  assert.deepEqual(routed.findings.map(f=>({entity:f.entityType,text:f.matchedText,
+    start:f.codepointRange.start,end:f.codepointRange.end,byte_start:f.byteRange.start,byte_end:f.byteRange.end})),report.routed.findings);
+  const defaulted=await session.scan(report.routed.text);
+  assert.deepEqual(defaulted.findings.map(f=>({entity:f.entityType,text:f.matchedText,
+    byte_start:f.byteRange.start,byte_end:f.byteRange.end})),report.default);
+  await assert.rejects(session.scan('x',{confg:{}}),TypeError);
+  await assert.rejects(session.scanModel('x',{config:{}}),TypeError);
   const cancellation=new api.ModelCancellation(); cancellation.cancel();
-  await assert.rejects(session.scan('private@example.test',{cancellation}),e=>e.code==='model_cancelled');
-  const pending=session.scan(report.cases[0].text);
-  await assert.rejects(session.scan('second'),e=>e.code==='model_busy');
+  await assert.rejects(session.scanModel('private@example.test',{cancellation}),e=>e.code==='model_cancelled');
+  const pending=session.scanModel(report.cases[0].text);
+  await assert.rejects(session.scanModel('second'),e=>e.code==='model_busy');
+  // Rule-only routing proceeds while inference holds the worker.
+  const during=await session.scan('second@example.test',{config:{entities:['EMAIL']}});
+  assert.equal(during.findings[0].matchedText,'second@example.test');
   await pending;
 } finally { await session.close(); }
 await session.close();

@@ -42,10 +42,18 @@ concurrent requests with a busy error. Cancellation and close stop active work
 and clean up its process. Python releases the GIL and Node keeps its event loop
 free while work runs.
 
-Model/rule combination, model scans of JSON documents, diagnostic copies,
-configuration fingerprints, inspection reports, and separate warm-up/health
-methods are outside this change. Existing rule-based JSON and transformation
-APIs remain available.
+`scan` takes the rule scanner's configuration and routes each requested entity
+type to one engine: rule detectors for every type they support, the model only
+for its remaining labels. As with the rule scanner, an omitted configuration
+equals `{}`, so a session returns the rule scanner's findings plus the model's
+other labels. A request that needs no model label does not use or reserve the
+worker. Findings for one entity type never come from both engines, so results
+need no cross-engine merging or confidence reconciliation. `scan_model` returns
+raw model output for evaluation and parity checks.
+
+Model scans of JSON documents, diagnostic copies, configuration fingerprints,
+inspection reports, and separate warm-up/health methods are outside this
+change. Existing rule-based JSON and transformation APIs remain available.
 
 ## Verification and release
 

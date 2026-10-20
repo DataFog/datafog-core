@@ -277,7 +277,7 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     request.deadline = Instant::now();
     assert_eq!(
         session
-            .scan_request(&request, "secret", &Cancellation::default())
+            .scan_model_request(&request, "secret", &Cancellation::default())
             .unwrap_err()
             .code,
         "model_timeout"
@@ -290,7 +290,7 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     cancellation.cancel();
     assert_eq!(
         session
-            .scan_request(&request, "secret", &cancellation)
+            .scan_model_request(&request, "secret", &cancellation)
             .unwrap_err()
             .code,
         "model_cancelled"
@@ -300,7 +300,7 @@ fn admission_precedes_scheduling_and_expired_or_cancelled_requests_do_not_infer(
     session.request_close();
     assert_eq!(
         session
-            .scan_request(&next, "", &Cancellation::default())
+            .scan_model_request(&next, "", &Cancellation::default())
             .unwrap_err()
             .code,
         "model_cancelled"
@@ -332,5 +332,203 @@ fn native_seven_label_mapping_preserves_names_and_identifier_meaning() {
         .unwrap();
         assert_eq!(result[0].0.entity_type, canonical);
         assert_eq!(result[0].1.native_label.as_deref(), Some(native));
+    }
+}
+
+fn idle_session() -> ModelSession {
+    ModelSession {
+        descriptor: descriptor(),
+        inner: Mutex::new(SessionInner { worker: None }),
+        closing: AtomicBool::new(false),
+        state: AtomicU8::new(1),
+        cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
+    }
+}
+
+#[test]
+fn routed_rule_entities_never_touch_the_model_worker() {
+    let session = idle_session();
+    let config = session
+        .routed_config(&serde_json::json!({"entities": ["CREDIT_CARD", "EMAIL"]}))
+        .unwrap();
+    assert!(!config.needs_model());
+    let text = "Card 4111 1111 1111 1111, mail may@example.test, call (212) 555-0100.";
+    // Another request holds the worker and the admission flag; rule-only
+    // routing neither waits for them nor reports `model_busy`.
+    let held = session.inner.lock().unwrap();
+    let request = session.prepare_request().unwrap();
+    let result = session
+        .scan_routed(text, &config, &Cancellation::default())
+        .unwrap();
+    let found: Vec<_> = result
+        .findings
+        .iter()
+        .map(|finding| (finding.entity_type.as_str(), finding.matched_text.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("CREDIT_CARD", "4111 1111 1111 1111"),
+            ("EMAIL", "may@example.test")
+        ]
+    );
+    assert_eq!(result.evidence.len(), 2);
+    for (index, evidence) in result.evidence.iter().enumerate() {
+        assert_eq!(evidence.finding_index, index);
+        assert!(
+            evidence.sources[0]
+                .detector_name
+                .starts_with("datafog-core/")
+        );
+        assert!(evidence.sources[0].raw_score.is_none());
+    }
+    assert_eq!(result.model, "DataFog/pii-en-65m");
+    drop(request);
+    drop(held);
+}
+
+#[test]
+fn routed_scans_keep_the_session_lifecycle_and_limits() {
+    let session = idle_session();
+    let config = session
+        .routed_config(&serde_json::json!({"entities": ["EMAIL"]}))
+        .unwrap();
+    let cancelled = Cancellation::default();
+    cancelled.cancel();
+    assert_eq!(
+        session
+            .scan_routed("may@example.test", &config, &cancelled)
+            .unwrap_err()
+            .code,
+        "model_cancelled"
+    );
+    let oversized = "x".repeat(session.descriptor.limits.max_input_bytes + 1);
+    assert_eq!(
+        session
+            .scan_routed(&oversized, &config, &Cancellation::default())
+            .unwrap_err()
+            .reason,
+        "limit_exceeded"
+    );
+    session.state.store(2, Ordering::Release);
+    assert_eq!(
+        session
+            .scan_routed("may@example.test", &config, &Cancellation::default())
+            .unwrap_err()
+            .code,
+        "model_session_failed"
+    );
+    let session = idle_session();
+    session.close().unwrap();
+    assert_eq!(
+        session
+            .scan_routed("may@example.test", &config, &Cancellation::default())
+            .unwrap_err()
+            .code,
+        "model_session_closed"
+    );
+    // A model-routed configuration must arrive with its reserved request.
+    let session = idle_session();
+    let model = session
+        .routed_config(&serde_json::json!({"entities": ["FIRST_NAME"]}))
+        .unwrap();
+    assert_eq!(
+        session
+            .scan_routed_request(None, "Jane", &model, &Cancellation::default())
+            .unwrap_err()
+            .path,
+        "/request"
+    );
+}
+
+#[test]
+fn routed_configuration_splits_entities_between_rules_and_model() {
+    let session = idle_session();
+    let mixed = session
+        .routed_config(&serde_json::json!({"entities": ["FIRST_NAME", "EMAIL", "CREDIT_CARD"]}))
+        .unwrap();
+    assert!(mixed.needs_model());
+    assert_eq!(
+        mixed.model_entities,
+        BTreeSet::from(["FIRST_NAME".to_owned()])
+    );
+    assert_eq!(
+        mixed.rules.as_ref().and_then(ScanConfig::entities),
+        Some(&BTreeSet::from([
+            "CREDIT_CARD".to_owned(),
+            "EMAIL".to_owned()
+        ]))
+    );
+    // Shared labels such as EMAIL and PHONE go to rules; without a selection
+    // the model returns only the labels rules cannot produce.
+    let everything = session.routed_config(&serde_json::json!({})).unwrap();
+    assert!(everything.rules.as_ref().unwrap().entities().is_none());
+    assert_eq!(
+        everything.model_entities,
+        BTreeSet::from(
+            [
+                "ACCOUNT_NUMBER",
+                "CUSTOMER_ID",
+                "FIRST_NAME",
+                "LAST_NAME",
+                "STREET_ADDRESS"
+            ]
+            .map(String::from)
+        )
+    );
+    // Omitting the configuration routes exactly like an empty configuration.
+    let default = session.default_routed_config();
+    assert_eq!(default.model_entities, everything.model_entities);
+    assert_eq!(default.rules, everything.rules);
+    let model_only = session
+        .routed_config(&serde_json::json!({"entities": ["STREET_ADDRESS"], "locale": "de"}))
+        .unwrap();
+    assert!(model_only.rules.is_none());
+    for (config, reason, path) in [
+        (serde_json::json!([]), "invalid_type", ""),
+        (
+            serde_json::json!({"entities": []}),
+            "empty_value",
+            "/entities",
+        ),
+        (
+            serde_json::json!({"entities": "EMAIL"}),
+            "invalid_type",
+            "/entities",
+        ),
+        (
+            serde_json::json!({"entities": ["EMAIL", 1]}),
+            "invalid_type",
+            "/entities/1",
+        ),
+        (
+            serde_json::json!({"entities": ["EMAIL", "EMAIL"]}),
+            "duplicate_value",
+            "/entities/1",
+        ),
+        (
+            serde_json::json!({"entities": ["EMAIL", "CARD_NUMBER"]}),
+            "invalid_value",
+            "/entities/1",
+        ),
+        (
+            serde_json::json!({"entities": ["STREET_ADDRESS"], "locale": "xx"}),
+            "invalid_value",
+            "/locale",
+        ),
+        (
+            serde_json::json!({"entities": ["EMAIL"], "unknown": true}),
+            "unknown_field",
+            "/unknown",
+        ),
+    ] {
+        let error = session.routed_config(&config).unwrap_err();
+        assert_eq!(error.code, "invalid_configuration", "{config}");
+        assert_eq!(
+            (error.reason.as_str(), error.path.as_str()),
+            (reason, path),
+            "{config}"
+        );
     }
 }

@@ -6,10 +6,10 @@ pub use gliner2::{Gliner2Config, Gliner2Label};
 #[cfg(test)]
 mod tests;
 
-use crate::{Finding, PrivacyError, TextIndex, TextRange};
+use crate::{Finding, PrivacyError, PrivacyErrorReason, ScanConfig, TextIndex, TextRange};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -231,6 +231,42 @@ pub struct SourceEvidence {
 pub struct FindingEvidence {
     pub finding_index: usize,
     pub sources: Vec<SourceEvidence>,
+}
+
+/// Entity routing for a model session scan. Rule detectors handle every
+/// requested entity type they support; the model runs only for requested
+/// types that it alone provides. Validated against one session's labels.
+#[derive(Clone, Debug)]
+pub struct RoutedScanConfig {
+    rules: Option<ScanConfig>,
+    model_entities: BTreeSet<String>,
+}
+
+impl RoutedScanConfig {
+    /// Whether a scan with this configuration runs model inference.
+    pub fn needs_model(&self) -> bool {
+        !self.model_entities.is_empty()
+    }
+}
+
+fn rule_entry(finding: Finding) -> (Finding, SourceEvidence) {
+    let source = SourceEvidence {
+        detector_name: finding.detector_name.clone(),
+        detector_version: finding.detector_version.clone(),
+        native_label: None,
+        raw_score: None,
+        calibrated_confidence: finding.confidence.map(f64::from),
+    };
+    (finding, source)
+}
+
+fn rule_entries(text: &str, config: &RoutedScanConfig) -> Vec<(Finding, SourceEvidence)> {
+    config.rules.as_ref().map_or_else(Vec::new, |rules| {
+        crate::scan_with_config(text, rules)
+            .into_iter()
+            .map(rule_entry)
+            .collect()
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -472,16 +508,28 @@ impl ModelSession {
         Ok(request.deadline)
     }
 
+    /// Scan with default routing: every enabled rule detector, plus the model
+    /// for the labels rules do not produce. Equivalent to an empty routed
+    /// configuration, as an omitted rule scan configuration equals `{}`.
     pub fn scan(
         &self,
         text: &str,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
-        let request = self.prepare_request()?;
-        self.scan_request(&request, text, cancellation)
+        self.scan_routed(text, &self.default_routed_config(), cancellation)
     }
 
-    pub fn scan_request(
+    /// Raw model output: every model label, with no rule detectors.
+    pub fn scan_model(
+        &self,
+        text: &str,
+        cancellation: &Cancellation,
+    ) -> Result<ModelScanResult, ModelError> {
+        let request = self.prepare_request()?;
+        self.scan_model_request(&request, text, cancellation)
+    }
+
+    pub fn scan_model_request(
         &self,
         request: &ModelRequest,
         text: &str,
@@ -490,25 +538,188 @@ impl ModelSession {
         let deadline = self.request_deadline(request)?;
         self.check(text, deadline, cancellation)?;
         let mut inner = self.lock()?;
-        self.scan_locked(&mut inner, text, deadline, cancellation)
+        self.scan_locked(&mut inner, text, None, deadline, cancellation)
+    }
+
+    /// Validate a routed scan configuration. It accepts the rule scan fields
+    /// (`entities`, `locale`, `detect_uuid`, `format`); `entities` may also
+    /// name this session's model labels. Without `entities`, every enabled
+    /// rule detector runs and the model returns the labels rules do not cover.
+    pub fn routed_config(&self, value: &serde_json::Value) -> Result<RoutedScanConfig, ModelError> {
+        let invalid = |reason, path: &str, message: &str| {
+            ModelError::from(PrivacyError::invalid_configuration(reason, path, message))
+        };
+        let object = value.as_object().ok_or_else(|| {
+            invalid(
+                PrivacyErrorReason::InvalidType,
+                "",
+                "scan configuration must be an object",
+            )
+        })?;
+        let model_labels: BTreeSet<&str> = self
+            .descriptor
+            .labels
+            .values()
+            .map(String::as_str)
+            .collect();
+        let mut rule_object = object.clone();
+        let (rule_entities, model_entities) = match object.get("entities") {
+            None => (None, self.model_only_labels()),
+            Some(entities) => {
+                let entities = entities.as_array().ok_or_else(|| {
+                    invalid(
+                        PrivacyErrorReason::InvalidType,
+                        "/entities",
+                        "entities must be an array",
+                    )
+                })?;
+                if entities.is_empty() {
+                    return Err(invalid(
+                        PrivacyErrorReason::EmptyValue,
+                        "/entities",
+                        "entities must contain at least one entity type",
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                let mut rules = Vec::new();
+                let mut model = BTreeSet::new();
+                for (index, entity) in entities.iter().enumerate() {
+                    let path = format!("/entities/{index}");
+                    let entity = entity.as_str().ok_or_else(|| {
+                        invalid(
+                            PrivacyErrorReason::InvalidType,
+                            &path,
+                            "entity type must be a string",
+                        )
+                    })?;
+                    if !seen.insert(entity) {
+                        return Err(invalid(
+                            PrivacyErrorReason::DuplicateValue,
+                            &path,
+                            "entity selection contains a duplicate entity type",
+                        ));
+                    }
+                    if crate::capabilities::text_entity_supported(entity) {
+                        rules.push(serde_json::Value::String(entity.to_owned()));
+                    } else if model_labels.contains(entity) {
+                        model.insert(entity.to_owned());
+                    } else {
+                        return Err(invalid(
+                            PrivacyErrorReason::InvalidValue,
+                            &path,
+                            "entity type is not supported by rules or this model",
+                        ));
+                    }
+                }
+                (Some(rules), model)
+            }
+        };
+        // Rule-routed entities were validated above, so remaining errors name
+        // the shared locale, UUID and format fields at their own paths.
+        let run_rules = match rule_entities {
+            None => true,
+            Some(rules) if rules.is_empty() => {
+                rule_object.remove("entities");
+                false
+            }
+            Some(rules) => {
+                rule_object.insert("entities".into(), serde_json::Value::Array(rules));
+                true
+            }
+        };
+        let rules = crate::parse_scan_config(&serde_json::Value::Object(rule_object))?;
+        Ok(RoutedScanConfig {
+            rules: run_rules.then_some(rules),
+            model_entities,
+        })
+    }
+
+    /// The routing used without a configuration: all enabled rule detectors
+    /// and the model labels that rules do not produce.
+    pub fn default_routed_config(&self) -> RoutedScanConfig {
+        RoutedScanConfig {
+            rules: Some(ScanConfig::new()),
+            model_entities: self.model_only_labels(),
+        }
+    }
+
+    fn model_only_labels(&self) -> BTreeSet<String> {
+        self.descriptor
+            .labels
+            .values()
+            .filter(|label| !crate::capabilities::text_entity_supported(label))
+            .cloned()
+            .collect()
+    }
+
+    /// Scan with entity routing. A configuration that needs no model labels
+    /// runs only rule detectors, without reserving or waiting for the worker.
+    pub fn scan_routed(
+        &self,
+        text: &str,
+        config: &RoutedScanConfig,
+        cancellation: &Cancellation,
+    ) -> Result<ModelScanResult, ModelError> {
+        let request = if config.needs_model() {
+            Some(self.prepare_request()?)
+        } else {
+            None
+        };
+        self.scan_routed_request(request.as_ref(), text, config, cancellation)
+    }
+
+    /// Bindings reserve the session before dispatch only when the routed
+    /// configuration needs the model; otherwise `request` is `None`.
+    pub fn scan_routed_request(
+        &self,
+        request: Option<&ModelRequest>,
+        text: &str,
+        config: &RoutedScanConfig,
+        cancellation: &Cancellation,
+    ) -> Result<ModelScanResult, ModelError> {
+        if !config.needs_model() {
+            // Lifecycle, input limits and cancellation apply without the worker.
+            let deadline = deadline(self.descriptor.limits.timeout_ms)?;
+            self.check(text, deadline, cancellation)?;
+            if self.state.load(Ordering::Acquire) == 2 {
+                return Err(ModelError::new(
+                    "model_session_failed",
+                    "failed",
+                    "/backend",
+                ));
+            }
+            let result = self.compose(rule_entries(text, config))?;
+            bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
+            return Ok(result);
+        }
+        let request = request.ok_or_else(|| ModelError::config("invalid_value", "/request"))?;
+        let deadline = self.request_deadline(request)?;
+        self.check(text, deadline, cancellation)?;
+        let mut inner = self.lock()?;
+        self.scan_locked(&mut inner, text, Some(config), deadline, cancellation)
     }
 
     fn scan_locked(
         &self,
         inner: &mut SessionInner,
         text: &str,
+        routing: Option<&RoutedScanConfig>,
         deadline: Instant,
         cancellation: &Cancellation,
     ) -> Result<ModelScanResult, ModelError> {
         let native = self.native(inner, text, deadline, cancellation)?;
         let converted = convert(text, native, &self.descriptor);
-        let entries = match converted {
+        let mut entries = match converted {
             Ok(entries) => entries,
             Err(error) => {
                 self.retire(inner)?;
                 return Err(error);
             }
         };
+        if let Some(config) = routing {
+            entries.retain(|(finding, _)| config.model_entities.contains(&finding.entity_type));
+            entries.splice(0..0, rule_entries(text, config));
+        }
         self.active_check(inner, text, deadline, cancellation)?;
         let result = self.compose(entries)?;
         bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;

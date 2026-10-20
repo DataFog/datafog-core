@@ -135,16 +135,35 @@ impl Task for OpenTask {
 pub struct ScanTask {
     session: Arc<core::ModelSession>,
     text: String,
-    request: core::ModelRequest,
+    /// Reserved before dispatch unless routing needs only rule detectors.
+    request: Option<core::ModelRequest>,
+    /// Routing for `scan`; `None` for raw `scan_model` output.
+    routed: Option<core::RoutedScanConfig>,
     cancellation: Arc<core::Cancellation>,
 }
 impl Task for ScanTask {
     type Output = core::ModelScanResult;
     type JsValue = ModelScanResult;
     fn compute(&mut self) -> napi::Result<Self::Output> {
-        self.session
-            .scan_request(&self.request, &self.text, &self.cancellation)
-            .map_err(error)
+        match (&self.routed, &self.request) {
+            (Some(routed), request) => self.session.scan_routed_request(
+                request.as_ref(),
+                &self.text,
+                routed,
+                &self.cancellation,
+            ),
+            (None, Some(request)) => {
+                self.session
+                    .scan_model_request(request, &self.text, &self.cancellation)
+            }
+            (None, None) => {
+                return Err(Error::new(
+                    Status::GenericFailure,
+                    "model scan was dispatched without a reserved request",
+                ));
+            }
+        }
+        .map_err(error)
     }
     fn resolve(&mut self, _: Env, value: Self::Output) -> napi::Result<Self::JsValue> {
         result(&self.text, value)
@@ -171,6 +190,39 @@ impl ModelSessionNative {
         env: &'env Env,
         text: String,
         cancellation: Option<&ModelCancellation>,
+        config: Option<serde_json::Value>,
+    ) -> napi::Result<Object<'env>> {
+        // Omitting the configuration routes like `{}`.
+        let routed = match config {
+            Some(config) => self.session.routed_config(&config).map_err(error)?,
+            None => self.session.default_routed_config(),
+        };
+        // Rule-only routing never reserves the model worker.
+        let request = if routed.needs_model() {
+            Some(self.session.prepare_request().map_err(error)?)
+        } else {
+            None
+        };
+        dispatch(
+            env,
+            ScanTask {
+                session: Arc::clone(&self.session),
+                text,
+                request,
+                routed: Some(routed),
+                cancellation: cancellation
+                    .map(|v| Arc::clone(&v.cancellation))
+                    .unwrap_or_default(),
+            },
+        )
+    }
+    /// Raw model output: every model label, with no rule detectors.
+    #[napi(ts_return_type = "Promise<ModelScanResult>")]
+    pub fn scan_model<'env>(
+        &self,
+        env: &'env Env,
+        text: String,
+        cancellation: Option<&ModelCancellation>,
     ) -> napi::Result<Object<'env>> {
         let request = self.session.prepare_request().map_err(error)?;
         dispatch(
@@ -178,7 +230,8 @@ impl ModelSessionNative {
             ScanTask {
                 session: Arc::clone(&self.session),
                 text,
-                request,
+                request: Some(request),
+                routed: None,
                 cancellation: cancellation
                     .map(|v| Arc::clone(&v.cancellation))
                     .unwrap_or_default(),

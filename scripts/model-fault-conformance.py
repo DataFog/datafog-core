@@ -74,17 +74,22 @@ def reject(call, code):
 with ThreadPoolExecutor(max_workers=1) as executor:
     session, worker, processes = open_worker()
     try:
-        reject(lambda: session.scan("x" * (limits["max_input_bytes"] + 1)), "invalid_configuration")
+        reject(lambda: session.scan_model("x" * (limits["max_input_bytes"] + 1)), "invalid_configuration")
         cancellation = ModelCancellation()
         baseline = cpu_time(processes)
-        pending = executor.submit(session.scan, long_text, cancellation=cancellation)
+        pending = executor.submit(session.scan_model, long_text, cancellation=cancellation)
         await_inference(processes, baseline, pending)
-        reject(lambda: session.scan("private@example.test"), "model_busy")
+        reject(lambda: session.scan_model("private@example.test"), "model_busy")
+        # Rule-only routing proceeds while inference holds the worker.
+        routed = session.scan("private@example.test", {"entities": ["EMAIL"]})
+        assert [f.matched_text for f in routed.findings] == ["private@example.test"]
         stopped_at = time.monotonic()
         cancellation.cancel()
         reject(lambda: pending.result(timeout=wait_seconds), "model_cancelled")
         assert_stopped(processes, stopped_at)
-        reject(lambda: session.scan("private@example.test"), "model_session_failed")
+        reject(lambda: session.scan_model("private@example.test"), "model_session_failed")
+        # Default routing needs the model too, so a failed session rejects it.
+        reject(lambda: session.scan("Jane Doe"), "model_session_failed")
     finally:
         session.close()
 
@@ -93,14 +98,14 @@ with ThreadPoolExecutor(max_workers=1) as executor:
         stopped_at = time.monotonic()
         worker.kill()
         # Core, the process owner, performs the reap; psutil must not consume its exit status.
-        reject(lambda: session.scan("private@example.test"), "model_inference_failed")
+        reject(lambda: session.scan_model("private@example.test"), "model_inference_failed")
         assert_stopped(processes, stopped_at)
     finally:
         session.close()
 
     session, worker, processes = open_worker()
     baseline = cpu_time(processes)
-    pending = executor.submit(session.scan, long_text)
+    pending = executor.submit(session.scan_model, long_text)
     await_inference(processes, baseline, pending)
     stopped_at = time.monotonic()
     session.close()

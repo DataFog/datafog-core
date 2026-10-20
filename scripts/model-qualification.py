@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from datafog_core import DataFogModelError, ModelCancellation, ModelSession
+from datafog_core import DataFogModelError, ModelCancellation, ModelSession, scan as rule_scan
 
 config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert not any(name in sys.modules for name in ("torch", "gliner2", "transformers", "onnxruntime"))
@@ -26,7 +26,7 @@ if "gliner2" not in config:
 report = {"cases": []}
 with ModelSession.open(config) as session:
     for case_index, text in enumerate(texts):
-        result = session.scan(text)
+        result = session.scan_model(text)
         assert result.contract_version == 1 and result.model
         assert len(result.evidence) == len(result.findings)
         for index, (finding, evidence) in enumerate(zip(result.findings, result.evidence, strict=True)):
@@ -55,12 +55,40 @@ with ModelSession.open(config) as session:
     cancellation = ModelCancellation()
     cancellation.cancel()
     try:
-        session.scan(texts[0], cancellation=cancellation)
+        session.scan_model(texts[0], cancellation=cancellation)
     except DataFogModelError as error:
         assert error.code == "model_cancelled"
     else:
         raise AssertionError("cancelled request returned findings")
-    assert session.scan("").findings == []  # Cancellation before execution permits reuse.
+    assert session.scan_model("").findings == []  # Cancellation before execution permits reuse.
+    # Routing: requested rule types come from rule detectors; requested model
+    # types equal the plain model scan's findings for those types.
+    routed_text = texts[0] + " Card 4111 1111 1111 1111 123."
+    def spans(findings, entity=None):
+        return [(f.entity_type, f.byte_range.start, f.byte_range.end, f.matched_text)
+                for f in findings if entity is None or f.entity_type == entity]
+    rules_only = session.scan(routed_text, {"entities": ["CREDIT_CARD", "EMAIL"]})
+    assert spans(rules_only.findings) == spans(rule_scan(routed_text, {"entities": ["CREDIT_CARD", "EMAIL"]}))
+    assert {f.entity_type for f in rules_only.findings} == {"CREDIT_CARD", "EMAIL"}
+    assert all(e["sources"][0]["raw_score"] is None for e in rules_only.evidence)
+    mixed = session.scan(routed_text, {"entities": ["STREET_ADDRESS", "EMAIL"]})
+    assert spans(mixed.findings, "STREET_ADDRESS") == spans(session.scan_model(routed_text).findings, "STREET_ADDRESS")
+    assert {f.entity_type for f in mixed.findings} <= {"STREET_ADDRESS", "EMAIL"}
+    assert [f.detector_name for f in mixed.findings if f.entity_type == "EMAIL"] == ["datafog-core/email"]
+    assert len(mixed.evidence) == len(mixed.findings)
+    # Omitting the configuration routes like `{}`: the rule scanner's findings
+    # plus the model labels rules do not produce.
+    default = session.scan(routed_text)
+    assert spans(default.findings) == spans(session.scan(routed_text, {}).findings)
+    rule_part = [f for f in default.findings if not f.detector_name.startswith("datafog-core/model/")]
+    assert spans(rule_part) == spans(rule_scan(routed_text))
+    report["default"] = [
+        {"entity": f.entity_type, "text": f.matched_text, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
+        for f in default.findings]
+    report["routed"] = {"text": routed_text, "entities": ["STREET_ADDRESS", "EMAIL"], "findings": [
+        {"entity": f.entity_type, "text": f.matched_text, "start": f.codepoint_range.start,
+         "end": f.codepoint_range.end, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
+        for f in mixed.findings], "evidence": mixed.evidence}
 session.close()
 try:
     session.scan("")
@@ -78,4 +106,4 @@ else:
 output = Path(sys.argv[2])
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text(json.dumps(report), encoding="utf-8")
-print("Installed Python model loading, results, offsets, errors and cleanup passed.")
+print("Installed Python model loading, results, routing, offsets, errors and cleanup passed.")

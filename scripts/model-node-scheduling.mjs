@@ -11,7 +11,7 @@ const session=await ModelSession.open(config);
 const blocker=promisify(pbkdf2)('synthetic-fixture','synthetic-salt',10_000_000,32,'sha256');
 try {
   const first=await Promise.race([
-    (async()=>{const result=await session.scan('John Smith lives at 123 Main Street.');
+    (async()=>{const result=await session.scanModel('John Smith lives at 123 Main Street.');
       assert(result.findings.length);
       await session.close();return 'model';})(),
     blocker.then(()=> 'libuv'),

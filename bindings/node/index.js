@@ -24,6 +24,17 @@ import {
 
 export { ModelCancellation, ModelSessionNative, openModelSession } from "./native.js";
 
+// An unknown option, such as a misspelled `config`, would otherwise be ignored.
+function modelScanOptions(options, allowed) {
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    throw new TypeError("model scan options must be an object");
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowed.includes(key)) throw new TypeError(`unknown model scan option: ${key}`);
+  }
+  return options;
+}
+
 /** Explicit offline model session. Inference and cleanup run outside the event loop. */
 export class ModelSession {
   #native;
@@ -33,9 +44,17 @@ export class ModelSession {
     try { return new ModelSession(await nativeOpenModelSession(snapshot)); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
-  async scan(text, { cancellation } = {}) {
+  async scan(text, options = {}) {
     if (typeof text !== "string") throw new TypeError("model scan text must be a string");
-    try { return await this.#native.scan(text, cancellation); }
+    const { cancellation, config } = modelScanOptions(options, ["cancellation", "config"]);
+    const snapshot = config === undefined ? undefined : JSON.parse(structuredJson(config, true));
+    try { return await this.#native.scan(text, cancellation, snapshot); }
+    catch (error) { throw normalizeError(error, "internal_error"); }
+  }
+  async scanModel(text, options = {}) {
+    if (typeof text !== "string") throw new TypeError("model scan text must be a string");
+    const { cancellation } = modelScanOptions(options, ["cancellation"]);
+    try { return await this.#native.scanModel(text, cancellation); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
   async close() { try { await this.#native.close(); } catch (error) { throw normalizeError(error, "internal_error"); } }
