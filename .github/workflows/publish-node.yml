@@ -10,10 +10,6 @@ on:
         description: Build and verify packages without publishing
         type: boolean
         default: true
-      source_ref:
-        description: Optional source ref to build and qualify; defaults to the workflow ref
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -44,8 +40,6 @@ jobs:
             build_args: ""
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_ref || github.ref }}
       - run: python3 scripts/check-release.py node
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -83,10 +77,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_ref || github.ref }}
       - name: Require passing model integration for this commit
-        run: GITHUB_SHA="$(git rev-parse HEAD)" python3 scripts/check-model-integration.py
+        run: python3 scripts/check-model-integration.py
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-node@v4
@@ -123,12 +115,9 @@ jobs:
       - name: Publish
         if: github.event_name == 'push' || !inputs.dry_run
         working-directory: bindings/node
-        env:
-          PUBLISH_SOURCE_REF: ${{ inputs.source_ref || github.ref }}
         run: |
-          source_revision="$(git rev-parse HEAD)"
           tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
           for package in npm/*; do
-            (cd "$package" && GITHUB_SHA="$source_revision" GITHUB_REF="$PUBLISH_SOURCE_REF" npm publish --ignore-scripts --tag "$tag")
+            (cd "$package" && npm publish --ignore-scripts --tag "$tag")
           done
-          GITHUB_SHA="$source_revision" GITHUB_REF="$PUBLISH_SOURCE_REF" npm publish --ignore-scripts --tag "$tag"
+          npm publish --ignore-scripts --tag "$tag"
