@@ -123,9 +123,12 @@ jobs:
       - name: Publish
         if: github.event_name == 'push' || !inputs.dry_run
         working-directory: bindings/node
+        env:
+          PUBLISH_SOURCE_REF: ${{ inputs.source_ref || github.ref }}
         run: |
+          source_revision="$(git rev-parse HEAD)"
           tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
           for package in npm/*; do
-            (cd "$package" && npm publish --ignore-scripts --tag "$tag")
+            (cd "$package" && GITHUB_SHA="$source_revision" GITHUB_REF="$PUBLISH_SOURCE_REF" npm publish --ignore-scripts --tag "$tag")
           done
-          npm publish --ignore-scripts --tag "$tag"
+          GITHUB_SHA="$source_revision" GITHUB_REF="$PUBLISH_SOURCE_REF" npm publish --ignore-scripts --tag "$tag"
