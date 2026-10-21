@@ -18,7 +18,7 @@ def api(repository, endpoint):
 
 REQUIRED_PLATFORMS = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-14", "windows-latest")
 REQUIRED_JOBS = {f"installed-model ({backend}, {platform})"
-                 for backend in ("datafog", "gliner2") for platform in REQUIRED_PLATFORMS}
+                 for backend in ("datafog", "gliner2", "gliner2-general") for platform in REQUIRED_PLATFORMS}
 
 
 def check(repository, revision):
@@ -49,7 +49,7 @@ def check(repository, revision):
     pages = api(repository, f"actions/runs/{run['id']}/jobs?per_page=100")
     passed = {job["name"] for page in pages for job in page["jobs"] if job["conclusion"] == "success"}
     if not REQUIRED_JOBS <= passed:
-        raise SystemExit("Publication blocked: both models must pass functional checks on every required platform.")
+        raise SystemExit("Publication blocked: DataFog, PII GLiNER2 and general GLiNER2 must pass functional checks on every required platform.")
     suffix = "" if revision == tested_revision else f" (README-only changes since {tested_revision})"
     print(f"Model integration passed for {revision}{suffix}: {run['html_url']}")
 

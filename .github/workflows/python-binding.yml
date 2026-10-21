@@ -67,7 +67,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - if: steps.scope.outputs.code == 'true' && (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12')
         name: Test publication check without downloading models
-        run: python scripts/test-model-publish-check.py
+        run: |
+          python scripts/test-model-publish-check.py
+          python scripts/test-model-manifest.py
       - if: steps.scope.outputs.code == 'true'
         run: python -m pip install maturin
       - if: steps.scope.outputs.code == 'true'

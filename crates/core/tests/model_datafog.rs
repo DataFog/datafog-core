@@ -9,10 +9,26 @@ fn pinned_model_execution() {
         .expect("DATAFOG_MODEL_CONFIG must name a verified local session config");
     let config: ModelSessionConfig =
         serde_json::from_reader(std::fs::File::open(config).unwrap()).unwrap();
+    let general = config.gliner2.as_ref().is_some_and(|options| {
+        options
+            .labels
+            .iter()
+            .any(|label| label.label == "current_employer")
+    });
+    let model_entity = if general {
+        "CURRENT_EMPLOYER"
+    } else {
+        "STREET_ADDRESS"
+    };
     let session = ModelSession::open(config).unwrap();
-    let text = "👋 John Smith lives at 123 Main Street. Email john@example.com.";
+    let text =
+        "👋 John Smith works for Cedar Labs and lives at 123 Main Street. Email john@example.com.";
     let result = session.scan_model(text, &Cancellation::default()).unwrap();
-    assert!(!result.findings.is_empty());
+    if !general {
+        assert!(!result.findings.is_empty());
+    } else {
+        assert_eq!(result.model, "fastino/gliner2-base-v1");
+    }
     assert_eq!(result.contract_version, 1);
     assert_eq!(result.evidence.len(), result.findings.len());
     for finding in &result.findings {
@@ -55,7 +71,7 @@ fn pinned_model_execution() {
     );
     assert_eq!(routed.findings, rule_findings);
     let mixed = session
-        .routed_config(&serde_json::json!({"entities": ["STREET_ADDRESS", "EMAIL"]}))
+        .routed_config(&serde_json::json!({"entities": [model_entity, "EMAIL"]}))
         .unwrap();
     assert!(mixed.needs_model());
     let routed = session
@@ -66,12 +82,12 @@ fn pinned_model_execution() {
         .unwrap()
         .findings
         .into_iter()
-        .filter(|finding| finding.entity_type == "STREET_ADDRESS")
+        .filter(|finding| finding.entity_type == model_entity)
         .collect();
     let routed_addresses: Vec<_> = routed
         .findings
         .iter()
-        .filter(|finding| finding.entity_type == "STREET_ADDRESS")
+        .filter(|finding| finding.entity_type == model_entity)
         .cloned()
         .collect();
     assert_eq!(routed_addresses, model_addresses);
@@ -86,7 +102,7 @@ fn pinned_model_execution() {
         routed
             .findings
             .iter()
-            .all(|finding| matches!(finding.entity_type.as_str(), "STREET_ADDRESS" | "EMAIL"))
+            .all(|finding| finding.entity_type == model_entity || finding.entity_type == "EMAIL")
     );
     assert_eq!(routed.evidence.len(), routed.findings.len());
 

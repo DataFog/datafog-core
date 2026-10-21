@@ -12,7 +12,8 @@ const blocker=promisify(pbkdf2)('synthetic-fixture','synthetic-salt',10_000_000,
 try {
   const first=await Promise.race([
     (async()=>{const result=await session.scanModel('John Smith lives at 123 Main Street.');
-      assert(result.findings.length);
+      assert.equal(result.contractVersion,1);
+      if(process.env.MODEL_BACKEND!=='gliner2-general') assert(result.findings.length);
       await session.close();return 'model';})(),
     blocker.then(()=> 'libuv'),
   ]);

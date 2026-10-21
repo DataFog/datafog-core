@@ -1,0 +1,51 @@
+---
+title: "0.4.5 beta.4"
+description: "Caller-selected GLiNER2 models, verified model manifests, and custom entity labels."
+icon: "tag"
+---
+
+This prerelease builds on `0.4.5-beta.3`. Install `0.4.5-beta.4` for Cargo and
+npm, or `0.4.5b4` for Python. Node and WASM remain on npm's `beta` tag;
+`latest` remains `0.4.4`.
+
+## PII and general-purpose GLiNER2
+
+Use the existing pinned PII checkpoint or select a compatible general-purpose
+GLiNER2 span model through a local model manifest. The release checks include
+`fastino/gliner2-privacy-filter-PII-multi` and `fastino/gliner2-base-v1`.
+
+The provisioner can generate a versioned manifest and file hashes from explicitly
+downloaded local assets using `--model-id` and `--revision`, or verify an existing
+manifest using `--manifest`. Core verifies the selected manifest and listed
+assets before starting inference. Results report the selected model identity;
+its revision is included in adapter evidence. Existing legacy PII bundles remain
+supported with their original compiled asset pins.
+
+## Custom entity schemas
+
+GLiNER2 labels are caller-defined, with per-label thresholds and optional
+descriptions. For example, `current_employer` produces the typed entity
+`CURRENT_EMPLOYER`. The existing `phone_number` to `PHONE` mapping is preserved.
+Empty, padded, duplicate labels and labels mapping to the same output type are
+rejected. Schemas remain fixed for each session.
+
+Custom findings retain byte and codepoint offsets, plus UTF-16 offsets in Node,
+and work with the existing transformations. `scan` still routes rule-covered
+entity types to rules and other selected labels to the model. Use `scan_model`
+or Node's `scanModel` for raw model output.
+
+Downloading and provisioning remain explicit. Inference uses local files through
+the existing CPU worker and pinned runtime dependencies. This release supports
+compatible GLiNER2 span models; it does not add classification, relation
+extraction, GLiNER2.5, GLiNER1, or spaCy adapters. WASM remains rule-based.
+
+See the [GLiNER2 setup guide](https://github.com/DataFog/datafog-core/blob/release/0.4.5-beta.4/docs/gliner2-model.md)
+and [manifest contract](https://github.com/DataFog/datafog-core/blob/release/0.4.5-beta.4/docs/model-manifests.md).
+
+## Release validation
+
+Publication requires DataFog, PII GLiNER2, and general-purpose GLiNER2 to pass
+packaged Rust and installed Python/Node checks on Linux x64, Linux ARM64, macOS
+ARM64, and Windows for the release commit. Intel macOS model checks are advisory.
+These checks validate loading, response contracts, routing, offsets and lifecycle
+behavior; they do not make model-accuracy claims.

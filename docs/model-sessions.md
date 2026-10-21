@@ -133,9 +133,10 @@ options object with a `TypeError`.
 ## Tests and publication
 
 Routine CI does not download models. Manually run the `Model integration`
-workflow for both models on all five native platforms before releasing.
+workflow for DataFog, PII GLiNER2 and general-purpose GLiNER2 on all five native
+platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.
-Publishing requires the latest run for the release commit to pass both models'
+Publishing requires the latest run for the release commit to pass all three models'
 jobs on Linux x86_64, Linux ARM64, macOS ARM64 and Windows. The macOS Intel jobs
 still run but are advisory: a failure is reported on the job without failing
 the run, and publishing does not wait for them. Later commits may reuse a
@@ -145,7 +146,7 @@ required jobs that have not passed still block publication.
 Release packages build from source.
 
 Review the diff and passing tests before publishing. Target Cargo/npm
-`0.4.5-beta.3` and Python `0.4.5b3`; keep npm on the `beta` tag and GitHub releases
+`0.4.5-beta.4` and Python `0.4.5b4`; keep npm on the `beta` tag and GitHub releases
 marked as prereleases. Python publishes only the existing `datafog-core` project;
 its trusted publisher uses repository `DataFog/datafog-core`, workflow
 `publish-python.yml`, environment `pypi`. Upload retries skip existing files.
