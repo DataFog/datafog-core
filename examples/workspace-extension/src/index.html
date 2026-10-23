@@ -10,19 +10,24 @@
     <button id="create">Create synthetic vault</button><button id="unlock">Unlock</button><button id="lock">Lock now</button>
     <p>Status: <output id="status" aria-live="polite">loading</output></p>
     <label>Synthetic statement text <textarea id="source" rows="4" spellcheck="false" autocomplete="off"></textarea></label>
-    <label>Entity type <input id="entity-type" value="PERSON" maxlength="32"></label>
+    <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>
     <button id="mark">Mark selected text</button><output id="selection-count">0 selections</output>
     <button id="add-input">Add text to batch</button>
-    <label>Synthetic CSV files <input id="files" type="file" accept=".csv,text/csv" multiple></label>
+    <label>Synthetic CSV or text PDF files <input id="files" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple></label>
     <output id="file-progress" aria-live="polite"></output>
     <section id="csv-review" hidden>
-      <h2>Local CSV cell review</h2>
-      <p>All records, including the first, are available. Select sensitive text in a decoded cell and mark it. Files stay unchanged.</p>
+      <h2>Local document review</h2>
+      <p>Review CSV records or extracted PDF page text. PDF text follows extraction order; review it before approval. Files stay unchanged.</p>
+      <div id="csv-location">
       <label>Record (1-based) <input id="csv-row" type="number" min="1" value="1"></label>
       <label>Column (1-based) <input id="csv-column" type="number" min="1" value="1"></label>
-      <button id="load-cell">Load cell</button>
-      <textarea id="csv-cell" rows="3" readonly autocomplete="off" spellcheck="false" aria-label="Decoded CSV cell"></textarea>
-      <button id="mark-cell">Mark selected cell text</button><button id="clear-cell">Clear cell selections</button>
+      </div>
+      <div id="pdf-location" hidden>
+        <label>Page (1-based) <input id="pdf-page" type="number" min="1" value="1"></label>
+      </div>
+      <button id="load-cell">Load text</button>
+      <textarea id="csv-cell" rows="3" readonly autocomplete="off" spellcheck="false" aria-label="Source text for privacy review"></textarea>
+      <button id="mark-cell">Mark selected review text</button><button id="clear-cell">Clear selections</button>
       <output id="cell-selections"></output>
     </section>
     <ul id="inputs" aria-label="Queued synthetic inputs"></ul>
