@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Local PDF text intake in the synthetic browser workflow, with page review,
+  aliases shared with CSV and typed text, and whole-batch rejection of scans,
+  image-bearing, encrypted, malformed, or unsupported PDFs.
 - Local CSV intake in the synthetic browser workflow, with decoded-cell review,
   pseudonymized string tables, and whole-batch rejection on parsing or encoding errors.
 - Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved

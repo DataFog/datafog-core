@@ -33,7 +33,6 @@ To inspect the UI separately, run `npm run build --prefix examples/workspace-ext
 ## Ownership and contract
 
 - `crates/core/src/workspace.rs` owns exact typed identity, marker allocation, validation, pending-change lifecycle and restoration. `workspace/codec.rs` owns the bounded, canonical CBOR development schema. Existing selection/overlap and offset machinery is reused.
-- Markers are `[[LABEL_CODE]]`: the uppercase entity type (at most 32 bytes) and a random six-character Crockford base32 code, unique within the workspace, for example `[[PERSON_7KQ4ZM]]`. Restoration ignores case and accepts Crockford's `I`/`L` → `1` and `O` → `0` substitutions in the code; any other marker-like span fails the whole restoration.
 - The WASM package exposes `Workspace` and opaque prepared changes. Byte ranges are UTF-8, zero-based and end-exclusive; `workspaceByteRangeFromUtf16` converts browser selections using Core. Optional detection metadata is never required or persisted.
 - `core-worker.js` runs Core/WASM. `broker.js` owns approval state and save/activation sequencing; `vault.js` uses native Web Crypto and a separate transient `kdf-worker.js`. Neither the password nor vault keys enter DataFog WASM.
 - `storage.js` uses a real IndexedDB read/compare/write transaction and waits for transaction completion. The expected head contains a lossless uint64 revision and complete commit ID. Each workspace has one encrypted bundle containing both snapshot and companion privacy configuration.
@@ -66,8 +65,8 @@ host limits a selection to 32 source inputs/files. These are development guardra
 ## CSV intake
 
 Choose synthetic CSV files locally, then **Review input**, select a record/column,
-and **Load cell**. Mark selected sensitive text using the existing entity-type
-field. **Clear cell selections** corrects that cell's supplied findings for this
+and **Load text**. Mark selected sensitive text using the existing entity-type
+field. **Clear selections** corrects that cell's supplied findings for this
 upload. Both adding and clearing selections invalidate approval. All records,
 including metadata and the first row, are available; there is no header inference.
 
@@ -99,8 +98,59 @@ is bundled locally in a worker (~109 KB unminified in this build); its license i
 copied alongside the bundle and asset hashes are recorded. Casting, record skipping,
 header conversion and delimiter guessing are disabled. This dependency provides
 quoted-field parsing without a new hand-written CSV parser or a Core dependency.
-The synthetic workflow still uses manually supplied findings. A PDF adapter
-follows separately.
+The synthetic workflow uses manually supplied findings.
+
+## PDF text intake
+
+The file picker also accepts synthetic, unencrypted text PDFs. Choose **Review
+input**, enter a 1-based page number and **Load text**. Each page is one reviewable
+text block, so a name split across adjacent PDF text runs can be selected as one
+finding. Core offsets are local to that page's extracted text. **Clear selections**
+and further selections invalidate approval; prepare and approve the updated
+selection again. CSV and PDF inputs share the same Core batch and saved
+workspace aliases.
+
+The approved JSON has `format: "pdf"` and ordered `pages`. Each page contains
+`number`, its native PDF `view` bounds, `rotation`, `userUnit` scale and pseudonymized
+`text`. Text follows PDF.js extraction order and whitespace handling, with Unicode
+normalization disabled. Dates, amounts and leading-zero identifiers remain
+extracted strings. Page positions are retained separately from the text; no table
+or accounting interpretation is performed. Filenames, PDF metadata, annotations,
+embedded files and original PDF bytes do not enter this output.
+
+Every page must contain extractable text. Image-only and blank pages block the
+file. Raster images also block intake, including decorative logos and text layers
+over scans: this slice makes no exception that could silently drop statement text
+inside an image. Encrypted PDFs are rejected even when an empty user password lets
+them open without prompting. Forms/XFA, annotations (including links), scripts,
+attachments, optional layers, collections, signatures and invisible-text modes are
+unsupported and block intake. Malformed/repaired input, parser warnings and parser
+error replies also block the file. Supply a supported text-only PDF or CSV export;
+explicitly remove a rejected file before reviewing and approving the remainder.
+
+Admission limits remain 1 MiB per source file and 1 MiB aggregate decoded source.
+Each PDF is limited to 256 pages, 100,000 extracted text items and 100,000 operators
+per page; its page texts count toward the existing aggregate leaf limit. Each file
+has a 30-second parsing deadline. Cancellation and the deadline terminate its
+worker. The current page's stream is drained without retaining additional text
+when decoded limits are exceeded, avoiding a PDF.js stream cancellation race;
+the operation still rejects as a whole. PDF.js exposes no hard heap or decoded
+stream-size cap, so these remain development guardrails rather than a parser
+memory guarantee. Completion/cancellation drops temporary bytes, page text and
+findings, while preserving committed encrypted mappings.
+
+The host pins Apache-2.0 [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) via
+`pdfjs-dist` 6.4.299. Its compatibility build runs entirely inside the terminable
+local worker, using locally bundled standard fonts and CMaps. It provides PDF font,
+encoding and content-stream interpretation without a new hand-written PDF parser
+or Core dependency. The script is about 3.4 MB unminified, plus local font/CMap
+resources. The bundled core-js 3.50.0 MIT notice and resource licenses accompany
+the build. The optional Node canvas package is not used by the browser bundle.
+
+Parser diagnostics are reduced to a boolean occurrence flag inside the worker,
+never logged or forwarded as exception text. The adapter also checks PDF.js error
+replies because this pinned version can return a partial operator list after a
+stream failure. These paths are covered by packaged-worker rejection tests.
 
 ## Acceptance coverage
 
@@ -108,7 +158,7 @@ follows separately.
 | --- | --- |
 | A1 | Encrypted save, actual browser close/relaunch, explicit unlock, byte-identical alias reuse and exact restoration. |
 | A2 | Preview cancellation and edits invalidate approval and commit/release nothing. |
-| A3 | Invalid types/ranges/text/units, well-formed marker collisions and resource bounds reject atomically through installed WASM. |
+| A3 | Invalid types/ranges/text/units, reserved-marker collisions and resource bounds reject atomically through installed WASM. |
 | A4 | Real IndexedDB abort, lost save acknowledgment and browser termination after commit/before activation. Saved state survives; no automatic release/resend. |
 | A5 | Two real writers at the same parent; lock/cancel at explicit pre/post-commit barriers. Only a winning authorized flow releases. |
 | A6 | Invalid/unknown markers alongside a valid marker reject the whole restoration. |
@@ -123,6 +173,10 @@ follows separately.
 | C2 | Real multi-file selection, local cell findings, preserved string tables, shared aliases and exact decoded-name restoration after browser restart. |
 | C3 | Rejected files/cells block the whole selection; removal and cell corrections invalidate approval and require a new preview. |
 | C4 | Completed/cancelled intake clears file controls, cells and selections; real FileReader cancellation leaves its source File unchanged. |
+| E1 | Packaged PDF worker extracts page text and preserves numeric strings; mixed-format review verifies decoded Unicode, page bounds and rotation. |
+| E2 | Scans, hybrid image/text pages, encryption (including empty user passwords), unsupported features, malformed/repaired PDFs and file/page/decoded-text limits reject with content-free errors. |
+| E3 | CSV/PDF selections share aliases; PDF corrections invalidate approval. A scan blocks the whole batch until explicit removal and a fresh preview. |
+| E4 | Completion/cancellation clears PDF review data; saved aliases restore and are reused after browser restart. Cancelling a pending parser request leaves its original File unchanged. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 
@@ -134,4 +188,4 @@ The harness exports narrow test fault controls for explicit transaction barriers
 
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
-PDF intake, protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+Protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.

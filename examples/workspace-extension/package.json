@@ -8,8 +8,9 @@
   },
   "dependencies": {
     "csv-parse": "7.0.3",
+    "libsodium-sumo": "0.8.4",
     "libsodium-wrappers-sumo": "0.8.4",
-    "libsodium-sumo": "0.8.4"
+    "pdfjs-dist": "6.4.299"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
