@@ -15,7 +15,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FINDINGS: usize = 10_000;
-pub const MAX_INPUTS: usize = 32;
+/// Text leaves across a batch; hosts impose their own source-file count limit.
+pub const MAX_INPUTS: usize = 100_000;
 pub const MAX_ENTRIES: usize = 20_000;
 pub const MAX_BUNDLE_BYTES: usize = 16 * 1024 * 1024;
 pub const RESERVED_INTRODUCER: &str = "[[DFP";

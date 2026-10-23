@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Local CSV intake in the synthetic browser workflow, with decoded-cell review,
+  pseudonymized string tables, and whole-batch rejection on parsing or encoding errors.
 - Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved
   snapshot; a rejected input blocks the whole batch. The synthetic browser harness
   supports explicit input removal followed by a fresh preview and approval.

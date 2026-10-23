@@ -7,6 +7,7 @@
     "test:workspace-integration": "node ../../scripts/test-workspace-extension.mjs"
   },
   "dependencies": {
+    "csv-parse": "7.0.3",
     "libsodium-wrappers-sumo": "0.8.4",
     "libsodium-sumo": "0.8.4"
   },

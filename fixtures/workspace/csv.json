@@ -1,0 +1,18 @@
+{
+  "name": "Smith, \"Jane\"",
+  "january": "\ufeff\"Statement for Smith, \"\"Jane\"\"\"\r\nDate,Payee,Amount,Account,Account\r\n2026-01-06,\"Smith, \"\"Jane\"\"\",-0010.00,00001234,\r\n2026-01-07,\"Smith, \"\"Jane\"\"\",12.3400,00001234,\"memo\r\nline\"\r\n\r\n2026-01-08, Café 😀 ,0.00\r\n",
+  "januaryRows": [
+    ["Statement for Smith, \"Jane\""],
+    ["Date", "Payee", "Amount", "Account", "Account"],
+    ["2026-01-06", "Smith, \"Jane\"", "-0010.00", "00001234", ""],
+    ["2026-01-07", "Smith, \"Jane\"", "12.3400", "00001234", "memo\r\nline"],
+    [""],
+    ["2026-01-08", " Café 😀 ", "0.00"]
+  ],
+  "february": "Date,Payee,Amount,Account,Account\n2026-02-06,\"Smith, \"\"Jane\"\"\",-12.30,00001234,\n2026-02-07,Other,0.000,00001234,\n",
+  "februaryRows": [
+    ["Date", "Payee", "Amount", "Account", "Account"],
+    ["2026-02-06", "Smith, \"Jane\"", "-12.30", "00001234", ""],
+    ["2026-02-07", "Other", "0.000", "00001234", ""]
+  ]
+}

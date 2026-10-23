@@ -4,7 +4,7 @@
 <body>
   <main>
     <h1>DataFog workspace proof</h1>
-    <p>This is a local development harness. Use synthetic text only. It does not connect to ChatGPT or Google Sheets.</p>
+    <p>This is a local development harness. Use synthetic data only. It does not connect to ChatGPT or Google Sheets.</p>
     <p>Native ChatGPT input and uploads bypass DataFog. This harness protects only its own local input.</p>
     <label>Password <input id="password" type="password" autocomplete="off" maxlength="1024"></label>
     <button id="create">Create synthetic vault</button><button id="unlock">Unlock</button><button id="lock">Lock now</button>
@@ -13,6 +13,18 @@
     <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>
     <button id="mark">Mark selected text</button><output id="selection-count">0 selections</output>
     <button id="add-input">Add text to batch</button>
+    <label>Synthetic CSV files <input id="files" type="file" accept=".csv,text/csv" multiple></label>
+    <output id="file-progress" aria-live="polite"></output>
+    <section id="csv-review" hidden>
+      <h2>Local CSV cell review</h2>
+      <p>All records, including the first, are available. Select sensitive text in a decoded cell and mark it. Files stay unchanged.</p>
+      <label>Record (1-based) <input id="csv-row" type="number" min="1" value="1"></label>
+      <label>Column (1-based) <input id="csv-column" type="number" min="1" value="1"></label>
+      <button id="load-cell">Load cell</button>
+      <textarea id="csv-cell" rows="3" readonly autocomplete="off" spellcheck="false" aria-label="Decoded CSV cell"></textarea>
+      <button id="mark-cell">Mark selected cell text</button><button id="clear-cell">Clear cell selections</button>
+      <output id="cell-selections"></output>
+    </section>
     <ul id="inputs" aria-label="Queued synthetic inputs"></ul>
     <output id="batch-error" aria-live="polite"></output>
     <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
