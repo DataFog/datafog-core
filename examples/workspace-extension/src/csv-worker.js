@@ -1,6 +1,6 @@
 import { parse } from "csv-parse/browser/esm/sync";
 import { serve, HostError } from "./rpc.js";
-import { MAX_CSV_BYTES, MAX_CSV_CELLS } from "./csv.js";
+import { MAX_CSV_BYTES, MAX_CSV_CELLS } from "./tabular.js";
 
 serve({
   parse(bytes) {

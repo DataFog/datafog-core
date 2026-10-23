@@ -32,6 +32,20 @@ function document(rows) {
   return {kind: "csv", fields, widths, offsets, sourceBytes};
 }
 
+function workbookDocument(workbook) {
+  const fields = [];
+  let sourceBytes = 0;
+  const add = text => {
+    const index = fields.length; fields.push({text, findings: []}); sourceBytes += encoder.encode(text).length;
+    return index;
+  };
+  const sheets = workbook.sheets.map(sheet => ({
+    nameIndex: add(sheet.name), visibility: sheet.visibility,
+    cells: sheet.cells.map(cell => ({address: cell.address, sourceType: cell.sourceType, valueIndex: add(cell.value), formatIndex: add(cell.numberFormat)})),
+  }));
+  return {kind: "xlsx", dateSystem: workbook.dateSystem, fields, sheets, sourceBytes};
+}
+
 function readBytes(file, signal) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new HostError("cancelled")); return; }
@@ -51,10 +65,14 @@ function readBytes(file, signal) {
 }
 
 /** All selected files produce either a document or a blocking rejection. */
-export async function importCsvFiles(files, existing, signal, progress) {
+export async function importTabularFiles(files, existing, signal, progress) {
   if (files.length + existing.length > MAX_FILES) return [{kind: "rejected", error: "resource_limit"}];
-  const worker = client(new Worker(new URL("./csv-worker.js", import.meta.url), {type: "module"}));
-  const abort = () => worker.stop();
+  const workers = new Map();
+  const workerFor = format => {
+    if (!workers.has(format)) workers.set(format, client(new Worker(new URL(`./${format}-worker.js`, import.meta.url), {type: "module"})));
+    return workers.get(format);
+  };
+  const abort = () => { for (const worker of workers.values()) worker.stop(); };
   signal.addEventListener("abort", abort, {once: true});
   let sourceBytes = existing.reduce((sum, input) => sum + (input.sourceBytes ?? encoder.encode(input.text ?? "").length), 0);
   let fields = existing.reduce((sum, input) => sum + (input.fields?.length ?? 1), 0);
@@ -65,11 +83,13 @@ export async function importCsvFiles(files, existing, signal, progress) {
       progress(index + 1, files.length);
       let bytes;
       try {
-        if (!/\.csv$/i.test(file.name)) throw new HostError("unsupported_format");
+        const format = /\.(csv|xlsx)$/i.exec(file.name)?.[1].toLowerCase();
+        if (!format) throw new HostError("unsupported_format");
         if (file.size > MAX_CSV_BYTES) throw new HostError("resource_limit");
         bytes = await readBytes(file, signal);
         if (signal.aborted) throw new HostError("cancelled");
-        const input = document(await worker.call("parse", [bytes]));
+        const parsed = await workerFor(format).call("parse", [bytes]);
+        const input = format === "csv" ? document(parsed) : workbookDocument(parsed);
         if (sourceBytes + input.sourceBytes > MAX_CSV_BYTES || fields + input.fields.length > MAX_CSV_CELLS) throw new HostError("resource_limit");
         sourceBytes += input.sourceBytes; fields += input.fields.length;
         imported.push({...input, label: file.name});
@@ -80,17 +100,26 @@ export async function importCsvFiles(files, existing, signal, progress) {
     }
     return imported;
   } finally {
-    signal.removeEventListener("abort", abort); worker.stop();
+    signal.removeEventListener("abort", abort); abort();
   }
 }
 
-/** Core sees text leaves; file/record/column structure stays in the host. */
+/** Core sees text leaves; file, record and worksheet structure stays in the host. */
 export function flattenDocuments(documents) {
   if (documents.length > MAX_FILES) throw new HostError("resource_limit");
   const inputs = [], locations = [];
   for (const [inputIndex, input] of documents.entries()) {
     if (input.kind === "rejected") throw new HostError(input.error, {inputIndex});
-    if (input.kind !== "csv") {
+    if (input.kind === "xlsx") {
+      const base = inputs.length; for (const field of input.fields) inputs.push(field);
+      for (const [sheetIndex, sheet] of input.sheets.entries()) {
+        locations[base + sheet.nameIndex] = {inputIndex, sheetIndex, component: "sheet name"};
+        for (const cell of sheet.cells) {
+          locations[base + cell.valueIndex] = {inputIndex, sheetIndex, cellAddress: cell.address, component: "value"};
+          locations[base + cell.formatIndex] = {inputIndex, sheetIndex, cellAddress: cell.address, component: "number format"};
+        }
+      }
+    } else if (input.kind !== "csv") {
       inputs.push({text: input.text, findings: input.findings}); locations.push({inputIndex});
     } else {
       input.widths.forEach((width, rowIndex) => {
@@ -107,6 +136,13 @@ export function flattenDocuments(documents) {
 export function formatDocuments(documents, texts) {
   let cursor = 0;
   const result = documents.map(input => {
+    if (input.kind === "xlsx") {
+      const base = cursor; cursor += input.fields.length;
+      return JSON.stringify({format: "xlsx", dateSystem: input.dateSystem, sheets: input.sheets.map(sheet => ({
+        name: texts[base + sheet.nameIndex], visibility: sheet.visibility,
+        cells: sheet.cells.map(cell => ({address: cell.address, sourceType: cell.sourceType, value: texts[base + cell.valueIndex], numberFormat: texts[base + cell.formatIndex]})),
+      }))});
+    }
     if (input.kind !== "csv") return texts[cursor++];
     const rows = input.widths.map(width => {
       const row = texts.slice(cursor, cursor + width); cursor += width; return row;

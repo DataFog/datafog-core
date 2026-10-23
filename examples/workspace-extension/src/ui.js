@@ -1,13 +1,13 @@
 import { client, safeCode, HostError } from "./rpc.js";
-import { importCsvFiles, flattenDocuments, formatDocuments, cellSelection } from "./csv.js";
+import { importTabularFiles, flattenDocuments, formatDocuments, cellSelection } from "./tabular.js";
 
 const broker = client(new Worker(new URL("./broker.js", import.meta.url), { type: "module" }));
 const element = id => document.getElementById(id);
 let findings = [];
 let queued = [];
 let intakeController;
-let csvDocument;
-let csvCell;
+let reviewDocument;
+let reviewField;
 let plan;
 let generation = 0;
 let restorationGeneration = 0;
@@ -16,26 +16,28 @@ const status = text => { element("status").textContent = text; };
 function clearPreview() { plan = undefined; element("preview").textContent = ""; element("approve").disabled = true; }
 function clearCurrent() { element("source").value = ""; findings = []; element("selection-count").textContent = "0 selections"; }
 function stopIntake() { intakeController?.abort(); intakeController = undefined; element("file-progress").textContent = ""; }
-function clearCell() { csvCell = undefined; element("csv-cell").value = ""; element("cell-selections").textContent = ""; }
-function clearCsvReview() { csvDocument = undefined; clearCell(); element("csv-review").hidden = true; }
-function clearDraft() { stopIntake(); clearCurrent(); clearCsvReview(); queued = []; element("files").value = ""; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
+function clearCell() { reviewField = undefined; element("csv-cell").value = ""; element("cell-selections").textContent = ""; }
+function clearTableReview() { reviewDocument = undefined; clearCell(); element("csv-review").hidden = true; element("xlsx-location").hidden = true; }
+function clearDraft() { stopIntake(); clearCurrent(); clearTableReview(); queued = []; element("files").value = ""; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
 function renderInputs() {
   element("inputs").replaceChildren();
   queued.forEach((input, index) => {
     const item = document.createElement("li");
-    item.textContent = `Input ${index + 1}${input.label ? `: ${input.label}` : ""}${input.kind === "csv" ? `: CSV, ${input.widths.length} records` : input.kind === "rejected" ? `: ${input.error}` : ""}`;
-    if (input.kind === "csv") {
+    item.textContent = `Input ${index + 1}${input.label ? `: ${input.label}` : ""}${input.kind === "csv" ? `: CSV, ${input.widths.length} records` : input.kind === "xlsx" ? `: XLSX, ${input.sheets.length} sheets` : input.kind === "rejected" ? `: ${input.error}` : ""}`;
+    if (input.kind === "csv" || input.kind === "xlsx") {
       const review = document.createElement("button"); review.textContent = `Review input ${index + 1}`;
       review.addEventListener("click", () => {
-        csvDocument = input; clearCell(); element("csv-review").hidden = false;
+        reviewDocument = input; clearCell(); element("csv-review").hidden = false;
+        element("csv-location").hidden = input.kind !== "csv"; element("xlsx-location").hidden = input.kind !== "xlsx";
         element("csv-row").value = "1"; element("csv-column").value = "1";
+        element("xlsx-sheet").value = "1"; element("xlsx-address").value = "A1"; element("xlsx-component").value = "value";
       });
       item.append(review);
     }
     const remove = document.createElement("button");
     remove.textContent = `Remove input ${index + 1}`;
     remove.addEventListener("click", () => {
-      generation++; stopIntake(); if (csvDocument === input) clearCsvReview(); queued = queued.filter(value => value !== input);
+      generation++; stopIntake(); if (reviewDocument === input) clearTableReview(); queued = queued.filter(value => value !== input);
       clearPreview(); element("batch-error").textContent = ""; renderInputs();
       void perform(async g => { await broker.call("cancel"); if (g === generation) status("input_removed"); });
     });
@@ -49,7 +51,9 @@ async function perform(task) {
   try { await task(g); } catch (error) {
     if (g === generation) {
       status(safeCode(error));
-      element("batch-error").textContent = Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : ""} rejected. Remove or correct it, then prepare a new preview.` : "";
+      const location = Number.isSafeInteger(error.sheetIndex) ? `, sheet ${error.sheetIndex + 1}${error.cellAddress ? `, cell ${error.cellAddress}` : ""}, ${error.component}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
+      const guidance = error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : "";
+      element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${location} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
   finally { operations--; renderBusy(); }
@@ -100,7 +104,7 @@ element("files").addEventListener("change", () => {
       await broker.call("cancel");
       if (g !== generation) return;
       if ((await broker.call("status")).status !== "unlocked") throw new HostError("locked");
-      const imported = await importCsvFiles(files, queued, controller.signal, (index, count) => {
+      const imported = await importTabularFiles(files, queued, controller.signal, (index, count) => {
         if (g === generation) element("file-progress").textContent = `Reading file ${index} of ${count}`;
       });
       if (g !== generation) return;
@@ -113,15 +117,28 @@ element("files").addEventListener("change", () => {
 });
 element("load-cell").addEventListener("click", () => {
   clearCell();
-  const row = Number(element("csv-row").value) - 1, column = Number(element("csv-column").value) - 1;
-  if (!csvDocument || !Number.isSafeInteger(row) || !Number.isSafeInteger(column) || row < 0 || column < 0 || row >= csvDocument.widths.length || column >= csvDocument.widths[row]) { status("invalid_cell"); return; }
-  csvCell = csvDocument.fields[csvDocument.offsets[row] + column];
-  element("csv-cell").value = csvCell.text;
-  element("cell-selections").textContent = `${csvCell.findings.length} selections`; status("cell_ready");
+  if (reviewDocument?.kind === "xlsx") {
+    const sheetIndex = Number(element("xlsx-sheet").value) - 1;
+    const sheet = Number.isSafeInteger(sheetIndex) && sheetIndex >= 0 ? reviewDocument.sheets[sheetIndex] : undefined;
+    if (!sheet) { status("invalid_cell"); return; }
+    const component = element("xlsx-component").value;
+    if (component === "name") reviewField = reviewDocument.fields[sheet.nameIndex];
+    else {
+      const cell = sheet.cells.find(cell => cell.address === element("xlsx-address").value.trim().toUpperCase());
+      if (cell) reviewField = reviewDocument.fields[component === "numberFormat" ? cell.formatIndex : cell.valueIndex];
+    }
+    if (!reviewField) { status("invalid_cell"); return; }
+  } else {
+    const row = Number(element("csv-row").value) - 1, column = Number(element("csv-column").value) - 1;
+    if (!reviewDocument || !Number.isSafeInteger(row) || !Number.isSafeInteger(column) || row < 0 || column < 0 || row >= reviewDocument.widths.length || column >= reviewDocument.widths[row]) { status("invalid_cell"); return; }
+    reviewField = reviewDocument.fields[reviewDocument.offsets[row] + column];
+  }
+  element("csv-cell").value = reviewField.text;
+  element("cell-selections").textContent = `${reviewField.findings.length} selections`; status("cell_ready");
 });
 element("mark-cell").addEventListener("click", () => {
-  if (!csvCell) { status("invalid_cell"); return; }
-  const cell = csvCell, textarea = element("csv-cell"), start = textarea.selectionStart, end = textarea.selectionEnd;
+  if (!reviewField) { status("invalid_cell"); return; }
+  const cell = reviewField, textarea = element("csv-cell"), start = textarea.selectionStart, end = textarea.selectionEnd;
   generation++; clearPreview();
   void perform(async g => {
     const original = cellSelection(cell.text, start, end);
@@ -131,8 +148,8 @@ element("mark-cell").addEventListener("click", () => {
   });
 });
 element("clear-cell").addEventListener("click", () => {
-  if (!csvCell) return;
-  generation++; clearPreview(); csvCell.findings = []; element("cell-selections").textContent = "0 selections";
+  if (!reviewField) return;
+  generation++; clearPreview(); reviewField.findings = []; element("cell-selections").textContent = "0 selections";
   void perform(async g => { await broker.call("cancel"); if (g === generation) status("selections_cleared"); });
 });
 element("prepare").addEventListener("click", () => perform(async g => {

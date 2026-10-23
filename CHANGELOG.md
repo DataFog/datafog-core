@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Values-only XLSX intake in the synthetic browser workflow, with sheet/cell review,
+  exact stored values and number formats, and whole-batch rejection of formulas.
 - Local CSV intake in the synthetic browser workflow, with decoded-cell review,
   pseudonymized string tables, and whole-batch rejection on parsing or encoding errors.
 - Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved

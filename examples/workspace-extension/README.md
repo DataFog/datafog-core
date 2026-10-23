@@ -98,8 +98,68 @@ is bundled locally in a worker (~109 KB unminified in this build); its license i
 copied alongside the bundle and asset hashes are recorded. Casting, record skipping,
 header conversion and delimiter guessing are disabled. This dependency provides
 quoted-field parsing without a new hand-written CSV parser or a Core dependency.
-The synthetic workflow still uses manually supplied findings. PDF and XLSX
-adapters follow separately.
+The synthetic workflow still uses manually supplied findings. PDF intake follows
+separately.
+
+## Values-only XLSX intake
+
+The same file picker accepts unencrypted `.xlsx` alongside CSV. Choose **Review
+input**, enter a 1-based sheet number and cell address, and load its **Stored
+value**, **Number format**, or **Sheet name** for local selections. Clearing or
+adding selections invalidates approval, as with CSV. The entire mixed selection
+uses one Core batch and one encrypted mapping save; identical typed values reuse
+the same aliases across formats and months.
+
+Every worksheet is included, including hidden/very-hidden sheets and hidden
+rows/columns. Actual stored cells are enumerated even outside a sheet's declared
+display range. Shared/inline/rich strings, blank cells, booleans, errors and date
+cells are supported. The outgoing JSON contains ordered sheets with their
+pseudonymized names, visibility and cell addresses. Each cell has a `sourceType`,
+string `value` and reviewable `numberFormat`; `sourceType` describes the original
+cell, including when the value has been replaced by a pseudonym.
+
+Numeric XML values are preserved as text (`12.3400`, `9007199254740993`), without
+JavaScript number rounding. Excel date serials stay serials, with the workbook's
+1900/1904 date system and number format retained. Formats such as `00000000` are
+carried alongside the stored value rather than evaluated. Sheet names and literal
+text in number formats pass through the same supplied-finding review. There is no
+second unsanitized display-value copy in the output. This is a structured data
+handoff, not a rebuilt workbook or a guarantee about accounting or sheet layout.
+
+Any formula blocks the workbook, including cached, shared and array formulas in
+hidden sheets or outside declared ranges. Text beginning with `=` remains text.
+Password/encryption protection, macros, external links and unsupported package
+features (including drawings, comments, tables, defined names, conditional
+formatting and data validation) block intake. Supply an unprotected values-only
+copy or CSV export. Malformed XML/ZIP, duplicate cells, invalid cell styles and
+resource excesses also block the whole selection. Remove rejected files explicitly
+before a new preview and approval; no automatic partial processing occurs.
+
+The XLSX adapter runs in a local worker. Compressed files remain limited to 1 MiB;
+ZIP expansion is bounded to 16 MiB/256 entries, with CRC/size checks, no filesystem
+extraction and strict XML parsing without DTDs. At most 32 sheets, 64 XML nesting
+levels and 64 attributes per element are accepted. The aggregate 1 MiB decoded
+source limit counts names, values and formats; the 100,000-leaf limit counts one
+per sheet name plus two per cell. Cancellation terminates parsing; completion and
+cancellation clear temporary workbook values, formats and names. Original files
+are unchanged. Parser errors contain codes, not source excerpts.
+
+Pinned host dependencies provide workbook decoding and bounded package checks:
+
+- Apache-2.0 `xlsx` (SheetJS CE) 0.20.3 comes from its
+  [official distribution](https://docs.sheetjs.com/docs/getting-started/installation/standalone/).
+  It decodes the workbook's shared/rich text and cell model without a new Core
+  parser. Raw numeric values are retained separately before decoding.
+- MIT `fflate` 0.8.3 supplies
+  [streaming ZIP inflation](https://github.com/101arrowz/fflate), bounded by the
+  adapter's ZIP metadata, output size and checksum validation.
+- BlueOak-1.0.0 `sax` 1.6.1 supplies
+  [strict namespace-aware XML parsing](https://github.com/isaacs/sax-js), used to
+  inspect package XML before workbook decoding so formula checks cover all sheets.
+
+All executable assets are bundled locally under the extension's existing CSP.
+These libraries add no runtime network access or Core dependencies. Licenses,
+versions, asset hashes and synthetic fixture hashes accompany the build.
 
 ## Acceptance coverage
 
@@ -122,6 +182,10 @@ adapters follow separately.
 | C2 | Real multi-file selection, local cell findings, preserved string tables, shared aliases and exact decoded-name restoration after browser restart. |
 | C3 | Rejected files/cells block the whole selection; removal and cell corrections invalidate approval and require a new preview. |
 | C4 | Completed/cancelled intake clears file controls, cells and selections; real FileReader cancellation leaves its source File unchanged. |
+| D1 | Packaged XLSX worker preserves exact numeric text, date systems, rich/shared strings, blank cells, formats, hidden sheets and sparse coordinates. |
+| D2 | Formulas across all sheets, protection, unsupported features, malformed packages and expansion/decoded-source excesses reject with content-free errors. |
+| D3 | Mixed CSV/XLSX selections share aliases; sheet names, Unicode cells and format literals are reviewable. A rejected workbook blocks the batch until explicit removal and fresh approval. |
+| D4 | Approval/cancellation clears workbook review data; mappings survive real browser restart and restore exact names. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 
@@ -133,4 +197,4 @@ The harness exports narrow test fault controls for explicit transaction barriers
 
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
-PDF/XLSX intake, protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+PDF intake, protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
