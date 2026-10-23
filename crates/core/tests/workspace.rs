@@ -1,7 +1,189 @@
 use datafog_core::{
     TextRange,
-    workspace::{ErrorCode, Workspace, WorkspaceFinding, byte_range_from_utf16},
+    workspace::{ErrorCode, Workspace, WorkspaceFinding, WorkspaceInput, byte_range_from_utf16},
 };
+
+#[test]
+fn a_batch_shares_aliases_and_commits_one_snapshot_after_approval() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let original = workspace.export_bundle().unwrap();
+    let findings = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane | -10 USD",
+            findings: &findings,
+        },
+        WorkspaceInput {
+            text: "Jane | -20 USD",
+            findings: &findings,
+        },
+    ];
+    let mut pending = workspace.prepare_batch(&inputs, [3; 16]).unwrap();
+    let previews = pending.previews().unwrap();
+    assert_eq!(previews.len(), 2);
+    let first = previews[0].text.clone();
+    let second = previews[1].text.clone();
+    assert_eq!(
+        first.strip_suffix(" | -10 USD"),
+        second.strip_suffix(" | -20 USD")
+    );
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    assert_eq!(pending.candidate_head().unwrap().revision, 1);
+    assert!(pending.preview().is_err());
+    let saved = pending.export_candidate_bundle().unwrap().to_vec();
+    let parent = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    workspace
+        .activate_saved(&mut pending, parent, candidate)
+        .unwrap();
+    assert!(pending.previews().is_err());
+    let reopened = Workspace::open_bundle(&saved).unwrap();
+    assert_eq!(reopened.restore(&first).unwrap(), inputs[0].text);
+    assert_eq!(reopened.restore(&second).unwrap(), inputs[1].text);
+    let again = reopened.prepare_batch(&inputs, [4; 16]).unwrap();
+    assert_eq!(again.previews().unwrap()[0].text, first);
+    assert_eq!(again.previews().unwrap()[1].text, second);
+    assert_eq!(again.candidate_head().unwrap(), candidate);
+}
+
+#[test]
+fn rejected_batch_members_preserve_committed_state_and_report_local_indexes() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let original = workspace.export_bundle().unwrap();
+    let valid = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let invalid = [WorkspaceFinding::new(
+        "PERSON",
+        "wrong",
+        TextRange { start: 5, end: 9 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &valid,
+        },
+        WorkspaceInput {
+            text: "👋 Jane",
+            findings: &invalid,
+        },
+    ];
+    let failure = workspace.prepare_batch(&inputs, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::InvalidFinding);
+    assert_eq!(failure.input_index, Some(1));
+    assert_eq!(failure.finding_index, Some(0));
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    let collision = [
+        inputs[0],
+        WorkspaceInput {
+            text: "[[DFP1:literal",
+            findings: &[],
+        },
+    ];
+    let failure = workspace.prepare_batch(&collision, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::InvalidMarker);
+    assert_eq!(failure.input_index, Some(1));
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    let reduced = workspace.prepare_batch(&inputs[..1], [4; 16]).unwrap();
+    assert!(reduced.preview().unwrap().text.ends_with(":PERSON:1]]"));
+}
+
+#[test]
+fn batch_limits_are_aggregate_and_ranges_remain_local_to_each_input() {
+    use datafog_core::workspace::{MAX_FINDINGS, MAX_INPUTS, MAX_SOURCE_BYTES};
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let first = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let second = [WorkspaceFinding::new(
+        "PERSON",
+        "John",
+        TextRange { start: 5, end: 9 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &first,
+        },
+        WorkspaceInput {
+            text: "👋 John",
+            findings: &second,
+        },
+    ];
+    let mut pending = workspace.prepare_batch(&inputs, [3; 16]).unwrap();
+    let previews = pending.previews().unwrap();
+    assert!(previews[0].text.ends_with(":PERSON:1]]"));
+    assert!(previews[1].text.ends_with(":PERSON:2]]"));
+    assert_eq!(
+        previews[1].transformations[0].source_utf16_range,
+        TextRange { start: 3, end: 7 }
+    );
+    assert_eq!(
+        previews[1].transformations[0].source_byte_range,
+        TextRange { start: 5, end: 9 }
+    );
+    pending.discard();
+    assert!(pending.previews().is_err());
+    assert_eq!(
+        workspace.prepare_batch(&[], [3; 16]).err().unwrap().code,
+        ErrorCode::InvalidBatch
+    );
+    let too_many: Vec<_> = (0..=MAX_INPUTS)
+        .map(|_| WorkspaceInput {
+            text: "",
+            findings: &[],
+        })
+        .collect();
+    assert_eq!(
+        workspace
+            .prepare_batch(&too_many, [3; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
+    let text = "x".repeat(MAX_SOURCE_BYTES / 2 + 1);
+    let too_large = [
+        WorkspaceInput {
+            text: &text,
+            findings: &[],
+        },
+        WorkspaceInput {
+            text: &text,
+            findings: &[],
+        },
+    ];
+    let failure = workspace.prepare_batch(&too_large, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::ResourceLimit);
+    assert_eq!(failure.input_index, Some(1));
+    let repeated = vec![first[0].clone(); MAX_FINDINGS / 2 + 1];
+    let too_many_findings = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &repeated,
+        },
+        WorkspaceInput {
+            text: "Jane",
+            findings: &repeated,
+        },
+    ];
+    assert_eq!(
+        workspace
+            .prepare_batch(&too_many_findings, [3; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
+}
 
 #[test]
 fn approved_workspace_reopens_with_identical_aliases_and_exact_restoration() {

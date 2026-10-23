@@ -13,10 +13,10 @@ serve({
   exportBundle() { return active().exportBundle(); },
   head() { return active().head(); },
   byteRange(text, start, end) { return workspaceByteRangeFromUtf16(text, start, end); },
-  prepare(text, findings, operation) {
-    const value = active().prepare(text, findings, operation);
+  prepareBatch(inputs, operation) {
+    const value = active().prepareBatch(inputs, operation);
     const id = next++; plans.set(id, value);
-    return { id, preview: value.preview(), ...value.heads() };
+    return { id, previews: value.previews(), ...value.heads() };
   },
   exportCandidate(id) { return plan(id).exportCandidateBundle(); },
   activate(id, parent, saved) { active().activateSaved(plan(id), parent, saved); plans.delete(id); },

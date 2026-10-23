@@ -12,6 +12,9 @@
     <label>Synthetic statement text <textarea id="source" rows="4" spellcheck="false" autocomplete="off"></textarea></label>
     <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>
     <button id="mark">Mark selected text</button><output id="selection-count">0 selections</output>
+    <button id="add-input">Add text to batch</button>
+    <ul id="inputs" aria-label="Queued synthetic inputs"></ul>
+    <output id="batch-error" aria-live="polite"></output>
     <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
     <h2>Local preview</h2><pre id="preview"></pre><button id="approve" disabled>Approve and save</button>
     <h2>Approved local handoff sink</h2><pre id="sink"></pre>

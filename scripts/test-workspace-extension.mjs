@@ -89,6 +89,44 @@ try {
   check(await page.locator("#restored").textContent() === fixture.january, "A1 exact restoration");
   console.log("PASS A1 encrypted save, browser restart, alias reuse and restoration");
 
+  page = await fresh("batch");
+  await prepare(page);
+  await page.locator("#add-input").click(); await status(page, "input_added");
+  await prepare(page, fixture.february);
+  await page.locator("#add-input").click(); await status(page, "input_added");
+  await page.locator("#source").fill("[[DFP1:literal source collision");
+  await page.locator("#add-input").click(); await status(page, "input_added");
+  await page.locator("#prepare").click(); await status(page, "invalid_marker");
+  check((await page.locator("#batch-error").textContent()).includes("Input 3"), "B1 rejected input is identified without source text");
+  check((await control(page, "state")).head.revision === "0", "B1 rejected batch saves no mappings");
+  await noRelease(page, "B1 rejected batch releases nothing");
+  check(await page.locator("#approve").isDisabled(), "B1 rejection leaves no approval");
+  await page.getByRole("button", {name: "Remove input 3", exact: true}).click(); await status(page, "input_removed");
+  await page.locator("#prepare").click(); await status(page, "preview_ready");
+  const batchPreview = await page.locator("#preview").textContent();
+  const batchMarkers = batchPreview.match(/\[\[DFP1:.*?\]\]/g);
+  check(batchMarkers?.length === 2 && batchMarkers[0] === batchMarkers[1], "B1 inputs share one exact pseudonym");
+  await page.getByRole("button", {name: "Remove input 2", exact: true}).click(); await status(page, "input_removed");
+  check(await page.locator("#approve").isDisabled() && await page.locator("#preview").textContent() === "", "B2 membership edits invalidate preview and approval");
+  await noRelease(page, "B2 membership edits do not release an old plan");
+  await prepare(page, fixture.february);
+  const approvedBatch = await page.locator("#preview").textContent();
+  await page.locator("#approve").click(); await status(page, "saved");
+  check(await page.locator("#sink").textContent() === approvedBatch, "B1 only the entire approved batch is released");
+  check((await control(page, "state")).head.revision === "1", "B1 batch has one committed head");
+  check(await page.locator("#source").inputValue() === "" && await page.locator("#inputs").textContent() === "", "B3 completed batch drops temporary inputs");
+  await context.close(); context = undefined;
+  page = await launch("batch"); await unlock(page);
+  const nextMonth = await prepare(page);
+  const approvedMarker = approvedBatch.match(/\[\[DFP1:.*?\]\]/)[0];
+  check(nextMonth.includes(approvedMarker), "B1 restart preserves batch aliases");
+  await restored(page, approvedMarker, "restored");
+  check(await page.locator("#restored").textContent() === fixture.name, "B1 batch alias restores after restart");
+  await page.locator("#add-input").click(); await status(page, "input_added");
+  await page.locator("#cancel").click(); await status(page, "cancelled");
+  check(await page.locator("#inputs").textContent() === "", "B3 cancelled batch drops temporary inputs");
+  console.log("PASS B1–B3 atomic batch, explicit removal/reapproval and temporary input cleanup");
+
   page = await fresh("approval");
   await prepare(page);
   await page.locator("#cancel").click(); await status(page, "cancelled");
@@ -306,7 +344,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));
