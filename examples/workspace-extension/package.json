@@ -1,0 +1,17 @@
+{
+  "name": "datafog-workspace-slice",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test:workspace-integration": "node ../../scripts/test-workspace-extension.mjs"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "0.8.4",
+    "libsodium-sumo": "0.8.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.62.1"
+  }
+}
