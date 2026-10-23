@@ -63,7 +63,10 @@ export async function verifyWorkspace(api, counters) {
   for (const bad of [marker.replace("CLIENT_NAME", "PERSON"), "[[CLIENT_NAME_ABC]]", "[[CLIENT_NAME_ZZZZZZ]]"]) {
     throws(() => w.restore(`${marker} ${bad}`), "invalid_marker");
   }
-  throws(() => w.prepare(marker, [], id(4)), "invalid_marker");
+  const passthrough = w.prepare(`${marker}${marker}`, [], id(4));
+  check(passthrough.preview().text === `${marker}${marker}` && passthrough.preview().transformations.length === 0, "committed markers pass through without new transformations");
+  check(equal(passthrough.exportCandidateBundle(), saved), "marker-only follow-up preserves the saved snapshot");
+  passthrough.discard();
   throws(() => w.prepare(source, [finding], id(3)), "invalid_operation_id");
   change = w.prepare(source, [finding], id(4));
   check(change.heads().expectedHead.revision === change.heads().candidateHead.revision, "no-change head");
@@ -74,6 +77,32 @@ export async function verifyWorkspace(api, counters) {
   check(change.preview().text === preview.text, "reopen preserves exact full marker");
   throws(() => w.activateSaved(change, change.heads().expectedHead, change.heads().candidateHead), "workspace_conflict");
   change.discard(); throws(() => change.preview(), "inactive_plan");
+  const followup = api.Workspace.openBundle(saved);
+  const question = `👋 é Compare ${marker} with John Smith, then ${marker}.`;
+  const start = question.indexOf("John Smith");
+  const freshFinding = {entityType: "CLIENT_NAME", matchedText: "John Smith", range: api.workspaceByteRangeFromUtf16(question, start, start + 10)};
+  let answer = followup.prepare(question, [freshFinding], id(10));
+  const answerPreview = answer.preview(), markers = answerPreview.text.match(/\[\[[A-Z][A-Z0-9_]*_[0-9A-HJKMNP-TV-Z]{6}\]\]/g);
+  check(markers.length === 3 && markers[0] === marker && markers[2] === marker && isMarker(markers[1], "CLIENT_NAME") && markers[1] !== marker, "follow-up preserves old markers and allocates only the new exact value");
+  check(answerPreview.text === question.replace("John Smith", markers[1]), "follow-up preserves all unselected text");
+  check(answerPreview.transformations.length === 1 && answerPreview.transformations[0].sourceUtf16Range.start === start && answerPreview.transformations[0].sourceByteRange.start === freshFinding.range.start, "follow-up keeps input-local Unicode offsets");
+  throws(() => followup.prepare(answerPreview.text, [], id(11)), "invalid_marker");
+  const markerStart = question.indexOf(marker);
+  throws(() => followup.prepare(question, [{entityType: "PERSON", matchedText: marker, range: api.workspaceByteRangeFromUtf16(question, markerStart, markerStart + marker.length)}], id(11)), "invalid_finding");
+  const foreign = api.Workspace.create(id(9), id(2));
+  const foreignPlan = foreign.prepare(source, [finding], id(3)), foreignMarker = foreignPlan.preview().text.match(/\[\[[A-Z][A-Z0-9_]*_[0-9A-HJKMNP-TV-Z]{6}\]\]/)[0];
+  foreign.activateSaved(foreignPlan, foreignPlan.heads().expectedHead, foreignPlan.heads().candidateHead);
+  for (const bad of [foreignMarker, marker.replace("CLIENT_NAME", "OTHER"), "[[CLIENT_NAME_ZZZZZZ]]"]) {
+    try { followup.prepareBatch([{text: question, findings: [freshFinding]}, {text: `${marker} ${bad}`, findings: []}], id(11)); throw new Error("missing follow-up rejection"); }
+    catch (error) { check(error.code === "invalid_marker" && error.inputIndex === 1 && error.findingIndex == null && error.message === "invalid_marker", "invalid follow-up markers reject the whole batch without source content"); }
+    check(equal(followup.exportBundle(), saved), "rejected follow-up preserves committed mappings");
+  }
+  followup.activateSaved(answer, answer.heads().expectedHead, answer.heads().candidateHead);
+  const followupSaved = followup.exportBundle(), followupReopened = api.Workspace.openBundle(followupSaved);
+  check(followupReopened.restore(answerPreview.text) === question.replaceAll(marker, finding.matchedText), "follow-up markers restore exactly after reopen");
+  answer = followupReopened.prepare(answerPreview.text, [], id(12));
+  check(answer.preview().text === answerPreview.text && equal(answer.exportCandidateBundle(), followupSaved), "saved follow-up aliases remain unchanged on resubmission");
+  answer.discard(); followup.close(); followupReopened.close(); foreign.close();
   const selection = api.workspaceByteRangeFromUtf16("👋 é Jane", 6, 10);
   check(selection.start === 9 && selection.end === 13 && selection.unit === "utf8_bytes", "Core UTF-16 conversion");
   throws(() => api.workspaceByteRangeFromUtf16("👋 Jane", 1, 7), "invalid_finding");
@@ -97,6 +126,9 @@ export async function verifyWorkspace(api, counters) {
     const high = api.Workspace.openBundle(bytes);
     check(high.head().revision === fixture.revision, "lossless exposed uint64 revision");
     check(equal(bytes, high.exportBundle()) && high.restore(fixture.marker) === "Jane", "CBOR uint64 fixture round trip");
+    const unchanged = high.prepare(fixture.marker, [], id(6));
+    check(unchanged.preview().text === fixture.marker && equal(unchanged.exportCandidateBundle(), bytes), "marker-only input does not advance even a maximum uint64 counter");
+    unchanged.discard();
     const fresh = { entityType: "PERSON", matchedText: "John", range: { unit: "utf8_bytes", start: 0, end: 4 } };
     if (name === "maximum") throws(() => high.prepare("John", [fresh], id(6)), "resource_limit");
     else {
