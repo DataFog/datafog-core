@@ -128,23 +128,44 @@ impl Drop for Preview {
     }
 }
 
+/// Values of one type that differ only in letter case or spacing share an identity,
+/// so `JOHN SMITH` on one statement and `John  Smith` on the next get one marker.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Identity {
     entity_type: String,
-    original: String,
+    key: String,
 }
 impl Drop for Identity {
     fn drop(&mut self) {
-        self.original.zeroize();
+        self.key.zeroize();
     }
 }
+/// `display` is the first spelling seen and is what restoration returns.
 /// `code` is canonical uppercase Crockford base32 and unique within the workspace.
 /// `issuance` records the operation that created the entry; it never leaves the vault.
 #[derive(Clone)]
 struct Entry {
+    display: String,
     code: String,
     issuance: PublicId,
     counter: u64,
+}
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.display.zeroize();
+    }
+}
+
+/// Lowercase, trimmed, with every run of whitespace collapsed to one space.
+fn identity_key(value: &str) -> String {
+    let mut key = String::with_capacity(value.len());
+    for word in value.split_whitespace() {
+        if !key.is_empty() {
+            key.push(' ');
+        }
+        key.extend(word.chars().flat_map(char::to_lowercase));
+    }
+    key
 }
 #[derive(Clone)]
 struct State {
@@ -278,6 +299,7 @@ impl Workspace {
             };
             if !valid_type(&finding.entity_type)
                 || finding.byte_range.start >= finding.byte_range.end
+                || finding.matched_text.trim().is_empty()
                 || crate::validate_utf8_range(text, finding.byte_range).is_err()
                 || finding
                     .detector_name
@@ -324,7 +346,7 @@ impl Workspace {
         for finding in selected {
             let identity = Identity {
                 entity_type: finding.entity_type.clone(),
-                original: finding.matched_text.clone(),
+                key: identity_key(&finding.matched_text),
             };
             if !candidate.entries.contains_key(&identity) {
                 if candidate.entries.len() >= MAX_ENTRIES {
@@ -345,6 +367,7 @@ impl Workspace {
                     &mut codes,
                 )?;
                 let entry = Entry {
+                    display: finding.matched_text.clone(),
                     code,
                     issuance: operation_id,
                     counter,
@@ -470,7 +493,7 @@ const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
 const MAX_CODE_ATTEMPTS: u32 = 32;
 
-/// Canonical marker text → original value, for every committed entry.
+/// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
     state
         .entries
@@ -478,7 +501,7 @@ fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
         .map(|(identity, entry)| {
             (
                 marker(&identity.entity_type, &entry.code),
-                identity.original.as_str(),
+                entry.display.as_str(),
             )
         })
         .collect()

@@ -44,7 +44,7 @@ fn encode_into(
     for (identity, entry) in &state.entries {
         e.array(5)?
             .str(&identity.entity_type)?
-            .str(&identity.original)?
+            .str(&entry.display)?
             .str(&entry.code)?
             .bytes(&entry.issuance)?
             .u64(entry.counter)?;
@@ -116,11 +116,12 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         array(&mut d, 5)?;
         let entity_type = d.str()?;
         require(valid_type(entity_type))?;
-        let original = d.str()?;
+        let display = d.str()?;
+        let key = identity_key(display);
         require(
-            !original.is_empty()
-                && original.len() <= MAX_SOURCE_BYTES
-                && marker_spans(original)?
+            !key.is_empty()
+                && display.len() <= MAX_SOURCE_BYTES
+                && marker_spans(display)?
                     .iter()
                     .all(|span| span.canonical.is_none()),
         )?;
@@ -136,9 +137,10 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             .or_insert(counter);
         let identity = Identity {
             entity_type: entity_type.to_owned(),
-            original: original.to_owned(),
+            key,
         };
         let entry = Entry {
+            display: display.to_owned(),
             code: code.to_owned(),
             issuance,
             counter,
