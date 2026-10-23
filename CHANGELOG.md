@@ -8,6 +8,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Encrypted workspace backup and restore in the synthetic browser workflow, using
+  the vault password or an offline recovery code. Imports require local approval,
+  reject occupied destinations, and preserve aliases under fresh workspace keys
+  and a new Rust/WASM recovery commit head.
 - `restoreReport` in Rust and WASM restores model output all-or-nothing and lists
   every unknown, damaged or unbracketed marker with byte and UTF-16 ranges, so a
   host can show what blocked restoration. Restoration also rejects a committed

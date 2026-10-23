@@ -1,10 +1,13 @@
 import { client, serve, HostError } from "./rpc.js";
 import { readRecords, saveRecord, revoke, equalHead, equalBytes } from "./storage.js";
-import { createVault, openVault, encryptCandidate, decryptCandidate, randomId } from "./vault.js";
+import { createVault, openVault, createWorkspaceRecord, encryptCandidate, decryptCandidate, randomId, toBase64url } from "./vault.js";
+import {exportBackup, openBackup} from "./backup.js";
 
 let core;
 let session;
 let pending;
+let pendingImport;
+let importWorker;
 let generation = 0;
 let controller;
 let activeDone;
@@ -14,6 +17,7 @@ const barriers = new Map();
 function guard(value) { if (value !== generation) throw new HostError("cancelled"); }
 function active() { if (!session) throw new HostError("locked"); return session; }
 function stopCore() { core?.stop(); core = undefined; }
+function stopImport() { pendingImport = undefined; importWorker?.stop(); importWorker = undefined; }
 async function run(task) {
   if (activeDone) throw new HostError("workspace_conflict");
   activeDone = new Promise(resolve => { finishActive = resolve; });
@@ -55,6 +59,7 @@ async function invalidate(locking) {
   generation++;
   controller?.abort();
   pending = undefined;
+  stopImport();
   if (locking) session = undefined;
   stopCore();
   for (const resolve of barriers.values()) resolve();
@@ -70,23 +75,23 @@ serve({
     return run(async () => {
       if ((await readRecords()).vault) throw new HostError("already_exists");
       const g = ++generation; controller = new AbortController();
-      stopCore(); const worker = makeCore();
+      stopCore(); stopImport(); pending = undefined; const worker = makeCore();
       const namespace = randomId();
       const metadata = await worker.call("create", [namespace, randomId()]); guard(g);
       const bundle = await worker.call("exportBundle"); guard(g);
       const created = await createVault(password, namespace, bundle, metadata.head, controller.signal); guard(g);
       await saveRecord({ ...created, creating: true, authorized: () => generation === g }); guard(g);
-      session = created;
-      return { status: "unlocked" };
+      session = {vault: created.vault, record: created.record, dataKey: created.dataKey};
+      return { status: "unlocked", recoveryCode: created.recoveryCode };
     });
   },
-  unlock(password) {
+  unlock(credential, method = "password") {
     return run(async () => {
-      const g = ++generation; session = undefined; pending = undefined; stopCore();
+      const g = ++generation; session = undefined; pending = undefined; stopCore(); stopImport();
       controller?.abort(); controller = new AbortController();
       const {vault, workspace: record} = await readRecords(); guard(g);
       if (!vault) throw new HostError("not_found");
-      const opened = await openVault(password, vault, record, controller.signal);
+      const opened = await openVault(credential, vault, record, controller.signal, method);
       try {
         guard(g);
         const worker = makeCore();
@@ -98,6 +103,64 @@ serve({
         return { status: "unlocked" };
       } catch (error) { stopCore(); throw error; }
       finally { opened.bundle.fill(0); }
+    });
+  },
+  exportBackup() {
+    return run(async () => {
+      const value = active(), g = generation;
+      await current(value, g);
+      const bytes = await exportBackup(value.vault, value.record, value.dataKey);
+      try { guard(g); await current(value, g); return bytes; }
+      catch (error) { bytes.fill(0); throw error; }
+    });
+  },
+  prepareImport(bytes, credential, method) {
+    return run(async () => {
+      const g = generation;
+      let opened, staging = false;
+      try {
+        const records = await readRecords(); guard(g);
+        if (records.vault) throw new HostError("workspace_conflict");
+        staging = true;
+        stopImport(); controller?.abort(); controller = new AbortController();
+        opened = await openBackup(bytes, credential, method, controller.signal); guard(g);
+        await checkpoint("after-import-open"); guard(g);
+        importWorker = client(new Worker(new URL("./core-worker.js", import.meta.url), {type: "module"}));
+        const metadata = await importWorker.call("open", [opened.bundle]); guard(g);
+        if (!equalBytes(metadata.namespace, opened.vault.workspaceId) || !equalHead(metadata.head, opened.record.head)) throw new HostError("invalid_backup");
+        const change = await importWorker.call("prepareRecovery", [randomId()]); guard(g);
+        const bundle = await importWorker.call("exportCandidate", [change.id]);
+        let encrypted;
+        try { guard(g); encrypted = await createWorkspaceRecord(opened.rootKey, opened.vault, bundle, change.candidateHead); guard(g); }
+        finally { bundle.fill(0); }
+        const id = toBase64url(randomId());
+        pendingImport = {id, generation: g, vault: opened.vault, record: encrypted.record, change};
+        return {id, exportedAt: opened.exportedAt, revision: metadata.head.revision, workspaceTag: toBase64url(metadata.namespace)};
+      } catch (error) { if (staging) stopImport(); throw error; }
+      finally { opened?.bundle.fill(0); if (bytes instanceof Uint8Array) bytes.fill(0); }
+    });
+  },
+  approveImport(id) {
+    return run(async () => {
+      const change = pendingImport, g = generation;
+      if (!change || change.id !== id || change.generation !== g) throw new HostError("stale_approval");
+      let committed = false;
+      try {
+        await checkpoint("before-import-save"); guard(g);
+        await saveRecord({vault: change.vault, record: change.record, creating: true,
+          authorized: () => generation === g && pendingImport === change, abort: faults.abortSave});
+        committed = true;
+        await checkpoint("after-import-save"); guard(g);
+        if (faults.loseAck) throw new HostError("save_uncertain");
+        await importWorker.call("activate", [change.change.id, change.change.expectedHead, change.change.candidateHead]); guard(g);
+        return {status: "backup_restored_locked"};
+      } catch (error) {
+        if (error.code === "already_exists") throw new HostError("workspace_conflict");
+        throw error;
+      } finally {
+        stopImport();
+        if (committed) { session = undefined; pending = undefined; stopCore(); }
+      }
     });
   },
   select(text, start, end, entityType) {
@@ -171,7 +234,7 @@ serve({
   // synchronize real transactions; they neither expose secrets nor replace crypto.
   test(command, value) {
     if (command === "configure") { Object.assign(faults, value); return true; }
-    if (command === "state") return { busy: Boolean(activeDone), paused: [...barriers.keys()], head: session?.record.head, pending: Boolean(pending), locked: !session };
+    if (command === "state") return { busy: Boolean(activeDone), paused: [...barriers.keys()], head: session?.record.head, pending: Boolean(pending), importPending: Boolean(pendingImport), locked: !session };
     if (command === "release") { barriers.get(value)?.(); barriers.delete(value); return true; }
     throw new HostError("internal_error");
   },
