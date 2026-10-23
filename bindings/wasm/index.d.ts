@@ -52,7 +52,15 @@ export interface ScanAndTransformConfig {
 
 export type DataFogErrorCode =
   | "invalid_configuration"
+  | "invalid_batch"
   | "invalid_finding"
+  | "closed_workspace"
+  | "inactive_plan"
+  | "workspace_conflict"
+  | "invalid_marker"
+  | "invalid_snapshot"
+  | "invalid_operation_id"
+  | "resource_limit"
   | "key_provider_required"
   | "key_not_found"
   | "key_access_denied"
@@ -76,6 +84,7 @@ export declare class DataFogError extends Error {
   readonly reason?: string;
   readonly path?: string;
   readonly findingIndex?: number;
+  readonly inputIndex?: number;
 }
 
 export interface TextRange {
@@ -189,6 +198,11 @@ export interface WorkspaceFinding {
   readonly detectorName?: string;
   readonly detectorVersion?: string;
 }
+/** One batch input; finding offsets are relative to this text only. */
+export interface WorkspaceInput {
+  readonly text: string;
+  readonly findings: readonly WorkspaceFinding[];
+}
 export interface WorkspaceHead { readonly revision: string; readonly commitId: readonly number[]; }
 export interface WorkspacePreview {
   readonly text: string;
@@ -202,7 +216,9 @@ export interface WorkspacePreview {
   }[];
 }
 export interface PreparedWorkspaceChange {
+  /** Requires a single-input plan. */
   preview(): WorkspacePreview;
+  previews(): readonly WorkspacePreview[];
   heads(): { readonly expectedHead: WorkspaceHead; readonly candidateHead: WorkspaceHead };
   /** Sensitive plaintext for the trusted encrypting host only. */
   exportCandidateBundle(): Uint8Array;
@@ -216,6 +232,8 @@ export class Workspace {
   namespace(): Uint8Array;
   exportBundle(): Uint8Array;
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Atomic batch: preserves order; source/finding limits apply to the whole selection. */
+  prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** The trusted host must confirm atomic persistence before calling this method. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
   restore(text: string): string;
