@@ -1,6 +1,9 @@
 use datafog_core::{
     TextRange,
-    workspace::{ErrorCode, Workspace, WorkspaceFinding, WorkspaceInput, byte_range_from_utf16},
+    workspace::{
+        ErrorCode, MarkerIssueKind, Workspace, WorkspaceFinding, WorkspaceInput,
+        byte_range_from_utf16,
+    },
 };
 
 /// `[[LABEL_CODE]]` with a six-character canonical Crockford base32 code.
@@ -799,4 +802,58 @@ fn snapshots_reject_entries_that_share_a_normalized_identity() {
         Workspace::open_bundle(&bundle).err().unwrap().code,
         ErrorCode::InvalidSnapshot
     );
+}
+
+#[test]
+fn restore_reports_every_blocking_span_in_order_without_partial_text() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let bare = &marker[2..marker.len() - 2];
+    let damaged = format!("{}]]", &marker[..marker.len() - 3]);
+    let text = format!(
+        "👋 {marker} paid [[PERSON_ZZZZZZ]], then {damaged}; total for {bare}. ORDER_ABC123 [[note]]"
+    );
+    let report = workspace.restore_report(&text).unwrap();
+    assert!(report.text.is_none());
+    assert_eq!(report.restored_markers, 1);
+    let kinds: Vec<_> = report.issues.iter().map(|issue| issue.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            MarkerIssueKind::Unknown,
+            MarkerIssueKind::Damaged,
+            MarkerIssueKind::Unbracketed
+        ]
+    );
+    let utf16: Vec<u16> = text.encode_utf16().collect();
+    for (issue, expected) in report
+        .issues
+        .iter()
+        .zip(["[[PERSON_ZZZZZZ]]", damaged.as_str(), bare])
+    {
+        let range = issue.byte_range;
+        assert_eq!(&text[range.start..range.end], expected);
+        assert_eq!(
+            String::from_utf16(&utf16[issue.utf16_range.start..issue.utf16_range.end]).unwrap(),
+            expected
+        );
+    }
+    assert_eq!(
+        workspace.restore(&text).unwrap_err().code,
+        ErrorCode::InvalidMarker
+    );
+    assert_eq!(
+        workspace
+            .restore(&format!("Total for {bare}"))
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidMarker
+    );
+    let clean = format!(
+        "{marker} and {} (ORDER_ABC123)",
+        marker.to_ascii_lowercase()
+    );
+    let report = workspace.restore_report(&clean).unwrap();
+    assert_eq!(report.text.as_deref(), Some("Jane and Jane (ORDER_ABC123)"));
+    assert_eq!(report.restored_markers, 2);
+    assert!(report.issues.is_empty());
 }
