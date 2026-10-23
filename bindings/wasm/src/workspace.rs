@@ -154,6 +154,23 @@ impl WasmWorkspace {
     pub fn export_bundle(&self) -> Result<Vec<u8>, JsValue> {
         self.inner.export_bundle().map_err(from_error)
     }
+    pub fn prepare_recovery(&mut self, operation: &[u8]) -> Result<u32, JsValue> {
+        if self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_recovery(id(operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
     pub fn prepare(
         &mut self,
         text: &str,

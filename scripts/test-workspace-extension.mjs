@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyPdfWorker, verifyPdfFlow} from "./test-workspace-pdf.mjs";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
+import {verifyBackups} from "./test-workspace-backup.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harness = path.join(root, "examples/workspace-extension");
@@ -84,6 +85,7 @@ async function markCsvCell(page, input, row, column, value, entityType = "PERSON
 }
 
 try {
+  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
   let page = await launch();
   await create(page);
   const january = await prepare(page);
@@ -471,7 +473,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4", "E1", "E2", "E3", "E4", "F1", "F2"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4", "E1", "E2", "E3", "E4", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));
