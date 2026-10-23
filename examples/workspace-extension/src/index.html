@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>DataFog workspace proof</title><link rel="stylesheet" href="style.css"></head>
+<body>
+  <main>
+    <h1>DataFog workspace proof</h1>
+    <p>This is a local development harness. Use synthetic text only. It does not connect to ChatGPT or Google Sheets.</p>
+    <p>Native ChatGPT input and uploads bypass DataFog. This harness protects only its own local input.</p>
+    <label>Password <input id="password" type="password" autocomplete="off" maxlength="1024"></label>
+    <button id="create">Create synthetic vault</button><button id="unlock">Unlock</button><button id="lock">Lock now</button>
+    <p>Status: <output id="status" aria-live="polite">loading</output></p>
+    <label>Synthetic statement text <textarea id="source" rows="4" spellcheck="false" autocomplete="off"></textarea></label>
+    <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>
+    <button id="mark">Mark selected text</button><output id="selection-count">0 selections</output>
+    <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
+    <h2>Local preview</h2><pre id="preview"></pre><button id="approve" disabled>Approve and save</button>
+    <h2>Approved local handoff sink</h2><pre id="sink"></pre>
+    <h2>Local restoration</h2>
+    <label>Text with committed markers <textarea id="restore-input" rows="3" spellcheck="false" autocomplete="off"></textarea></label>
+    <button id="restore">Restore locally</button><pre id="restored"></pre>
+  </main>
+  <script type="module" src="ui.js"></script>
+</body>
+</html>

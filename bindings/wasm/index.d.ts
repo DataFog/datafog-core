@@ -179,3 +179,46 @@ export function transformStructured(data: JsonDocument, findings: StructuredFind
 export function scanAndTransformStructured(data: JsonDocument, config: StructuredScanAndTransformConfig): StructuredTransformResult;
 /** Always rejects with unsupported_strategy after input validation. */
 export function restoreStructured(data: JsonDocument, context: PrivacyContext): never;
+
+/** Provisional workspace input; exact values and type codes are never normalized. */
+export interface WorkspaceFinding {
+  readonly entityType: string;
+  readonly matchedText: string;
+  readonly range: TextRange & { readonly unit: "utf8_bytes" };
+  readonly confidence?: number;
+  readonly detectorName?: string;
+  readonly detectorVersion?: string;
+}
+export interface WorkspaceHead { readonly revision: string; readonly commitId: readonly number[]; }
+export interface WorkspacePreview {
+  readonly text: string;
+  readonly transformations: readonly {
+    readonly sourceByteRange: TextRange;
+    readonly sourceCodepointRange: TextRange;
+    readonly sourceUtf16Range: TextRange;
+    readonly outputByteRange: TextRange;
+    readonly outputCodepointRange: TextRange;
+    readonly outputUtf16Range: TextRange;
+  }[];
+}
+export interface PreparedWorkspaceChange {
+  preview(): WorkspacePreview;
+  heads(): { readonly expectedHead: WorkspaceHead; readonly candidateHead: WorkspaceHead };
+  /** Sensitive plaintext for the trusted encrypting host only. */
+  exportCandidateBundle(): Uint8Array;
+  discard(): void;
+}
+export class Workspace {
+  private constructor();
+  static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
+  static openBundle(bytes: Uint8Array): Workspace;
+  head(): WorkspaceHead;
+  namespace(): Uint8Array;
+  exportBundle(): Uint8Array;
+  prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
+  /** The trusted host must confirm atomic persistence before calling this method. */
+  activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
+  restore(text: string): string;
+  close(): void;
+}
+export function workspaceByteRangeFromUtf16(text: string, start: number, end: number): TextRange & { readonly unit: "utf8_bytes" };

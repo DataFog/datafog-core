@@ -1,0 +1,7 @@
+:root { font: 16px/1.5 system-ui, sans-serif; color-scheme: light dark; }
+main { max-width: 58rem; margin: 2rem auto; padding: 0 1rem; }
+label { display: block; margin: 1rem 0 .5rem; }
+textarea { display: block; box-sizing: border-box; width: 100%; font: inherit; }
+button { margin: .4rem .4rem .4rem 0; padding: .5rem .8rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #888; padding: 1rem; min-height: 1.5rem; }
+#status { font-weight: bold; }
