@@ -231,8 +231,9 @@ export class Workspace {
   head(): WorkspaceHead;
   namespace(): Uint8Array;
   exportBundle(): Uint8Array;
+  /** Exact committed full markers pass through; findings must not overlap them. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
-  /** Atomic batch: preserves order; source/finding limits apply to the whole selection. */
+  /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** The trusted host must confirm atomic persistence before calling this method. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
