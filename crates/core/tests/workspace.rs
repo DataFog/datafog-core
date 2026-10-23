@@ -45,6 +45,77 @@ fn saved_person(namespace: [u8; 16]) -> (Workspace, String) {
 }
 
 #[test]
+fn recovery_stages_a_fresh_head_and_preserves_known_markers() {
+    let (workspace, jane) = saved_person([1; 16]);
+    let backup = workspace.export_bundle().unwrap();
+    let john = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    let later = workspace.prepare("John", &[john], [4; 16]).unwrap();
+    let missing_marker = later.preview().unwrap().text.clone();
+    let mut recovered = Workspace::open_bundle(&backup).unwrap();
+    let mut recovery = recovered.prepare_recovery([5; 16]).unwrap();
+    assert!(recovery.previews().unwrap().is_empty());
+    assert_eq!(recovered.export_bundle().unwrap(), backup);
+    let parent = recovery.expected_head().unwrap();
+    let candidate = recovery.candidate_head().unwrap();
+    assert_eq!(candidate.revision, parent.revision + 1);
+    assert_eq!(candidate.commit_id, [5; 16]);
+    let saved = recovery.export_candidate_bundle().unwrap().to_vec();
+    recovered
+        .activate_saved(&mut recovery, parent, candidate)
+        .unwrap();
+    assert_eq!(
+        recovery.candidate_head().unwrap_err().code,
+        ErrorCode::InactivePlan
+    );
+    assert_eq!(recovered.restore(&jane).unwrap(), "Jane");
+    let reopened = Workspace::open_bundle(&saved).unwrap();
+    let reuse = reopened
+        .prepare(
+            "Jane",
+            &[WorkspaceFinding::new(
+                "PERSON",
+                "Jane",
+                TextRange { start: 0, end: 4 },
+            )],
+            [6; 16],
+        )
+        .unwrap();
+    assert_eq!(reuse.preview().unwrap().text, jane);
+    let carol = reopened
+        .prepare(
+            "Carol",
+            &[WorkspaceFinding::new(
+                "PERSON",
+                "Carol",
+                TextRange { start: 0, end: 5 },
+            )],
+            [7; 16],
+        )
+        .unwrap();
+    let new_marker = &carol.preview().unwrap().text;
+    assert!(is_marker(new_marker, "PERSON"));
+    assert_ne!(new_marker, &jane);
+    assert_ne!(new_marker, &missing_marker);
+    assert_eq!(
+        reopened.restore(&missing_marker).unwrap_err().code,
+        ErrorCode::InvalidMarker
+    );
+    for used in [[3; 16], [5; 16]] {
+        assert_eq!(
+            reopened.prepare_recovery(used).err().unwrap().code,
+            ErrorCode::InvalidId
+        );
+    }
+    let mut discarded = reopened.prepare_recovery([8; 16]).unwrap();
+    discarded.discard();
+    assert_eq!(
+        discarded.export_candidate_bundle().unwrap_err().code,
+        ErrorCode::InactivePlan
+    );
+    assert_eq!(reopened.export_bundle().unwrap(), saved);
+}
+
+#[test]
 fn committed_markers_pass_through_followups_after_reopening() {
     let (workspace, marker) = saved_person([1; 16]);
     let saved = workspace.export_bundle().unwrap();
@@ -614,11 +685,17 @@ fn versioned_counter_fixtures_preserve_uint64_values_and_fail_closed_on_overflow
         );
         let finding = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
         let next = workspace.prepare("John", &[finding], [4; 16]);
+        let recovery = workspace.prepare_recovery([5; 16]);
         if name == "maximum" {
             assert_eq!(next.err().unwrap().code, ErrorCode::ResourceLimit);
+            assert_eq!(recovery.err().unwrap().code, ErrorCode::ResourceLimit);
         } else {
             assert_eq!(
                 next.unwrap().candidate_head().unwrap().revision,
+                revision + 1
+            );
+            assert_eq!(
+                recovery.unwrap().candidate_head().unwrap().revision,
                 revision + 1
             );
         }

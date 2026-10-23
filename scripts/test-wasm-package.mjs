@@ -151,6 +151,9 @@ const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
+const recovery = workspace.prepareRecovery(new Uint8Array(16));
+const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
+workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
 const position: number | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));

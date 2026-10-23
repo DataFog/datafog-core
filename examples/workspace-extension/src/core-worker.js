@@ -11,6 +11,11 @@ serve({
   async create(namespace, operation) { await ready; workspace?.close(); plans.clear(); workspace = Workspace.create(namespace, operation); return metadata(); },
   async open(bytes) { await ready; workspace?.close(); plans.clear(); try { workspace = Workspace.openBundle(bytes); return metadata(); } finally { bytes.fill(0); } },
   exportBundle() { return active().exportBundle(); },
+  prepareRecovery(operation) {
+    const value = active().prepareRecovery(operation);
+    const id = next++; plans.set(id, value);
+    return { id, ...value.heads() };
+  },
   head() { return active().head(); },
   byteRange(text, start, end) { return workspaceByteRangeFromUtf16(text, start, end); },
   prepareBatch(inputs, operation) {
