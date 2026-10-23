@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Workspace values of one type that differ only in letter case or spacing share
+  one marker, so `JOHN SMITH` and `John  Smith` are one person. Restoration
+  returns the first spelling seen. Whitespace-only findings are rejected.
 - Persistent workspace pseudonyms in Rust and WASM, with exact local restoration.
   Markers are short typed codes such as `[[PERSON_7KQ4ZM]]`, unique within the
   workspace. A synthetic browser harness verifies approval, encrypted mapping
