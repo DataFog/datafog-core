@@ -26,6 +26,12 @@ pub const MAX_LABEL_BYTES: usize = 32;
 pub const MARKER_CODE_LENGTH: usize = 6;
 pub type PublicId = [u8; 16];
 
+const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
+/// with slack so moderately damaged markers are still recognized and rejected.
+const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
+const MAX_CODE_ATTEMPTS: u32 = 32;
+
 /// Complete optimistic-concurrency identity, not an authorization credential.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Head {
@@ -287,6 +293,7 @@ impl Workspace {
         self.state = None;
     }
 
+    /// Preserve exact committed markers and transform supplied findings outside them.
     pub fn prepare(
         &self,
         text: &str,
@@ -298,6 +305,7 @@ impl Workspace {
 
     /// Prepare all inputs as one immutable change. A failure returns no partial plan.
     /// Size and finding limits apply to the aggregate batch; no inputs are omitted.
+    /// Marker references must already be committed before this batch begins.
     pub fn prepare_batch(
         &self,
         inputs: &[WorkspaceInput<'_>],
@@ -328,6 +336,7 @@ impl Workspace {
         {
             return Err(error(ErrorCode::InvalidId));
         }
+        let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
         let mut previews = Vec::with_capacity(inputs.len());
@@ -338,6 +347,7 @@ impl Workspace {
                     input.text,
                     input.findings,
                     operation_id,
+                    &committed,
                     &mut codes,
                     &mut candidate,
                 )
@@ -382,16 +392,12 @@ impl Workspace {
         text: &str,
         findings: &[WorkspaceFinding],
         operation_id: PublicId,
+        committed: &BTreeMap<String, &str>,
         codes: &mut BTreeSet<String>,
         candidate: &mut State,
     ) -> Result<Preview> {
         source_limit(text)?;
-        if marker_spans(text)?
-            .iter()
-            .any(|span| span.canonical.is_some())
-        {
-            return Err(error(ErrorCode::InvalidMarker));
-        }
+        let markers = committed_marker_ranges(text, committed)?;
         let mut index = TextIndex::new(text);
         let mut adapted = Vec::with_capacity(findings.len());
         let mut total_bytes = 0usize;
@@ -405,6 +411,9 @@ impl Workspace {
                 || finding.byte_range.start >= finding.byte_range.end
                 || finding.matched_text.trim().is_empty()
                 || crate::validate_utf8_range(text, finding.byte_range).is_err()
+                || markers
+                    .get(markers.partition_point(|marker| marker.end <= finding.byte_range.start))
+                    .is_some_and(|marker| marker.start < finding.byte_range.end)
                 || finding
                     .detector_name
                     .as_ref()
@@ -569,12 +578,6 @@ impl Workspace {
     }
 }
 
-const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
-/// with slack so moderately damaged markers are still recognized and rejected.
-const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
-const MAX_CODE_ATTEMPTS: u32 = 32;
-
 /// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
     state
@@ -637,6 +640,25 @@ fn marker_spans(text: &str) -> Result<Vec<MarkerSpan>> {
         cursor = interior_end + 2;
     }
     Ok(spans)
+}
+
+/// Ranges of committed markers in source text. Well-formed markers that are not
+/// committed are rejected; damaged marker-like spans are ordinary text there.
+fn committed_marker_ranges(
+    text: &str,
+    committed: &BTreeMap<String, &str>,
+) -> Result<Vec<TextRange>> {
+    let mut ranges = Vec::new();
+    for span in marker_spans(text)? {
+        let Some(canonical) = span.canonical else {
+            continue;
+        };
+        if !committed.contains_key(&canonical) {
+            return Err(error(ErrorCode::InvalidMarker));
+        }
+        ranges.push(span.range);
+    }
+    Ok(ranges)
 }
 
 fn canonical_marker(interior: &str) -> Option<String> {

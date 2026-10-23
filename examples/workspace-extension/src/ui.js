@@ -52,7 +52,7 @@ async function perform(task) {
     if (g === generation) {
       status(safeCode(error));
       const location = Number.isSafeInteger(error.pageIndex) ? `, page ${error.pageIndex + 1}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
-      const guidance = ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
+      const guidance = error.code === "invalid_marker" ? " Use the exact pseudonym from this unlocked workspace. Unknown, foreign and unsaved markers are blocked." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${location} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }

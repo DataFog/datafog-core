@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Protected follow-up text in Rust and WASM. Committed workspace pseudonyms stay
+  unchanged; unknown or uncommitted markers and overlapping findings block the
+  operation. The synthetic browser workflow requires local preview and approval.
 - Local PDF text intake in the synthetic browser workflow, with page review,
   aliases shared with CSV and typed text, and whole-batch rejection of scans,
   image-bearing, encrypted, malformed, or unsupported PDFs.

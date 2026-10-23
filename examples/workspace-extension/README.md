@@ -152,13 +152,50 @@ never logged or forwarded as exception text. The adapter also checks PDF.js erro
 replies because this pinned version can return a partial operator list after a
 stream failure. These paths are covered by packaged-worker rejection tests.
 
+## Protected follow-up questions
+
+After unlocking, enter a synthetic follow-up in **Synthetic text or follow-up
+question**. Paste full pseudonyms from an approved upload and mark any newly
+sensitive text outside those markers. Prepare the local preview, review it, and
+approve its local handoff. Questions containing only saved pseudonyms still need
+preview and approval. Edits and cancellation invalidate approval; unlocking does
+not restore or automatically submit a previous draft. Native ChatGPT input still
+bypasses this harness.
+
+Rust `prepare`/`prepare_batch` and WASM `prepare`/`prepareBatch` now preserve exact
+committed full markers byte for byte, including repeated or adjacent references.
+New findings share the same typed mapping registry as file uploads. Existing
+markers stay pseudonyms in the preview and output; only newly supplied findings
+produce transformation records. Offsets refer to the supplied input text, with
+no intermediate restoration. The API signatures, marker bytes and saved schema
+are unchanged.
+
+Every well-formed marker in input text must be committed in the workspace's
+snapshot. Unknown, foreign-workspace and uncommitted markers reject the entire
+input/batch with `invalid_marker`. Damaged marker-like spans such as
+`[[PERSON_7KQ]]` are ordinary text in new input, though they fail restoration. A new marker allocated by an
+earlier member of the same pending batch is still uncommitted and cannot be used
+as an input reference. Short display labels remain ordinary text, not marker keys.
+Any supplied finding overlapping a marker, including a partial or enclosing span,
+rejects with `invalid_finding` and an input-local finding index. Findings directly
+adjacent to markers are allowed. Validation applies to every supplied finding
+before selection/replacement.
+
+Core owns marker validation for every text leaf, across all host input formats;
+bindings contain no duplicate marker rules. Rejected preparations change no saved
+mappings and expose no partial preview. A question using only existing aliases
+leaves the mapping head unchanged but still has a single-use prepared plan. The
+browser uses its existing approval, encrypted-save and activation sequence for
+both changed and unchanged follow-ups. Detection remains supplied findings in
+this synthetic workflow.
+
 ## Acceptance coverage
 
 | Check | Evidence |
 | --- | --- |
 | A1 | Encrypted save, actual browser close/relaunch, explicit unlock, byte-identical alias reuse and exact restoration. |
 | A2 | Preview cancellation and edits invalidate approval and commit/release nothing. |
-| A3 | Invalid types/ranges/text/units, reserved-marker collisions and resource bounds reject atomically through installed WASM. |
+| A3 | Invalid types/ranges/text/units, unregistered reserved-marker collisions and resource bounds reject atomically through installed WASM. |
 | A4 | Real IndexedDB abort, lost save acknowledgment and browser termination after commit/before activation. Saved state survives; no automatic release/resend. |
 | A5 | Two real writers at the same parent; lock/cancel at explicit pre/post-commit barriers. Only a winning authorized flow releases. |
 | A6 | Invalid/unknown markers alongside a valid marker reject the whole restoration. |
@@ -177,6 +214,8 @@ stream failure. These paths are covered by packaged-worker rejection tests.
 | E2 | Scans, hybrid image/text pages, encryption (including empty user passwords), unsupported features, malformed/repaired PDFs and file/page/decoded-text limits reject with content-free errors. |
 | E3 | CSV/PDF selections share aliases; PDF corrections invalidate approval. A scan blocks the whole batch until explicit removal and a fresh preview. |
 | E4 | Completion/cancellation clears PDF review data; saved aliases restore and are reused after browser restart. Cancelling a pending parser request leaves its original File unchanged. |
+| F1 | Approved upload → browser restart/unlock → reviewed Unicode follow-up with old aliases and a new name → exact approved output → restart and restoration. Alias-only questions still require approval without advancing mappings. |
+| F2 | Damaged, foreign and cancelled-preview markers block the complete question. Selecting an existing marker is rejected; edits/cancellation invalidate approval and preserve committed aliases. Native/installed tests also cover partial/crossing overlaps and rejection of a marker allocated earlier in the same pending batch. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 
@@ -188,4 +227,4 @@ The harness exports narrow test fault controls for explicit transaction barriers
 
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
-Protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+Real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
