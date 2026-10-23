@@ -25,6 +25,9 @@
 
 - Keep each pull request focused on one behavior or maintenance goal.
 - Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-features` before merging Rust changes.
+- From October 22, 2026 (PR #91), user-facing changes require a concise entry under `[Unreleased]` in `CHANGELOG.md`; earlier changes are not backfilled.
+- Changes with no user-facing effect require both the `no-changelog` PR label and `Changelog exemption: <reason>` in the PR body. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- Check the whole PR against its target branch; do not duplicate changelog entries for each follow-up commit.
 
 ## Pull request writing
 
