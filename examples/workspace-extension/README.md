@@ -4,6 +4,13 @@ This non-shipping Manifest V3 harness starts from DataFog Core 0.4.4 and proves:
 
 **supplied findings → local preview/approval → encrypted atomic save → activation → browser restart/unlock → identical alias reuse → exact local restoration.**
 
+The second slice adds atomic batches of synthetic text. Mark a text's selections,
+choose **Add text to batch**, and repeat. **Prepare local preview** includes queued
+inputs and any current draft. A rejected member blocks the entire selection and
+identifies its input number. Explicit removal invalidates the old preview; prepare
+and approve the remaining selection again. Inputs are kept separate in the Core
+preview and broker result; numbered sections are display formatting only.
+
 Use synthetic text only. The workspace API, development CBOR schema and marker format are provisional. Do not put real statements in this harness or treat it as the completed privacy extension.
 
 ## Run locally
@@ -34,6 +41,15 @@ To inspect the UI separately, run `npm run build --prefix examples/workspace-ext
 
 `Workspace.create(namespace, operationId)` takes host-generated 16-byte public CSPRNG IDs. `prepare` does not change committed state. Preview/export keep a change pending; `activateSaved` or discard ends it, including a no-change preparation. The trusted host must actually save before calling `activateSaved`: Core cannot verify a human approval or disk durability. Closing Core invalidates outstanding plan access.
 
+`Workspace.prepareBatch(inputs, operationId)` prepares one candidate bundle for the
+whole ordered selection. `change.previews()` returns one preview per input, with
+ranges local to that input. `change.preview()` requires exactly one input. The Rust
+equivalents are `prepare_batch` and `previews`. New values share allocation state
+across members, and one changed batch advances the workspace head once. Failure
+returns no partial plan and leaves committed mappings intact. Errors may carry
+`inputIndex` and an input-local `findingIndex`, without matched text. The existing
+CBOR schema and previously issued marker bytes are unchanged.
+
 ## Crypto and persistence
 
 The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/workspace keys, and explicit libsodium Argon2id13: 16-byte salt, 32-byte result, 64 MiB and opslimit 3. Only the bounded development KDF profile is accepted; there is no weaker fallback. Password and workspace key wrappers have separate authenticated contexts. The snapshot AAD binds its vault, workspace, key ID and complete commit head.
@@ -41,6 +57,11 @@ The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/work
 Passwords and raw key buffers are cleared where possible, and runtime Web Crypto keys are nonextractable. JavaScript/native memory erasure is best effort; this does not provide hardware-bound key storage or protection from malicious extension code. IndexedDB transaction completion and requested strict durability do not establish a guarantee against every OS/power failure. Authenticated snapshots do not prove that no newer history exists.
 
 Initial limits are **development guardrails**, not production capacity claims: 1 MiB source, 10,000 findings, 20,000 entries and 16 MiB bundle/output. Finding transport is also bounded before JSON serialization, including repeated object references. Exceeding limits rejects the whole operation. Full-year capacity, final marker preservation/overhead and production security review remain later qualification.
+
+Batches accept 1–32 inputs. Source bytes, findings and preview output limits apply
+to the aggregate selection. The WASM batch JSON transport is bounded to 16 MiB.
+This slice uses manually supplied synthetic text and findings; CSV and PDF intake
+adapters follow separately.
 
 ## Acceptance coverage
 
@@ -56,6 +77,9 @@ Initial limits are **development guardrails**, not production capacity claims: 1
 | A8 | Wrong credentials, malformed KDF/envelope fields, tampered ciphertext/AAD, strict CBOR and shared uint64/overflow fixtures. |
 | A9 | Real KDF/Web Crypto/storage, locked restart, rejected runtime-key export, no automatic console logging or external requests, and an Argon2id fixture from an independent native libsodium build. |
 | A10 | Same local/CI command and pinned tool/browser dependencies; content-free artifact hashes and environment versions. |
+| B1 | Whole-batch rejection, indexed errors, explicit removal, one approval/save and identical shared aliases after browser restart. |
+| B2 | Changing batch membership invalidates the prior preview and approval; no partial or stale output is released. |
+| B3 | Completing or cancelling a batch clears its temporary source inputs and findings. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 

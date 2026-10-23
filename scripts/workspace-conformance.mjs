@@ -9,6 +9,35 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+  const batch = api.Workspace.create(id(21), id(22));
+  const name = { entityType: "PERSON", matchedText: "Jane", range: { unit: "utf8_bytes", start: 0, end: 4 } };
+  const inputs = [{ text: "Jane | -10 USD", findings: [name] }, { text: "Jane | -20 USD", findings: [name] }];
+  let grouped = batch.prepareBatch(inputs, id(23));
+  const previews = grouped.previews();
+  check(previews.length === 2 && previews[0].text.replace("-10", "-20") === previews[1].text, "batch shares aliases and preserves input order");
+  throws(() => grouped.preview(), "invalid_batch");
+  const batchSaved = grouped.exportCandidateBundle();
+  check(grouped.heads().candidateHead.revision === "1", "one batch revision");
+  batch.activateSaved(grouped, grouped.heads().expectedHead, grouped.heads().candidateHead);
+  throws(() => grouped.previews(), "inactive_plan");
+  const batchReopened = api.Workspace.openBundle(batchSaved);
+  check(previews.every((p, i) => batchReopened.restore(p.text) === inputs[i].text), "batch restores each input after reopen");
+  try { batch.prepareBatch([inputs[0], { text: "Jane", findings: [{ ...name, matchedText: "wrong" }] }], id(24)); throw new Error("missing rejection"); }
+  catch (error) { check(error.code === "invalid_finding" && error.inputIndex === 1 && error.findingIndex === 0, "safe batch and finding indexes"); }
+  throws(() => batch.prepareBatch([inputs[0], {text: "[[PERSON_ZZZZZZ]] literal", findings: []}], id(24)), "invalid_marker");
+  check(equal(batch.exportBundle(), batchSaved), "rejected batch preserves complete saved bundle");
+  grouped = batchReopened.prepareBatch(inputs, id(24));
+  check(grouped.previews()[1].text === previews[1].text, "batch marker reuse");
+  grouped.discard(); throws(() => grouped.previews(), "inactive_plan");
+  throws(() => batch.prepareBatch([], id(24)), "invalid_batch");
+  throws(() => batch.prepareBatch(Array(33).fill(inputs[0]), id(24)), "resource_limit");
+  const largeInput = {text: "x".repeat(512 * 1024 + 1), findings: []};
+  throws(() => batch.prepareBatch([largeInput, largeInput], id(24)), "resource_limit");
+  throws(() => batch.prepareBatch([inputs[0], {text: "Jane", findings: [{...name, range: {...name.range, unit: "utf16"}}]}], id(24)), "invalid_finding");
+  let getterRead = false;
+  throws(() => batch.prepareBatch([{get text() { getterRead = true; return "Jane"; }, findings: []}], id(24)), "invalid_batch");
+  check(!getterRead, "batch transport rejects accessors without invoking them");
+  batch.close(); batchReopened.close();
   const w = api.Workspace.create(id(1), id(2));
   const finding = { entityType: "CLIENT_NAME", matchedText: "Jane Smith", range: { unit: "utf8_bytes", start: 13, end: 23 } };
   const source = "2026-01-06 | Jane Smith | -40.00 USD";

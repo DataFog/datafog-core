@@ -33,13 +33,14 @@ export function init() {
 }
 
 export class DataFogError extends Error {
-  constructor({ code, reason, message, path, findingIndex }) {
+  constructor({ code, reason, message, path, findingIndex, inputIndex }) {
     super(message);
     this.name = "DataFogError";
     this.code = code;
     this.reason = reason;
     this.path = path;
     this.findingIndex = findingIndex;
+    this.inputIndex = inputIndex;
   }
 }
 
@@ -260,6 +261,7 @@ function workspaceFindingsJson(findings) {
 }
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); Object.freeze(this); }
+  previews() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "previews", handle)); }
   preview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "preview", handle)); }
   heads() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "plan_heads", handle)); }
   exportCandidateBundle() { const {state, handle} = workspacePlans.get(this); return workspaceCall(state, "export_candidate_bundle", handle); }
@@ -296,6 +298,40 @@ export class Workspace {
     catch (error) { if (error instanceof DataFogError) throw error; throw workspaceFailure("invalid_finding"); }
     workspaceText(json, 16 * 1024 * 1024);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare", text, json, operationId));
+  }
+  prepareBatch(inputs, operationId) {
+    workspaceBytes(operationId, 16, true);
+    if (!Array.isArray(inputs) || inputs.length === 0) throw workspaceFailure("invalid_batch");
+    if (inputs.length > 32) throw workspaceFailure("resource_limit");
+    if (Reflect.ownKeys(inputs).length !== inputs.length + 1) throw workspaceFailure("invalid_batch");
+    const parts = [];
+    let sourceBytes = 0, findingCount = 0, transportBytes = 2;
+    for (let inputIndex = 0; inputIndex < inputs.length; inputIndex++) {
+      try {
+        const item = Object.getOwnPropertyDescriptor(inputs, String(inputIndex));
+        if (!item?.enumerable || !("value" in item)) throw workspaceFailure("invalid_batch");
+        const input = item.value;
+        if (!input || typeof input !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw workspaceFailure("invalid_batch");
+        const properties = Object.getOwnPropertyDescriptors(input);
+        if (Reflect.ownKeys(properties).length !== 2 || !properties.text?.enumerable || !("value" in properties.text) || !properties.findings?.enumerable || !("value" in properties.findings)) throw workspaceFailure("invalid_batch");
+        const {value: text} = properties.text, {value: findings} = properties.findings;
+        workspaceText(text, 1024 * 1024);
+        if (!Array.isArray(findings)) throw workspaceFailure("invalid_finding");
+        sourceBytes += new TextEncoder().encode(text).length;
+        findingCount += findings.length;
+        if (sourceBytes > 1024 * 1024 || findingCount > 10000) throw workspaceFailure("resource_limit");
+        const findingsJson = workspaceFindingsJson(findings);
+        const textJson = JSON.stringify(text);
+        transportBytes += 32 + new TextEncoder().encode(textJson).length + new TextEncoder().encode(findingsJson).length;
+        if (transportBytes > 16 * 1024 * 1024) throw workspaceFailure("resource_limit");
+        parts.push(`{"text":${textJson},"findings":${findingsJson}}`);
+      } catch (error) {
+        const failure = error instanceof DataFogError ? error : workspaceFailure("invalid_finding");
+        failure.inputIndex = inputIndex;
+        throw failure;
+      }
+    }
+    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_batch", `[${parts.join(",")}]`, operationId));
   }
   activateSaved(change, expectedHead, savedHead) {
     const plan = workspacePlans.get(change);
