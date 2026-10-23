@@ -65,8 +65,8 @@ host limits a selection to 32 source inputs/files. These are development guardra
 ## CSV intake
 
 Choose synthetic CSV files locally, then **Review input**, select a record/column,
-and **Load cell**. Mark selected sensitive text using the existing entity-type
-field. **Clear cell selections** corrects that cell's supplied findings for this
+and **Load text**. Mark selected sensitive text using the existing entity-type
+field. **Clear selections** corrects that cell's supplied findings for this
 upload. Both adding and clearing selections invalidate approval. All records,
 including metadata and the first row, are available; there is no header inference.
 
@@ -98,8 +98,7 @@ is bundled locally in a worker (~109 KB unminified in this build); its license i
 copied alongside the bundle and asset hashes are recorded. Casting, record skipping,
 header conversion and delimiter guessing are disabled. This dependency provides
 quoted-field parsing without a new hand-written CSV parser or a Core dependency.
-The synthetic workflow still uses manually supplied findings. PDF intake follows
-separately.
+The synthetic workflow uses manually supplied findings.
 
 ## Values-only XLSX intake
 
@@ -161,6 +160,58 @@ All executable assets are bundled locally under the extension's existing CSP.
 These libraries add no runtime network access or Core dependencies. Licenses,
 versions, asset hashes and synthetic fixture hashes accompany the build.
 
+## PDF text intake
+
+The file picker also accepts synthetic, unencrypted text PDFs. Choose **Review
+input**, enter a 1-based page number and **Load text**. Each page is one reviewable
+text block, so a name split across adjacent PDF text runs can be selected as one
+finding. Core offsets are local to that page's extracted text. **Clear selections**
+and further selections invalidate approval; prepare and approve the updated
+selection again. CSV, XLSX and PDF inputs share the same Core batch and saved
+workspace aliases.
+
+The approved JSON has `format: "pdf"` and ordered `pages`. Each page contains
+`number`, its native PDF `view` bounds, `rotation`, `userUnit` scale and pseudonymized
+`text`. Text follows PDF.js extraction order and whitespace handling, with Unicode
+normalization disabled. Dates, amounts and leading-zero identifiers remain
+extracted strings. Page positions are retained separately from the text; no table
+or accounting interpretation is performed. Filenames, PDF metadata, annotations,
+embedded files and original PDF bytes do not enter this output.
+
+Every page must contain extractable text. Image-only and blank pages block the
+file. Raster images also block intake, including decorative logos and text layers
+over scans: this slice makes no exception that could silently drop statement text
+inside an image. Encrypted PDFs are rejected even when an empty user password lets
+them open without prompting. Forms/XFA, annotations (including links), scripts,
+attachments, optional layers, collections, signatures and invisible-text modes are
+unsupported and block intake. Malformed/repaired input, parser warnings and parser
+error replies also block the file. Supply a supported text-only PDF or CSV export;
+explicitly remove a rejected file before reviewing and approving the remainder.
+
+Admission limits remain 1 MiB per source file and 1 MiB aggregate decoded source.
+Each PDF is limited to 256 pages, 100,000 extracted text items and 100,000 operators
+per page; its page texts count toward the existing aggregate leaf limit. Each file
+has a 30-second parsing deadline. Cancellation and the deadline terminate its
+worker. The current page's stream is drained without retaining additional text
+when decoded limits are exceeded, avoiding a PDF.js stream cancellation race;
+the operation still rejects as a whole. PDF.js exposes no hard heap or decoded
+stream-size cap, so these remain development guardrails rather than a parser
+memory guarantee. Completion/cancellation drops temporary bytes, page text and
+findings, while preserving committed encrypted mappings.
+
+The host pins Apache-2.0 [Mozilla PDF.js](https://mozilla.github.io/pdf.js/) via
+`pdfjs-dist` 6.4.299. Its compatibility build runs entirely inside the terminable
+local worker, using locally bundled standard fonts and CMaps. It provides PDF font,
+encoding and content-stream interpretation without a new hand-written PDF parser
+or Core dependency. The script is about 3.4 MB unminified, plus local font/CMap
+resources. The bundled core-js 3.50.0 MIT notice and resource licenses accompany
+the build. The optional Node canvas package is not used by the browser bundle.
+
+Parser diagnostics are reduced to a boolean occurrence flag inside the worker,
+never logged or forwarded as exception text. The adapter also checks PDF.js error
+replies because this pinned version can return a partial operator list after a
+stream failure. These paths are covered by packaged-worker rejection tests.
+
 ## Acceptance coverage
 
 | Check | Evidence |
@@ -186,6 +237,10 @@ versions, asset hashes and synthetic fixture hashes accompany the build.
 | D2 | Formulas across all sheets, protection, unsupported features, malformed packages and expansion/decoded-source excesses reject with content-free errors. |
 | D3 | Mixed CSV/XLSX selections share aliases; sheet names, Unicode cells and format literals are reviewable. A rejected workbook blocks the batch until explicit removal and fresh approval. |
 | D4 | Approval/cancellation clears workbook review data; mappings survive real browser restart and restore exact names. |
+| E1 | Packaged PDF worker extracts page text and preserves numeric strings; mixed-format review verifies decoded Unicode, page bounds and rotation. |
+| E2 | Scans, hybrid image/text pages, encryption (including empty user passwords), unsupported features, malformed/repaired PDFs and file/page/decoded-text limits reject with content-free errors. |
+| E3 | CSV/XLSX/PDF selections share aliases; PDF corrections invalidate approval. A scan blocks the whole batch until explicit removal and a fresh preview. |
+| E4 | Completion/cancellation clears PDF review data; saved aliases restore and are reused after browser restart. Cancelling a pending parser request leaves its original File unchanged. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 
@@ -197,4 +252,4 @@ The harness exports narrow test fault controls for explicit transaction barriers
 
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
-PDF intake, protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+Protected follow-ups, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.

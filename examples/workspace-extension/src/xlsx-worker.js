@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import sax from "sax";
 import {xlsxParts} from "./xlsx-package.js";
 import {serve, HostError} from "./rpc.js";
-import {MAX_CSV_BYTES, MAX_CSV_CELLS} from "./tabular.js";
+import {MAX_SOURCE_BYTES, MAX_TEXT_LEAVES} from "./documents.js";
 
 const main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const office = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -72,7 +72,7 @@ function inspect(parts) {
           const decoded = XLSX.utils.decode_cell(address);
           if (decoded.c > 16383 || decoded.r > 1048575) fail();
           cell = {address, type, style: Number(style), value: undefined, payload: undefined};
-          if (++totalCells > MAX_CSV_CELLS) throw new HostError("resource_limit");
+          if (++totalCells > MAX_TEXT_LEAVES) throw new HostError("resource_limit");
         } else if (parent?.local === "c" && !["v", "is"].includes(node.local)) unsupported();
         if (["v", "is"].includes(node.local) && cell) {
           if (parent?.local !== "c" || cell.payload !== undefined || ((node.local === "is") !== (cell.type === "inlineStr"))) fail();
@@ -111,7 +111,7 @@ function inspect(parts) {
 function parse(bytes) {
   let parts;
   try {
-    if (!(bytes instanceof Uint8Array) || bytes.length > MAX_CSV_BYTES) throw new HostError("resource_limit");
+    if (!(bytes instanceof Uint8Array) || bytes.length > MAX_SOURCE_BYTES) throw new HostError("resource_limit");
     parts = xlsxParts(bytes);
     const inspected = inspect(parts);
     const book = XLSX.read(bytes, {type: "array", cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellDates: false, sheetStubs: true, WTF: true});
@@ -135,7 +135,7 @@ function parse(bytes) {
           if (raw.type === "b" && !["0", "1"].includes(value)) fail();
         }
         sourceBytes += new TextEncoder().encode(value).length + new TextEncoder().encode(numberFormat).length;
-        if (sourceBytes > MAX_CSV_BYTES) throw new HostError("resource_limit");
+        if (sourceBytes > MAX_SOURCE_BYTES) throw new HostError("resource_limit");
         cells.push({address: raw.address, sourceType, value, numberFormat});
       }
       const addresses = Object.keys(parsed).filter(key => !key.startsWith("!"));
@@ -143,7 +143,7 @@ function parse(bytes) {
       sourceBytes += new TextEncoder().encode(sheet.name).length;
       return {name: sheet.name, visibility: sheet.visibility, cells};
     });
-    if (sourceBytes > MAX_CSV_BYTES) throw new HostError("resource_limit");
+    if (sourceBytes > MAX_SOURCE_BYTES) throw new HostError("resource_limit");
     return {dateSystem: inspected.dateSystem, sheets};
   } catch (error) {
     if (error instanceof HostError) throw error;

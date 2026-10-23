@@ -55,7 +55,7 @@ export async function verifyXlsxWorker(page) {
   console.log("PASS D1/D2 workbook source values, all-sheet formula rejection and package validation");
 }
 
-async function markWorkbookField(page, sheet, address, component, value, entityType = "PERSON") {
+export async function markWorkbookField(page, sheet, address, component, value, entityType = "PERSON") {
   await page.getByRole("button", {name: "Review input 2", exact: true}).click();
   await page.locator("#xlsx-sheet").fill(String(sheet)); await page.locator("#xlsx-address").fill(address);
   await page.locator("#xlsx-component").selectOption(component);

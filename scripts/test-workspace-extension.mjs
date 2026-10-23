@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyXlsxWorker, verifyXlsxFlow} from "./test-workspace-xlsx.mjs";
+import {verifyPdfWorker, verifyPdfFlow} from "./test-workspace-pdf.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harness = path.join(root, "examples/workspace-extension");
@@ -236,11 +237,11 @@ try {
   await page.waitForFunction(() => !document.querySelector("#prepare").disabled);
   check(await page.locator("#inputs").textContent() === "" && await page.locator("#files").inputValue() === "" && await page.locator("#csv-cell").inputValue() === "" && await page.locator("#file-progress").textContent() === "", "C4 cancelled intake ignores late results and clears temporary file data");
   const abortedRead = await page.evaluate(async source => {
-    const {importTabularFiles} = await import("./tabular.js");
+    const {importFiles} = await import("./documents.js");
     const file = new File([source], "cancel.csv", {type: "text/csv"});
     const controller = new AbortController();
     try {
-      await importTabularFiles([file], [], controller.signal, () => queueMicrotask(() => controller.abort()));
+      await importFiles([file], [], controller.signal, () => queueMicrotask(() => controller.abort()));
       return false;
     } catch (error) {
       const actual = new Uint8Array(await file.arrayBuffer()), expected = new TextEncoder().encode(source);
@@ -251,6 +252,9 @@ try {
   console.log("PASS C1–C4 local CSV intake, exact string tables, file rejection/reapproval and cleanup");
   await verifyXlsxWorker(page);
   await verifyXlsxFlow({fresh, status, markCsvCell, contextClose: async () => { await context.close(); context = undefined; }, launch, unlock, restored, check});
+  page = await context.newPage(); await page.goto(`${origin}/index.html`);
+  await verifyPdfWorker(page);
+  await verifyPdfFlow({fresh, status, markCsvCell, contextClose: async () => { await context.close(); context = undefined; }, launch, unlock, restored, check});
 
   page = await fresh("approval");
   await prepare(page);
@@ -469,7 +473,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4", "D1", "D2", "D3", "D4"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4", "D1", "D2", "D3", "D4", "E1", "E2", "E3", "E4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));

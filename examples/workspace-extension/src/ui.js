@@ -1,5 +1,5 @@
 import { client, safeCode, HostError } from "./rpc.js";
-import { importTabularFiles, flattenDocuments, formatDocuments, cellSelection } from "./tabular.js";
+import { importFiles, flattenDocuments, formatDocuments, cellSelection } from "./documents.js";
 
 const broker = client(new Worker(new URL("./broker.js", import.meta.url), { type: "module" }));
 const element = id => document.getElementById(id);
@@ -17,18 +17,19 @@ function clearPreview() { plan = undefined; element("preview").textContent = "";
 function clearCurrent() { element("source").value = ""; findings = []; element("selection-count").textContent = "0 selections"; }
 function stopIntake() { intakeController?.abort(); intakeController = undefined; element("file-progress").textContent = ""; }
 function clearCell() { reviewField = undefined; element("csv-cell").value = ""; element("cell-selections").textContent = ""; }
-function clearTableReview() { reviewDocument = undefined; clearCell(); element("csv-review").hidden = true; element("xlsx-location").hidden = true; }
+function clearTableReview() { reviewDocument = undefined; clearCell(); element("csv-review").hidden = true; element("xlsx-location").hidden = true; element("pdf-location").hidden = true; }
 function clearDraft() { stopIntake(); clearCurrent(); clearTableReview(); queued = []; element("files").value = ""; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
 function renderInputs() {
   element("inputs").replaceChildren();
   queued.forEach((input, index) => {
     const item = document.createElement("li");
-    item.textContent = `Input ${index + 1}${input.label ? `: ${input.label}` : ""}${input.kind === "csv" ? `: CSV, ${input.widths.length} records` : input.kind === "xlsx" ? `: XLSX, ${input.sheets.length} sheets` : input.kind === "rejected" ? `: ${input.error}` : ""}`;
-    if (input.kind === "csv" || input.kind === "xlsx") {
+    item.textContent = `Input ${index + 1}${input.label ? `: ${input.label}` : ""}${input.kind === "csv" ? `: CSV, ${input.widths.length} records` : input.kind === "xlsx" ? `: XLSX, ${input.sheets.length} sheets` : input.kind === "pdf" ? `: PDF, ${input.pages.length} pages` : input.kind === "rejected" ? `: ${input.error}` : ""}`;
+    if (["csv", "xlsx", "pdf"].includes(input.kind)) {
       const review = document.createElement("button"); review.textContent = `Review input ${index + 1}`;
       review.addEventListener("click", () => {
         reviewDocument = input; clearCell(); element("csv-review").hidden = false;
         element("csv-location").hidden = input.kind !== "csv"; element("xlsx-location").hidden = input.kind !== "xlsx";
+        element("pdf-location").hidden = input.kind !== "pdf"; element("pdf-page").value = "1";
         element("csv-row").value = "1"; element("csv-column").value = "1";
         element("xlsx-sheet").value = "1"; element("xlsx-address").value = "A1"; element("xlsx-component").value = "value";
       });
@@ -51,8 +52,8 @@ async function perform(task) {
   try { await task(g); } catch (error) {
     if (g === generation) {
       status(safeCode(error));
-      const location = Number.isSafeInteger(error.sheetIndex) ? `, sheet ${error.sheetIndex + 1}${error.cellAddress ? `, cell ${error.cellAddress}` : ""}, ${error.component}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
-      const guidance = error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : "";
+      const location = Number.isSafeInteger(error.pageIndex) ? `, page ${error.pageIndex + 1}` : Number.isSafeInteger(error.sheetIndex) ? `, sheet ${error.sheetIndex + 1}${error.cellAddress ? `, cell ${error.cellAddress}` : ""}, ${error.component}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
+      const guidance = error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${location} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
@@ -104,8 +105,8 @@ element("files").addEventListener("change", () => {
       await broker.call("cancel");
       if (g !== generation) return;
       if ((await broker.call("status")).status !== "unlocked") throw new HostError("locked");
-      const imported = await importTabularFiles(files, queued, controller.signal, (index, count) => {
-        if (g === generation) element("file-progress").textContent = `Reading file ${index} of ${count}`;
+      const imported = await importFiles(files, queued, controller.signal, (index, count, stage) => {
+        if (g === generation) element("file-progress").textContent = `${stage === "parsing" ? "Extracting" : "Reading"} file ${index} of ${count}`;
       });
       if (g !== generation) return;
       queued.push(...imported); renderInputs(); element("batch-error").textContent = ""; status("files_added");
@@ -117,7 +118,12 @@ element("files").addEventListener("change", () => {
 });
 element("load-cell").addEventListener("click", () => {
   clearCell();
-  if (reviewDocument?.kind === "xlsx") {
+  if (reviewDocument?.kind === "pdf") {
+    const pageIndex = Number(element("pdf-page").value) - 1;
+    const page = Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? reviewDocument.pages[pageIndex] : undefined;
+    if (!page) { status("invalid_cell"); return; }
+    reviewField = reviewDocument.fields[page.fieldIndex];
+  } else if (reviewDocument?.kind === "xlsx") {
     const sheetIndex = Number(element("xlsx-sheet").value) - 1;
     const sheet = Number.isSafeInteger(sheetIndex) && sheetIndex >= 0 ? reviewDocument.sheets[sheetIndex] : undefined;
     if (!sheet) { status("invalid_cell"); return; }

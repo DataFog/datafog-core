@@ -1,7 +1,7 @@
 import { client, HostError, safeCode } from "./rpc.js";
 
-export const MAX_CSV_BYTES = 1024 * 1024;
-export const MAX_CSV_CELLS = 100000;
+export const MAX_SOURCE_BYTES = 1024 * 1024;
+export const MAX_TEXT_LEAVES = 100000;
 export const MAX_FILES = 32;
 const encoder = new TextEncoder();
 
@@ -46,6 +46,12 @@ function workbookDocument(workbook) {
   return {kind: "xlsx", dateSystem: workbook.dateSystem, fields, sheets, sourceBytes};
 }
 
+function pdfDocument(document) {
+  const fields = document.pages.map(page => ({text: page.text, findings: []}));
+  const pages = document.pages.map(({number, view, rotation, userUnit}, fieldIndex) => ({number, view, rotation, userUnit, fieldIndex}));
+  return {kind: "pdf", fields, pages, sourceBytes: fields.reduce((sum, field) => sum + encoder.encode(field.text).length, 0)};
+}
+
 function readBytes(file, signal) {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new HostError("cancelled")); return; }
@@ -65,7 +71,7 @@ function readBytes(file, signal) {
 }
 
 /** All selected files produce either a document or a blocking rejection. */
-export async function importTabularFiles(files, existing, signal, progress) {
+export async function importFiles(files, existing, signal, progress) {
   if (files.length + existing.length > MAX_FILES) return [{kind: "rejected", error: "resource_limit"}];
   const workers = new Map();
   const workerFor = format => {
@@ -81,22 +87,28 @@ export async function importTabularFiles(files, existing, signal, progress) {
     for (const [index, file] of files.entries()) {
       if (signal.aborted) throw new HostError("cancelled");
       progress(index + 1, files.length);
-      let bytes;
+      let bytes, timer;
       try {
-        const format = /\.(csv|xlsx)$/i.exec(file.name)?.[1].toLowerCase();
+        const format = /\.(csv|xlsx|pdf)$/i.exec(file.name)?.[1].toLowerCase();
         if (!format) throw new HostError("unsupported_format");
-        if (file.size > MAX_CSV_BYTES) throw new HostError("resource_limit");
+        if (file.size > MAX_SOURCE_BYTES) throw new HostError("resource_limit");
         bytes = await readBytes(file, signal);
         if (signal.aborted) throw new HostError("cancelled");
-        const parsed = await workerFor(format).call("parse", [bytes]);
-        const input = format === "csv" ? document(parsed) : workbookDocument(parsed);
-        if (sourceBytes + input.sourceBytes > MAX_CSV_BYTES || fields + input.fields.length > MAX_CSV_CELLS) throw new HostError("resource_limit");
+        progress(index + 1, files.length, "parsing");
+        if (signal.aborted) throw new HostError("cancelled");
+        const worker = workerFor(format), parsing = worker.call("parse", [bytes]);
+        const parsed = format === "pdf" ? await Promise.race([parsing, new Promise((_, reject) => {
+          timer = setTimeout(() => { reject(new HostError("resource_limit")); worker.stop(); workers.delete(format); }, 30000);
+        })]) : await parsing;
+        if (signal.aborted) throw new HostError("cancelled");
+        const input = format === "csv" ? document(parsed) : format === "xlsx" ? workbookDocument(parsed) : pdfDocument(parsed);
+        if (sourceBytes + input.sourceBytes > MAX_SOURCE_BYTES || fields + input.fields.length > MAX_TEXT_LEAVES) throw new HostError("resource_limit");
         sourceBytes += input.sourceBytes; fields += input.fields.length;
         imported.push({...input, label: file.name});
       } catch (error) {
         if (signal.aborted || error.code === "cancelled") throw new HostError("cancelled");
         imported.push({kind: "rejected", error: safeCode(error), label: file.name});
-      } finally { bytes?.fill(0); }
+      } finally { clearTimeout(timer); bytes?.fill(0); }
     }
     return imported;
   } finally {
@@ -104,13 +116,16 @@ export async function importTabularFiles(files, existing, signal, progress) {
   }
 }
 
-/** Core sees text leaves; file, record and worksheet structure stays in the host. */
+/** Core sees text leaves; file, record, worksheet and page structure stays in the host. */
 export function flattenDocuments(documents) {
   if (documents.length > MAX_FILES) throw new HostError("resource_limit");
   const inputs = [], locations = [];
   for (const [inputIndex, input] of documents.entries()) {
     if (input.kind === "rejected") throw new HostError(input.error, {inputIndex});
-    if (input.kind === "xlsx") {
+    if (input.kind === "pdf") {
+      const base = inputs.length; for (const field of input.fields) inputs.push(field);
+      for (const [pageIndex, page] of input.pages.entries()) locations[base + page.fieldIndex] = {inputIndex, pageIndex};
+    } else if (input.kind === "xlsx") {
       const base = inputs.length; for (const field of input.fields) inputs.push(field);
       for (const [sheetIndex, sheet] of input.sheets.entries()) {
         locations[base + sheet.nameIndex] = {inputIndex, sheetIndex, component: "sheet name"};
@@ -136,6 +151,10 @@ export function flattenDocuments(documents) {
 export function formatDocuments(documents, texts) {
   let cursor = 0;
   const result = documents.map(input => {
+    if (input.kind === "pdf") {
+      const base = cursor; cursor += input.fields.length;
+      return JSON.stringify({format: "pdf", pages: input.pages.map(({number, view, rotation, userUnit, fieldIndex}) => ({number, view, rotation, userUnit, text: texts[base + fieldIndex]}))});
+    }
     if (input.kind === "xlsx") {
       const base = cursor; cursor += input.fields.length;
       return JSON.stringify({format: "xlsx", dateSystem: input.dateSystem, sheets: input.sheets.map(sheet => ({

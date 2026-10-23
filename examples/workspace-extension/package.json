@@ -11,6 +11,7 @@
     "fflate": "0.8.3",
     "libsodium-sumo": "0.8.4",
     "libsodium-wrappers-sumo": "0.8.4",
+    "pdfjs-dist": "6.4.299",
     "sax": "1.6.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

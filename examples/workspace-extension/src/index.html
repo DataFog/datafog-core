@@ -13,11 +13,11 @@
     <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>
     <button id="mark">Mark selected text</button><output id="selection-count">0 selections</output>
     <button id="add-input">Add text to batch</button>
-    <label>Synthetic CSV or values-only XLSX files <input id="files" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple></label>
+    <label>Synthetic CSV, values-only XLSX or text PDF files <input id="files" type="file" accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple></label>
     <output id="file-progress" aria-live="polite"></output>
     <section id="csv-review" hidden>
-      <h2>Local table and workbook review</h2>
-      <p>Review all records and sheets, including hidden sheets. XLSX values, number formats and sheet names can be marked separately. Values stay in their stored representation; files stay unchanged.</p>
+      <h2>Local document review</h2>
+      <p>Review CSV records, XLSX sheets (including hidden sheets), or extracted PDF page text. XLSX values, number formats and sheet names can be marked separately. PDF text follows extraction order; review it before approval. Files stay unchanged.</p>
       <div id="csv-location">
       <label>Record (1-based) <input id="csv-row" type="number" min="1" value="1"></label>
       <label>Column (1-based) <input id="csv-column" type="number" min="1" value="1"></label>
@@ -27,9 +27,12 @@
         <label>Cell address <input id="xlsx-address" value="A1" maxlength="10"></label>
         <label>Review <select id="xlsx-component"><option value="value">Stored value</option><option value="numberFormat">Number format</option><option value="name">Sheet name</option></select></label>
       </div>
-      <button id="load-cell">Load cell</button>
+      <div id="pdf-location" hidden>
+        <label>Page (1-based) <input id="pdf-page" type="number" min="1" value="1"></label>
+      </div>
+      <button id="load-cell">Load text</button>
       <textarea id="csv-cell" rows="3" readonly autocomplete="off" spellcheck="false" aria-label="Source text for privacy review"></textarea>
-      <button id="mark-cell">Mark selected cell text</button><button id="clear-cell">Clear cell selections</button>
+      <button id="mark-cell">Mark selected review text</button><button id="clear-cell">Clear selections</button>
       <output id="cell-selections"></output>
     </section>
     <ul id="inputs" aria-label="Queued synthetic inputs"></ul>

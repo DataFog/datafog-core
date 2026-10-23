@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Local PDF text intake in the synthetic browser workflow, with page review,
+  shared CSV/XLSX aliases, and whole-batch rejection of scans, image-bearing,
+  encrypted, malformed, or unsupported PDFs.
 - Values-only XLSX intake in the synthetic browser workflow, with sheet/cell review,
   exact stored values and number formats, and whole-batch rejection of formulas.
 - Local CSV intake in the synthetic browser workflow, with decoded-cell review,
