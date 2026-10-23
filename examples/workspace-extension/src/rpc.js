@@ -9,6 +9,7 @@ const known = new Set([
   "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
   "storage_failure", "save_uncertain", "locked", "stale_approval", "cancelled", "already_exists", "not_found", "internal_error",
   "invalid_csv", "invalid_encoding", "unsupported_format", "file_read_failed",
+  "invalid_pdf", "unsupported_pdf", "protected_pdf", "scanned_pdf",
 ]);
 export function safeCode(error) { return known.has(error?.code) ? error.code : "internal_error"; }
 

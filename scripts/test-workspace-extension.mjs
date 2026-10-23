@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {verifyPdfWorker, verifyPdfFlow} from "./test-workspace-pdf.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harness = path.join(root, "examples/workspace-extension");
@@ -235,11 +236,11 @@ try {
   await page.waitForFunction(() => !document.querySelector("#prepare").disabled);
   check(await page.locator("#inputs").textContent() === "" && await page.locator("#files").inputValue() === "" && await page.locator("#csv-cell").inputValue() === "" && await page.locator("#file-progress").textContent() === "", "C4 cancelled intake ignores late results and clears temporary file data");
   const abortedRead = await page.evaluate(async source => {
-    const {importCsvFiles} = await import("./csv.js");
+    const {importFiles} = await import("./documents.js");
     const file = new File([source], "cancel.csv", {type: "text/csv"});
     const controller = new AbortController();
     try {
-      await importCsvFiles([file], [], controller.signal, () => queueMicrotask(() => controller.abort()));
+      await importFiles([file], [], controller.signal, () => queueMicrotask(() => controller.abort()));
       return false;
     } catch (error) {
       const actual = new Uint8Array(await file.arrayBuffer()), expected = new TextEncoder().encode(source);
@@ -248,6 +249,8 @@ try {
   }, csvFixture.january);
   check(abortedRead, "C4 cancellation aborts a real FileReader and leaves the source File unchanged");
   console.log("PASS C1–C4 local CSV intake, exact string tables, file rejection/reapproval and cleanup");
+  await verifyPdfWorker(page);
+  await verifyPdfFlow({fresh, status, markCsvCell, contextClose: async () => { await context.close(); context = undefined; }, launch, unlock, restored, check});
 
   page = await fresh("approval");
   await prepare(page);
@@ -466,7 +469,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4", "E1", "E2", "E3", "E4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));
