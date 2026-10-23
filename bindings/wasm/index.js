@@ -342,6 +342,7 @@ export class Workspace {
     workspaceCall(this.#state, "activate_saved", plan.handle, expected, saved);
   }
   restore(text) { workspaceText(text, 16 * 1024 * 1024); return workspaceCall(this.#state, "restore", text); }
+  restoreReport(text) { workspaceText(text, 16 * 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "restore_report", text)); }
   close() {
     if (!this.#state.closed) {
       workspaceCall(this.#state, "close");

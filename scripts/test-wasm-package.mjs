@@ -146,7 +146,7 @@ void discovered;
 void protectedDocument;
 void protectedTogether;
 
-import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview } from "@datafog/wasm";
+import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
@@ -154,8 +154,14 @@ const previews: readonly WorkspacePreview[] = pending.previews();
 const position: number | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
+const report: WorkspaceRestoreReport = workspace.restoreReport("Jane");
+const restoredText: string | null = report.text;
+// @ts-expect-error Issue kinds are a closed set.
+const unexpectedKind: "missing" = report.issues[0].kind;
 void previews;
 void position;
+void restoredText;
+void unexpectedKind;
 
 `.trimStart(),
   );
