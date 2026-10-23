@@ -53,7 +53,7 @@ async function perform(task) {
     if (g === generation) {
       status(safeCode(error));
       const location = Number.isSafeInteger(error.pageIndex) ? `, page ${error.pageIndex + 1}` : Number.isSafeInteger(error.sheetIndex) ? `, sheet ${error.sheetIndex + 1}${error.cellAddress ? `, cell ${error.cellAddress}` : ""}, ${error.component}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
-      const guidance = error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
+      const guidance = error.code === "invalid_marker" ? " Use the exact full pseudonym from this unlocked workspace. Unknown, damaged, foreign and unsaved markers are blocked." : error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${location} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }

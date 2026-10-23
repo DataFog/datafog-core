@@ -260,6 +260,7 @@ impl Workspace {
         self.state = None;
     }
 
+    /// Preserve exact committed markers and transform supplied findings outside them.
     pub fn prepare(
         &self,
         text: &str,
@@ -271,6 +272,7 @@ impl Workspace {
 
     /// Prepare all inputs as one immutable change. A failure returns no partial plan.
     /// Size and finding limits apply to the aggregate batch; no inputs are omitted.
+    /// Marker references must already be committed before this batch begins.
     pub fn prepare_batch(
         &self,
         inputs: &[WorkspaceInput<'_>],
@@ -301,12 +303,19 @@ impl Workspace {
         {
             return Err(error(ErrorCode::InvalidId));
         }
+        let committed = marker_lookup(state);
         let mut candidate = state.clone();
         let mut previews = Vec::with_capacity(inputs.len());
         let mut output_bytes = 0usize;
         for (input_index, input) in inputs.iter().enumerate() {
             let preview = self
-                .prepare_input(input.text, input.findings, operation_id, &mut candidate)
+                .prepare_input(
+                    input.text,
+                    input.findings,
+                    operation_id,
+                    &committed,
+                    &mut candidate,
+                )
                 .map_err(|mut failure| {
                     failure.input_index = Some(input_index);
                     failure
@@ -348,12 +357,11 @@ impl Workspace {
         text: &str,
         findings: &[WorkspaceFinding],
         operation_id: PublicId,
+        committed: &BTreeMap<&str, &str>,
         candidate: &mut State,
     ) -> Result<Preview> {
         source_limit(text)?;
-        if text.contains(RESERVED_INTRODUCER) {
-            return Err(error(ErrorCode::InvalidMarker));
-        }
+        let markers = marker_ranges(text, committed)?;
         let mut index = TextIndex::new(text);
         let mut adapted = Vec::with_capacity(findings.len());
         let mut total_bytes = 0usize;
@@ -366,6 +374,9 @@ impl Workspace {
             if !valid_type(&finding.entity_type)
                 || finding.byte_range.start >= finding.byte_range.end
                 || crate::validate_utf8_range(text, finding.byte_range).is_err()
+                || markers
+                    .get(markers.partition_point(|marker| marker.end <= finding.byte_range.start))
+                    .is_some_and(|marker| marker.start < finding.byte_range.end)
                 || finding
                     .detector_name
                     .as_ref()
@@ -507,32 +518,53 @@ impl Workspace {
         if text.len() > MAX_BUNDLE_BYTES {
             return Err(error(ErrorCode::ResourceLimit));
         }
-        let lookup: BTreeMap<_, _> = state
-            .entries
-            .iter()
-            .map(|(id, e)| (e.marker.as_str(), id.original.as_str()))
-            .collect();
+        let lookup = marker_lookup(state);
         let mut output = String::new();
         let mut cursor = 0;
-        while let Some(relative) = text[cursor..].find(RESERVED_INTRODUCER) {
-            let start = cursor + relative;
-            let tail = &text[start..];
-            let end = tail
-                .find("]]")
-                .filter(|end| *end <= 140)
-                .ok_or_else(|| error(ErrorCode::InvalidMarker))?
-                + 2;
-            let full = &tail[..end];
+        for range in marker_ranges(text, &lookup)? {
+            let full = &text[range.start..range.end];
             let original = lookup
                 .get(full)
                 .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
-            append(&mut output, &text[cursor..start])?;
+            append(&mut output, &text[cursor..range.start])?;
             append(&mut output, original)?;
-            cursor = start + end;
+            cursor = range.end;
         }
         append(&mut output, &text[cursor..])?;
         Ok(output)
     }
+}
+
+fn marker_lookup(state: &State) -> BTreeMap<&str, &str> {
+    state
+        .entries
+        .iter()
+        .map(|(identity, entry)| (entry.marker.as_str(), identity.original.as_str()))
+        .collect()
+}
+
+fn marker_ranges(text: &str, committed: &BTreeMap<&str, &str>) -> Result<Vec<TextRange>> {
+    let mut ranges = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = text[cursor..].find(RESERVED_INTRODUCER) {
+        let start = cursor + relative;
+        let tail = &text[start..];
+        let end = start
+            + tail
+                .find("]]")
+                .filter(|end| *end <= 140)
+                .ok_or_else(|| error(ErrorCode::InvalidMarker))?
+            + 2;
+        if !committed.contains_key(&text[start..end]) {
+            return Err(error(ErrorCode::InvalidMarker));
+        }
+        ranges
+            .try_reserve(1)
+            .map_err(|_| error(ErrorCode::ResourceLimit))?;
+        ranges.push(TextRange { start, end });
+        cursor = end;
+    }
+    Ok(ranges)
 }
 
 fn valid_type(value: &str) -> bool {

@@ -3,6 +3,176 @@ use datafog_core::{
     workspace::{ErrorCode, Workspace, WorkspaceFinding, WorkspaceInput, byte_range_from_utf16},
 };
 
+fn saved_person(namespace: [u8; 16]) -> (Workspace, String) {
+    let mut workspace = Workspace::create(namespace, [2; 16]).unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "Jane", TextRange { start: 0, end: 4 });
+    let mut pending = workspace.prepare("Jane", &[finding], [3; 16]).unwrap();
+    let marker = pending.preview().unwrap().text.clone();
+    let parent = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    workspace
+        .activate_saved(&mut pending, parent, candidate)
+        .unwrap();
+    (workspace, marker)
+}
+
+#[test]
+fn committed_markers_pass_through_followups_after_reopening() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let mut reopened = Workspace::open_bundle(&saved).unwrap();
+    let source = format!("👋 e\u{301} {marker} vs John, then {marker}.");
+    let start = source.find("John").unwrap();
+    let range = TextRange {
+        start,
+        end: start + 4,
+    };
+    let finding = WorkspaceFinding::new("PERSON", "John", range);
+    let mut pending = reopened.prepare(&source, &[finding], [4; 16]).unwrap();
+    let preview = pending.preview().unwrap();
+    assert_eq!(preview.text.matches(&marker).count(), 2);
+    assert_eq!(preview.transformations.len(), 1);
+    let transformation = &preview.transformations[0];
+    assert_eq!(transformation.source_byte_range, range);
+    assert_eq!(
+        transformation.source_codepoint_range.start,
+        source[..start].chars().count()
+    );
+    assert_eq!(
+        transformation.source_utf16_range.start,
+        source[..start].encode_utf16().count()
+    );
+    let replacement =
+        &preview.text[transformation.output_byte_range.start..transformation.output_byte_range.end];
+    assert_eq!(preview.text, source.replace("John", replacement));
+    assert!(replacement.ends_with(":PERSON:2]]"));
+    let output = preview.text.clone();
+    assert_eq!(reopened.export_bundle().unwrap(), saved);
+    let parent = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    reopened
+        .activate_saved(&mut pending, parent, candidate)
+        .unwrap();
+    assert_eq!(
+        reopened.restore(&output).unwrap(),
+        source.replace(&marker, "Jane")
+    );
+    let saved = reopened.export_bundle().unwrap();
+    let next = Workspace::open_bundle(&saved).unwrap();
+    let unchanged = next.prepare(&output, &[], [5; 16]).unwrap();
+    assert_eq!(unchanged.preview().unwrap().text, output);
+    assert!(unchanged.preview().unwrap().transformations.is_empty());
+    assert_eq!(
+        unchanged.expected_head().unwrap(),
+        unchanged.candidate_head().unwrap()
+    );
+    assert_eq!(unchanged.export_candidate_bundle().unwrap(), saved);
+}
+
+#[test]
+fn findings_cannot_replace_or_cross_existing_markers() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let source = format!("John{marker}Jane");
+    let end = 4 + marker.len();
+    let outside = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    for range in [
+        TextRange { start: 4, end },
+        TextRange { start: 5, end: 6 },
+        TextRange { start: 3, end: 5 },
+        TextRange {
+            start: end - 1,
+            end: end + 1,
+        },
+        TextRange {
+            start: 0,
+            end: source.len(),
+        },
+    ] {
+        let inside = WorkspaceFinding::new("PERSON", &source[range.start..range.end], range);
+        let failure = workspace
+            .prepare(&source, &[outside.clone(), inside], [4; 16])
+            .err()
+            .unwrap();
+        assert_eq!(failure.code, ErrorCode::InvalidFinding);
+        assert_eq!(failure.input_index, Some(0));
+        assert_eq!(failure.finding_index, Some(1));
+        assert_eq!(failure.to_string(), "invalid_finding");
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+    }
+    let right = WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange {
+            start: end,
+            end: source.len(),
+        },
+    );
+    let pending = workspace
+        .prepare(&source, &[outside, right], [4; 16])
+        .unwrap();
+    let preview = pending.preview().unwrap();
+    assert_eq!(preview.transformations.len(), 2);
+    assert_eq!(preview.text.matches(&marker).count(), 2);
+    assert!(preview.text.ends_with(&format!("{marker}{marker}")));
+    let first = &preview.transformations[0];
+    assert!(
+        preview.text[first.output_byte_range.start..first.output_byte_range.end]
+            .ends_with(":PERSON:2]]")
+    );
+}
+
+#[test]
+fn unknown_markers_reject_batches_without_admitting_pending_aliases() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let (_, foreign) = saved_person([9; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    let mut pending = workspace
+        .prepare("John", &[finding.clone()], [4; 16])
+        .unwrap();
+    let uncommitted = pending.preview().unwrap().text.clone();
+    for bad in [
+        foreign,
+        uncommitted.clone(),
+        marker.replace("DFP1", "DFP2"),
+        marker.replace(":PERSON:", ":OTHER:"),
+        marker.replace(":PERSON:1]]", ":PERSON:2]]"),
+        marker[..marker.len() - 1].to_owned(),
+        "[[DFP1:unknown]]".to_owned(),
+        "[[DFP".to_owned(),
+    ] {
+        let source = format!("{marker} then {bad}");
+        let inputs = [
+            WorkspaceInput {
+                text: "John",
+                findings: std::slice::from_ref(&finding),
+            },
+            WorkspaceInput {
+                text: &source,
+                findings: &[],
+            },
+        ];
+        // The first member allocates the same candidate alias as `pending`;
+        // validation must still use only the workspace's committed registry.
+        let failure = workspace.prepare_batch(&inputs, [4; 16]).err().unwrap();
+        assert_eq!(failure.code, ErrorCode::InvalidMarker);
+        assert_eq!(failure.input_index, Some(1));
+        assert_eq!(failure.finding_index, None);
+        assert_eq!(failure.to_string(), "invalid_marker");
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+    }
+    pending.discard();
+    assert_eq!(
+        workspace
+            .prepare(&uncommitted, &[], [5; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::InvalidMarker
+    );
+}
+
 #[test]
 fn a_batch_shares_aliases_and_commits_one_snapshot_after_approval() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
@@ -313,7 +483,8 @@ fn committed_markers_restore_atomically_and_pending_changes_are_single_use() {
             ErrorCode::InvalidMarker
         );
     }
-    assert!(workspace.prepare(&marker, &[], [4; 16]).is_err());
+    let passthrough = workspace.prepare(&marker, &[], [4; 16]).unwrap();
+    assert_eq!(passthrough.preview().unwrap().text, marker);
     let mut no_change = workspace.prepare("Jane", &[finding], [4; 16]).unwrap();
     assert_eq!(
         no_change.expected_head().unwrap(),
