@@ -1,5 +1,6 @@
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,
+    WorkspaceInput,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -10,10 +11,11 @@ fn failure(code: ErrorCode) -> JsValue {
     from_error(WorkspaceError {
         code,
         finding_index: None,
+        input_index: None,
     })
 }
 fn from_error(error: WorkspaceError) -> JsValue {
-    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index }).to_string())
+    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index, "inputIndex": error.input_index }).to_string())
 }
 fn id(bytes: &[u8]) -> Result<workspace::PublicId, JsValue> {
     bytes.try_into().map_err(|_| failure(ErrorCode::InvalidId))
@@ -63,6 +65,58 @@ struct FindingInput {
     confidence: Option<f32>,
     detector_name: Option<String>,
     detector_version: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Input {
+    text: String,
+    findings: Vec<FindingInput>,
+}
+
+fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, WorkspaceError> {
+    inputs
+        .into_iter()
+        .enumerate()
+        .map(|(index, f)| {
+            if f.range.unit != "utf8_bytes" {
+                return Err(WorkspaceError {
+                    code: ErrorCode::InvalidFinding,
+                    finding_index: Some(index),
+                    input_index: None,
+                });
+            }
+            Ok(WorkspaceFinding {
+                entity_type: f.entity_type,
+                matched_text: f.matched_text,
+                byte_range: datafog_core::TextRange {
+                    start: f.range.start,
+                    end: f.range.end,
+                },
+                confidence: f.confidence,
+                detector_name: f.detector_name,
+                detector_version: f.detector_version,
+            })
+        })
+        .collect()
+}
+
+fn preview_value(preview: &workspace::Preview) -> serde_json::Value {
+    let ranges: Vec<_> = preview
+        .transformations
+        .iter()
+        .map(|t| {
+            json!({
+                "sourceByteRange": super::TextRange::from(t.source_byte_range),
+                "sourceCodepointRange": super::TextRange::from(t.source_codepoint_range),
+                "sourceUtf16Range": super::TextRange::from(t.source_utf16_range),
+                "outputByteRange": super::TextRange::from(t.output_byte_range),
+                "outputCodepointRange": super::TextRange::from(t.output_codepoint_range),
+                "outputUtf16Range": super::TextRange::from(t.output_utf16_range),
+            })
+        })
+        .collect();
+    json!({"text": preview.text, "transformations": ranges})
 }
 
 /// Raw binding; the package wrapper owns opaque plan objects and safe error conversion.
@@ -117,29 +171,7 @@ impl WasmWorkspace {
         if inputs.len() > workspace::MAX_FINDINGS {
             return Err(failure(ErrorCode::ResourceLimit));
         }
-        let findings = inputs
-            .into_iter()
-            .enumerate()
-            .map(|(index, f)| {
-                if f.range.unit != "utf8_bytes" {
-                    return Err(from_error(WorkspaceError {
-                        code: ErrorCode::InvalidFinding,
-                        finding_index: Some(index),
-                    }));
-                }
-                Ok(WorkspaceFinding {
-                    entity_type: f.entity_type,
-                    matched_text: f.matched_text,
-                    byte_range: datafog_core::TextRange {
-                        start: f.range.start,
-                        end: f.range.end,
-                    },
-                    confidence: f.confidence,
-                    detector_name: f.detector_name,
-                    detector_version: f.detector_version,
-                })
-            })
-            .collect::<Result<Vec<_>, JsValue>>()?;
+        let findings = adapt_findings(inputs).map_err(from_error)?;
         let next = self
             .next_plan
             .checked_add(1)
@@ -153,23 +185,61 @@ impl WasmWorkspace {
         self.next_plan = next;
         Ok(handle)
     }
-    pub fn preview(&self, handle: u32) -> Result<String, JsValue> {
-        let preview = self.plan(handle)?.preview().map_err(from_error)?;
-        let ranges: Vec<_> = preview
-            .transformations
+    pub fn prepare_batch(&mut self, inputs_json: &str, operation: &[u8]) -> Result<u32, JsValue> {
+        if inputs_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let inputs: Vec<Input> =
+            serde_json::from_str(inputs_json).map_err(|_| failure(ErrorCode::InvalidFinding))?;
+        if inputs.len() > workspace::MAX_INPUTS {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let mut findings = Vec::with_capacity(inputs.len());
+        for (input_index, input) in inputs.iter().enumerate() {
+            if input.findings.len() > workspace::MAX_FINDINGS {
+                return Err(from_error(WorkspaceError {
+                    code: ErrorCode::ResourceLimit,
+                    input_index: Some(input_index),
+                    finding_index: None,
+                }));
+            }
+        }
+        for (input_index, input) in inputs.into_iter().enumerate() {
+            let adapted = adapt_findings(input.findings).map_err(|mut error| {
+                error.input_index = Some(input_index);
+                from_error(error)
+            })?;
+            findings.push((input.text, adapted));
+        }
+        let borrowed: Vec<_> = findings
             .iter()
-            .map(|t| {
-                json!({
-                    "sourceByteRange": super::TextRange::from(t.source_byte_range),
-                    "sourceCodepointRange": super::TextRange::from(t.source_codepoint_range),
-                    "sourceUtf16Range": super::TextRange::from(t.source_utf16_range),
-                    "outputByteRange": super::TextRange::from(t.output_byte_range),
-                    "outputCodepointRange": super::TextRange::from(t.output_codepoint_range),
-                    "outputUtf16Range": super::TextRange::from(t.output_utf16_range),
-                })
-            })
+            .map(|(text, findings)| WorkspaceInput { text, findings })
             .collect();
-        Ok(json!({"text": preview.text, "transformations": ranges}).to_string())
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_batch(&borrowed, id(operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
+    pub fn preview(&self, handle: u32) -> Result<String, JsValue> {
+        Ok(preview_value(self.plan(handle)?.preview().map_err(from_error)?).to_string())
+    }
+    pub fn previews(&self, handle: u32) -> Result<String, JsValue> {
+        let previews: Vec<_> = self
+            .plan(handle)?
+            .previews()
+            .map_err(from_error)?
+            .iter()
+            .map(preview_value)
+            .collect();
+        Ok(json!(previews).to_string())
     }
     pub fn plan_heads(&self, handle: u32) -> Result<String, JsValue> {
         let plan = self.plan(handle)?;

@@ -16,6 +16,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FINDINGS: usize = 10_000;
+pub const MAX_INPUTS: usize = 32;
 pub const MAX_ENTRIES: usize = 20_000;
 pub const MAX_BUNDLE_BYTES: usize = 16 * 1024 * 1024;
 /// Entity type labels are uppercase ASCII and appear verbatim inside markers.
@@ -37,6 +38,7 @@ pub enum ErrorCode {
     InactivePlan,
     WorkspaceConflict,
     InvalidFinding,
+    InvalidBatch,
     InvalidMarker,
     InvalidSnapshot,
     InvalidId,
@@ -50,6 +52,7 @@ impl ErrorCode {
             Self::InactivePlan => "inactive_plan",
             Self::WorkspaceConflict => "workspace_conflict",
             Self::InvalidFinding => "invalid_finding",
+            Self::InvalidBatch => "invalid_batch",
             Self::InvalidMarker => "invalid_marker",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidId => "invalid_operation_id",
@@ -58,11 +61,12 @@ impl ErrorCode {
     }
 }
 
-/// Content-free machine-readable failure. Indexes refer to supplied findings.
+/// Content-free failure. Input indexes identify batch members; finding indexes are input-local.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkspaceError {
     pub code: ErrorCode,
     pub finding_index: Option<usize>,
+    pub input_index: Option<usize>,
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -75,6 +79,7 @@ fn error(code: ErrorCode) -> WorkspaceError {
     WorkspaceError {
         code,
         finding_index: None,
+        input_index: None,
     }
 }
 type Result<T> = std::result::Result<T, WorkspaceError>;
@@ -105,6 +110,13 @@ impl WorkspaceFinding {
             detector_version: None,
         }
     }
+}
+
+/// One batch member. Ranges are local to this input; order is preserved in previews.
+#[derive(Clone, Copy)]
+pub struct WorkspaceInput<'a> {
+    pub text: &'a str,
+    pub findings: &'a [WorkspaceFinding],
 }
 
 /// A transformed span, with explicit zero-based, end-exclusive coordinate systems.
@@ -180,7 +192,7 @@ struct Pending {
     parent: Head,
     candidate: State,
     bundle: Zeroizing<Vec<u8>>,
-    preview: Preview,
+    previews: Vec<Preview>,
 }
 
 /// An immutable pending change. Preview/export do not consume it; activation or discard do.
@@ -198,8 +210,15 @@ impl PreparedChange {
         }
         Ok(pending)
     }
+    /// Single-input convenience; use `previews` for a multi-input plan.
     pub fn preview(&self) -> Result<&Preview> {
-        Ok(&self.pending()?.preview)
+        match self.previews()? {
+            [preview] => Ok(preview),
+            _ => Err(error(ErrorCode::InvalidBatch)),
+        }
+    }
+    pub fn previews(&self) -> Result<&[Preview]> {
+        Ok(&self.pending()?.previews)
     }
     pub fn expected_head(&self) -> Result<Head> {
         Ok(self.pending()?.parent)
@@ -273,21 +292,104 @@ impl Workspace {
         findings: &[WorkspaceFinding],
         operation_id: PublicId,
     ) -> Result<PreparedChange> {
+        self.prepare_batch(&[WorkspaceInput { text, findings }], operation_id)
+    }
+
+    /// Prepare all inputs as one immutable change. A failure returns no partial plan.
+    /// Size and finding limits apply to the aggregate batch; no inputs are omitted.
+    pub fn prepare_batch(
+        &self,
+        inputs: &[WorkspaceInput<'_>],
+        operation_id: PublicId,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
+        if inputs.is_empty() {
+            return Err(error(ErrorCode::InvalidBatch));
+        }
+        if inputs.len() > MAX_INPUTS {
+            return Err(error(ErrorCode::ResourceLimit));
+        }
+        let mut source_bytes = 0usize;
+        let mut finding_count = 0usize;
+        for (input_index, input) in inputs.iter().enumerate() {
+            source_bytes = source_bytes.saturating_add(input.text.len());
+            finding_count = finding_count.saturating_add(input.findings.len());
+            if source_bytes > MAX_SOURCE_BYTES || finding_count > MAX_FINDINGS {
+                return Err(WorkspaceError {
+                    code: ErrorCode::ResourceLimit,
+                    input_index: Some(input_index),
+                    finding_index: None,
+                });
+            }
+        }
+        if state.head.commit_id == operation_id
+            || state.entries.values().any(|e| e.issuance == operation_id)
+        {
+            return Err(error(ErrorCode::InvalidId));
+        }
+        let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
+        let mut candidate = state.clone();
+        let mut previews = Vec::with_capacity(inputs.len());
+        let mut output_bytes = 0usize;
+        for (input_index, input) in inputs.iter().enumerate() {
+            let preview = self
+                .prepare_input(
+                    input.text,
+                    input.findings,
+                    operation_id,
+                    &mut codes,
+                    &mut candidate,
+                )
+                .map_err(|mut failure| {
+                    failure.input_index = Some(input_index);
+                    failure
+                })?;
+            output_bytes = output_bytes.saturating_add(preview.text.len());
+            if output_bytes > MAX_BUNDLE_BYTES {
+                return Err(WorkspaceError {
+                    code: ErrorCode::ResourceLimit,
+                    input_index: Some(input_index),
+                    finding_index: None,
+                });
+            }
+            previews.push(preview);
+        }
+        if candidate.entries.len() != state.entries.len() {
+            candidate.head = Head {
+                revision: state
+                    .head
+                    .revision
+                    .checked_add(1)
+                    .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
+                commit_id: operation_id,
+            };
+        }
+        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        Ok(PreparedChange {
+            pending: Some(Pending {
+                lifetime: Arc::clone(&self.lifetime),
+                parent: state.head,
+                candidate,
+                bundle,
+                previews,
+            }),
+        })
+    }
+
+    fn prepare_input(
+        &self,
+        text: &str,
+        findings: &[WorkspaceFinding],
+        operation_id: PublicId,
+        codes: &mut BTreeSet<String>,
+        candidate: &mut State,
+    ) -> Result<Preview> {
         source_limit(text)?;
         if marker_spans(text)?
             .iter()
             .any(|span| span.canonical.is_some())
         {
             return Err(error(ErrorCode::InvalidMarker));
-        }
-        if findings.len() > MAX_FINDINGS {
-            return Err(error(ErrorCode::ResourceLimit));
-        }
-        if state.head.commit_id == operation_id
-            || state.entries.values().any(|e| e.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
         }
         let mut index = TextIndex::new(text);
         let mut adapted = Vec::with_capacity(findings.len());
@@ -296,6 +398,7 @@ impl Workspace {
             let invalid = || WorkspaceError {
                 code: ErrorCode::InvalidFinding,
                 finding_index: Some(finding_index),
+                input_index: None,
             };
             if !valid_type(&finding.entity_type)
                 || finding.byte_range.start >= finding.byte_range.end
@@ -336,13 +439,11 @@ impl Workspace {
             crate::select_findings(text, &adapted, &config).map_err(|e| WorkspaceError {
                 code: ErrorCode::InvalidFinding,
                 finding_index: e.finding_index(),
+                input_index: None,
             })?;
-        let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
-        let mut candidate = state.clone();
         let mut output = String::new();
         let mut transformations = Vec::with_capacity(selected.len());
         let mut cursor = 0;
-        let mut changed = false;
         for finding in selected {
             let identity = Identity {
                 entity_type: finding.entity_type.clone(),
@@ -364,7 +465,7 @@ impl Workspace {
                     operation_id,
                     &finding.entity_type,
                     counter,
-                    &mut codes,
+                    codes,
                 )?;
                 let entry = Entry {
                     display: finding.matched_text.clone(),
@@ -376,7 +477,6 @@ impl Workspace {
                     .counters
                     .insert(finding.entity_type.clone(), counter);
                 candidate.entries.insert(identity.clone(), entry);
-                changed = true;
             }
             let entry = candidate
                 .entries
@@ -412,28 +512,9 @@ impl Workspace {
                 .utf16_range(range)
                 .map_err(|_| error(ErrorCode::InvalidFinding))?;
         }
-        if changed {
-            candidate.head = Head {
-                revision: state
-                    .head
-                    .revision
-                    .checked_add(1)
-                    .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
-                commit_id: operation_id,
-            };
-        }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
-        Ok(PreparedChange {
-            pending: Some(Pending {
-                lifetime: Arc::clone(&self.lifetime),
-                parent: state.head,
-                candidate,
-                bundle,
-                preview: Preview {
-                    text: output,
-                    transformations,
-                },
-            }),
+        Ok(Preview {
+            text: output,
+            transformations,
         })
     }
 
