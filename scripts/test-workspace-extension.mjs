@@ -11,6 +11,7 @@ const { chromium } = createRequire(path.join(harness, "package.json"))("playwrig
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
+const csvFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/csv.json"), "utf8"));
 execFileSync("npm", ["run", "build", "--prefix", harness], { stdio: "inherit" });
 const temporary = await mkdtemp(path.join(os.tmpdir(), "datafog-workspace-"));
 let context;
@@ -65,6 +66,19 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
   await page.locator("#mark").click(); await status(page, "selection_added");
   await page.locator("#prepare").click(); await status(page, "preview_ready");
   return page.locator("#preview").textContent();
+}
+
+async function markCsvCell(page, input, row, column, value, entityType = "PERSON") {
+  await page.getByRole("button", {name: `Review input ${input}`, exact: true}).click();
+  await page.locator("#csv-row").fill(String(row)); await page.locator("#csv-column").fill(String(column));
+  await page.locator("#load-cell").click(); await status(page, "cell_ready");
+  await page.locator("#entity-type").fill(entityType);
+  await page.locator("#csv-cell").evaluate((element, value) => {
+    const start = element.value.indexOf(value);
+    if (start < 0) throw new Error("synthetic cell selection missing");
+    element.setSelectionRange(start, start + value.length);
+  }, value);
+  await page.locator("#mark-cell").click(); await status(page, "selection_added");
 }
 
 try {
@@ -126,6 +140,114 @@ try {
   await page.locator("#cancel").click(); await status(page, "cancelled");
   check(await page.locator("#inputs").textContent() === "", "B3 cancelled batch drops temporary inputs");
   console.log("PASS B1–B3 atomic batch, explicit removal/reapproval and temporary input cleanup");
+
+  const csvRows = await page.evaluate(async source => {
+    const {client} = await import("./rpc.js");
+    const worker = client(new Worker(new URL("./csv-worker.js", location.href), {type: "module"}));
+    try { return await worker.call("parse", [new TextEncoder().encode(source)]); }
+    finally { worker.stop(); }
+  }, csvFixture.january);
+  check(JSON.stringify(csvRows) === JSON.stringify(csvFixture.januaryRows), "C1 CSV preserves every decoded string and record");
+  const csvRejections = await page.evaluate(async () => {
+    const {client} = await import("./rpc.js");
+    const worker = client(new Worker(new URL("./csv-worker.js", location.href), {type: "module"}));
+    const bytes = text => new TextEncoder().encode(text);
+    try {
+      for (const [input, code] of [
+        [bytes(""), "invalid_csv"],
+        [bytes('a,b\n"private"trailing,2'), "invalid_csv"],
+        [bytes('private"quote,2'), "invalid_csv"],
+        [new Uint8Array([0xc3, 0x28]), "invalid_encoding"],
+        [bytes("p\0r\0i\0v\0a\0t\0e\0"), "invalid_encoding"],
+        [new Uint8Array(1024 * 1024 + 1), "resource_limit"],
+        [bytes(",".repeat(100000)), "resource_limit"],
+      ]) {
+        try { await worker.call("parse", [input]); return false; }
+        catch (error) { if (error.code !== code || error.message !== code) return false; }
+      }
+      return true;
+    } finally { worker.stop(); }
+  });
+  check(csvRejections, "C1 malformed CSV, encoding and resource errors are content-free and reject the whole file");
+
+  page = await fresh("csv");
+  await page.locator("#files").setInputFiles([
+    {name: "private-owner-january.csv", mimeType: "text/csv", buffer: Buffer.from(csvFixture.january)},
+    {name: "february.csv", mimeType: "text/csv", buffer: Buffer.from(csvFixture.february)},
+  ]);
+  await status(page, "files_added");
+  await markCsvCell(page, 1, 1, 1, csvFixture.name);
+  await markCsvCell(page, 1, 3, 2, csvFixture.name);
+  await markCsvCell(page, 1, 4, 2, csvFixture.name);
+  await markCsvCell(page, 2, 2, 2, csvFixture.name);
+  await markCsvCell(page, 1, 3, 4, "00001234", "ACCOUNT_NUMBER");
+  await markCsvCell(page, 1, 4, 5, "line", "NOTE");
+  await page.locator("#prepare").click(); await status(page, "preview_ready");
+  const csvPreview = await page.locator("#preview").textContent();
+  check(!csvPreview.includes("private-owner-january.csv") && (await page.locator("#inputs").textContent()).includes("private-owner-january.csv"), "C2 filenames identify local inputs without entering outgoing tables");
+  const tables = csvPreview.split("\n\nInput 2\n");
+  const januaryTable = JSON.parse(tables[0].replace(/^Input 1\n/, ""));
+  const februaryTable = JSON.parse(tables[1]);
+  const csvMarker = januaryTable.rows[2][1];
+  check(januaryTable.rows[0][0] === `Statement for ${csvMarker}` && januaryTable.rows[3][1] === csvMarker && februaryTable.rows[1][1] === csvMarker, "C2 decoded identities share aliases across metadata, cells and files");
+  check(januaryTable.rows[2][2] === "-0010.00" && januaryTable.rows[3][2] === "12.3400" && januaryTable.rows[3][3] === "00001234", "C2 unselected financial strings retain exact spelling");
+  check(/^\[\[ACCOUNT_NUMBER_[0-9A-HJKMNP-TV-Z]{6}\]\]$/.test(januaryTable.rows[2][3]) && januaryTable.rows[1][3] === januaryTable.rows[1][4], "C2 numeric identifiers can be selected and duplicate headers survive");
+  check(JSON.stringify(januaryTable.rows[4]) === '[""]' && JSON.stringify(januaryTable.rows[5]) === JSON.stringify(csvFixture.januaryRows[5]) && /^memo\r\n\[\[NOTE_[0-9A-HJKMNP-TV-Z]{6}\]\]/.test(januaryTable.rows[3][4]), "C2 blank/ragged records, Unicode and exact multiline selection offsets survive");
+  await noRelease(page, "C2 file preview does not release content");
+  const discardedNoteMarker = januaryTable.rows[3][4].slice("memo\r\n".length);
+  await page.locator("#clear-cell").click(); await status(page, "selections_cleared");
+  check(await page.locator("#approve").isDisabled() && await page.locator("#preview").textContent() === "", "C3 cell corrections invalidate the prior approval");
+  await page.locator("#files").setInputFiles({name: "bad.csv", mimeType: "text/csv", buffer: Buffer.from('private-source,"unterminated')});
+  await status(page, "files_added");
+  check(await page.locator("#approve").isDisabled(), "C3 file selection invalidates the prior approval");
+  await page.locator("#prepare").click(); await status(page, "invalid_csv");
+  check((await page.locator("#batch-error").textContent()).includes("Input 3"), "C3 rejected file is identified");
+  check((await control(page, "state")).head.revision === "0", "C3 rejected file blocks saving the complete selection");
+  await noRelease(page, "C3 rejected file releases no partial output");
+  await page.getByRole("button", {name: "Remove input 3", exact: true}).click(); await status(page, "input_removed");
+  await page.locator("#prepare").click(); await status(page, "preview_ready");
+  const approvedCsv = await page.locator("#preview").textContent();
+  await page.locator("#approve").click(); await status(page, "saved");
+  check(await page.locator("#sink").textContent() === approvedCsv, "C3 only the regenerated approved tables are released");
+  check(await page.locator("#files").inputValue() === "" && await page.locator("#csv-cell").inputValue() === "" && await page.locator("#inputs").textContent() === "", "C4 completion clears files, decoded cells and selections");
+  const savedCsvMarker = approvedCsv.match(/\[\[PERSON_[0-9A-HJKMNP-TV-Z]{6}\]\]/)[0];
+  await context.close(); context = undefined;
+  page = await launch("csv"); await unlock(page);
+  await restored(page, savedCsvMarker, "restored");
+  check(await page.locator("#restored").textContent() === csvFixture.name, "C2 CSV identity restores to decoded original after browser restart");
+  await restored(page, discardedNoteMarker, "invalid_marker");
+  await page.locator("#files").setInputFiles({name: "statement.xlsx", mimeType: "application/octet-stream", buffer: Buffer.from("unsupported-synthetic-file")});
+  await status(page, "files_added");
+  await page.locator("#prepare").click(); await status(page, "unsupported_format");
+  await noRelease(page, "C3 unsupported formats block approval");
+  await page.getByRole("button", {name: "Remove input 1", exact: true}).click(); await status(page, "input_removed");
+  await page.locator("#files").setInputFiles({name: "collision.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\nsafe,[[PERSON_ZZZZZZ]]")});
+  await status(page, "files_added");
+  await page.locator("#prepare").click(); await status(page, "invalid_marker");
+  check((await page.locator("#batch-error").textContent()).includes("Input 1, record 2, column 2"), "C3 Core errors map to safe file and cell coordinates");
+  await page.locator("#cancel").click(); await status(page, "cancelled");
+  await page.evaluate(source => {
+    const transfer = new DataTransfer(); transfer.items.add(new File([source], "cancel.csv", {type: "text/csv"}));
+    const input = document.querySelector("#files"); input.files = transfer.files; input.dispatchEvent(new Event("change"));
+    document.querySelector("#cancel").click();
+  }, csvFixture.january);
+  await status(page, "cancelled");
+  await page.waitForFunction(() => !document.querySelector("#prepare").disabled);
+  check(await page.locator("#inputs").textContent() === "" && await page.locator("#files").inputValue() === "" && await page.locator("#csv-cell").inputValue() === "" && await page.locator("#file-progress").textContent() === "", "C4 cancelled intake ignores late results and clears temporary file data");
+  const abortedRead = await page.evaluate(async source => {
+    const {importCsvFiles} = await import("./csv.js");
+    const file = new File([source], "cancel.csv", {type: "text/csv"});
+    const controller = new AbortController();
+    try {
+      await importCsvFiles([file], [], controller.signal, () => queueMicrotask(() => controller.abort()));
+      return false;
+    } catch (error) {
+      const actual = new Uint8Array(await file.arrayBuffer()), expected = new TextEncoder().encode(source);
+      return error.code === "cancelled" && actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
+    }
+  }, csvFixture.january);
+  check(abortedRead, "C4 cancellation aborts a real FileReader and leaves the source File unchanged");
+  console.log("PASS C1–C4 local CSV intake, exact string tables, file rejection/reapproval and cleanup");
 
   page = await fresh("approval");
   await prepare(page);
@@ -344,7 +466,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "C1", "C2", "C3", "C4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));
