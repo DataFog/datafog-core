@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- `restoreReport` in Rust and WASM restores model output all-or-nothing and lists
+  every unknown, damaged or unbracketed marker with byte and UTF-16 ranges, so a
+  host can show what blocked restoration. Restoration also rejects a committed
+  marker whose brackets were dropped (`PERSON_7KQ4ZM`) instead of leaving the code
+  in the restored text.
 - Protected follow-up text in Rust and WASM. Committed workspace pseudonyms stay
   unchanged; unknown or uncommitted markers and overlapping findings block the
   operation. The synthetic browser workflow requires local preview and approval.
