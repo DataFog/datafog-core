@@ -6,9 +6,29 @@
     <h1>DataFog workspace proof</h1>
     <p>This is a local development harness. Use synthetic data only. It does not connect to ChatGPT or Google Sheets.</p>
     <p>Native ChatGPT input and uploads bypass DataFog. This harness protects only its own local input.</p>
-    <label>Password <input id="password" type="password" autocomplete="off" maxlength="1024"></label>
+    <label>Unlock with <select id="unlock-method"><option value="password">Password</option><option value="recovery">Recovery code</option></select></label>
+    <label>Vault credential (use a password when creating) <input id="password" type="password" autocomplete="off" maxlength="1024"></label>
     <button id="create">Create synthetic vault</button><button id="unlock">Unlock</button><button id="lock">Lock now</button>
+    <section id="recovery-notice" hidden>
+      <h2>Save your offline recovery code</h2>
+      <p>This code can open your mappings and backups. Store it separately and privately. It is shown only now. Losing both the password and this code makes recovery impossible.</p>
+      <textarea id="recovery-created" rows="2" readonly spellcheck="false" autocomplete="off" aria-label="New offline recovery code"></textarea>
+      <button id="recovery-dismiss">I saved the code; hide it</button>
+    </section>
     <p>Status: <output id="status" aria-live="polite">loading</output></p>
+    <section>
+      <h2>Encrypted workspace backup</h2>
+      <p>Export saves committed mappings and privacy settings, without statement files or drafts. Either the password or recovery code current at export can open it. Keep backups private; later credential changes do not update older files.</p>
+      <button id="backup-export">Export encrypted backup</button>
+      <p>Restore into an empty profile. Existing workspaces are never overwritten or merged.</p>
+      <label>Backup file <input id="backup-file" type="file" accept=".dfbackup,application/octet-stream"></label>
+      <label>Open backup with <select id="backup-method"><option value="password">Password</option><option value="recovery">Recovery code</option></select></label>
+      <label>Export-time backup credential <input id="backup-credential" type="password" autocomplete="off" maxlength="1024"></label>
+      <button id="backup-review">Review backup locally</button>
+      <pre id="backup-preview"></pre>
+      <p>The export time describes this saved copy and does not prove freshness. Later aliases and settings may be missing. Restore does not send anything and leaves the vault locked.</p>
+      <button id="backup-approve" disabled>Approve restore into this empty profile</button>
+    </section>
     <label>Synthetic text or follow-up question <textarea id="source" rows="4" spellcheck="false" autocomplete="off"></textarea></label>
     <p>For follow-ups, keep full workspace pseudonyms intact and mark only new sensitive text outside them. Review and approve every question before its local handoff.</p>
     <label>Entity type <input id="entity-type" value="PERSON" maxlength="64"></label>

@@ -128,11 +128,24 @@ export async function verifyWorkspace(api, counters) {
     const unchanged = high.prepare(fixture.marker, [], id(6));
     check(unchanged.preview().text === fixture.marker && equal(unchanged.exportCandidateBundle(), bytes), "marker-only input does not advance even a maximum uint64 counter");
     unchanged.discard();
+    if (name === "maximum") throws(() => high.prepareRecovery(id(7)), "resource_limit");
+    else {
+      const recovery = high.prepareRecovery(id(7));
+      const {expectedHead, candidateHead} = recovery.heads();
+      check(recovery.previews().length === 0 && candidateHead.revision === String(BigInt(fixture.revision) + 1n), "recovery has a fresh lossless head and no handoff preview");
+      check(equal(high.exportBundle(), bytes), "preparing recovery leaves source unchanged");
+      const recovered = api.Workspace.openBundle(recovery.exportCandidateBundle());
+      check(recovered.restore(fixture.marker) === "Jane", "recovery preserves complete issued markers");
+      high.activateSaved(recovery, expectedHead, candidateHead);
+      throws(() => recovery.exportCandidateBundle(), "inactive_plan");
+      throws(() => high.prepareRecovery(id(7)), "invalid_operation_id");
+      recovered.close();
+    }
     const fresh = { entityType: "PERSON", matchedText: "John", range: { unit: "utf8_bytes", start: 0, end: 4 } };
     if (name === "maximum") throws(() => high.prepare("John", [fresh], id(6)), "resource_limit");
     else {
       const p = high.prepare("John", [fresh], id(6));
-      check(p.heads().candidateHead.revision === String(BigInt(fixture.revision) + 1n), "lossless uint64 increment");
+      check(p.heads().candidateHead.revision === String(BigInt(fixture.revision) + 2n), "lossless uint64 increment after recovery");
       check(p.preview().text.endsWith(`:PERSON:${BigInt(fixture.counter) + 1n}]]`), "lossless uint64 counter");
       p.discard();
     }

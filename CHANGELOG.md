@@ -8,6 +8,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Encrypted workspace backup and restore in the synthetic browser workflow, using
+  the vault password or an offline recovery code. Imports require local approval,
+  reject occupied destinations, and preserve aliases under fresh workspace keys
+  and a new Rust/WASM recovery commit head.
 - Protected follow-up text in Rust and WASM. Committed workspace pseudonyms stay
   unchanged; invalid or uncommitted markers and overlapping findings block the
   operation. The synthetic browser workflow requires local preview and approval.

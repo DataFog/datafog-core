@@ -1,5 +1,6 @@
 import { client, safeCode, HostError } from "./rpc.js";
 import { importFiles, flattenDocuments, formatDocuments, cellSelection } from "./documents.js";
+import {MAX_BACKUP_BYTES} from "./backup.js";
 
 const broker = client(new Worker(new URL("./broker.js", import.meta.url), { type: "module" }));
 const element = id => document.getElementById(id);
@@ -9,6 +10,7 @@ let intakeController;
 let reviewDocument;
 let reviewField;
 let plan;
+let importPlan;
 let generation = 0;
 let restorationGeneration = 0;
 let operations = 0;
@@ -45,7 +47,13 @@ function renderInputs() {
     item.append(remove); element("inputs").append(item);
   });
 }
-function clearViews() { clearDraft(); element("sink").textContent = ""; element("restore-input").value = ""; element("restored").textContent = ""; element("password").value = ""; }
+function clearImportPreview() { importPlan = undefined; element("backup-preview").textContent = ""; element("backup-approve").disabled = true; }
+function hideRecovery() { element("recovery-created").value = ""; element("recovery-notice").hidden = true; }
+function clearViews() {
+  clearDraft(); clearImportPreview(); hideRecovery();
+  element("sink").textContent = ""; element("restore-input").value = ""; element("restored").textContent = "";
+  for (const id of ["password", "backup-credential", "backup-file"]) element(id).value = "";
+}
 async function perform(task) {
   const g = generation;
   operations++; renderBusy();
@@ -53,18 +61,20 @@ async function perform(task) {
     if (g === generation) {
       status(safeCode(error));
       const location = Number.isSafeInteger(error.pageIndex) ? `, page ${error.pageIndex + 1}` : Number.isSafeInteger(error.sheetIndex) ? `, sheet ${error.sheetIndex + 1}${error.cellAddress ? `, cell ${error.cellAddress}` : ""}, ${error.component}` : Number.isSafeInteger(error.rowIndex) ? `, record ${error.rowIndex + 1}, column ${error.columnIndex + 1}` : "";
-      const guidance = error.code === "invalid_marker" ? " Use the exact full pseudonym from this unlocked workspace. Unknown, damaged, foreign and unsaved markers are blocked." : error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
+      const guidance = error.code === "invalid_marker" ? " Use the exact full pseudonym from this unlocked workspace. Unknown, damaged, foreign and unsaved markers are blocked." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : error.code === "formulas_not_supported" ? " Supply a values-only XLSX copy or CSV export." : ["unsupported_xlsx", "protected_xlsx", "invalid_xlsx"].includes(error.code) ? " Supply an unencrypted values-only XLSX copy or CSV export." : ["scanned_pdf", "unsupported_pdf", "protected_pdf", "invalid_pdf"].includes(error.code) ? " Supply an unencrypted text-only PDF without images or unsupported features, or a CSV export." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1}${location} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
   finally { operations--; renderBusy(); }
 }
 function renderBusy() {
-  for (const id of ["password", "create", "unlock", "mark", "prepare", "restore", "add-input", "load-cell", "mark-cell", "clear-cell"]) element(id).disabled = operations > 0;
+  if (importPlan && importPlan.generation !== generation) clearImportPreview();
+  for (const id of ["password", "unlock-method", "create", "unlock", "mark", "prepare", "restore", "add-input", "load-cell", "mark-cell", "clear-cell", "backup-export", "backup-file", "backup-method", "backup-credential", "backup-review"]) element(id).disabled = operations > 0;
   element("approve").disabled = operations > 0 || plan === undefined;
+  element("backup-approve").disabled = operations > 0 || importPlan === undefined;
 }
 function invalidateDraft() {
-  generation++; stopIntake(); findings = []; clearPreview(); element("selection-count").textContent = "0 selections"; element("batch-error").textContent = "";
+  generation++; stopIntake(); findings = []; clearPreview(); clearImportPreview(); element("selection-count").textContent = "0 selections"; element("batch-error").textContent = "";
   void broker.call("cancel").catch(error => status(safeCode(error)));
 }
 element("source").addEventListener("input", invalidateDraft);
@@ -73,13 +83,56 @@ element("restore-input").addEventListener("input", () => { restorationGeneration
 for (const name of ["create", "unlock"]) {
   element(name).addEventListener("click", () => {
     const password = element("password").value;
+    const method = element("unlock-method").value;
     generation++; clearViews();
     void perform(async g => {
-    const result = await broker.call(name, [password]);
-    if (g === generation) status(result.status);
+    const result = await broker.call(name, [password, method]);
+    if (g === generation) {
+      if (result.recoveryCode) { element("recovery-created").value = result.recoveryCode; element("recovery-notice").hidden = false; }
+      status(result.status);
+    }
     });
   });
 }
+element("recovery-dismiss").addEventListener("click", hideRecovery);
+element("backup-export").addEventListener("click", () => perform(async g => {
+  const bytes = await broker.call("exportBackup");
+  try {
+    if (g !== generation) return;
+    const url = URL.createObjectURL(new Blob([bytes], {type: "application/octet-stream"}));
+    try { const link = document.createElement("a"); link.href = url; link.download = "datafog-workspace.dfbackup"; link.click(); }
+    finally { setTimeout(() => URL.revokeObjectURL(url), 0); }
+    status("backup_exported");
+  } finally { bytes.fill(0); }
+}));
+for (const [id, event] of [["backup-file", "change"], ["backup-method", "change"], ["backup-credential", "input"]]) {
+  element(id).addEventListener(event, () => {
+    const staged = importPlan !== undefined; clearImportPreview();
+    if (staged) { generation++; void broker.call("cancel").catch(error => status(safeCode(error))); }
+  });
+}
+element("backup-review").addEventListener("click", () => {
+  const file = element("backup-file").files[0], credential = element("backup-credential").value, method = element("backup-method").value;
+  element("backup-credential").value = ""; element("backup-file").value = ""; clearImportPreview();
+  void perform(async g => {
+    if (!file) throw new HostError("invalid_backup");
+    if (file.size > MAX_BACKUP_BYTES) throw new HostError("resource_limit");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      if (g !== generation) return;
+      const result = await broker.call("prepareImport", [bytes, credential, method]);
+      if (g !== generation) return;
+      importPlan = {...result, generation: g};
+      element("backup-preview").textContent = `Saved workspace ${result.workspaceTag}\nExported ${result.exportedAt}\nSaved revision ${result.revision}\nRestore saved mappings/settings into this empty profile.`;
+      status("backup_preview_ready");
+    } finally { bytes.fill(0); }
+  });
+});
+element("backup-approve").addEventListener("click", () => perform(async g => {
+  const approved = importPlan; clearImportPreview();
+  const result = await broker.call("approveImport", [approved.id]);
+  if (g === generation) { clearViews(); status(result.status); }
+}));
 element("mark").addEventListener("click", () => perform(async g => {
   const source = element("source");
   const finding = await broker.call("select", [source.value, source.selectionStart, source.selectionEnd, element("entity-type").value]);
