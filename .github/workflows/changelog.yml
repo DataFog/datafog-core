@@ -1,0 +1,32 @@
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changelog:
+    name: Changelog policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test changelog policy
+        run: python scripts/test-changelog.py
+      - name: Check PR entry or explicit exemption
+        env:
+          CHANGELOG_BASE: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/check-changelog.py --event "$GITHUB_EVENT_PATH"
