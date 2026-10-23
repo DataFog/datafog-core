@@ -25,3 +25,12 @@
 
 - Keep each pull request focused on one behavior or maintenance goal.
 - Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-features` before merging Rust changes.
+
+## Pull request writing
+
+- Lead with what changes and why, using concrete behavior and direct language.
+- Keep descriptions proportional to the change; a few short paragraphs usually suffice. Use headings and lists only when they help the reviewer.
+- Explain design decisions needed to assess the change. Keep file inventories, implementation walkthroughs, and future roadmaps in linked documentation.
+- Include relevant test results or measurements. Let CI carry routine checklists.
+- State material limitations once and directly. Avoid hedging, repeated caveats, and speculative warnings.
+- Describe the final change for a reviewer without conversation context.
