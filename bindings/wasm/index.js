@@ -302,7 +302,7 @@ export class Workspace {
   prepareBatch(inputs, operationId) {
     workspaceBytes(operationId, 16, true);
     if (!Array.isArray(inputs) || inputs.length === 0) throw workspaceFailure("invalid_batch");
-    if (inputs.length > 32) throw workspaceFailure("resource_limit");
+    if (inputs.length > 100000) throw workspaceFailure("resource_limit");
     if (Reflect.ownKeys(inputs).length !== inputs.length + 1) throw workspaceFailure("invalid_batch");
     const parts = [];
     let sourceBytes = 0, findingCount = 0, transportBytes = 2;
