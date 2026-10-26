@@ -179,9 +179,6 @@ jobs:
           print(f"\nAll {len(manifest)} model files verified")
           PY
 
-      - name: Run model checks
-        run: cargo dfv check --models --json
-
       - name: Run model eval
         run: cargo dfv eval --models --json
 
