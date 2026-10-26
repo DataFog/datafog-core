@@ -8,13 +8,37 @@ Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
 cargo dfv doctor              # Check environment readiness
 cargo dfv build               # Build all bindings
 cargo dfv check               # Run all rule-based detector tests
-cargo dfv check --json        # Machine-readable output
-cargo dfv parity              # Cross-SDK span/offset comparison
+cargo dfv check --models      # Run model tier checks (GLiNER2/DataFog)
+cargo dfv eval                # Per-entity precision/recall/F1 for rules
+cargo dfv eval --model <name> # Per-entity metrics for a specific model engine (e.g., datafog, gliner2)
+cargo dfv bench               # Latency benchmark against baseline
+cargo dfv smoke               # Install and test packages as a user would
+cargo dfv parity              # Cross-SDK fixture offset verification
+cargo dfv parity --live       # Run scan() through each SDK and diff outputs
 ```
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
 
+**Thresholds:**
+- Rule-based: any precision/recall drop fails.
+- Model-based: depends on engine tier (see below).
+- Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
+- Parity: zero tolerance unless a PR intentionally updates a fixture.
+- Live parity: compares actual scan() output across Python and Node bindings. WASM parity is verified via smoke test in headless Chromium.
+
+**Model engine tiers:**
+- **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
+- **community** (e.g. gliner2): F1 regression is warn-only, never fails PRs. Requires named owner in CODEOWNERS.
+
+Contract checks block for all tiers: pinned revision verified by doctor (sha256 verified from each bundle's own manifest against its files), engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
+
+**TODO:** Provisioning from ENGINE_REGISTRY (issue #87 - GLiNER2 runtime step).
+
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
+
+**Scripts wrapped by dfv:**
+- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py
+- `smoke`: bindings/python/tests/test_installed.py, scripts/test-node-package.mjs, scripts/test-wasm-package.mjs
 
 ## Correctness
 

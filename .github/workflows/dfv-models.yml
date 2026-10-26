@@ -1,0 +1,199 @@
+name: Model verification
+
+on:
+  pull_request:
+    paths:
+      - 'crates/core/src/models/**'
+      - 'crates/xtask/**'
+      - 'scripts/provision-*'
+      - 'scripts/model-*'
+      - 'scripts/*model*'
+      - 'baselines/eval-models-*.json'
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dfv-models:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATAFOG_PLATFORM: linux-x86_64
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install provisioning tools
+        run: python -m pip install 'huggingface_hub==1.27.0' 'psutil==7.2.2' maturin
+
+      # GLiNER2 model caching and provisioning
+      - name: Restore cached GLiNER2 assets
+        uses: actions/cache/restore@v4
+        id: gliner2-cache
+        with:
+          path: ${{ runner.temp }}/gliner2-download
+          key: gliner2-model-${{ hashFiles('scripts/provision-gliner2-model.py', 'crates/core/src/models/gliner2-lock.json') }}
+
+      - name: Download GLiNER2 files (if not cached)
+        if: steps.gliner2-cache.outputs.cache-hit != 'true'
+        run: |
+          hf download fastino/gliner2-privacy-filter-PII-multi \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
+            --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
+
+      - name: Cache GLiNER2 assets
+        uses: actions/cache/save@v4
+        if: steps.gliner2-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/gliner2-download
+          key: ${{ steps.gliner2-cache.outputs.cache-primary-key }}
+
+      - name: Provision GLiNER2 model
+        run: |
+          python scripts/provision-gliner2-model.py \
+            --source "$RUNNER_TEMP/gliner2-download" \
+            --destination "models/gliner2"
+
+      # DataFog model caching and provisioning
+      - name: Restore cached DataFog assets
+        uses: actions/cache/restore@v4
+        id: datafog-cache
+        with:
+          path: ${{ runner.temp }}/datafog-download
+          key: datafog-model-${{ env.DATAFOG_PLATFORM }}-${{ hashFiles('scripts/provision-datafog-model.py') }}
+
+      - name: Download DataFog archive (if not cached)
+        if: steps.datafog-cache.outputs.cache-hit != 'true'
+        run: |
+          hf download DataFog/pii-en-65m \
+            "runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
+            --revision 7cadd41e21f59b2a149e31378d073cf6ca057531 --local-dir "$RUNNER_TEMP/datafog-download"
+
+      - name: Cache DataFog assets
+        uses: actions/cache/save@v4
+        if: steps.datafog-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/datafog-download
+          key: ${{ steps.datafog-cache.outputs.cache-primary-key }}
+
+      - name: Provision DataFog model
+        run: |
+          python scripts/provision-datafog-model.py \
+            --archive "$RUNNER_TEMP/datafog-download/runtimes/v0.2.0/datafog-pii-0.1.0-runtime-0.2.0-$DATAFOG_PLATFORM.tar.gz" \
+            --destination "models/datafog"
+
+      # Create model manifest for doctor verification
+      - name: Create models manifest
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          models_dir = Path("models")
+          manifest = {}
+
+          # GLiNER2 manifest
+          gliner2_manifest_path = models_dir / "gliner2" / "bundle-manifest.json"
+          if gliner2_manifest_path.exists():
+              gliner2_manifest = json.loads(gliner2_manifest_path.read_text())
+              for name, info in gliner2_manifest.get("files", {}).items():
+                  manifest[f"gliner2/{name}"] = {
+                      "path": f"gliner2/{name}",
+                      "sha256": info["sha256"],
+                      "bytes": info["bytes"]
+                  }
+
+          # DataFog manifest
+          datafog_manifest_path = models_dir / "datafog" / "bundle-manifest.json"
+          if datafog_manifest_path.exists():
+              datafog_manifest = json.loads(datafog_manifest_path.read_text())
+              for name, info in datafog_manifest.get("files", {}).items():
+                  manifest[f"datafog/{name}"] = {
+                      "path": f"datafog/{name}",
+                      "sha256": info["sha256"],
+                      "bytes": info["bytes"]
+                  }
+
+          (models_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+          print(f"Created manifest with {len(manifest)} entries")
+          PY
+
+      - run: cargo dfv build --sdk python
+
+      - name: Verify model weight hashes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          
+          models_dir = Path("models")
+          manifest_path = models_dir / "manifest.json"
+          
+          if not manifest_path.exists():
+              print("ERROR: models/manifest.json not found")
+              exit(1)
+          
+          manifest = json.loads(manifest_path.read_text())
+          all_ok = True
+          
+          for name, info in manifest.items():
+              file_path = models_dir / info["path"]
+              if not file_path.exists():
+                  print(f"FAIL: {name} - file missing")
+                  all_ok = False
+                  continue
+          
+              data = file_path.read_bytes()
+              actual_sha = hashlib.sha256(data).hexdigest()
+              expected_sha = info["sha256"]
+          
+              if actual_sha != expected_sha:
+                  print(f"FAIL: {name} - sha256 mismatch")
+                  all_ok = False
+              else:
+                  print(f"OK: {name}")
+          
+          if not all_ok:
+              exit(1)
+          print(f"\nAll {len(manifest)} model files verified")
+          PY
+
+      - name: Run model eval
+        run: cargo dfv eval --models --json
+
+      - name: Build Node binding for parity
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: cargo dfv build --sdk node
+
+      - name: Full live parity check (nightly/manual only)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: cargo dfv parity --live --full --json
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfv-model-reports
+          path: target/dfv/runs/
+          retention-days: 30

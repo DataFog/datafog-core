@@ -65,6 +65,12 @@ jobs:
         run: cargo dfv check --json
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv parity --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv eval --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv smoke --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv parity --live --json
       - if: always() && steps.scope.outputs.code == 'true'
         uses: actions/upload-artifact@v4
         with:
