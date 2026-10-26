@@ -183,6 +183,14 @@ jobs:
       - name: Run model eval
         run: cargo dfv eval --models --json
 
+      - name: Build Node binding for parity
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: cargo dfv build --sdk node
+
+      - name: Full live parity check (nightly/manual only)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: cargo dfv parity --live --full --json
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:

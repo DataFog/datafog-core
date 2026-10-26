@@ -174,7 +174,7 @@ pub fn check_maturin() -> DoctorCheck {
 }
 
 pub fn check_node() -> DoctorCheck {
-    let expected_major = 22;
+    let expected_major = 24;
     let output = Command::new("node").arg("--version").output();
 
     match output {
@@ -204,7 +204,7 @@ pub fn check_node() -> DoctorCheck {
             "node",
             None,
             &format!("Node.js {expected_major}+"),
-            "curl -fsSL https://fnm.vercel.app/install | bash && fnm install 22",
+            "curl -fsSL https://fnm.vercel.app/install | bash && fnm install 24",
             true,
         ),
     }

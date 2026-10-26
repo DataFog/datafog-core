@@ -89,6 +89,8 @@ pub enum AccuracyStatus {
     Fail,
     /// Missing or unparseable baseline (fails first-party, warns community)
     NoBaseline,
+    /// Provisional baseline - warns instead of fails even for first-party
+    Provisional,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,9 +98,12 @@ pub struct EntityMetrics {
     pub true_positives: usize,
     pub false_positives: usize,
     pub false_negatives: usize,
-    pub precision: f64,
-    pub recall: f64,
-    pub f1: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precision: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recall: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub f1: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,9 +111,12 @@ pub struct EvalSummary {
     pub total_fixtures: usize,
     pub total_entities_expected: usize,
     pub total_entities_found: usize,
-    pub macro_precision: f64,
-    pub macro_recall: f64,
-    pub macro_f1: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub macro_precision: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub macro_recall: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub macro_f1: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +172,15 @@ pub struct ModelBaseline {
     pub excluded_entity_types: Vec<String>,
     pub metrics: HashMap<String, EntityMetrics>,
     pub summary: EvalSummary,
+    #[serde(default)]
+    pub provisional: bool,
+}
+
+fn format_opt_metric(v: Option<f64>) -> String {
+    match v {
+        Some(x) => format!("{x:.4}"),
+        None => "n/a".to_string(),
+    }
 }
 
 /// Print per-entity metrics table to stdout
@@ -173,11 +190,11 @@ fn print_metrics_table(metrics: &HashMap<String, EntityMetrics>) {
     sorted_entities.sort_by_key(|(k, _)| k.as_str());
     for (entity_type, m) in sorted_entities {
         println!(
-            "  {}: P={:.4} R={:.4} F1={:.4} (TP={} FP={} FN={})",
+            "  {}: P={} R={} F1={} (TP={} FP={} FN={})",
             entity_type,
-            m.precision,
-            m.recall,
-            m.f1,
+            format_opt_metric(m.precision),
+            format_opt_metric(m.recall),
+            format_opt_metric(m.f1),
             m.true_positives,
             m.false_positives,
             m.false_negatives
@@ -227,9 +244,15 @@ fn print_eval_summary(summary: &EvalSummary, scored_only: bool) {
         println!("  Found entities: {}", summary.total_entities_found);
     }
     println!();
-    println!("  Macro Precision: {:.4}", summary.macro_precision);
-    println!("  Macro Recall:    {:.4}", summary.macro_recall);
-    println!("  Macro F1:        {:.4}", summary.macro_f1);
+    println!(
+        "  Macro Precision: {}",
+        format_opt_metric(summary.macro_precision)
+    );
+    println!(
+        "  Macro Recall:    {}",
+        format_opt_metric(summary.macro_recall)
+    );
+    println!("  Macro F1:        {}", format_opt_metric(summary.macro_f1));
 }
 
 fn load_fixtures(fixture_dir: &Path) -> Vec<FixtureRecord> {
@@ -411,23 +434,22 @@ fn compute_model_metrics(
     let mut metrics = HashMap::new();
     let mut total_precision = 0.0;
     let mut total_recall = 0.0;
-    let mut entity_count = 0;
+    let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
         let precision = if *tp + *fp > 0 {
-            *tp as f64 / (*tp + *fp) as f64
+            Some(*tp as f64 / (*tp + *fp) as f64)
         } else {
-            1.0
+            None // undefined when TP+FP=0
         };
         let recall = if *tp + *fn_ > 0 {
-            *tp as f64 / (*tp + *fn_) as f64
+            Some(*tp as f64 / (*tp + *fn_) as f64)
         } else {
-            1.0
+            None // undefined when TP+FN=0
         };
-        let f1 = if precision + recall > 0.0 {
-            2.0 * precision * recall / (precision + recall)
-        } else {
-            0.0
+        let f1 = match (precision, recall) {
+            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+            _ => None,
         };
 
         metrics.insert(
@@ -442,25 +464,26 @@ fn compute_model_metrics(
             },
         );
 
-        total_precision += precision;
-        total_recall += recall;
-        entity_count += 1;
+        if let (Some(p), Some(r)) = (precision, recall) {
+            total_precision += p;
+            total_recall += r;
+            defined_count += 1;
+        }
     }
 
-    let macro_precision = if entity_count > 0 {
-        total_precision / entity_count as f64
+    let macro_precision = if defined_count > 0 {
+        Some(total_precision / defined_count as f64)
     } else {
-        1.0
+        None
     };
-    let macro_recall = if entity_count > 0 {
-        total_recall / entity_count as f64
+    let macro_recall = if defined_count > 0 {
+        Some(total_recall / defined_count as f64)
     } else {
-        1.0
+        None
     };
-    let macro_f1 = if macro_precision + macro_recall > 0.0 {
-        2.0 * macro_precision * macro_recall / (macro_precision + macro_recall)
-    } else {
-        0.0
+    let macro_f1 = match (macro_precision, macro_recall) {
+        (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+        _ => None,
     };
 
     let summary = EvalSummary {
@@ -549,23 +572,22 @@ fn compute_rule_metrics(
     let mut metrics = HashMap::new();
     let mut total_precision = 0.0;
     let mut total_recall = 0.0;
-    let mut entity_count = 0;
+    let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
         let precision = if *tp + *fp > 0 {
-            *tp as f64 / (*tp + *fp) as f64
+            Some(*tp as f64 / (*tp + *fp) as f64)
         } else {
-            1.0
+            None // undefined when TP+FP=0
         };
         let recall = if *tp + *fn_ > 0 {
-            *tp as f64 / (*tp + *fn_) as f64
+            Some(*tp as f64 / (*tp + *fn_) as f64)
         } else {
-            1.0
+            None // undefined when TP+FN=0
         };
-        let f1 = if precision + recall > 0.0 {
-            2.0 * precision * recall / (precision + recall)
-        } else {
-            0.0
+        let f1 = match (precision, recall) {
+            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+            _ => None,
         };
 
         metrics.insert(
@@ -580,25 +602,26 @@ fn compute_rule_metrics(
             },
         );
 
-        total_precision += precision;
-        total_recall += recall;
-        entity_count += 1;
+        if let (Some(p), Some(r)) = (precision, recall) {
+            total_precision += p;
+            total_recall += r;
+            defined_count += 1;
+        }
     }
 
-    let macro_precision = if entity_count > 0 {
-        total_precision / entity_count as f64
+    let macro_precision = if defined_count > 0 {
+        Some(total_precision / defined_count as f64)
     } else {
-        1.0
+        None
     };
-    let macro_recall = if entity_count > 0 {
-        total_recall / entity_count as f64
+    let macro_recall = if defined_count > 0 {
+        Some(total_recall / defined_count as f64)
     } else {
-        1.0
+        None
     };
-    let macro_f1 = if macro_precision + macro_recall > 0.0 {
-        2.0 * macro_precision * macro_recall / (macro_precision + macro_recall)
-    } else {
-        0.0
+    let macro_f1 = match (macro_precision, macro_recall) {
+        (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+        _ => None,
     };
 
     let summary = EvalSummary {
@@ -617,7 +640,7 @@ fn compare_with_model_baseline(
     current: &HashMap<String, EntityMetrics>,
     baseline_path: &Path,
     tier: EngineTier,
-) -> Option<(BaselineComparison, AccuracyStatus)> {
+) -> Option<(BaselineComparison, AccuracyStatus, bool)> {
     let content = fs::read_to_string(baseline_path).ok()?;
     let baseline: ModelBaseline = serde_json::from_str(&content).ok()?;
 
@@ -626,48 +649,59 @@ fn compare_with_model_baseline(
 
     for (entity_type, current_metrics) in current {
         if let Some(baseline_metrics) = baseline.metrics.get(entity_type) {
-            let f1_delta = current_metrics.f1 - baseline_metrics.f1;
-            if f1_delta < -0.01 {
-                // > 1pt drop: fail for first-party, warn for community
-                let severity = match tier {
-                    EngineTier::FirstParty => "fail",
-                    EngineTier::Community => "warn",
-                };
-                regressions.push(MetricRegression {
-                    entity_type: entity_type.clone(),
-                    metric: "f1".to_string(),
-                    baseline: baseline_metrics.f1,
-                    current: current_metrics.f1,
-                    delta: f1_delta,
-                    severity: severity.to_string(),
-                });
-            } else if f1_delta < 0.0 {
-                // <= 1pt drop: always warn
-                regressions.push(MetricRegression {
-                    entity_type: entity_type.clone(),
-                    metric: "f1".to_string(),
-                    baseline: baseline_metrics.f1,
-                    current: current_metrics.f1,
-                    delta: f1_delta,
-                    severity: "warn".to_string(),
-                });
-            } else if f1_delta > 0.001 {
-                improvements.push(MetricImprovement {
-                    entity_type: entity_type.clone(),
-                    metric: "f1".to_string(),
-                    baseline: baseline_metrics.f1,
-                    current: current_metrics.f1,
-                    delta: f1_delta,
-                });
+            // Only compare when both current and baseline have defined F1
+            if let (Some(current_f1), Some(baseline_f1)) = (current_metrics.f1, baseline_metrics.f1)
+            {
+                let f1_delta = current_f1 - baseline_f1;
+                if f1_delta < -0.01 {
+                    // > 1pt drop: fail for first-party (unless provisional), warn for community
+                    let severity = match tier {
+                        EngineTier::FirstParty if !baseline.provisional => "fail",
+                        _ => "warn",
+                    };
+                    regressions.push(MetricRegression {
+                        entity_type: entity_type.clone(),
+                        metric: "f1".to_string(),
+                        baseline: baseline_f1,
+                        current: current_f1,
+                        delta: f1_delta,
+                        severity: severity.to_string(),
+                    });
+                } else if f1_delta < 0.0 {
+                    // <= 1pt drop: always warn
+                    regressions.push(MetricRegression {
+                        entity_type: entity_type.clone(),
+                        metric: "f1".to_string(),
+                        baseline: baseline_f1,
+                        current: current_f1,
+                        delta: f1_delta,
+                        severity: "warn".to_string(),
+                    });
+                } else if f1_delta > 0.001 {
+                    improvements.push(MetricImprovement {
+                        entity_type: entity_type.clone(),
+                        metric: "f1".to_string(),
+                        baseline: baseline_f1,
+                        current: current_f1,
+                        delta: f1_delta,
+                    });
+                }
             }
         }
     }
 
-    // Determine accuracy status based on tier
+    // Determine accuracy status based on tier and provisional flag
     let has_fail = regressions.iter().any(|r| r.severity == "fail");
     let has_warn = regressions.iter().any(|r| r.severity == "warn");
 
-    let status = if has_fail {
+    let status = if baseline.provisional {
+        // Provisional baselines never fail, only warn
+        if has_fail || has_warn {
+            AccuracyStatus::Provisional
+        } else {
+            AccuracyStatus::Pass
+        }
+    } else if has_fail {
         AccuracyStatus::Fail
     } else if has_warn {
         AccuracyStatus::Warn
@@ -675,10 +709,10 @@ fn compare_with_model_baseline(
         AccuracyStatus::Pass
     };
 
-    // For baseline comparison pass field: first-party fails on "fail", community never fails
+    // For baseline comparison pass field: first-party fails on "fail" (unless provisional), community never fails
     let pass = match tier {
-        EngineTier::FirstParty => !has_fail,
-        EngineTier::Community => true, // accuracy never blocks community
+        EngineTier::FirstParty => !has_fail || baseline.provisional,
+        EngineTier::Community => true,
     };
 
     Some((
@@ -689,6 +723,7 @@ fn compare_with_model_baseline(
             pass,
         },
         status,
+        baseline.provisional,
     ))
 }
 
@@ -710,44 +745,54 @@ fn compare_with_rule_baseline(
 
     for (entity_type, current_metrics) in current {
         if let Some(baseline_metrics) = baseline.metrics.get(entity_type) {
-            let precision_delta = current_metrics.precision - baseline_metrics.precision;
-            if precision_delta < 0.0 {
-                regressions.push(MetricRegression {
-                    entity_type: entity_type.clone(),
-                    metric: "precision".to_string(),
-                    baseline: baseline_metrics.precision,
-                    current: current_metrics.precision,
-                    delta: precision_delta,
-                    severity: "fail".to_string(),
-                });
-            } else if precision_delta > 0.001 {
-                improvements.push(MetricImprovement {
-                    entity_type: entity_type.clone(),
-                    metric: "precision".to_string(),
-                    baseline: baseline_metrics.precision,
-                    current: current_metrics.precision,
-                    delta: precision_delta,
-                });
+            // Compare precision when both are defined
+            if let (Some(current_precision), Some(baseline_precision)) =
+                (current_metrics.precision, baseline_metrics.precision)
+            {
+                let precision_delta = current_precision - baseline_precision;
+                if precision_delta < 0.0 {
+                    regressions.push(MetricRegression {
+                        entity_type: entity_type.clone(),
+                        metric: "precision".to_string(),
+                        baseline: baseline_precision,
+                        current: current_precision,
+                        delta: precision_delta,
+                        severity: "fail".to_string(),
+                    });
+                } else if precision_delta > 0.001 {
+                    improvements.push(MetricImprovement {
+                        entity_type: entity_type.clone(),
+                        metric: "precision".to_string(),
+                        baseline: baseline_precision,
+                        current: current_precision,
+                        delta: precision_delta,
+                    });
+                }
             }
 
-            let recall_delta = current_metrics.recall - baseline_metrics.recall;
-            if recall_delta < 0.0 {
-                regressions.push(MetricRegression {
-                    entity_type: entity_type.clone(),
-                    metric: "recall".to_string(),
-                    baseline: baseline_metrics.recall,
-                    current: current_metrics.recall,
-                    delta: recall_delta,
-                    severity: "fail".to_string(),
-                });
-            } else if recall_delta > 0.001 {
-                improvements.push(MetricImprovement {
-                    entity_type: entity_type.clone(),
-                    metric: "recall".to_string(),
-                    baseline: baseline_metrics.recall,
-                    current: current_metrics.recall,
-                    delta: recall_delta,
-                });
+            // Compare recall when both are defined
+            if let (Some(current_recall), Some(baseline_recall)) =
+                (current_metrics.recall, baseline_metrics.recall)
+            {
+                let recall_delta = current_recall - baseline_recall;
+                if recall_delta < 0.0 {
+                    regressions.push(MetricRegression {
+                        entity_type: entity_type.clone(),
+                        metric: "recall".to_string(),
+                        baseline: baseline_recall,
+                        current: current_recall,
+                        delta: recall_delta,
+                        severity: "fail".to_string(),
+                    });
+                } else if recall_delta > 0.001 {
+                    improvements.push(MetricImprovement {
+                        entity_type: entity_type.clone(),
+                        metric: "recall".to_string(),
+                        baseline: baseline_recall,
+                        current: current_recall,
+                        delta: recall_delta,
+                    });
+                }
             }
         }
     }
@@ -791,9 +836,9 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                     total_fixtures: 0,
                     total_entities_expected: 0,
                     total_entities_found: 0,
-                    macro_precision: 1.0,
-                    macro_recall: 1.0,
-                    macro_f1: 1.0,
+                    macro_precision: None,
+                    macro_recall: None,
+                    macro_f1: None,
                 },
                 baseline_comparison: None,
                 duration_seconds: 0.0,
@@ -956,17 +1001,17 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         };
 
         // Build accuracy result with tier-aware gating
-        let (baseline_comparison, accuracy_status) = if baseline_path.exists() {
+        let (baseline_comparison, accuracy_status, is_provisional) = if baseline_path.exists() {
             match compare_with_model_baseline(&metrics, &baseline_path, engine.tier) {
-                Some((comparison, status)) => (Some(comparison), status),
+                Some((comparison, status, provisional)) => (Some(comparison), status, provisional),
                 None => {
                     // Baseline exists but couldn't be parsed
-                    (None, AccuracyStatus::NoBaseline)
+                    (None, AccuracyStatus::NoBaseline, false)
                 }
             }
         } else {
             // Baseline doesn't exist
-            (None, AccuracyStatus::NoBaseline)
+            (None, AccuracyStatus::NoBaseline, false)
         };
 
         let accuracy = AccuracyResult {
@@ -977,7 +1022,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         };
 
         // Overall pass: contract must pass, accuracy depends on tier
-        // For first-party: Fail or NoBaseline blocks
+        // For first-party: Fail or NoBaseline blocks (Provisional warns only)
         // For community: nothing blocks (accuracy is warn-only)
         let accuracy_blocks = match engine.tier {
             EngineTier::FirstParty => matches!(
@@ -987,6 +1032,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             EngineTier::Community => false,
         };
         let pass = contract.pass && !accuracy_blocks;
+        let _ = is_provisional; // Used in baseline comparison logic
 
         let duration = start.elapsed().as_secs_f64();
 
@@ -1032,6 +1078,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 excluded_entity_types: excluded.clone(),
                 metrics: metrics.clone(),
                 summary: summary.clone(),
+                provisional: false,
             };
 
             if let Some(parent) = baseline_path.parent() {
@@ -1084,11 +1131,15 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 AccuracyStatus::Warn => "⚠ warn",
                 AccuracyStatus::Fail => "✗ fail",
                 AccuracyStatus::NoBaseline => "✗ no_baseline",
+                AccuracyStatus::Provisional => "⚠ provisional",
             };
             println!();
             println!("Accuracy: {accuracy_icon} ({tier_str})");
             if engine.tier == EngineTier::Community {
                 println!("  (community tier: accuracy is warn-only, never blocks PR)");
+            }
+            if accuracy_status == AccuracyStatus::Provisional {
+                println!("  (provisional baseline: regressions warn only, do not block PR)");
             }
 
             if let Some(ref comparison) = baseline_comparison {
@@ -1096,13 +1147,19 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 print_baseline_comparison(comparison);
             } else if accuracy_status == AccuracyStatus::NoBaseline {
                 println!();
-                let blocking = if engine.tier == EngineTier::FirstParty {
-                    " (blocking for first-party)"
+                if engine.tier == EngineTier::Community {
+                    println!(
+                        "No baseline yet (community tier) - {}",
+                        baseline_path.display()
+                    );
+                    println!("Run with --update-baseline to create one.");
                 } else {
-                    ""
-                };
-                println!("No baseline found at {}{blocking}", baseline_path.display());
-                println!("Run with --update-baseline to create one.");
+                    println!(
+                        "No baseline found at {} (blocking for first-party)",
+                        baseline_path.display()
+                    );
+                    println!("Run with --update-baseline to create one.");
+                }
             }
 
             println!();
@@ -1239,19 +1296,18 @@ mod tests {
 
     fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
         let precision = if tp + fp > 0 {
-            tp as f64 / (tp + fp) as f64
+            Some(tp as f64 / (tp + fp) as f64)
         } else {
-            0.0
+            None
         };
         let recall = if tp + fn_ > 0 {
-            tp as f64 / (tp + fn_) as f64
+            Some(tp as f64 / (tp + fn_) as f64)
         } else {
-            0.0
+            None
         };
-        let f1 = if precision + recall > 0.0 {
-            2.0 * precision * recall / (precision + recall)
-        } else {
-            0.0
+        let f1 = match (precision, recall) {
+            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+            _ => None,
         };
         EntityMetrics {
             true_positives: tp,
@@ -1289,10 +1345,11 @@ mod tests {
                 total_fixtures: 100,
                 total_entities_expected: 100,
                 total_entities_found: 95,
-                macro_precision: 0.8,
-                macro_recall: 0.8,
-                macro_f1: 0.8,
+                macro_precision: Some(0.8),
+                macro_recall: Some(0.8),
+                macro_f1: Some(0.8),
             },
+            provisional: false,
         };
         std::fs::write(
             &baseline_path,
@@ -1304,7 +1361,7 @@ mod tests {
         let result =
             compare_with_model_baseline(&current_metrics, &baseline_path, EngineTier::FirstParty);
         assert!(result.is_some());
-        let (comparison, status) = result.unwrap();
+        let (comparison, status, _provisional) = result.unwrap();
         assert_eq!(status, AccuracyStatus::Fail);
         assert!(!comparison.pass);
         assert!(comparison.regressions.iter().any(|r| r.severity == "fail"));
@@ -1337,10 +1394,11 @@ mod tests {
                 total_fixtures: 100,
                 total_entities_expected: 100,
                 total_entities_found: 95,
-                macro_precision: 0.8,
-                macro_recall: 0.8,
-                macro_f1: 0.8,
+                macro_precision: Some(0.8),
+                macro_recall: Some(0.8),
+                macro_f1: Some(0.8),
             },
+            provisional: false,
         };
         std::fs::write(
             &baseline_path,
@@ -1352,10 +1410,58 @@ mod tests {
         let result =
             compare_with_model_baseline(&current_metrics, &baseline_path, EngineTier::Community);
         assert!(result.is_some());
-        let (comparison, status) = result.unwrap();
+        let (comparison, status, _provisional) = result.unwrap();
         assert_eq!(status, AccuracyStatus::Warn);
         assert!(comparison.pass); // Community never fails on accuracy
         assert!(comparison.regressions.iter().all(|r| r.severity == "warn"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn provisional_baseline_warns_not_fails() {
+        // Same setup but with provisional=true
+        let mut baseline_metrics = HashMap::new();
+        baseline_metrics.insert("EMAIL".to_string(), make_metrics(80, 10, 10));
+
+        let mut current_metrics = HashMap::new();
+        current_metrics.insert("EMAIL".to_string(), make_metrics(70, 15, 15));
+
+        let temp_dir = std::env::temp_dir().join("dfv_test_baseline_provisional");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let baseline_path = temp_dir.join("test-baseline.json");
+
+        let baseline = ModelBaseline {
+            model_id: "test".to_string(),
+            revision: "test".to_string(),
+            manifest_sha256: "test".to_string(),
+            scored_entity_types: vec!["EMAIL".to_string()],
+            excluded_entity_types: vec![],
+            metrics: baseline_metrics,
+            summary: EvalSummary {
+                total_fixtures: 100,
+                total_entities_expected: 100,
+                total_entities_found: 95,
+                macro_precision: Some(0.8),
+                macro_recall: Some(0.8),
+                macro_f1: Some(0.8),
+            },
+            provisional: true, // Provisional baseline
+        };
+        std::fs::write(
+            &baseline_path,
+            serde_json::to_string_pretty(&baseline).unwrap(),
+        )
+        .unwrap();
+
+        // First-party with provisional: should warn (Provisional status), not fail
+        let result =
+            compare_with_model_baseline(&current_metrics, &baseline_path, EngineTier::FirstParty);
+        assert!(result.is_some());
+        let (comparison, status, provisional) = result.unwrap();
+        assert!(provisional);
+        assert_eq!(status, AccuracyStatus::Provisional);
+        assert!(comparison.pass); // Provisional baselines pass even with regressions
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

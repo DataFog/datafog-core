@@ -10,7 +10,7 @@ cargo dfv build               # Build all bindings
 cargo dfv check               # Run all rule-based detector tests
 cargo dfv check --models      # Run model tier checks (GLiNER2/DataFog)
 cargo dfv eval                # Per-entity precision/recall/F1 for rules
-cargo dfv eval --models       # Per-entity metrics for model detectors
+cargo dfv eval --model <name> # Per-entity metrics for a specific model engine (e.g., datafog, gliner2)
 cargo dfv bench               # Latency benchmark against baseline
 cargo dfv smoke               # Install and test packages as a user would
 cargo dfv parity              # Cross-SDK fixture offset verification
@@ -30,7 +30,9 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 - **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
 - **community** (e.g. gliner2): F1 regression is warn-only, never fails PRs. Requires named owner in CODEOWNERS.
 
-Contract checks block for all tiers: pinned revision + sha256 verified by doctor, engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
+Contract checks block for all tiers: pinned revision verified by doctor (sha256 verified from each bundle's own manifest against its files), engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
+
+**TODO:** Provisioning from ENGINE_REGISTRY (issue #87 - GLiNER2 runtime step).
 
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 
