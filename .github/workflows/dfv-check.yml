@@ -58,9 +58,9 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         run: npm ci --prefix bindings/wasm && npx --prefix bindings/wasm playwright install --with-deps chromium
       - if: steps.scope.outputs.code == 'true'
-        run: cargo dfv doctor --json
-      - if: steps.scope.outputs.code == 'true'
         run: cargo dfv build
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv doctor --json
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv check --json
       - if: steps.scope.outputs.code == 'true'
