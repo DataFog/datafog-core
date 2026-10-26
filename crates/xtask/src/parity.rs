@@ -172,6 +172,166 @@ console.log(JSON.stringify(result));
     serde_json::from_str(stdout.trim()).ok()
 }
 
+struct WasmEnv {
+    temp_dir: PathBuf,
+}
+
+static WASM_ENV: std::sync::OnceLock<Option<WasmEnv>> = std::sync::OnceLock::new();
+
+fn init_wasm_env(root: &std::path::Path, run_dir: &std::path::Path) -> Option<&'static WasmEnv> {
+    WASM_ENV
+        .get_or_init(|| {
+            let wasm_dir = root.join("bindings").join("wasm");
+            let dist_dir = wasm_dir.join("dist");
+            if !dist_dir.exists() {
+                return None;
+            }
+
+            let packed = Command::new("npm")
+                .args(["pack", "--json"])
+                .current_dir(&wasm_dir)
+                .output()
+                .ok()?;
+
+            if !packed.status.success() {
+                return None;
+            }
+
+            let stdout = String::from_utf8_lossy(&packed.stdout);
+            let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).ok()?;
+            let tarball_name = parsed.first()?.get("filename")?.as_str()?;
+            let tarball = wasm_dir.join(tarball_name);
+
+            let temp_dir = run_dir.join("wasm_parity_project");
+            let _ = fs::create_dir_all(&temp_dir);
+
+            let package_json = r#"{"name": "wasm-parity-test", "private": true, "type": "module"}"#;
+            let _ = fs::write(temp_dir.join("package.json"), package_json);
+
+            let npm_install = Command::new("npm")
+                .args(["install", "--ignore-scripts"])
+                .arg(&tarball)
+                .current_dir(&temp_dir)
+                .status()
+                .ok()?;
+
+            let _ = fs::remove_file(&tarball);
+
+            if !npm_install.success() {
+                return None;
+            }
+
+            let playwright_install = Command::new("npm")
+                .args(["install", "playwright"])
+                .current_dir(&temp_dir)
+                .status()
+                .ok()?;
+
+            if !playwright_install.success() {
+                return None;
+            }
+
+            let browser_install = Command::new("npx")
+                .args(["playwright", "install", "--with-deps", "chromium"])
+                .current_dir(&temp_dir)
+                .status()
+                .ok()?;
+
+            if !browser_install.success() {
+                return None;
+            }
+
+            let _ = fs::write(
+                temp_dir.join("index.html"),
+                "<!doctype html><title>WASM parity test</title>",
+            );
+
+            Some(WasmEnv { temp_dir })
+        })
+        .as_ref()
+}
+
+fn scan_with_wasm(
+    text: &str,
+    root: &std::path::Path,
+    run_dir: &std::path::Path,
+) -> Option<Vec<SdkFinding>> {
+    let env = init_wasm_env(root, run_dir)?;
+
+    let escaped_text = serde_json::to_string(text).unwrap();
+    let server_code = format!(
+        r#"
+import {{ createServer }} from "node:http";
+import {{ readFileSync }} from "node:fs";
+import path from "node:path";
+
+const tempDir = process.argv[2];
+const port = 8766;
+
+function contentType(file) {{
+  if (file.endsWith(".html")) return "text/html; charset=utf-8";
+  if (file.endsWith(".js") || file.endsWith(".mjs")) return "text/javascript; charset=utf-8";
+  if (file.endsWith(".wasm")) return "application/wasm";
+  return "application/octet-stream";
+}}
+
+const server = createServer((req, res) => {{
+  const pathname = new URL(req.url, "http://localhost").pathname;
+  const file = path.resolve(tempDir, `./${{pathname === "/" ? "/index.html" : pathname}}`);
+  try {{
+    res.writeHead(200, {{ "content-type": contentType(file) }});
+    res.end(readFileSync(file));
+  }} catch {{
+    res.writeHead(404).end();
+  }}
+}});
+
+server.listen(port, "127.0.0.1", async () => {{
+  const {{ chromium }} = await import("playwright");
+  const browser = await chromium.launch();
+  try {{
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${{port}}`);
+    const result = await page.evaluate(async () => {{
+      const {{ init, scan }} = await import("/node_modules/@datafog/wasm/index.js");
+      await init();
+      const text = {escaped_text};
+      const findings = scan(text);
+      return findings.map(f => ({{
+        entity_type: f.entityType,
+        matched_text: f.matchedText,
+        codepoint_start: f.codepointRange.start,
+        codepoint_end: f.codepointRange.end,
+        byte_start: f.byteRange.start,
+        byte_end: f.byteRange.end
+      }}));
+    }});
+    console.log(JSON.stringify(result));
+  }} finally {{
+    await browser.close();
+    server.close();
+  }}
+}});
+"#
+    );
+
+    let script_path = env.temp_dir.join("parity-scan.mjs");
+    let _ = fs::write(&script_path, &server_code);
+
+    let output = Command::new("node")
+        .args(["parity-scan.mjs", env.temp_dir.to_str().unwrap()])
+        .current_dir(&env.temp_dir)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).ok()
+}
+
 fn compare_sdk_findings(
     fixture_id: &str,
     sdk_a: &str,
@@ -257,8 +417,8 @@ fn run_live_parity(
     let mut sdks_available: Vec<String> = Vec::new();
 
     if !json_output {
-        println!("Running live cross-SDK parity check (Python, Node)...");
-        println!("(WASM parity is verified via `cargo dfv smoke` in headless Chromium)");
+        println!("Running live cross-SDK parity check (Python, Node, WASM)...");
+        println!("(WASM via headless Chromium for UTF-16 offset verification)");
         println!();
     }
 
@@ -298,10 +458,12 @@ fn run_live_parity(
 
             let python_findings = scan_with_python(text, root);
             let node_findings = scan_with_node(text, root);
+            let wasm_findings = scan_with_wasm(text, root, run_dir);
 
             let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
                 ("python", python_findings.as_ref()),
                 ("node", node_findings.as_ref()),
+                ("wasm", wasm_findings.as_ref()),
             ];
 
             if fixtures_checked == 1 {
@@ -381,7 +543,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             pass: true,
             fixtures_checked: 0,
             sdks_compared: if live {
-                vec!["python".to_string(), "node".to_string()]
+                vec!["python".to_string(), "node".to_string(), "wasm".to_string()]
             } else {
                 vec![
                     "rust".to_string(),
@@ -404,12 +566,10 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!("Dry run - would execute:");
             if live {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
-                println!("  2. Run scan() through each installed SDK (Python, Node)");
+                println!("  2. Run scan() through each installed SDK (Python, Node, WASM)");
                 println!("  3. Compare actual output spans across SDK pairs");
                 println!("  4. Report any discrepancies in entity_type, matched_text, or ranges");
-                println!(
-                    "  Note: WASM parity is verified via `cargo dfv smoke` in headless Chromium."
-                );
+                println!("  Note: WASM runs via headless Chromium for UTF-16 offset verification.");
             } else {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
                 println!("  2. For each fixture entity, verify:");

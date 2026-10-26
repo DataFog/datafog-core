@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +92,14 @@ struct BaselineMetrics {
     models: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DetectedEntity {
+    entity_type: String,
+    matched_text: String,
+    codepoint_start: usize,
+    codepoint_end: usize,
+}
+
 fn load_fixtures(fixture_dir: &Path) -> Vec<FixtureRecord> {
     let mut records = Vec::new();
     let fixture_files = ["development.jsonl", "final.jsonl"];
@@ -117,38 +125,187 @@ fn load_fixtures(fixture_dir: &Path) -> Vec<FixtureRecord> {
     records
 }
 
+struct PythonEnv {
+    python_bin: PathBuf,
+}
+
+fn setup_python_env(root: &Path) -> Option<PythonEnv> {
+    let venv_dir = root.join("target").join("dfv_eval_venv");
+    let python_bin = if cfg!(windows) {
+        venv_dir.join("Scripts").join("python.exe")
+    } else {
+        venv_dir.join("bin").join("python")
+    };
+
+    if python_bin.exists() {
+        return Some(PythonEnv { python_bin });
+    }
+
+    let wheel_dir = root.join("target").join("wheels");
+    let wheel = fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
+        entries.find_map(|e| {
+            e.ok().and_then(|entry| {
+                let name = entry.file_name();
+                if name.to_string_lossy().ends_with(".whl") {
+                    Some(entry.path())
+                } else {
+                    None
+                }
+            })
+        })
+    })?;
+
+    Command::new("python3")
+        .args(["-m", "venv"])
+        .arg(&venv_dir)
+        .status()
+        .ok()?;
+
+    let status = Command::new(&python_bin)
+        .args(["-m", "pip", "install", "--force-reinstall", "-q"])
+        .arg(&wheel)
+        .status()
+        .ok()?;
+
+    if !status.success() {
+        return None;
+    }
+
+    Some(PythonEnv { python_bin })
+}
+
+fn run_rule_scan(text: &str, env: &PythonEnv, root: &Path) -> Option<Vec<DetectedEntity>> {
+    let code = format!(
+        r#"
+import json
+from datafog_core import scan
+findings = scan({})
+result = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
+    codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in findings]
+print(json.dumps(result))
+"#,
+        serde_json::to_string(text).unwrap()
+    );
+
+    let output = Command::new(&env.python_bin)
+        .args(["-c", &code])
+        .current_dir(root)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim()).ok()
+}
+
+fn run_model_scan(text: &str, env: &PythonEnv, root: &Path) -> Option<Vec<DetectedEntity>> {
+    let models_dir = root.join("models");
+    let datafog_bundle = models_dir.join("datafog");
+    let gliner2_bundle = models_dir.join("gliner2");
+
+    let (bundle_path, is_gliner2) = if datafog_bundle.exists() {
+        (datafog_bundle, false)
+    } else if gliner2_bundle.exists() {
+        (gliner2_bundle, true)
+    } else {
+        return None;
+    };
+
+    let manifest_path = bundle_path.join("bundle-manifest.json");
+    if !manifest_path.exists() {
+        return None;
+    }
+
+    let manifest_content = fs::read_to_string(&manifest_path).ok()?;
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(manifest_content.as_bytes());
+    let sha256 = format!("{:x}", hasher.finalize());
+
+    let bundle_str = bundle_path.to_string_lossy().replace('\\', "\\\\");
+    let python_str = env.python_bin.to_string_lossy().replace('\\', "\\\\");
+    let text_escaped = serde_json::to_string(text).unwrap();
+
+    let config_extras = if is_gliner2 {
+        format!(
+            r#", "gliner2": {{"python": "{python_str}", "labels": [{{"label": "street_address", "threshold": 0.5}}], "intra_threads": 1, "chunk_size": 384, "chunk_overlap": 64}}"#
+        )
+    } else {
+        String::new()
+    };
+
+    let code = format!(
+        r#"
+import json
+from datafog_core import ModelSession
+config = {{"bundle": "{bundle_str}", "manifest_sha256": "{sha256}", "limits": {{"max_input_bytes": 65536, "max_response_bytes": 16777216, "max_findings": 65536, "timeout_ms": 120000, "cleanup_timeout_ms": 5000}}{config_extras}}}
+with ModelSession.open(config) as session:
+    result = session.scan_model({text_escaped})
+    findings = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
+        codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in result.findings]
+    print(json.dumps(findings))
+"#
+    );
+
+    let output = Command::new(&env.python_bin)
+        .args(["-c", &code])
+        .current_dir(root)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Model scan error: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return None;
+    }
+
+    serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim()).ok()
+}
+
 fn compute_metrics(
     fixtures: &[FixtureRecord],
-    _models: bool,
-) -> (HashMap<String, EntityMetrics>, EvalSummary) {
+    models: bool,
+    root: &Path,
+    json_output: bool,
+) -> Option<(HashMap<String, EntityMetrics>, EvalSummary)> {
+    let env = setup_python_env(root)?;
+
     let mut entity_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
     let mut total_expected = 0;
     let mut total_found = 0;
 
-    for fixture in fixtures {
+    for (i, fixture) in fixtures.iter().enumerate() {
+        if !json_output && i % 100 == 0 {
+            eprint!("\rProcessing fixture {}/{}...", i + 1, fixtures.len());
+        }
+
         let expected: Vec<_> = fixture
             .entities
             .iter()
             .map(|e| (e.label.clone(), e.text.clone(), e.start, e.end))
             .collect();
 
-        let mut found: Vec<(String, String, usize, usize)> = Vec::new();
-        let codepoints: Vec<char> = fixture.text.chars().collect();
-        for entity in &fixture.entities {
-            let actual_text: String = codepoints
-                .get(entity.start..entity.end)
-                .map(|s| s.iter().collect())
-                .unwrap_or_default();
+        let detected = if models {
+            run_model_scan(&fixture.text, &env, root)?
+        } else {
+            run_rule_scan(&fixture.text, &env, root)?
+        };
 
-            if actual_text == entity.text {
-                found.push((
-                    entity.label.clone(),
-                    entity.text.clone(),
-                    entity.start,
-                    entity.end,
-                ));
-            }
-        }
+        let found: Vec<_> = detected
+            .iter()
+            .map(|d| {
+                (
+                    d.entity_type.clone(),
+                    d.matched_text.clone(),
+                    d.codepoint_start,
+                    d.codepoint_end,
+                )
+            })
+            .collect();
 
         total_expected += expected.len();
         total_found += found.len();
@@ -176,6 +333,10 @@ fn compute_metrics(
                 stats.1 += 1;
             }
         }
+    }
+
+    if !json_output {
+        eprintln!();
     }
 
     let mut metrics = HashMap::new();
@@ -242,7 +403,7 @@ fn compute_metrics(
         macro_f1,
     };
 
-    (metrics, summary)
+    Some((metrics, summary))
 }
 
 fn compare_with_baseline(
@@ -370,9 +531,9 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
 
     if !json_output && !dry_run {
         if models {
-            println!("Running model eval (precision/recall/F1)...");
+            println!("Running model eval (precision/recall/F1 via ModelSession.scan_model)...");
         } else {
-            println!("Running rule-based eval (precision/recall/F1)...");
+            println!("Running rule-based eval (precision/recall/F1 via scan())...");
         }
         println!();
     }
@@ -411,14 +572,18 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         } else {
             println!("Dry run - would execute:");
             println!("  1. Load fixtures from fixtures/*.jsonl");
-            println!("  2. For each fixture, compare expected vs detected entities");
-            println!("  3. Compute per-entity precision/recall/F1");
             if models {
-                println!("  4. Compare model metrics with baselines/eval-models.json");
+                println!("  2. For each fixture, run ModelSession.scan_model() via Python");
+                println!("  3. Compare model findings against expected entities");
+                println!("  4. Compute per-entity precision/recall/F1");
+                println!("  5. Compare with baselines/eval-models.json");
                 println!("     - F1 drop > 1 point: fail");
                 println!("     - F1 drop <= 1 point: warn");
             } else {
-                println!("  4. Compare rule metrics with baselines/eval-rules.json");
+                println!("  2. For each fixture, run scan() via Python");
+                println!("  3. Compare rule findings against expected entities");
+                println!("  4. Compute per-entity precision/recall/F1");
+                println!("  5. Compare with baselines/eval-rules.json");
                 println!("     - Any precision or recall drop: fail");
             }
         }
@@ -446,7 +611,23 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         println!("Loaded {} fixtures", fixtures.len());
     }
 
-    let (metrics, summary) = compute_metrics(&fixtures, models);
+    let Some((metrics, summary)) = compute_metrics(&fixtures, models, &root, json_output) else {
+        let err = serde_json::json!({
+            "pass": false,
+            "error": if models { "model_unavailable" } else { "scan_failed" },
+            "message": if models {
+                "Models not provisioned. Run scripts/provision-gliner2-model.py or scripts/provision-datafog-model.py first."
+            } else {
+                "Failed to run scan. Ensure Python wheel is built with cargo dfv build."
+            }
+        });
+        if json_output {
+            println!("{}", serde_json::to_string_pretty(&err).unwrap());
+        } else {
+            eprintln!("Error: {}", err.get("message").unwrap().as_str().unwrap());
+        }
+        return ExitCode::FAILURE;
+    };
 
     let baseline_name = if models {
         "baselines/eval-models.json"
