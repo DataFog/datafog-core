@@ -24,7 +24,7 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 - Model-based: F1 drop > 1 point fails, smaller drop warns.
 - Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
 - Parity: zero tolerance unless a PR intentionally updates a fixture.
-- Live parity: compares actual scan() output across all 4 SDKs (Rust, Python, Node, WASM).
+- Live parity: compares actual scan() output across Python and Node bindings. WASM parity is verified via smoke test in headless Chromium.
 
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 

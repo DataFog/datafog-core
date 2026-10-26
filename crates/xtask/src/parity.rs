@@ -42,17 +42,69 @@ pub struct ParityDiscrepancy {
     pub value_b: serde_json::Value,
 }
 
-fn scan_with_python(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
-    let venv_dir = root.join("target").join("dfv_venv");
-    let python_bin = if cfg!(windows) {
-        venv_dir.join("Scripts").join("python.exe")
-    } else {
-        venv_dir.join("bin").join("python")
-    };
+struct PythonEnv {
+    python_bin: PathBuf,
+}
 
-    if !python_bin.exists() {
-        return None;
-    }
+static PYTHON_ENV: std::sync::OnceLock<Option<PythonEnv>> = std::sync::OnceLock::new();
+
+fn init_python_env(root: &std::path::Path) -> Option<&'static PythonEnv> {
+    PYTHON_ENV
+        .get_or_init(|| {
+            let wheel_dir = root.join("target").join("wheels");
+            let wheel = if wheel_dir.exists() {
+                fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
+                    entries.find_map(|e| {
+                        e.ok().and_then(|entry| {
+                            let name = entry.file_name();
+                            if name.to_string_lossy().ends_with(".whl") {
+                                Some(entry.path())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                })
+            } else {
+                None
+            }?;
+
+            let venv_dir = root.join("target").join("dfv_parity_venv");
+            let python_bin = if cfg!(windows) {
+                venv_dir.join("Scripts").join("python.exe")
+            } else {
+                venv_dir.join("bin").join("python")
+            };
+
+            if !python_bin.exists() {
+                let venv_status = Command::new("python3")
+                    .args(["-m", "venv"])
+                    .arg(&venv_dir)
+                    .status()
+                    .ok()?;
+
+                if !venv_status.success() {
+                    return None;
+                }
+
+                let pip_install = Command::new(&python_bin)
+                    .args(["-m", "pip", "install", "--force-reinstall", "-q"])
+                    .arg(&wheel)
+                    .status()
+                    .ok()?;
+
+                if !pip_install.success() {
+                    return None;
+                }
+            }
+
+            Some(PythonEnv { python_bin })
+        })
+        .as_ref()
+}
+
+fn scan_with_python(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
+    let env = init_python_env(root)?;
 
     let code = format!(
         r#"
@@ -67,7 +119,7 @@ print(json.dumps(result))
         serde_json::to_string(text).unwrap()
     );
 
-    let output = Command::new(&python_bin)
+    let output = Command::new(&env.python_bin)
         .args(["-c", &code])
         .current_dir(root)
         .output()
@@ -120,115 +172,7 @@ console.log(JSON.stringify(result));
     serde_json::from_str(stdout.trim()).ok()
 }
 
-fn scan_with_rust(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
-    let cargo_toml = root.join("crates").join("core").join("Cargo.toml");
-    if !cargo_toml.exists() {
-        return None;
-    }
 
-    let escaped_text = text.replace('\\', "\\\\").replace('"', "\\\"");
-    let code = format!(
-        r#"
-use datafog_core::scan;
-fn main() {{
-    let findings = scan("{escaped_text}");
-    let result: Vec<_> = findings.iter().map(|f| {{
-        serde_json::json!({{
-            "entity_type": f.entity_type,
-            "matched_text": f.matched_text,
-            "codepoint_start": f.codepoint_range.start,
-            "codepoint_end": f.codepoint_range.end,
-            "byte_start": f.byte_range.start,
-            "byte_end": f.byte_range.end
-        }})
-    }}).collect();
-    println!("{{}}", serde_json::to_string(&result).unwrap());
-}}
-"#
-    );
-
-    let tmp_dir = std::env::temp_dir().join("dfv_rust_scan");
-    let _ = fs::create_dir_all(&tmp_dir);
-    let src_file = tmp_dir.join("main.rs");
-    if fs::write(&src_file, code).is_err() {
-        return None;
-    }
-
-    let cargo_toml_content = format!(
-        r#"[package]
-name = "dfv_rust_scan"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-datafog-core = {{ path = "{}" }}
-serde_json = "1"
-"#,
-        root.join("crates/core").display()
-    );
-
-    if fs::write(tmp_dir.join("Cargo.toml"), cargo_toml_content).is_err() {
-        return None;
-    }
-
-    let _ = fs::create_dir_all(tmp_dir.join("src"));
-    if fs::rename(&src_file, tmp_dir.join("src").join("main.rs")).is_err() {
-        return None;
-    }
-
-    let output = Command::new("cargo")
-        .args(["run", "--quiet", "--release"])
-        .current_dir(&tmp_dir)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim()).ok()
-}
-
-fn scan_with_wasm(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
-    let wasm_dir = root.join("bindings").join("wasm");
-    let pkg_dir = wasm_dir.join("pkg");
-    let wasm_js = pkg_dir.join("datafog_wasm.js");
-
-    if !wasm_js.exists() {
-        return None;
-    }
-
-    let escaped_text = serde_json::to_string(text).unwrap();
-    let code = format!(
-        r#"
-const {{ scan }} = require('./pkg/datafog_wasm.js');
-const findings = scan({escaped_text});
-const result = findings.map(f => ({{
-    entity_type: f.entityType,
-    matched_text: f.matchedText,
-    codepoint_start: f.codepointRange.start,
-    codepoint_end: f.codepointRange.end,
-    byte_start: f.byteRange.start,
-    byte_end: f.byteRange.end
-}}));
-console.log(JSON.stringify(result));
-"#
-    );
-
-    let output = Command::new("node")
-        .args(["-e", &code])
-        .current_dir(&wasm_dir)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim()).ok()
-}
 
 fn compare_sdk_findings(
     fixture_id: &str,
@@ -315,7 +259,8 @@ fn run_live_parity(
     let mut sdks_available: Vec<String> = Vec::new();
 
     if !json_output {
-        println!("Running live cross-SDK parity check (all 4 SDKs)...");
+        println!("Running live cross-SDK parity check (Python, Node)...");
+        println!("(WASM parity is verified via `cargo dfv smoke` in headless Chromium)");
         println!();
     }
 
@@ -353,16 +298,12 @@ fn run_live_parity(
 
             fixtures_checked += 1;
 
-            let rust_findings = scan_with_rust(text, root);
             let python_findings = scan_with_python(text, root);
             let node_findings = scan_with_node(text, root);
-            let wasm_findings = scan_with_wasm(text, root);
 
             let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
-                ("rust", rust_findings.as_ref()),
                 ("python", python_findings.as_ref()),
                 ("node", node_findings.as_ref()),
-                ("wasm", wasm_findings.as_ref()),
             ];
 
             if fixtures_checked == 1 {
@@ -441,12 +382,16 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
         let result = ParityResult {
             pass: true,
             fixtures_checked: 0,
-            sdks_compared: vec![
-                "rust".to_string(),
-                "python".to_string(),
-                "node".to_string(),
-                "wasm".to_string(),
-            ],
+            sdks_compared: if live {
+                vec!["python".to_string(), "node".to_string()]
+            } else {
+                vec![
+                    "rust".to_string(),
+                    "python".to_string(),
+                    "node".to_string(),
+                    "wasm".to_string(),
+                ]
+            },
             discrepancies: vec![],
             duration_seconds: 0.0,
             run_directory: PathBuf::from("/tmp/dfv-dry-run"),
@@ -461,9 +406,10 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!("Dry run - would execute:");
             if live {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
-                println!("  2. Run scan() through each installed SDK (Rust, Python, Node, WASM)");
-                println!("  3. Compare actual output spans across all SDK pairs");
+                println!("  2. Run scan() through each installed SDK (Python, Node)");
+                println!("  3. Compare actual output spans across SDK pairs");
                 println!("  4. Report any discrepancies in entity_type, matched_text, or ranges");
+                println!("  Note: WASM parity is verified via `cargo dfv smoke` in headless Chromium.");
             } else {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
                 println!("  2. For each fixture entity, verify:");
@@ -478,7 +424,9 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!();
             if live {
                 println!("Note: --live runs actual scans through installed SDKs.");
-                println!("Requires built Rust core, Python wheel, Node package, and WASM pkg.");
+                println!("Requires built Python wheel and Node package.");
+                println!("Both wrap the same Rust core, so this tests binding correctness.");
+                println!("WASM parity is verified via `cargo dfv smoke` in headless Chromium.");
             } else {
                 println!("Note: This validates fixture offset self-consistency.");
                 println!("All SDKs must produce identical spans for the same fixture.");
