@@ -172,8 +172,6 @@ console.log(JSON.stringify(result));
     serde_json::from_str(stdout.trim()).ok()
 }
 
-
-
 fn compare_sdk_findings(
     fixture_id: &str,
     sdk_a: &str,
@@ -409,7 +407,9 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
                 println!("  2. Run scan() through each installed SDK (Python, Node)");
                 println!("  3. Compare actual output spans across SDK pairs");
                 println!("  4. Report any discrepancies in entity_type, matched_text, or ranges");
-                println!("  Note: WASM parity is verified via `cargo dfv smoke` in headless Chromium.");
+                println!(
+                    "  Note: WASM parity is verified via `cargo dfv smoke` in headless Chromium."
+                );
             } else {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
                 println!("  2. For each fixture entity, verify:");

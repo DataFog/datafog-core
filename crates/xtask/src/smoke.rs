@@ -487,9 +487,30 @@ server.listen(port, "127.0.0.1", async () => {
         "<!doctype html><title>WASM smoke test</title>",
     );
 
+    let playwright_npm_install = Command::new("npm")
+        .args(["install", "playwright"])
+        .current_dir(&temp_dir)
+        .output();
+
+    if !playwright_npm_install
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        let _ = fs::remove_file(&tarball);
+        return SmokeTestResult {
+            pass: false,
+            duration_seconds: start.elapsed().as_secs_f64(),
+            output: None,
+            error: Some("Failed to install playwright npm package".to_string()),
+            wrapped_script: Some(script.to_string()),
+            command: Some(cmd.to_string()),
+            scan_result: None,
+        };
+    }
+
     let playwright_install = Command::new("npx")
         .args(["playwright", "install", "--with-deps", "chromium"])
-        .current_dir(&wasm_dir)
+        .current_dir(&temp_dir)
         .status();
 
     if !playwright_install.map(|s| s.success()).unwrap_or(false) {
@@ -508,7 +529,6 @@ server.listen(port, "127.0.0.1", async () => {
     let output = Command::new("node")
         .args(["smoke-server.mjs", temp_dir.to_str().unwrap()])
         .current_dir(&temp_dir)
-        .env("NODE_PATH", wasm_dir.join("node_modules"))
         .output();
 
     let _ = fs::remove_file(&tarball);
