@@ -17,3 +17,5 @@ node_modules/
 workers/**/build/
 workers/**/*.egg-info/
 workers/**/__pycache__/
+/models/
+/models-cache/

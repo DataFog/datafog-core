@@ -2,6 +2,7 @@ mod bench;
 mod build;
 mod check;
 mod doctor;
+mod engines;
 mod eval;
 mod models;
 mod parity;

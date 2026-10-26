@@ -21,10 +21,16 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 
 **Thresholds:**
 - Rule-based: any precision/recall drop fails.
-- Model-based: F1 drop > 1 point fails, smaller drop warns.
+- Model-based: depends on engine tier (see below).
 - Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
 - Parity: zero tolerance unless a PR intentionally updates a fixture.
 - Live parity: compares actual scan() output across Python and Node bindings. WASM parity is verified via smoke test in headless Chromium.
+
+**Model engine tiers:**
+- **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
+- **community** (e.g. gliner2): F1 regression is warn-only, never fails PRs. Requires named owner in CODEOWNERS.
+
+Contract checks block for all tiers: pinned revision + sha256 verified by doctor, engine loads behind its feature/config, spans have valid offsets matching across SDKs, disabling the engine leaves core untouched. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
 
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 
