@@ -1,0 +1,29 @@
+{
+  "model_id": "fastino/gliner2-privacy-filter-PII-multi",
+  "revision": "1cb4166094dc58fa8d836429f060d6c95f62b495",
+  "manifest_sha256": "placeholder_pending_runtime_setup",
+  "scored_entity_types": [
+    "STREET_ADDRESS"
+  ],
+  "excluded_entity_types": [
+    "CREDIT_CARD",
+    "DATE",
+    "EMAIL",
+    "FIRST_NAME",
+    "IP_ADDRESS",
+    "LAST_NAME",
+    "PHONE",
+    "SSN",
+    "ZIP_CODE"
+  ],
+  "metrics": {},
+  "summary": {
+    "total_fixtures": 0,
+    "total_entities_expected": 0,
+    "total_entities_found": 0,
+    "macro_precision": 0.0,
+    "macro_recall": 0.0,
+    "macro_f1": 0.0
+  },
+  "_note": "Placeholder baseline - GLiNER2 requires Python worker with gliner2/transformers/torch. Run eval --model gliner2 --update-baseline after installing the worker."
+}
