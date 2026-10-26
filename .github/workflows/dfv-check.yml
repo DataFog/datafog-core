@@ -65,9 +65,68 @@ jobs:
         run: cargo dfv check --json
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv parity --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv eval --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv smoke --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv parity --live --json
       - if: always() && steps.scope.outputs.code == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dfv-reports
+          path: target/dfv/runs/
+          retention-days: 30
+
+  dfv-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: |
+      github.event_name == 'schedule' ||
+      contains(github.event.head_commit.modified, 'crates/core/src/models/') ||
+      contains(github.event.head_commit.modified, 'scripts/provision-') ||
+      contains(github.event.head_commit.modified, 'scripts/model-')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install provisioning tools
+        run: python -m pip install 'huggingface_hub==1.27.0' 'psutil==7.2.2' maturin
+      - name: Restore cached model assets
+        uses: actions/cache/restore@v4
+        id: model-assets
+        with:
+          path: |
+            ${{ runner.temp }}/gliner2-download
+          key: gliner2-model-${{ hashFiles('scripts/provision-gliner2-model.py', 'crates/core/src/models/gliner2-lock.json') }}
+      - name: Download GLiNER2 files (if not cached)
+        if: steps.model-assets.outputs.cache-hit != 'true'
+        run: |
+          hf download fastino/gliner2-privacy-filter-PII-multi \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
+            --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
+      - name: Cache GLiNER2 assets
+        uses: actions/cache/save@v4
+        if: steps.model-assets.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ${{ runner.temp }}/gliner2-download
+          key: ${{ steps.model-assets.outputs.cache-primary-key }}
+      - run: cargo dfv build --sdk python
+      - run: cargo dfv check --models --json
+      - run: cargo dfv eval --models --json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfv-model-reports
           path: target/dfv/runs/
           retention-days: 30

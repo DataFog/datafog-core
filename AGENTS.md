@@ -8,13 +8,28 @@ Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
 cargo dfv doctor              # Check environment readiness
 cargo dfv build               # Build all bindings
 cargo dfv check               # Run all rule-based detector tests
-cargo dfv check --json        # Machine-readable output
-cargo dfv parity              # Cross-SDK span/offset comparison
+cargo dfv check --models      # Run model tier checks (GLiNER2/DataFog)
+cargo dfv eval                # Per-entity precision/recall/F1 for rules
+cargo dfv eval --models       # Per-entity metrics for model detectors
+cargo dfv bench               # Latency benchmark against baseline
+cargo dfv smoke               # Install and test packages as a user would
+cargo dfv parity              # Cross-SDK fixture offset verification
+cargo dfv parity --live       # Run scan() through each SDK and diff outputs
 ```
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
 
+**Thresholds:**
+- Rule-based: any precision/recall drop fails.
+- Model-based: F1 drop > 1 point fails, smaller drop warns.
+- Benchmark: > 10% slower fails, 5-10% warns.
+- Parity: zero tolerance unless a PR intentionally updates a fixture.
+
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
+
+**Scripts wrapped by dfv:**
+- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py
+- `smoke`: bindings/python/tests/test_installed.py, scripts/test-node-package.mjs, scripts/test-wasm-package.mjs
 
 ## Correctness
 
