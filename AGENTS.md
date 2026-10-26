@@ -1,5 +1,21 @@
 # DataFog Core repository rules
 
+## Verification CLI
+
+Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
+
+```bash
+cargo dfv doctor              # Check environment readiness
+cargo dfv build               # Build all bindings
+cargo dfv check               # Run all rule-based detector tests
+cargo dfv check --json        # Machine-readable output
+cargo dfv parity              # Cross-SDK span/offset comparison
+```
+
+Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
+
+Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
+
 ## Correctness
 
 - Detection changes require positive and negative tests that prove the changed behavior.
