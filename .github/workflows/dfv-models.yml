@@ -4,10 +4,11 @@ on:
   pull_request:
     paths:
       - 'crates/core/src/models/**'
+      - 'crates/xtask/**'
       - 'scripts/provision-*'
       - 'scripts/model-*'
       - 'scripts/*model*'
-      - 'baselines/eval-models.json'
+      - 'baselines/eval-models-*.json'
   schedule:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
   workflow_dispatch:

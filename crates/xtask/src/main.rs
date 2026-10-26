@@ -87,6 +87,11 @@ SMOKE OPTIONS:
 
 PARITY OPTIONS:
     --live             Run actual scans through installed SDKs and diff outputs
+    --sample N         Sample N fixtures (default 100 for --live, prioritizes multibyte/emoji)
+    --full             Run on all fixtures (nightly/workflow_dispatch)
+
+EVAL OPTIONS (MODEL):
+    --model <engine>   Evaluate specific engine (datafog, gliner2)
 
 EXAMPLES:
     cargo dfv doctor                   # Check if environment is ready

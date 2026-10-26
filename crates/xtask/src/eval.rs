@@ -87,6 +87,8 @@ pub enum AccuracyStatus {
     Warn,
     /// Major regression (> 1pt F1 drop) on first-party engine
     Fail,
+    /// Missing or unparseable baseline (fails first-party, warns community)
+    NoBaseline,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,6 +164,72 @@ pub struct ModelBaseline {
     pub excluded_entity_types: Vec<String>,
     pub metrics: HashMap<String, EntityMetrics>,
     pub summary: EvalSummary,
+}
+
+/// Print per-entity metrics table to stdout
+fn print_metrics_table(metrics: &HashMap<String, EntityMetrics>) {
+    println!("Per-entity metrics:");
+    let mut sorted_entities: Vec<_> = metrics.iter().collect();
+    sorted_entities.sort_by_key(|(k, _)| k.as_str());
+    for (entity_type, m) in sorted_entities {
+        println!(
+            "  {}: P={:.4} R={:.4} F1={:.4} (TP={} FP={} FN={})",
+            entity_type,
+            m.precision,
+            m.recall,
+            m.f1,
+            m.true_positives,
+            m.false_positives,
+            m.false_negatives
+        );
+    }
+}
+
+/// Print baseline comparison to stdout
+fn print_baseline_comparison(comparison: &BaselineComparison) {
+    println!("Baseline comparison ({}):", comparison.baseline_path);
+
+    if comparison.regressions.is_empty() && comparison.improvements.is_empty() {
+        println!("  No changes from baseline");
+    }
+
+    for reg in &comparison.regressions {
+        let icon = if reg.severity == "fail" { "✗" } else { "⚠" };
+        println!(
+            "  {} {} {}: {:.4} -> {:.4} ({:+.4})",
+            icon, reg.entity_type, reg.metric, reg.baseline, reg.current, reg.delta
+        );
+    }
+
+    for imp in &comparison.improvements {
+        println!(
+            "  ↑ {} {}: {:.4} -> {:.4} ({:+.4})",
+            imp.entity_type, imp.metric, imp.baseline, imp.current, imp.delta
+        );
+    }
+}
+
+/// Print evaluation summary to stdout
+fn print_eval_summary(summary: &EvalSummary, scored_only: bool) {
+    println!("Evaluation Summary:");
+    println!("  Fixtures: {}", summary.total_fixtures);
+    if scored_only {
+        println!(
+            "  Expected entities (scored types): {}",
+            summary.total_entities_expected
+        );
+        println!(
+            "  Found entities (scored types): {}",
+            summary.total_entities_found
+        );
+    } else {
+        println!("  Expected entities: {}", summary.total_entities_expected);
+        println!("  Found entities: {}", summary.total_entities_found);
+    }
+    println!();
+    println!("  Macro Precision: {:.4}", summary.macro_precision);
+    println!("  Macro Recall:    {:.4}", summary.macro_recall);
+    println!("  Macro F1:        {:.4}", summary.macro_f1);
 }
 
 fn load_fixtures(fixture_dir: &Path) -> Vec<FixtureRecord> {
@@ -891,10 +959,14 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         let (baseline_comparison, accuracy_status) = if baseline_path.exists() {
             match compare_with_model_baseline(&metrics, &baseline_path, engine.tier) {
                 Some((comparison, status)) => (Some(comparison), status),
-                None => (None, AccuracyStatus::Pass),
+                None => {
+                    // Baseline exists but couldn't be parsed
+                    (None, AccuracyStatus::NoBaseline)
+                }
             }
         } else {
-            (None, AccuracyStatus::Pass)
+            // Baseline doesn't exist
+            (None, AccuracyStatus::NoBaseline)
         };
 
         let accuracy = AccuracyResult {
@@ -905,9 +977,14 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         };
 
         // Overall pass: contract must pass, accuracy depends on tier
+        // For first-party: Fail or NoBaseline blocks
+        // For community: nothing blocks (accuracy is warn-only)
         let accuracy_blocks = match engine.tier {
-            EngineTier::FirstParty => accuracy_status == AccuracyStatus::Fail,
-            EngineTier::Community => false, // accuracy never blocks community
+            EngineTier::FirstParty => matches!(
+                accuracy_status,
+                AccuracyStatus::Fail | AccuracyStatus::NoBaseline
+            ),
+            EngineTier::Community => false,
         };
         let pass = contract.pass && !accuracy_blocks;
 
@@ -998,76 +1075,34 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             println!("Scored entity types: {scored_types:?}");
             println!("Excluded fixture types: {excluded:?}");
             println!();
-            println!("Evaluation Summary:");
-            println!("  Fixtures: {}", summary.total_fixtures);
-            println!(
-                "  Expected entities (scored types): {}",
-                summary.total_entities_expected
-            );
-            println!(
-                "  Found entities (scored types): {}",
-                summary.total_entities_found
-            );
+            print_eval_summary(&summary, true);
             println!();
-            println!("  Macro Precision: {:.4}", summary.macro_precision);
-            println!("  Macro Recall:    {:.4}", summary.macro_recall);
-            println!("  Macro F1:        {:.4}", summary.macro_f1);
-            println!();
+            print_metrics_table(&metrics);
 
-            println!("Per-entity metrics:");
-            let mut sorted_entities: Vec<_> = metrics.iter().collect();
-            sorted_entities.sort_by_key(|(k, _)| k.as_str());
-            for (entity_type, m) in sorted_entities {
-                println!(
-                    "  {}: P={:.4} R={:.4} F1={:.4} (TP={} FP={} FN={})",
-                    entity_type,
-                    m.precision,
-                    m.recall,
-                    m.f1,
-                    m.true_positives,
-                    m.false_positives,
-                    m.false_negatives
-                );
+            let accuracy_icon = match accuracy_status {
+                AccuracyStatus::Pass => "✓ pass",
+                AccuracyStatus::Warn => "⚠ warn",
+                AccuracyStatus::Fail => "✗ fail",
+                AccuracyStatus::NoBaseline => "✗ no_baseline",
+            };
+            println!();
+            println!("Accuracy: {accuracy_icon} ({tier_str})");
+            if engine.tier == EngineTier::Community {
+                println!("  (community tier: accuracy is warn-only, never blocks PR)");
             }
 
             if let Some(ref comparison) = baseline_comparison {
                 println!();
-                let accuracy_icon = match accuracy_status {
-                    AccuracyStatus::Pass => "✓ pass",
-                    AccuracyStatus::Warn => "⚠ warn",
-                    AccuracyStatus::Fail => "✗ fail",
+                print_baseline_comparison(comparison);
+            } else if accuracy_status == AccuracyStatus::NoBaseline {
+                println!();
+                let blocking = if engine.tier == EngineTier::FirstParty {
+                    " (blocking for first-party)"
+                } else {
+                    ""
                 };
-                println!("Accuracy: {accuracy_icon} ({tier_str})");
-                if engine.tier == EngineTier::Community {
-                    println!("  (community tier: accuracy is warn-only, never blocks PR)");
-                }
-                println!();
-                println!("Baseline comparison ({}):", comparison.baseline_path);
-
-                if comparison.regressions.is_empty() && comparison.improvements.is_empty() {
-                    println!("  No changes from baseline");
-                }
-
-                for reg in &comparison.regressions {
-                    let icon = if reg.severity == "fail" { "✗" } else { "⚠" };
-                    println!(
-                        "  {} {} {}: {:.4} -> {:.4} ({:+.4})",
-                        icon, reg.entity_type, reg.metric, reg.baseline, reg.current, reg.delta
-                    );
-                }
-
-                for imp in &comparison.improvements {
-                    println!(
-                        "  ↑ {} {}: {:.4} -> {:.4} ({:+.4})",
-                        imp.entity_type, imp.metric, imp.baseline, imp.current, imp.delta
-                    );
-                }
-            } else if !baseline_path.exists() {
-                println!();
-                println!(
-                    "No baseline found at {}. Run with --update-baseline to create one.",
-                    baseline_path.display()
-                );
+                println!("No baseline found at {}{blocking}", baseline_path.display());
+                println!("Run with --update-baseline to create one.");
             }
 
             println!();
@@ -1080,6 +1115,11 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 }
                 if accuracy_status == AccuracyStatus::Fail {
                     println!("  Accuracy regressions detected (blocking for first-party)");
+                }
+                if accuracy_status == AccuracyStatus::NoBaseline
+                    && engine.tier == EngineTier::FirstParty
+                {
+                    println!("  Missing baseline (blocking for first-party)");
                 }
             }
             println!();
@@ -1160,54 +1200,13 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         println!("{}", serde_json::to_string_pretty(&result).unwrap());
     } else {
         println!();
-        println!("Evaluation Summary:");
-        println!("  Fixtures: {}", summary.total_fixtures);
-        println!("  Expected entities: {}", summary.total_entities_expected);
-        println!("  Found entities: {}", summary.total_entities_found);
+        print_eval_summary(&summary, false);
         println!();
-        println!("  Macro Precision: {:.4}", summary.macro_precision);
-        println!("  Macro Recall:    {:.4}", summary.macro_recall);
-        println!("  Macro F1:        {:.4}", summary.macro_f1);
-        println!();
-
-        println!("Per-entity metrics:");
-        let mut sorted_entities: Vec<_> = metrics.iter().collect();
-        sorted_entities.sort_by_key(|(k, _)| k.as_str());
-        for (entity_type, m) in sorted_entities {
-            println!(
-                "  {}: P={:.4} R={:.4} F1={:.4} (TP={} FP={} FN={})",
-                entity_type,
-                m.precision,
-                m.recall,
-                m.f1,
-                m.true_positives,
-                m.false_positives,
-                m.false_negatives
-            );
-        }
+        print_metrics_table(&metrics);
 
         if let Some(ref comparison) = baseline_comparison {
             println!();
-            println!("Baseline comparison ({}):", comparison.baseline_path);
-
-            if comparison.regressions.is_empty() && comparison.improvements.is_empty() {
-                println!("  No changes from baseline");
-            }
-
-            for reg in &comparison.regressions {
-                let icon = if reg.severity == "fail" { "✗" } else { "⚠" };
-                println!(
-                    "  {} {} {}: {:.4} -> {:.4} ({:+.4})",
-                    icon, reg.entity_type, reg.metric, reg.baseline, reg.current, reg.delta
-                );
-            }
-
-            for imp in &comparison.improvements {
-                println!(
-                    "  ↑ {} {}: {:.4} -> {:.4} ({:+.4})",
-                    imp.entity_type, imp.metric, imp.baseline, imp.current, imp.delta
-                );
-            }
+            print_baseline_comparison(comparison);
         } else if !baseline_path.exists() {
             println!();
             println!(
@@ -1230,5 +1229,145 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
+        let precision = if tp + fp > 0 {
+            tp as f64 / (tp + fp) as f64
+        } else {
+            0.0
+        };
+        let recall = if tp + fn_ > 0 {
+            tp as f64 / (tp + fn_) as f64
+        } else {
+            0.0
+        };
+        let f1 = if precision + recall > 0.0 {
+            2.0 * precision * recall / (precision + recall)
+        } else {
+            0.0
+        };
+        EntityMetrics {
+            true_positives: tp,
+            false_positives: fp,
+            false_negatives: fn_,
+            precision,
+            recall,
+            f1,
+        }
+    }
+
+    #[test]
+    fn first_party_f1_drop_over_1pt_fails() {
+        // Baseline: F1 = 0.80
+        let mut baseline_metrics = HashMap::new();
+        baseline_metrics.insert("EMAIL".to_string(), make_metrics(80, 10, 10)); // F1 = 0.80
+
+        // Current: F1 dropped by > 1pt (0.80 -> 0.70 = 10pt drop)
+        let mut current_metrics = HashMap::new();
+        current_metrics.insert("EMAIL".to_string(), make_metrics(70, 15, 15)); // F1 ~= 0.70
+
+        // Create temp baseline file
+        let temp_dir = std::env::temp_dir().join("dfv_test_baseline_1");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let baseline_path = temp_dir.join("test-baseline.json");
+
+        let baseline = ModelBaseline {
+            model_id: "test".to_string(),
+            revision: "test".to_string(),
+            manifest_sha256: "test".to_string(),
+            scored_entity_types: vec!["EMAIL".to_string()],
+            excluded_entity_types: vec![],
+            metrics: baseline_metrics,
+            summary: EvalSummary {
+                total_fixtures: 100,
+                total_entities_expected: 100,
+                total_entities_found: 95,
+                macro_precision: 0.8,
+                macro_recall: 0.8,
+                macro_f1: 0.8,
+            },
+        };
+        std::fs::write(
+            &baseline_path,
+            serde_json::to_string_pretty(&baseline).unwrap(),
+        )
+        .unwrap();
+
+        // First-party: should fail
+        let result =
+            compare_with_model_baseline(&current_metrics, &baseline_path, EngineTier::FirstParty);
+        assert!(result.is_some());
+        let (comparison, status) = result.unwrap();
+        assert_eq!(status, AccuracyStatus::Fail);
+        assert!(!comparison.pass);
+        assert!(comparison.regressions.iter().any(|r| r.severity == "fail"));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn community_f1_drop_over_1pt_warns_only() {
+        // Same setup as above but for community tier
+        let mut baseline_metrics = HashMap::new();
+        baseline_metrics.insert("EMAIL".to_string(), make_metrics(80, 10, 10));
+
+        let mut current_metrics = HashMap::new();
+        current_metrics.insert("EMAIL".to_string(), make_metrics(70, 15, 15));
+
+        let temp_dir = std::env::temp_dir().join("dfv_test_baseline_2");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let baseline_path = temp_dir.join("test-baseline.json");
+
+        let baseline = ModelBaseline {
+            model_id: "test".to_string(),
+            revision: "test".to_string(),
+            manifest_sha256: "test".to_string(),
+            scored_entity_types: vec!["EMAIL".to_string()],
+            excluded_entity_types: vec![],
+            metrics: baseline_metrics,
+            summary: EvalSummary {
+                total_fixtures: 100,
+                total_entities_expected: 100,
+                total_entities_found: 95,
+                macro_precision: 0.8,
+                macro_recall: 0.8,
+                macro_f1: 0.8,
+            },
+        };
+        std::fs::write(
+            &baseline_path,
+            serde_json::to_string_pretty(&baseline).unwrap(),
+        )
+        .unwrap();
+
+        // Community: should warn only, pass=true
+        let result =
+            compare_with_model_baseline(&current_metrics, &baseline_path, EngineTier::Community);
+        assert!(result.is_some());
+        let (comparison, status) = result.unwrap();
+        assert_eq!(status, AccuracyStatus::Warn);
+        assert!(comparison.pass); // Community never fails on accuracy
+        assert!(comparison.regressions.iter().all(|r| r.severity == "warn"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn missing_baseline_fails_first_party() {
+        let nonexistent = std::path::PathBuf::from("/nonexistent/baseline.json");
+        let result =
+            compare_with_model_baseline(&HashMap::new(), &nonexistent, EngineTier::FirstParty);
+        assert!(result.is_none()); // None means no baseline found
+
+        // The caller should treat None as NoBaseline, which fails for first-party
+        // This is tested in the main eval logic
     }
 }

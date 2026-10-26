@@ -332,6 +332,88 @@ server.listen(port, "127.0.0.1", async () => {{
     serde_json::from_str(stdout.trim()).ok()
 }
 
+/// Identifies if a fixture contains multibyte characters that could cause offset drift.
+fn fixture_has_multibyte(text: &str) -> bool {
+    text.chars().any(|c| c.len_utf8() > 1)
+}
+
+/// Identifies if a fixture contains emoji characters.
+fn fixture_has_emoji(text: &str) -> bool {
+    text.chars()
+        .any(|c| matches!(c, '\u{1F300}'..='\u{1F9FF}' | '\u{2600}'..='\u{26FF}'))
+}
+
+/// Identifies if a fixture contains German characters (umlauts, eszett).
+fn fixture_has_german(text: &str) -> bool {
+    text.chars()
+        .any(|c| matches!(c, 'ä' | 'ö' | 'ü' | 'Ä' | 'Ö' | 'Ü' | 'ß'))
+}
+
+/// Identifies if a fixture is structured (table, multi-line).
+fn fixture_is_structured(text: &str) -> bool {
+    text.contains('\n') || text.contains('\t') || text.contains('|')
+}
+
+#[derive(Debug, Clone)]
+struct FixtureMeta {
+    id: String,
+    text: String,
+    is_multibyte: bool,
+    is_emoji: bool,
+    is_german: bool,
+    is_structured: bool,
+}
+
+impl FixtureMeta {
+    fn from_record(record: &serde_json::Value) -> Option<Self> {
+        let id = record.get("id")?.as_str()?.to_string();
+        let text = record.get("text")?.as_str()?.to_string();
+        Some(Self {
+            is_multibyte: fixture_has_multibyte(&text),
+            is_emoji: fixture_has_emoji(&text),
+            is_german: fixture_has_german(&text),
+            is_structured: fixture_is_structured(&text),
+            id,
+            text,
+        })
+    }
+
+    fn is_priority(&self) -> bool {
+        self.is_multibyte || self.is_emoji || self.is_german || self.is_structured
+    }
+}
+
+/// Select a deterministic sample of fixtures, prioritizing offset-sensitive cases.
+fn select_sample_fixtures(fixtures: &[FixtureMeta], sample_size: usize) -> Vec<&FixtureMeta> {
+    let mut selected = Vec::new();
+
+    // First: all priority fixtures (multibyte, emoji, german, structured)
+    for f in fixtures {
+        if f.is_priority() {
+            selected.push(f);
+        }
+    }
+
+    // Fill remaining slots deterministically from non-priority fixtures
+    if selected.len() < sample_size {
+        let remaining = sample_size - selected.len();
+        let non_priority: Vec<_> = fixtures.iter().filter(|f| !f.is_priority()).collect();
+
+        // Take evenly distributed samples
+        if !non_priority.is_empty() {
+            let step = non_priority.len().max(1) / remaining.max(1);
+            let step = step.max(1);
+            for (i, f) in non_priority.iter().enumerate() {
+                if i % step == 0 && selected.len() < sample_size {
+                    selected.push(f);
+                }
+            }
+        }
+    }
+
+    selected
+}
+
 fn compare_sdk_findings(
     fixture_id: &str,
     sdk_a: &str,
@@ -406,10 +488,43 @@ fn run_live_parity(
     run_dir: &std::path::Path,
     root: &std::path::Path,
     json_output: bool,
+    sample_size: Option<usize>,
 ) -> ParityResult {
     let start = Instant::now();
     let fixtures_dir = root.join("fixtures");
     let fixture_files = ["development.jsonl", "final.jsonl"];
+
+    // Load all fixtures with metadata
+    let mut all_fixtures: Vec<FixtureMeta> = Vec::new();
+    for fixture_file in &fixture_files {
+        let fixture_path = fixtures_dir.join(fixture_file);
+        if !fixture_path.exists() {
+            continue;
+        }
+        let content = match fs::read_to_string(&fixture_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(meta) = FixtureMeta::from_record(&record) {
+                    all_fixtures.push(meta);
+                }
+            }
+        }
+    }
+
+    // Select fixtures based on sample size
+    let fixtures_to_check: Vec<&FixtureMeta> = if let Some(n) = sample_size {
+        select_sample_fixtures(&all_fixtures, n)
+    } else {
+        all_fixtures.iter().collect()
+    };
+
+    let priority_count = fixtures_to_check.iter().filter(|f| f.is_priority()).count();
 
     let mut all_discrepancies = Vec::new();
     let mut fixtures_checked = 0;
@@ -417,83 +532,63 @@ fn run_live_parity(
     let mut sdks_available: Vec<String> = Vec::new();
 
     if !json_output {
-        println!("Running live cross-SDK parity check (Python, Node, WASM)...");
-        println!("(WASM via headless Chromium for UTF-16 offset verification)");
+        if sample_size.is_some() {
+            println!(
+                "Running live cross-SDK parity check ({} of {} fixtures, {} priority)...",
+                fixtures_to_check.len(),
+                all_fixtures.len(),
+                priority_count
+            );
+        } else {
+            println!(
+                "Running live cross-SDK parity check ({} fixtures)...",
+                fixtures_to_check.len()
+            );
+        }
+        println!("(Python, Node; WASM via headless Chromium for UTF-16 offset verification)");
         println!();
     }
 
-    for fixture_file in &fixture_files {
-        let fixture_path = fixtures_dir.join(fixture_file);
-        if !fixture_path.exists() {
-            continue;
+    for fixture in &fixtures_to_check {
+        fixtures_checked += 1;
+
+        let python_findings = scan_with_python(&fixture.text, root);
+        let node_findings = scan_with_node(&fixture.text, root);
+        let wasm_findings = scan_with_wasm(&fixture.text, root, run_dir);
+
+        let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
+            ("python", python_findings.as_ref()),
+            ("node", node_findings.as_ref()),
+            ("wasm", wasm_findings.as_ref()),
+        ];
+
+        if fixtures_checked == 1 {
+            for (name, findings) in &sdk_map {
+                if findings.is_some() && !sdks_available.contains(&name.to_string()) {
+                    sdks_available.push(name.to_string());
+                }
+            }
         }
 
-        let content = match fs::read_to_string(&fixture_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
+        let available: Vec<_> = sdk_map
+            .iter()
+            .filter_map(|(name, f)| f.map(|findings| (*name, findings)))
+            .collect();
 
-        for line in content.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
+        for (name, findings) in &available {
+            sdk_results
+                .entry(format!("{}_{name}", fixture.id))
+                .or_default()
+                .extend(findings.iter().cloned());
+        }
 
-            let record: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            let fixture_id = record
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-
-            let text = match record.get("text").and_then(|v| v.as_str()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            fixtures_checked += 1;
-
-            let python_findings = scan_with_python(text, root);
-            let node_findings = scan_with_node(text, root);
-            let wasm_findings = scan_with_wasm(text, root, run_dir);
-
-            let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
-                ("python", python_findings.as_ref()),
-                ("node", node_findings.as_ref()),
-                ("wasm", wasm_findings.as_ref()),
-            ];
-
-            if fixtures_checked == 1 {
-                for (name, findings) in &sdk_map {
-                    if findings.is_some() && !sdks_available.contains(&name.to_string()) {
-                        sdks_available.push(name.to_string());
-                    }
-                }
-            }
-
-            let available: Vec<_> = sdk_map
-                .iter()
-                .filter_map(|(name, f)| f.map(|findings| (*name, findings)))
-                .collect();
-
-            for (name, findings) in &available {
-                sdk_results
-                    .entry(format!("{fixture_id}_{name}"))
-                    .or_default()
-                    .extend(findings.iter().cloned());
-            }
-
-            for i in 0..available.len() {
-                for j in (i + 1)..available.len() {
-                    let (sdk_a, findings_a) = available[i];
-                    let (sdk_b, findings_b) = available[j];
-                    let discrepancies =
-                        compare_sdk_findings(&fixture_id, sdk_a, findings_a, sdk_b, findings_b);
-                    all_discrepancies.extend(discrepancies);
-                }
+        for i in 0..available.len() {
+            for j in (i + 1)..available.len() {
+                let (sdk_a, findings_a) = available[i];
+                let (sdk_b, findings_b) = available[j];
+                let discrepancies =
+                    compare_sdk_findings(&fixture.id, sdk_a, findings_a, sdk_b, findings_b);
+                all_discrepancies.extend(discrepancies);
             }
         }
     }
@@ -537,6 +632,23 @@ fn run_live_parity(
 pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let live = args.iter().any(|a| a == "--live");
+    let full = args.iter().any(|a| a == "--full");
+
+    // Parse --sample N
+    let sample_size: Option<usize> = args
+        .iter()
+        .position(|a| a == "--sample")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse().ok());
+
+    // Default: sample 100 for live parity on PRs, unless --full is specified
+    let effective_sample = if full {
+        None // Full run
+    } else if live && sample_size.is_none() {
+        Some(100) // Default sample for live parity
+    } else {
+        sample_size
+    };
 
     if dry_run {
         let result = ParityResult {
@@ -566,9 +678,16 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!("Dry run - would execute:");
             if live {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
-                println!("  2. Run scan() through each installed SDK (Python, Node, WASM)");
-                println!("  3. Compare actual output spans across SDK pairs");
-                println!("  4. Report any discrepancies in entity_type, matched_text, or ranges");
+                if let Some(n) = effective_sample {
+                    println!(
+                        "  2. Select ~{n} fixtures (all multibyte/emoji/german/structured + fill)"
+                    );
+                } else {
+                    println!("  2. Run on all fixtures (--full)");
+                }
+                println!("  3. Run scan() through each installed SDK (Python, Node, WASM)");
+                println!("  4. Compare actual output spans across SDK pairs");
+                println!("  5. Report any discrepancies in entity_type, matched_text, or ranges");
                 println!("  Note: WASM runs via headless Chromium for UTF-16 offset verification.");
             } else {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
@@ -584,6 +703,10 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!();
             if live {
                 println!("Note: --live runs actual scans through installed SDKs.");
+                if effective_sample.is_some() {
+                    println!("      Default: ~100 fixtures (prioritizing offset-sensitive cases).");
+                    println!("      Use --full for all fixtures, --sample N for custom count.");
+                }
                 println!("Requires built Python wheel and Node package.");
                 println!("Both wrap the same Rust core, so this tests binding correctness.");
                 println!("WASM parity is verified via `cargo dfv smoke` in headless Chromium.");
@@ -600,7 +723,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
     let root = workspace_root();
 
     if live {
-        let parity_result = run_live_parity(&run_dir, &root, json_output);
+        let parity_result = run_live_parity(&run_dir, &root, json_output, effective_sample);
 
         if json_output {
             println!("{}", serde_json::to_string_pretty(&parity_result).unwrap());

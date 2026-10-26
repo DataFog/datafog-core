@@ -31,7 +31,6 @@ pub enum EngineTier {
     Community,
 }
 
-
 /// Definition of a model engine for eval, check, and provisioning.
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -134,7 +133,8 @@ impl EngineConfig {
 
     /// Get manifest info (sha256, model_id, revision)
     pub fn manifest_info(&self, root: &Path) -> Option<ManifestInfo> {
-        let manifest_path = self.bundle_path(root).join("bundle-manifest.json");
+        let bundle_path = self.bundle_path(root);
+        let manifest_path = bundle_path.join("bundle-manifest.json");
         let content = std::fs::read_to_string(&manifest_path).ok()?;
 
         use sha2::{Digest, Sha256};
@@ -142,19 +142,34 @@ impl EngineConfig {
         hasher.update(content.as_bytes());
         let sha256 = format!("{:x}", hasher.finalize());
 
-        let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
-
-        let model_id = manifest
-            .get("model")
-            .and_then(|m| m.get("id"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        let revision = manifest
-            .get("model")
-            .and_then(|m| m.get("revision"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
+        // Try to get model info from config.json (datafog) or bundle-manifest.json
+        let config_path = bundle_path.join("config.json");
+        let (model_id, revision) = if config_path.exists() {
+            let config_content = std::fs::read_to_string(&config_path).ok();
+            let config: Option<serde_json::Value> =
+                config_content.and_then(|c| serde_json::from_str(&c).ok());
+            let rev = config
+                .as_ref()
+                .and_then(|c| c.get("model_revision"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            // For datafog, use the HF repo name as model_id
+            (Some("DataFog/pii-en-65m".to_string()), rev)
+        } else {
+            // For gliner2 and others, try bundle-manifest.json model field
+            let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
+            let model_id = manifest
+                .get("model")
+                .and_then(|m| m.get("id"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let revision = manifest
+                .get("model")
+                .and_then(|m| m.get("revision"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            (model_id, revision)
+        };
 
         Some(ManifestInfo {
             sha256,
@@ -216,7 +231,6 @@ pub struct DetectedEntity {
     pub codepoint_start: usize,
     pub codepoint_end: usize,
 }
-
 
 #[cfg(test)]
 mod tests {

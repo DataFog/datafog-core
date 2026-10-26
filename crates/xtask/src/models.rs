@@ -1,3 +1,4 @@
+use crate::engines::{ENGINE_REGISTRY, EngineConfig};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -103,9 +104,10 @@ pub fn verify_model_weights(models_dir: &Path) -> Vec<ModelWeightStatus> {
     results
 }
 
-fn run_provision_gliner2(run_dir: &Path, dry_run: bool) -> ModelCheckResult {
-    let script = "scripts/provision-gliner2-model.py";
-    let cmd = format!("python3 {script} --source <model-download> --destination models/gliner2");
+/// Check provisioning status for an engine from the registry.
+fn run_provision_check(engine: &EngineConfig, run_dir: &Path, dry_run: bool) -> ModelCheckResult {
+    let script = engine.provision_script;
+    let cmd = format!("python3 {} --destination models/{}", script, engine.name);
 
     if dry_run {
         return ModelCheckResult {
@@ -127,38 +129,23 @@ fn run_provision_gliner2(run_dir: &Path, dry_run: bool) -> ModelCheckResult {
             pass: false,
             duration_seconds: start.elapsed().as_secs_f64(),
             output: None,
-            error: Some("provisioning script not found".to_string()),
+            error: Some(format!("{} provisioning script not found", engine.name)),
             wrapped_script: Some(script.to_string()),
             command: Some(cmd),
         };
     }
 
-    let models_dir = root.join("models");
-    let gliner2_lock = root.join("crates/core/src/models/gliner2-lock.json");
-
-    if !gliner2_lock.exists() {
-        return ModelCheckResult {
-            pass: false,
-            duration_seconds: start.elapsed().as_secs_f64(),
-            output: None,
-            error: Some("gliner2-lock.json not found".to_string()),
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd),
-        };
-    }
-
-    if models_dir
-        .join("gliner2")
-        .join("bundle-manifest.json")
-        .exists()
-    {
+    if engine.is_provisioned(&root) {
         let duration = start.elapsed().as_secs_f64();
-        let log_path = run_dir.join("gliner2_provision.log");
-        let _ = fs::write(&log_path, "GLiNER2 bundle already provisioned");
+        let log_path = run_dir.join(format!("{}_provision.log", engine.name));
+        let _ = fs::write(
+            &log_path,
+            format!("{} bundle already provisioned", engine.name),
+        );
         return ModelCheckResult {
             pass: true,
             duration_seconds: duration,
-            output: Some("GLiNER2 bundle already provisioned".to_string()),
+            output: Some(format!("{} bundle already provisioned", engine.name)),
             error: None,
             wrapped_script: Some(script.to_string()),
             command: Some(cmd),
@@ -169,71 +156,10 @@ fn run_provision_gliner2(run_dir: &Path, dry_run: bool) -> ModelCheckResult {
         pass: false,
         duration_seconds: start.elapsed().as_secs_f64(),
         output: None,
-        error: Some(
-            "GLiNER2 model not provisioned. Run provision script with model source.".to_string(),
-        ),
-        wrapped_script: Some(script.to_string()),
-        command: Some(cmd),
-    }
-}
-
-fn run_provision_datafog(run_dir: &Path, dry_run: bool) -> ModelCheckResult {
-    let script = "scripts/provision-datafog-model.py";
-    let cmd = format!("python3 {script} --archive <archive-path> --destination models/datafog");
-
-    if dry_run {
-        return ModelCheckResult {
-            pass: true,
-            duration_seconds: 0.0,
-            output: None,
-            error: None,
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd),
-        };
-    }
-
-    let start = Instant::now();
-    let root = workspace_root();
-    let script_path = root.join(script);
-
-    if !script_path.exists() {
-        return ModelCheckResult {
-            pass: false,
-            duration_seconds: start.elapsed().as_secs_f64(),
-            output: None,
-            error: Some("provisioning script not found".to_string()),
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd),
-        };
-    }
-
-    let models_dir = root.join("models");
-
-    if models_dir
-        .join("datafog")
-        .join("bundle-manifest.json")
-        .exists()
-    {
-        let duration = start.elapsed().as_secs_f64();
-        let log_path = run_dir.join("datafog_provision.log");
-        let _ = fs::write(&log_path, "DataFog bundle already provisioned");
-        return ModelCheckResult {
-            pass: true,
-            duration_seconds: duration,
-            output: Some("DataFog bundle already provisioned".to_string()),
-            error: None,
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd),
-        };
-    }
-
-    ModelCheckResult {
-        pass: false,
-        duration_seconds: start.elapsed().as_secs_f64(),
-        output: None,
-        error: Some(
-            "DataFog model not provisioned. Run provision script with archive.".to_string(),
-        ),
+        error: Some(format!(
+            "{} model not provisioned. Run: python {}",
+            engine.name, script
+        )),
         wrapped_script: Some(script.to_string()),
         command: Some(cmd),
     }
@@ -661,39 +587,26 @@ pub fn run_models_check(args: &[String], json_output: bool) -> ExitCode {
     }
     checks.insert("model_weights".to_string(), weights_result);
 
-    if !json_output && !dry_run {
-        println!("Checking GLiNER2 provisioning...");
-    }
-    let gliner2_result = run_provision_gliner2(&run_dir, dry_run);
-    if !json_output {
-        if dry_run {
-            println!(
-                "  gliner2_provision: {} (wraps {})",
-                gliner2_result.command.as_deref().unwrap_or(""),
-                gliner2_result.wrapped_script.as_deref().unwrap_or("")
-            );
-        } else {
-            print_model_check_result("gliner2_provision", &gliner2_result);
+    // Check provisioning for each engine in the registry
+    for engine in ENGINE_REGISTRY {
+        if !json_output && !dry_run {
+            println!("Checking {} provisioning...", engine.name);
         }
-    }
-    checks.insert("gliner2_provision".to_string(), gliner2_result);
-
-    if !json_output && !dry_run {
-        println!("Checking DataFog provisioning...");
-    }
-    let datafog_result = run_provision_datafog(&run_dir, dry_run);
-    if !json_output {
-        if dry_run {
-            println!(
-                "  datafog_provision: {} (wraps {})",
-                datafog_result.command.as_deref().unwrap_or(""),
-                datafog_result.wrapped_script.as_deref().unwrap_or("")
-            );
-        } else {
-            print_model_check_result("datafog_provision", &datafog_result);
+        let provision_result = run_provision_check(engine, &run_dir, dry_run);
+        if !json_output {
+            if dry_run {
+                println!(
+                    "  {}_provision: {} (wraps {})",
+                    engine.name,
+                    provision_result.command.as_deref().unwrap_or(""),
+                    provision_result.wrapped_script.as_deref().unwrap_or("")
+                );
+            } else {
+                print_model_check_result(&format!("{}_provision", engine.name), &provision_result);
+            }
         }
+        checks.insert(format!("{}_provision", engine.name), provision_result);
     }
-    checks.insert("datafog_provision".to_string(), datafog_result);
 
     if !json_output && !dry_run {
         println!("Running manifest provisioning tests...");
@@ -763,14 +676,13 @@ pub fn run_models_check(args: &[String], json_output: bool) -> ExitCode {
     }
     checks.insert("fault_conformance".to_string(), fault_result);
 
-    let models_ready = checks
-        .get("gliner2_provision")
-        .map(|c| c.pass)
-        .unwrap_or(false)
-        || checks
-            .get("datafog_provision")
+    // At least one engine from the registry must be provisioned
+    let models_ready = ENGINE_REGISTRY.iter().any(|engine| {
+        checks
+            .get(&format!("{}_provision", engine.name))
             .map(|c| c.pass)
-            .unwrap_or(false);
+            .unwrap_or(false)
+    });
 
     let all_pass = checks.values().all(|c| c.pass);
     let duration = start.elapsed().as_secs_f64();
