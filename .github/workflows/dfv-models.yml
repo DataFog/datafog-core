@@ -140,8 +140,44 @@ jobs:
 
       - run: cargo dfv build --sdk python
 
-      - name: Run doctor with model verification
-        run: cargo dfv doctor --json
+      - name: Verify model weight hashes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          
+          models_dir = Path("models")
+          manifest_path = models_dir / "manifest.json"
+          
+          if not manifest_path.exists():
+              print("ERROR: models/manifest.json not found")
+              exit(1)
+          
+          manifest = json.loads(manifest_path.read_text())
+          all_ok = True
+          
+          for name, info in manifest.items():
+              file_path = models_dir / info["path"]
+              if not file_path.exists():
+                  print(f"FAIL: {name} - file missing")
+                  all_ok = False
+                  continue
+          
+              data = file_path.read_bytes()
+              actual_sha = hashlib.sha256(data).hexdigest()
+              expected_sha = info["sha256"]
+          
+              if actual_sha != expected_sha:
+                  print(f"FAIL: {name} - sha256 mismatch")
+                  all_ok = False
+              else:
+                  print(f"OK: {name}")
+          
+          if not all_ok:
+              exit(1)
+          print(f"\nAll {len(manifest)} model files verified")
+          PY
 
       - name: Run model checks
         run: cargo dfv check --models --json
