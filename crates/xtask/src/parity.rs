@@ -120,6 +120,116 @@ console.log(JSON.stringify(result));
     serde_json::from_str(stdout.trim()).ok()
 }
 
+fn scan_with_rust(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
+    let cargo_toml = root.join("crates").join("core").join("Cargo.toml");
+    if !cargo_toml.exists() {
+        return None;
+    }
+
+    let escaped_text = text.replace('\\', "\\\\").replace('"', "\\\"");
+    let code = format!(
+        r#"
+use datafog_core::scan;
+fn main() {{
+    let findings = scan("{escaped_text}");
+    let result: Vec<_> = findings.iter().map(|f| {{
+        serde_json::json!({{
+            "entity_type": f.entity_type,
+            "matched_text": f.matched_text,
+            "codepoint_start": f.codepoint_range.start,
+            "codepoint_end": f.codepoint_range.end,
+            "byte_start": f.byte_range.start,
+            "byte_end": f.byte_range.end
+        }})
+    }}).collect();
+    println!("{{}}", serde_json::to_string(&result).unwrap());
+}}
+"#
+    );
+
+    let tmp_dir = std::env::temp_dir().join("dfv_rust_scan");
+    let _ = fs::create_dir_all(&tmp_dir);
+    let src_file = tmp_dir.join("main.rs");
+    if fs::write(&src_file, code).is_err() {
+        return None;
+    }
+
+    let cargo_toml_content = format!(
+        r#"[package]
+name = "dfv_rust_scan"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+datafog-core = {{ path = "{}" }}
+serde_json = "1"
+"#,
+        root.join("crates/core").display()
+    );
+
+    if fs::write(tmp_dir.join("Cargo.toml"), cargo_toml_content).is_err() {
+        return None;
+    }
+
+    let _ = fs::create_dir_all(tmp_dir.join("src"));
+    if fs::rename(&src_file, tmp_dir.join("src").join("main.rs")).is_err() {
+        return None;
+    }
+
+    let output = Command::new("cargo")
+        .args(["run", "--quiet", "--release"])
+        .current_dir(&tmp_dir)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).ok()
+}
+
+fn scan_with_wasm(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
+    let wasm_dir = root.join("bindings").join("wasm");
+    let pkg_dir = wasm_dir.join("pkg");
+    let wasm_js = pkg_dir.join("datafog_wasm.js");
+
+    if !wasm_js.exists() {
+        return None;
+    }
+
+    let escaped_text = serde_json::to_string(text).unwrap();
+    let code = format!(
+        r#"
+const {{ scan }} = require('./pkg/datafog_wasm.js');
+const findings = scan({escaped_text});
+const result = findings.map(f => ({{
+    entity_type: f.entityType,
+    matched_text: f.matchedText,
+    codepoint_start: f.codepointRange.start,
+    codepoint_end: f.codepointRange.end,
+    byte_start: f.byteRange.start,
+    byte_end: f.byteRange.end
+}}));
+console.log(JSON.stringify(result));
+"#
+    );
+
+    let output = Command::new("node")
+        .args(["-e", &code])
+        .current_dir(&wasm_dir)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).ok()
+}
+
 fn compare_sdk_findings(
     fixture_id: &str,
     sdk_a: &str,
@@ -202,9 +312,10 @@ fn run_live_parity(
     let mut all_discrepancies = Vec::new();
     let mut fixtures_checked = 0;
     let mut sdk_results: HashMap<String, Vec<SdkFinding>> = HashMap::new();
+    let mut sdks_available: Vec<String> = Vec::new();
 
     if !json_output {
-        println!("Running live cross-SDK parity check...");
+        println!("Running live cross-SDK parity check (all 4 SDKs)...");
         println!();
     }
 
@@ -242,21 +353,46 @@ fn run_live_parity(
 
             fixtures_checked += 1;
 
+            let rust_findings = scan_with_rust(text, root);
             let python_findings = scan_with_python(text, root);
             let node_findings = scan_with_node(text, root);
+            let wasm_findings = scan_with_wasm(text, root);
 
-            if let (Some(py), Some(node)) = (&python_findings, &node_findings) {
-                let discrepancies = compare_sdk_findings(&fixture_id, "python", py, "node", node);
-                all_discrepancies.extend(discrepancies);
+            let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
+                ("rust", rust_findings.as_ref()),
+                ("python", python_findings.as_ref()),
+                ("node", node_findings.as_ref()),
+                ("wasm", wasm_findings.as_ref()),
+            ];
 
+            if fixtures_checked == 1 {
+                for (name, findings) in &sdk_map {
+                    if findings.is_some() && !sdks_available.contains(&name.to_string()) {
+                        sdks_available.push(name.to_string());
+                    }
+                }
+            }
+
+            let available: Vec<_> = sdk_map
+                .iter()
+                .filter_map(|(name, f)| f.map(|findings| (*name, findings)))
+                .collect();
+
+            for (name, findings) in &available {
                 sdk_results
-                    .entry(format!("{fixture_id}_python"))
+                    .entry(format!("{fixture_id}_{name}"))
                     .or_default()
-                    .extend(py.iter().cloned());
-                sdk_results
-                    .entry(format!("{fixture_id}_node"))
-                    .or_default()
-                    .extend(node.iter().cloned());
+                    .extend(findings.iter().cloned());
+            }
+
+            for i in 0..available.len() {
+                for j in (i + 1)..available.len() {
+                    let (sdk_a, findings_a) = available[i];
+                    let (sdk_b, findings_b) = available[j];
+                    let discrepancies =
+                        compare_sdk_findings(&fixture_id, sdk_a, findings_a, sdk_b, findings_b);
+                    all_discrepancies.extend(discrepancies);
+                }
             }
         }
     }
@@ -267,7 +403,16 @@ fn run_live_parity(
     let parity_result = ParityResult {
         pass,
         fixtures_checked,
-        sdks_compared: vec!["python".to_string(), "node".to_string()],
+        sdks_compared: if sdks_available.is_empty() {
+            vec![
+                "rust".to_string(),
+                "python".to_string(),
+                "node".to_string(),
+                "wasm".to_string(),
+            ]
+        } else {
+            sdks_available
+        },
         discrepancies: all_discrepancies,
         duration_seconds: duration,
         run_directory: run_dir.to_path_buf(),
@@ -316,8 +461,8 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!("Dry run - would execute:");
             if live {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
-                println!("  2. Run scan() through each installed SDK (Python, Node)");
-                println!("  3. Compare actual output spans across SDKs");
+                println!("  2. Run scan() through each installed SDK (Rust, Python, Node, WASM)");
+                println!("  3. Compare actual output spans across all SDK pairs");
                 println!("  4. Report any discrepancies in entity_type, matched_text, or ranges");
             } else {
                 println!("  1. Load fixtures from fixtures/*.jsonl");
@@ -333,7 +478,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!();
             if live {
                 println!("Note: --live runs actual scans through installed SDKs.");
-                println!("Requires built and installed Python wheel and Node package.");
+                println!("Requires built Rust core, Python wheel, Node package, and WASM pkg.");
             } else {
                 println!("Note: This validates fixture offset self-consistency.");
                 println!("All SDKs must produce identical spans for the same fixture.");
@@ -355,7 +500,10 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!();
             println!("Live parity check complete:");
             println!("  Fixtures checked: {}", parity_result.fixtures_checked);
-            println!("  SDKs compared: python, node");
+            println!(
+                "  SDKs compared: {}",
+                parity_result.sdks_compared.join(", ")
+            );
             println!("  Duration: {:.1}s", parity_result.duration_seconds);
             println!();
 

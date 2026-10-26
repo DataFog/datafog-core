@@ -58,6 +58,12 @@ struct BenchBaseline {
     coefficient_of_variation: f64,
     #[serde(default)]
     runs: usize,
+    #[serde(default)]
+    provisional: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    machine: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<String>,
 }
 
 fn parse_benchmark_output(output: &str) -> Option<BenchMeasurement> {
@@ -206,7 +212,26 @@ fn compare_with_baseline(
         / baseline.median_mib_per_second)
         * 100.0;
 
-    let (status, pass) = if delta_percent < -10.0 {
+    let (status, pass) = if baseline.provisional {
+        if delta_percent < -10.0 {
+            (
+                "warn: >10% slower (baseline is provisional)".to_string(),
+                true,
+            )
+        } else if delta_percent < -5.0 {
+            (
+                "warn: 5-10% slower (baseline is provisional)".to_string(),
+                true,
+            )
+        } else if delta_percent > 5.0 {
+            (
+                "improved: >5% faster (baseline is provisional)".to_string(),
+                true,
+            )
+        } else {
+            ("ok: within 5% (baseline is provisional)".to_string(), true)
+        }
+    } else if delta_percent < -10.0 {
         ("fail: >10% slower".to_string(), false)
     } else if delta_percent < -5.0 {
         ("warn: 5-10% slower".to_string(), true)
@@ -399,6 +424,9 @@ pub fn run_bench(args: &[String], json_output: bool) -> ExitCode {
             median_mib_per_second: summary.median_mib_per_second,
             coefficient_of_variation: summary.coefficient_of_variation,
             runs: summary.runs,
+            provisional: true,
+            machine: None,
+            notes: None,
         };
         if let Some(parent) = baseline_path.parent() {
             let _ = fs::create_dir_all(parent);

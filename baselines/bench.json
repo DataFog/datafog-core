@@ -1,5 +1,8 @@
 {
   "median_mib_per_second": 31.933,
   "coefficient_of_variation": 28.004627504740466,
-  "runs": 5
+  "runs": 5,
+  "provisional": true,
+  "machine": "cloud-agent-vm",
+  "notes": "High variance (CV 28%) - baseline recorded on a VM with unpredictable performance. Bench is warn-only until a baseline from a stable dedicated runner exists."
 }
