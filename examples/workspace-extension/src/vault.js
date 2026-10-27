@@ -78,7 +78,8 @@ function recoverySecret(code) {
 }
 
 function derive(password, salt, signal) {
-  if (typeof password !== "string" || !password.isWellFormed() || password.length === 0 || password.length > 1024) return Promise.reject(new HostError("invalid_credentials"));
+  const passwordBytes = encoder.encode(password);
+  if (typeof password !== "string" || !password.isWellFormed() || passwordBytes.length === 0 || passwordBytes.length > 1024) return Promise.reject(new HostError("invalid_credentials"));
   const worker = new Worker(new URL("./kdf-worker.js", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     const stop = () => { worker.terminate(); signal?.removeEventListener("abort", cancel); };

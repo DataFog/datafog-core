@@ -25,12 +25,6 @@ pub const MAX_LABEL_BYTES: usize = 32;
 pub const MARKER_CODE_LENGTH: usize = 6;
 pub type PublicId = [u8; 16];
 
-const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
-/// with slack so moderately damaged markers are still recognized and rejected.
-const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
-const MAX_CODE_ATTEMPTS: u32 = 32;
-
 /// Complete optimistic-concurrency identity, not an authorization credential.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Head {
@@ -217,7 +211,15 @@ impl Drop for Entry {
     }
 }
 
-/// Lowercase, trimmed, with every run of whitespace collapsed to one space.
+/// Derive the normalized identity key for workspace lookup.
+///
+/// Uses [`str::split_whitespace`], which recognizes Unicode whitespace including
+/// NBSP (U+00A0) and tabs, so leading/trailing spaces, NBSP and multiple interior
+/// spaces all collapse. Uses [`char::to_lowercase`] for Unicode-aware lowercasing,
+/// so `ß` maps to `ss` and Turkish `İ` maps to `i` + combining dot.
+///
+/// This means values that differ only in case, spacing type or whitespace amount
+/// share one entry. The stored `display` is the first spelling seen, untrimmed.
 fn identity_key(value: &str) -> String {
     let mut key = String::with_capacity(value.len());
     for word in value.split_whitespace() {
@@ -630,7 +632,14 @@ impl Workspace {
     }
 
     /// Restore committed markers; any issue fails the whole call so no partially
-    /// restored text is exposed. Use `restore_report` to locate the issues.
+    /// restored text is exposed. Marker matching ignores case and accepts Crockford's
+    /// `I`/`L` → `1` and `O` → `0` substitutions in the code. Use `restore_report`
+    /// to locate the issues.
+    ///
+    /// Any `[[LABEL_CODE]]`-shaped span that does not resolve to a committed entry
+    /// blocks restoration, including accidental patterns such as `[[my_note]]` or
+    /// `[[TODO_ABC123]]`. These are considered damaged markers; the caller should
+    /// remove or escape them before retrying. `restore` maps any issue to `InvalidMarker`.
     pub fn restore(&self, text: &str) -> Result<String> {
         let mut report = self.restore_report(text)?;
         report
@@ -705,6 +714,12 @@ impl Workspace {
         })
     }
 }
+
+const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
+/// with slack so moderately damaged markers are still recognized and rejected.
+const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
+const MAX_CODE_ATTEMPTS: u32 = 32;
 
 /// Committed `LABEL_CODE` words outside any `[[...]]` span. Uncommitted look-alikes,
 /// such as order numbers, are ordinary text.
@@ -928,4 +943,63 @@ pub fn byte_range_from_utf16(text: &str, range: TextRange) -> Result<TextRange> 
     index
         .byte_range_from_utf16(range)
         .map_err(|_| error(ErrorCode::InvalidFinding))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_attempt_codes(
+        namespace: PublicId,
+        operation: PublicId,
+        label: &str,
+        counter: u64,
+    ) -> Vec<String> {
+        (0..MAX_CODE_ATTEMPTS)
+            .map(|attempt| {
+                let mut mac = Hmac::<Sha256>::new_from_slice(&operation).unwrap();
+                mac.update(b"datafog-workspace-marker-code\0");
+                mac.update(&namespace);
+                mac.update(label.as_bytes());
+                mac.update(&[0]);
+                mac.update(&counter.to_be_bytes());
+                mac.update(&attempt.to_be_bytes());
+                let digest = mac.finalize().into_bytes();
+                let bits = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]) >> 2;
+                (0..MARKER_CODE_LENGTH)
+                    .map(|index| {
+                        let shift = 5 * (MARKER_CODE_LENGTH - 1 - index);
+                        char::from(CROCKFORD[((bits >> shift) & 31) as usize])
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn issue_code_redraws_on_collision_and_exhausts_after_max_attempts() {
+        let namespace = [1u8; 16];
+        let operation = [0u8; 16];
+        let mut codes = BTreeSet::new();
+
+        let first = issue_code(namespace, operation, "PERSON", 0, &mut codes).unwrap();
+        assert!(valid_code(&first));
+        assert!(codes.contains(&first));
+
+        let second = issue_code(namespace, operation, "PERSON", 1, &mut codes).unwrap();
+        assert!(valid_code(&second));
+        assert_ne!(first, second);
+        assert!(codes.contains(&second));
+
+        let all_codes: BTreeSet<String> = all_attempt_codes(namespace, operation, "PERSON", 2)
+            .into_iter()
+            .collect();
+        let mut blocking = all_codes.clone();
+        let result = issue_code(namespace, operation, "PERSON", 2, &mut blocking);
+        assert_eq!(result.err().unwrap().code, ErrorCode::ResourceLimit);
+
+        let mut partial = all_codes.iter().skip(1).cloned().collect();
+        let fallback = issue_code(namespace, operation, "PERSON", 2, &mut partial).unwrap();
+        assert_eq!(fallback, all_codes.iter().next().unwrap().clone());
+    }
 }
