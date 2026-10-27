@@ -8,7 +8,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- D4 test set: 85 labelled fixtures for `PERSON` (42 entities) and `STREET_ADDRESS` (38 entities) in `fixtures/d4-names-addresses.jsonl`, with offset validation and documentation (#115)
+- D4 test set: 85 labelled fixtures for `PERSON` (42 entities), `STREET_ADDRESS` (38 entities, street-line only), and `ZIP_CODE` (26 entities) in `fixtures/d4-names-addresses.jsonl`, with offset validation and documentation (#115)
 - Agent-friendly verification CLI (`cargo dfv`) with `doctor`, `build`, `check`, `parity`, `eval`, `bench`, and `smoke` commands for cross-SDK testing (#108, #109)
 - Per-entity precision/recall/F1 evaluation with tiered accuracy gating: first-party engines fail on F1 drops >1pt, community engines warn only (#109)
 - Provisional baselines for DataFog and GLiNER2 models; regressions against provisional baselines warn but do not block PRs (#109, #112)

@@ -516,6 +516,11 @@ fn compute_model_metrics(
             })
             .collect();
 
+        // One-to-one matching: each prediction can match at most one gold span.
+        // Track which predictions have been consumed for exact and lenient matching.
+        let mut exact_consumed: HashSet<usize> = HashSet::new();
+        let mut lenient_consumed: HashSet<usize> = HashSet::new();
+
         for exp in &fixture.entities {
             if !scored_types.contains(&exp.label) {
                 excluded_types.insert(exp.label.clone());
@@ -526,52 +531,89 @@ fn compute_model_metrics(
             let exact = exact_stats.entry(exp.label.clone()).or_insert((0, 0, 0));
             let lenient = lenient_stats.entry(exp.label.clone()).or_insert((0, 0, 0));
 
-            let exact_match = found
-                .iter()
-                .any(|f| f.0 == exp.label && f.2 == exp.start && f.3 == exp.end);
+            // Exact match: find first unconsumed prediction with exact boundaries
+            let exact_match = found.iter().enumerate().find(|(idx, f)| {
+                !exact_consumed.contains(idx)
+                    && f.0 == exp.label
+                    && f.2 == exp.start
+                    && f.3 == exp.end
+            });
 
-            let lenient_match = found
-                .iter()
-                .any(|f| f.0 == exp.label && ranges_overlap(f.2, f.3, exp.start, exp.end));
-
-            if exact_match {
+            if let Some((idx, _)) = exact_match {
+                exact_consumed.insert(idx);
                 exact.0 += 1;
             } else {
                 exact.2 += 1;
             }
 
-            if lenient_match {
+            // Lenient match: find first unconsumed prediction with overlapping boundaries
+            let lenient_match = found.iter().enumerate().find(|(idx, f)| {
+                !lenient_consumed.contains(idx)
+                    && f.0 == exp.label
+                    && ranges_overlap(f.2, f.3, exp.start, exp.end)
+            });
+
+            if let Some((idx, _)) = lenient_match {
+                lenient_consumed.insert(idx);
                 lenient.0 += 1;
             } else {
                 lenient.2 += 1;
             }
         }
 
+        // For FP counting, deduplicate overlapping predictions:
+        // If multiple predictions of the same type overlap, count only one FP.
+        // Group predictions by type, then merge overlapping spans.
+        let mut preds_by_type: HashMap<String, Vec<(usize, usize)>> = HashMap::new();
         for f in &found {
-            if !scored_types.contains(&f.0) {
-                continue;
+            if scored_types.contains(&f.0) {
+                preds_by_type
+                    .entry(f.0.clone())
+                    .or_default()
+                    .push((f.2, f.3));
+            }
+        }
+
+        for (entity_type, mut spans) in preds_by_type {
+            // Sort by start position
+            spans.sort_by_key(|s| s.0);
+
+            // Merge overlapping spans
+            let mut merged: Vec<(usize, usize)> = Vec::new();
+            for (start, end) in spans {
+                if let Some(last) = merged.last_mut() {
+                    if start <= last.1 {
+                        // Overlaps with last span, extend it
+                        last.1 = last.1.max(end);
+                        continue;
+                    }
+                }
+                merged.push((start, end));
             }
 
-            total_found += 1;
+            total_found += merged.len();
 
-            let exact_match = fixture
-                .entities
-                .iter()
-                .any(|e| e.label == f.0 && e.start == f.2 && e.end == f.3);
+            for (start, end) in &merged {
+                let exact_match = fixture
+                    .entities
+                    .iter()
+                    .any(|e| e.label == entity_type && e.start == *start && e.end == *end);
 
-            let lenient_match = fixture
-                .entities
-                .iter()
-                .any(|e| e.label == f.0 && ranges_overlap(f.2, f.3, e.start, e.end));
+                let lenient_match = fixture.entities.iter().any(|e| {
+                    e.label == entity_type && ranges_overlap(*start, *end, e.start, e.end)
+                });
 
-            if !exact_match {
-                let exact = exact_stats.entry(f.0.clone()).or_insert((0, 0, 0));
-                exact.1 += 1;
-            }
+                if !exact_match {
+                    let exact = exact_stats.entry(entity_type.clone()).or_insert((0, 0, 0));
+                    exact.1 += 1;
+                }
 
-            if !lenient_match {
-                let lenient = lenient_stats.entry(f.0.clone()).or_insert((0, 0, 0));
-                lenient.1 += 1;
+                if !lenient_match {
+                    let lenient = lenient_stats
+                        .entry(entity_type.clone())
+                        .or_insert((0, 0, 0));
+                    lenient.1 += 1;
+                }
             }
         }
     }

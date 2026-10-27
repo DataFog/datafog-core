@@ -1,109 +1,105 @@
-# D4 Test Set: Names and Addresses
+# D4 Test Set
 
-The D4 test set provides labelled evaluation data for person names (`PERSON`) and
-street addresses (`STREET_ADDRESS`). It's the detection measurement fixture for
-[ADR 004](adr/004-workspace-aliasing-v1.md) and [workspace-v1-plan.md](workspace-v1-plan.md).
+D4 is a labelled evaluation fixture set for measuring name and address detection against the ADR 004 bar.
 
-## Purpose
+## Entity types
 
-Rules detect emails, phones, card numbers, SSNs, routing numbers, and credentials
-well. Names and street addresses in free text are the gap — rules miss most of
-them. The D4 set measures how well GLiNER2 (and later models) close that gap.
+| Type | Description | Source |
+|------|-------------|--------|
+| PERSON | Full person names | GLiNER2 model |
+| STREET_ADDRESS | Street line only (number, street name, apt/suite/unit) | GLiNER2 model |
+| ZIP_CODE | US postal codes (5-digit or ZIP+4) | Rule detector |
 
-**Detection bar (ADR 004):**
-- At least 90% of names caught before review, using GLiNER2's `person` label at
-  threshold 0.5.
-- Street-address recall is an open measurement until a stable baseline exists.
+## Labelling convention
 
-## Fixture file
+### STREET_ADDRESS
 
-`fixtures/d4-names-addresses.jsonl` — 85 records with 42 `PERSON` and 38
-`STREET_ADDRESS` entities, plus 22 hard negatives.
+**STREET_ADDRESS covers the street line only.** For example:
 
-## Entity coverage
+- `123 Main Street` — yes
+- `Apt 4B, 456 Oak Lane` — yes (apartment stays with street)
+- `Suite 3400, 350 Fifth Avenue` — yes
+- `123 Main Street, Anytown, CA 90210` — no (includes city/state/zip)
 
-### PERSON (42 entities across 38 positive fixtures)
+**Rationale:** Each address component gets its own marker so city and postal code don't reach the LLM in plain text next to a street marker. City + zip together can narrow identity significantly, so they are detected as separate findings rather than grouped with the street.
 
-- **Multi-part names:** First + Last, First + Middle + Last
-- **Hyphenated names:** García-López, Tanaka-Williams, O'Reilly-Chen
-- **Non-English names:** Chinese (李明), Japanese (Tanaka Yuki), Vietnamese
-  (Nguyễn Văn Minh), Arabic (Ahmed Al-Rashid, Mohammed bin Salman Al-Faisal),
-  Icelandic (Björk Guðmundsdóttir)
-- **Diacritics:** María, François, Özlem, Søren, Chloé
-- **Names near code:** Inside strings, code comments, function calls
-- **Names with punctuation:** Titles (Dr.), suffixes (Jr.), colons, parentheses
-- **ALL CAPS names:** WONG, DAVID MING-HO
+### ZIP_CODE
 
-### STREET_ADDRESS (38 entities across 36 positive fixtures)
+ZIP_CODE uses the existing rule detector and covers:
+- 5-digit codes: `90210`
+- ZIP+4 codes: `95014-2084`
 
-- **US addresses:** Standard (123 Main Street, City, ST 12345), with ZIP+4
-- **Apartment/unit numbers:** Apt 4B, Suite 3400, Unit 7, Floor 12
-- **International formats:** UK (W1U 8EW), German (10117 Berlin), Japanese
-  (163-8001), French (75001 Paris), Canadian (N2J 2W2)
-- **PO Boxes:** PO Box 1234, Small Town, MT 59001
-- **Multi-line addresses:** Newline-separated components
-- **Directionals:** N., S.W., NW
-- **Named streets:** Martin Luther King Jr. Blvd, Massachusetts Ave
+### State/region
 
-### Hard negatives (22 fixtures)
+State/region is currently **unlabelled**. Whether to add a STATE entity type is an open question—it's unclear if state abbreviations alone carry enough PII risk to warrant detection.
 
-- **Company names:** Apple, Microsoft
-- **Publication names:** The Washington Post
-- **Street names as places:** Broadway, Madison Avenue, Wall Street
-- **Code patterns:** `struct Address {}`, function parameters
-- **Generic text:** "Enter your shipping address"
+### City
 
-## Synthetic data policy
+City names are currently **unlabelled**. There is no CITY entity type in datafog-core. Adding city detection is a product decision for future work.
 
-All names and addresses are synthetic. No real PII appears in the fixtures.
+## ADR 004 thresholds
 
-**Names:** Generated to cover naming patterns across cultures. Any resemblance to
-real people is coincidental.
+- **PERSON recall:** ≥90% required (ADR 004)
+- **STREET_ADDRESS recall:** No acceptance threshold defined yet — this is an open question for the maintainer.
 
-**Addresses:** Mix of famous landmark addresses (1600 Pennsylvania Avenue, 10
-Downing Street, 1 Infinite Loop), fictional addresses (742 Evergreen Terrace),
-and synthetic addresses in realistic formats.
+## Fixture categories
 
-## Offset validation
+- `single_positive`: One entity of the target type
+- `multi_positive`: Multiple entities (same or different types)
+- `hard_negative`: Similar text that should NOT match (organization names, street directions, code snippets)
 
-`scripts/validate-fixture-offsets.py` verifies that every entity's declared
-`start`/`end` offsets match the `text` field in the fixture. Run it to catch
-offset drift:
+## Entity counts
+
+- 42 PERSON entities
+- 38 STREET_ADDRESS entities
+- 26 ZIP_CODE entities
+- 22 hard negatives (empty entity lists)
+
+## Known misses
+
+### PERSON (1 exact miss, 0 lenient miss)
+
+- `d4-person-0006`: "Müller, Hans" — model predicts "Müller" and "Hans" separately instead of the inverted format
+
+### STREET_ADDRESS (1 genuine miss)
+
+- `d4-addr-0014`: "1234 Martin Luther King Jr. Blvd, Suite 100" — model produces no prediction (long street name with "Jr.")
+
+## Precision notes
+
+When scoring GLiNER2 across all fixtures (D4 + development + final = 1185 fixtures), the model predictions on non-D4 fixtures count as false positives because those fixtures have EMAIL/PHONE/SSN labels but no PERSON/STREET_ADDRESS gold labels.
+
+D4-only precision is higher than the combined precision:
+- Combined: ~18% PERSON precision (177 FPs on non-D4 fixtures)
+- D4-only: ~64% PERSON precision
+
+The combined precision reflects real over-prediction behavior: the model sometimes predicts email addresses as person names.
+
+## Usage
+
+The D4 fixtures are loaded by `cargo dfv eval` alongside development.jsonl and final.jsonl.
+
+To evaluate GLiNER2 against D4:
 
 ```bash
-python3 scripts/validate-fixture-offsets.py
-```
-
-The script runs during `cargo dfv check` and fails loudly on any mismatch.
-
-## Running evaluation
-
-```bash
-# Rule-based eval (PERSON and STREET_ADDRESS have no rule detectors, so 0 TP)
-cargo dfv eval
-
-# GLiNER2 eval (requires provisioned model)
 cargo dfv eval --model gliner2
 ```
 
-## Baseline status
+The eval reports both exact and lenient (overlap) matching:
+- **Exact match:** prediction boundaries must match gold span exactly
+- **Lenient match:** prediction must overlap gold span (same label)
 
-- **Rules:** The rule engine has no PERSON or STREET_ADDRESS detectors, so these
-  entity types have 0 TP, 0 FP, 0 FN in rule eval — they're not in the scored
-  types and don't appear in the baseline.
+Both use one-to-one assignment: each prediction matches at most one gold span.
 
-- **GLiNER2:** The GLiNER2 baseline (`baselines/eval-models-gliner2.json`) now
-  scores `PERSON` and `STREET_ADDRESS`. The baseline is provisional until someone
-  provisions the model and runs `cargo dfv eval --model gliner2 --update-baseline`.
+## Label prompt sensitivity
 
-## Extending the set
+GLiNER2 results vary with the label prompt used:
 
-Add new fixtures to `fixtures/d4-names-addresses.jsonl`, one JSON object per
-line:
+| Label | PERSON Exact Recall |
+|-------|---------------------|
+| `person` | 97.6% (41/42) |
+| `name` | ~88% |
 
-```json
-{"id":"d4-person-NNNN","text":"...","entities":[{"label":"PERSON","text":"Name Here","start":0,"end":9}],"category":"single_positive"}
-```
+The Rust core uses `"person"` as the label prompt. Using `"name"` gives lower recall.
 
-Run the offset validator after adding fixtures. Categories: `single_positive`,
-`multi_positive`, `hard_negative`.
+This explains the difference between this PR's 97.6% recall and PR #116's 88.1% recall—they use different label prompts.
