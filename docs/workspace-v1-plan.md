@@ -49,17 +49,44 @@ If the file-upload investigation keeps CSV in V1, add:
 
 ## Detection, in parallel
 
-- **Browser model (D2).** On the V1 detection path now: names and street
-  addresses in prose are what rules miss. Run the DataFog PII model in ONNX
-  Runtime Web inside an extension worker; measure size, speed on a Mac, and
-  agreement with the native model. Sid owns the model, the ONNX build and
-  accuracy; Josh owns the worker wiring. The fallback, if the browser is too slow,
-  is a small local helper reached through native messaging. Size M–L.
+- **Browser model (D2).** The in-browser model for V1 is GLiNER2
+  (`fastino/gliner2-privacy-filter-PII-multi`). The DataFog PII model is on hold
+  and may return through the planned model-engine interface (ROADMAP.md, step 6).
+  GLiNER2 is community-tier: accuracy regressions warn but do not block PRs.
+  Owner: open.
+
+  **Open questions (browser feasibility):**
+  - There is no existing WASM or browser path for GLiNER2 in this repo. The
+    Python worker (`bindings/python/python/datafog_core/_gliner2_worker.py`)
+    runs via a local Python interpreter; Node and Rust call that worker.
+  - Community ONNX exports exist (`okasi/gliner2-privacy-filter-pii-multi-onnx`,
+    `onnx-community/gliner2-multi-v1-agent-ONNX`) and can run in ONNX Runtime
+    Web. Published sizes: Q8 ~510 MB, Q4 ~458 MB, fp16 ~614 MB (multi-v1).
+  - The GLiNER2 count-gating fix (issue #87) lives in Python preprocessing. A
+    browser runtime would need equivalent logic in JavaScript or WASM, either
+    by porting the `count_logits` handling or by using an ONNX export that
+    already floors the entity count to one.
+  - Latency, memory and download size on real extension hardware are unmeasured.
+
+  The fallback, if in-browser inference is too slow or too large, is a small
+  local helper reached through native messaging. Size M–L.
+
 - **Free-text rules (D1).** Account numbers after a label, masked forms ("ending
   in 1234", `XXXX1234`), and a baseline street-address rule. Positive and negative
   tests per AGENTS.md. Size M.
+
 - **Test set and scoring (D4).** Synthetic pasted text (emails, notes, message
   threads, forms) with planted values and a scoring script for the ADR 004 bar.
+
+  **Scoring notes:**
+  - The D4 detection bar (ADR 004) requires at least 90% of names caught. Measure
+    with GLiNER2's `person` label at threshold 0.5.
+  - Street-address recall is an open measurement: the fixtures have no labelled
+    `STREET_ADDRESS` examples yet.
+  - The GLiNER2 eval baseline (`baselines/eval-models-gliner2.json`, if it exists)
+    is provisional and warn-only. Until a stable baseline is committed, accuracy
+    regressions do not block.
+
   Size M.
 
 ## Model marker tests
@@ -120,5 +147,18 @@ Real text goes into a workspace only when all of these hold:
 - The vault encryption review is done.
 
 Before that, real-data testing uses a throwaway browser profile or a build that
-saves no mappings. The critical path is the review screen (Core PRs 1–4) and the
-browser model, which decides how many names are caught before review.
+saves no mappings. The critical path is the review screen (Core PRs 1–4) and
+GLiNER2 in the browser, which decides how many names are caught before review.
+
+## Open risks for GLiNER2-first
+
+1. **Browser feasibility.** No browser path exists today. ONNX exports exist but
+   download size (458–614 MB) may be prohibitive for an extension. Measure before
+   committing.
+2. **Count-gating (#87).** The entity-count floor fix is in Python. A browser
+   runtime needs the same logic. If an ONNX export already handles this, document
+   which one; otherwise, plan the port.
+3. **Street-address fixtures.** The D4 set has no labelled `STREET_ADDRESS`
+   examples, so the 90% bar cannot be measured until fixtures are added.
+4. **Accuracy baseline.** The GLiNER2 eval baseline is provisional and warn-only.
+   Until a stable baseline is committed, accuracy comparisons are informational.

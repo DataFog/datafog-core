@@ -120,14 +120,27 @@ and in a file.
 
 Rules catch emails, phones, card numbers, SSNs, routing numbers and credentials
 well. Names and street addresses in free text are the gap: rules miss most of
-them. The in-browser model (D2) is therefore on the V1 detection path. The
-fallback is the person's own selection plus workspace recall, which catches every
-value they approved before.
+them.
 
-Proposed bar on the D4 synthetic pasted-text set, to confirm once it exists:
+The in-browser model for V1 is GLiNER2 (`fastino/gliner2-privacy-filter-PII-multi`).
+The DataFog PII model is on hold; it may return later through the planned
+model-engine interface (ROADMAP.md, step 6). GLiNER2 is a community-tier model
+engine: accuracy regressions are warn-only and do not block PRs.
 
-- No missed emails, phone numbers, card numbers, SSNs or account numbers.
-- At least 90% of names and street addresses caught before review, with no recall.
+The fallback path, when no model is available or when the model misses a value,
+is workspace recall plus the person's own selection. Workspace recall catches
+every value they approved before; the person's selection catches anything the
+scanner and recall both missed.
+
+**Detection bar (D4).** The synthetic pasted-text set, once it exists, should
+measure:
+
+- No missed emails, phone numbers, card numbers, SSNs or account numbers (rules).
+- At least 90% of names caught before review, with no recall, using GLiNER2's
+  `person` label at a 0.5 threshold.
+- Street-address recall is an open measurement. The D4 fixtures have no labelled
+  `STREET_ADDRESS` examples yet, so the 90% bar cannot be verified. Add fixtures
+  and measure before the pilot gate.
 - Every previously approved value caught by recall in later text.
 
 ### Workspace snapshot
