@@ -199,6 +199,41 @@ fn unknown_markers_reject_batches_without_admitting_pending_aliases() {
 }
 
 #[test]
+fn marker_issued_in_same_batch_is_rejected_with_expected_error() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let saved = workspace.export_bundle().unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "Alice", TextRange { start: 0, end: 5 });
+    let input1 = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let marker_from_first = workspace
+        .prepare_batch(&[input1], [3; 16])
+        .unwrap()
+        .preview()
+        .unwrap()
+        .text
+        .clone();
+    let text_with_new_marker = format!("Then {marker_from_first}");
+    let input2 = WorkspaceInput {
+        text: &text_with_new_marker,
+        findings: &[],
+    };
+    let input1_again = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let error = workspace
+        .prepare_batch(&[input1_again, input2], [4; 16])
+        .err()
+        .unwrap();
+    assert_eq!(error.code, ErrorCode::InvalidMarker);
+    assert_eq!(error.input_index, Some(1));
+    assert_eq!(error.finding_index, None);
+    assert_eq!(workspace.export_bundle().unwrap(), saved);
+}
+
+#[test]
 fn a_batch_shares_aliases_and_commits_one_snapshot_after_approval() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let original = workspace.export_bundle().unwrap();
@@ -856,4 +891,168 @@ fn restore_reports_every_blocking_span_in_order_without_partial_text() {
     assert_eq!(report.text.as_deref(), Some("Jane and Jane (ORDER_ABC123)"));
     assert_eq!(report.restored_markers, 2);
     assert!(report.issues.is_empty());
+}
+
+#[test]
+fn restore_rejects_wrong_label_and_single_bracket_markers() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let code = &marker[9..15];
+    let wrong_label = format!("[[OTHER_{code}]]");
+    let report = workspace.restore_report(&wrong_label).unwrap();
+    assert!(report.text.is_none());
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].kind, MarkerIssueKind::Unknown);
+
+    let single_bracket = format!("[PERSON_{code}]");
+    let report = workspace.restore_report(&single_bracket).unwrap();
+    assert!(
+        report.text.is_none(),
+        "single-bracket contains unbracketed committed code"
+    );
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].kind, MarkerIssueKind::Unbracketed);
+    let bare_code = format!("PERSON_{code}");
+    assert_eq!(
+        &single_bracket[report.issues[0].byte_range.start..report.issues[0].byte_range.end],
+        bare_code
+    );
+}
+
+#[test]
+fn never_committed_look_alike_restores_as_plain_text() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let look_alike = "ORDER_ABC123";
+    let report = workspace.restore_report(look_alike).unwrap();
+    assert_eq!(report.text.as_deref(), Some(look_alike));
+    assert!(report.issues.is_empty());
+
+    let bracketed_look_alike = "[[ORDER_123456]]";
+    let report = workspace.restore_report(bracketed_look_alike).unwrap();
+    assert!(report.text.is_none());
+    assert_eq!(report.issues.len(), 1);
+    assert_eq!(report.issues[0].kind, MarkerIssueKind::Unknown);
+}
+
+#[test]
+fn restore_report_has_correct_utf16_ranges_in_multibyte_text() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let text = format!("👋🎉 prefix {marker} suffix 日本語");
+    let report = workspace.restore_report(&text).unwrap();
+    assert!(report.text.is_some());
+    assert_eq!(report.restored_markers, 1);
+    assert!(report.issues.is_empty());
+
+    let code = &marker[9..15];
+    let unknown = format!("[[OTHER_{code}]]");
+    let text_with_issue = format!("日本語 {unknown} 漢字");
+    let report = workspace.restore_report(&text_with_issue).unwrap();
+    assert!(report.text.is_none());
+    assert_eq!(report.issues.len(), 1);
+
+    let issue = &report.issues[0];
+    let utf16_chars: Vec<u16> = text_with_issue.encode_utf16().collect();
+    let extracted =
+        String::from_utf16(&utf16_chars[issue.utf16_range.start..issue.utf16_range.end]).unwrap();
+    assert_eq!(extracted, unknown);
+    assert_eq!(
+        &text_with_issue[issue.byte_range.start..issue.byte_range.end],
+        unknown
+    );
+}
+
+#[test]
+fn identity_key_handles_unicode_case_and_whitespace_edge_cases() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+
+    let eszett = commit(&mut workspace, "PERSON", "Straße", [3; 16]);
+    let upper_eszett = commit(&mut workspace, "PERSON", "STRAßE", [4; 16]);
+    assert_eq!(eszett, upper_eszett, "Straße and STRAßE share identity");
+    assert_eq!(workspace.restore(&eszett).unwrap(), "Straße");
+
+    let strasse = commit(&mut workspace, "PERSON", "STRASSE", [5; 16]);
+    assert_ne!(
+        eszett, strasse,
+        "ß and SS are distinct: to_lowercase(ß) = ß, not ss"
+    );
+
+    let dotted_i = commit(&mut workspace, "PERSON", "İstanbul", [6; 16]);
+    let lower_dotted = commit(&mut workspace, "PERSON", "i̇stanbul", [7; 16]);
+    assert_eq!(
+        dotted_i, lower_dotted,
+        "İ lowercases to i + combining dot above"
+    );
+
+    let nbsp = commit(&mut workspace, "PERSON", "John\u{00A0}Doe", [8; 16]);
+    let space = commit(&mut workspace, "PERSON", "John Doe", [9; 16]);
+    assert_eq!(nbsp, space, "NBSP and space share identity");
+
+    let tabs = commit(&mut workspace, "PERSON", "Jane\t\tSmith", [10; 16]);
+    let spaces = commit(&mut workspace, "PERSON", "Jane Smith", [11; 16]);
+    assert_eq!(tabs, spaces, "tabs collapse to single space");
+
+    let leading = commit(&mut workspace, "PERSON", "  Alice  ", [12; 16]);
+    let trimmed = commit(&mut workspace, "PERSON", "Alice", [13; 16]);
+    assert_eq!(leading, trimmed, "surrounding spaces share identity");
+    assert_eq!(
+        workspace.restore(&leading).unwrap(),
+        "  Alice  ",
+        "first spelling (with spaces) is restored"
+    );
+}
+
+#[test]
+fn hmac_code_derivation_fixture_prevents_silent_algorithm_changes() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/workspace/hmac-code.json")).unwrap();
+    let operation: [u8; 16] = hex_bytes(fixture["operationHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let namespace: [u8; 16] = hex_bytes(fixture["namespaceHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let workspace = Workspace::create(namespace, [2; 16]).unwrap();
+    let value = "Jane";
+    let finding = WorkspaceFinding::new(
+        fixture["label"].as_str().unwrap(),
+        value,
+        TextRange {
+            start: 0,
+            end: value.len(),
+        },
+    );
+    let pending = workspace.prepare(value, &[finding], operation).unwrap();
+    let marker = pending.preview().unwrap().text.clone();
+    let expected_code = fixture["code"].as_str().unwrap();
+    let expected_marker = format!(
+        "[[{}_{}]]",
+        fixture["label"].as_str().unwrap(),
+        expected_code
+    );
+    assert_eq!(marker, expected_marker, "code derivation changed");
+}
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    hex.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn code_collision_redraws_and_exhaustion_returns_resource_limit() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let mut markers = Vec::new();
+    for i in 0u64..33 {
+        let value = format!("Value {i}");
+        let mut id = [3; 16];
+        id[..8].copy_from_slice(&i.to_be_bytes());
+        let marker = commit(&mut workspace, "PERSON", &value, id);
+        assert!(is_marker(&marker, "PERSON"));
+        markers.push(marker);
+    }
+    let codes: std::collections::BTreeSet<_> = markers
+        .iter()
+        .map(|m| &m[m.len() - 8..m.len() - 2])
+        .collect();
+    assert_eq!(codes.len(), markers.len(), "codes should be unique");
 }
