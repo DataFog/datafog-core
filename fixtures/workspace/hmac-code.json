@@ -1,0 +1,10 @@
+{
+  "source": "HMAC-SHA256 code derivation: key = operation ID; message = domain + namespace + label + NUL + counter (u64 BE) + attempt (u32 BE); top 30 bits → 6 Crockford characters. Counter starts at 1 for the first entry.",
+  "operationHex": "00000000000000000000000000000000",
+  "namespaceHex": "01010101010101010101010101010101",
+  "label": "PERSON",
+  "counter": 1,
+  "attempt": 0,
+  "digestHex": "9db6a476e327b6600e244602ad6c70a529c8c812d36a955e3d4cbe1b23dde4c6",
+  "code": "KPVA8X"
+}
