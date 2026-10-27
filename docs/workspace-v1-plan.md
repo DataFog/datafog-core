@@ -59,14 +59,21 @@ If the file-upload investigation keeps CSV in V1, add:
   - There is no existing WASM or browser path for GLiNER2 in this repo. The
     Python worker (`bindings/python/python/datafog_core/_gliner2_worker.py`)
     runs via a local Python interpreter; Node and Rust call that worker.
-  - Community ONNX exports exist (`okasi/gliner2-privacy-filter-pii-multi-onnx`,
-    `onnx-community/gliner2-multi-v1-agent-ONNX`) and can run in ONNX Runtime
-    Web. Published sizes: Q8 ~510 MB, Q4 ~458 MB, fp16 ~614 MB (multi-v1).
-  - The GLiNER2 count-gating fix (issue #87) lives in Python preprocessing. A
-    browser runtime would need equivalent logic in JavaScript or WASM, either
-    by porting the `count_logits` handling or by using an ONNX export that
-    already floors the entity count to one.
+  - Community ONNX exports exist and can run in ONNX Runtime Web:
+    - `okasi/gliner2-privacy-filter-pii-multi-onnx` — same checkpoint we use;
+      Q4 479 MB, Q8 533 MB, plus 16 MB tokenizer. Apache-2.0.
+    - `onnx-community/gliner2-multi-v1-agent-ONNX` — different model (multi-v1);
+      fp16 614 MB, fp32 1228 MB. Apache-2.0.
+    - No fp16 export of the privacy-filter checkpoint is published. The PyTorch
+      weights we use are 1228 MB.
+  - The GLiNER2 count-floor fix (issue #87) wraps `model.count_pred` in a
+    `FlooredCountPred` torch.nn.Module. At inference it boosts the count=1 score
+    when the predicted count is 0, lifting it to 1. A browser runtime must apply
+    the same floor to the count head's output, either in JS postprocessing or
+    inside the ONNX graph. No named export is verified to include this fix.
   - Latency, memory and download size on real extension hardware are unmeasured.
+  - Language coverage: en, fr, es, de, it, pt, nl. Does not include Arabic,
+    Persian or Turkish.
 
   The fallback, if in-browser inference is too slow or too large, is a small
   local helper reached through native messaging. Size M–L.
@@ -83,8 +90,9 @@ If the file-upload investigation keeps CSV in V1, add:
     with GLiNER2's `person` label at threshold 0.5.
   - Street-address recall is an open measurement: the fixtures have no labelled
     `STREET_ADDRESS` examples yet.
-  - The GLiNER2 eval baseline (`baselines/eval-models-gliner2.json`, if it exists)
-    is provisional and warn-only. Until a stable baseline is committed, accuracy
+  - The GLiNER2 eval baseline (`baselines/eval-models-gliner2.json`) is
+    provisional and warn-only; every score is currently n/a because there are no
+    `STREET_ADDRESS` labels. Until a stable baseline is committed, accuracy
     regressions do not block.
 
   Size M.
@@ -153,12 +161,12 @@ GLiNER2 in the browser, which decides how many names are caught before review.
 ## Open risks for GLiNER2-first
 
 1. **Browser feasibility.** No browser path exists today. ONNX exports exist but
-   download size (458–614 MB) may be prohibitive for an extension. Measure before
-   committing.
-2. **Count-gating (#87).** The entity-count floor fix is in Python. A browser
-   runtime needs the same logic. If an ONNX export already handles this, document
-   which one; otherwise, plan the port.
+   download size (479–533 MB for the privacy-filter checkpoint, 614+ MB for
+   multi-v1) may be prohibitive for an extension. Measure before committing.
+2. **Count-floor (#87).** The `FlooredCountPred` fix wraps `model.count_pred` in
+   the Python worker. A browser runtime must apply the same floor to the count
+   head's output. No named export is verified to include it.
 3. **Street-address fixtures.** The D4 set has no labelled `STREET_ADDRESS`
    examples, so the 90% bar cannot be measured until fixtures are added.
-4. **Accuracy baseline.** The GLiNER2 eval baseline is provisional and warn-only.
-   Until a stable baseline is committed, accuracy comparisons are informational.
+4. **Accuracy baseline.** The GLiNER2 eval baseline is provisional and warn-only;
+   every score is n/a because there are no `STREET_ADDRESS` labels.
