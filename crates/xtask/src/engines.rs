@@ -143,9 +143,25 @@ impl EngineConfig {
         hasher.update(content.as_bytes());
         let sha256 = format!("{:x}", hasher.finalize());
 
-        // Try to get model info from config.json (datafog) or bundle-manifest.json
-        let config_path = bundle_path.join("config.json");
-        let (model_id, revision) = if config_path.exists() {
+        let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
+        let from_manifest = manifest.get("model").map(|model| {
+            (
+                model.get("id").and_then(|v| v.as_str()).map(String::from),
+                model
+                    .get("revision")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+            )
+        });
+        let (model_id, revision) = if let Some((id, rev)) = from_manifest {
+            (id, rev)
+        } else if self.name == "gliner2" {
+            (
+                Some("fastino/gliner2-privacy-filter-PII-multi".to_string()),
+                Some("1cb4166094dc58fa8d836429f060d6c95f62b495".to_string()),
+            )
+        } else {
+            let config_path = bundle_path.join("config.json");
             let config_content = std::fs::read_to_string(&config_path).ok();
             let config: Option<serde_json::Value> =
                 config_content.and_then(|c| serde_json::from_str(&c).ok());
@@ -154,22 +170,7 @@ impl EngineConfig {
                 .and_then(|c| c.get("model_revision"))
                 .and_then(|v| v.as_str())
                 .map(String::from);
-            // For datafog, use the HF repo name as model_id
             (Some("DataFog/pii-en-65m".to_string()), rev)
-        } else {
-            // For gliner2 and others, try bundle-manifest.json model field
-            let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
-            let model_id = manifest
-                .get("model")
-                .and_then(|m| m.get("id"))
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            let revision = manifest
-                .get("model")
-                .and_then(|m| m.get("revision"))
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            (model_id, revision)
         };
 
         Some(ManifestInfo {

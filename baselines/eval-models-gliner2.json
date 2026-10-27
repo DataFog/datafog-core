@@ -1,0 +1,31 @@
+{
+  "model_id": "fastino/gliner2-privacy-filter-PII-multi",
+  "revision": "1cb4166094dc58fa8d836429f060d6c95f62b495",
+  "manifest_sha256": "c772d4ea437d812f30e2959c3d730dffcf6be80b4339667fd30e2146c17cdb84",
+  "scored_entity_types": [
+    "STREET_ADDRESS"
+  ],
+  "excluded_entity_types": [
+    "CREDIT_CARD",
+    "DATE",
+    "EMAIL",
+    "IP_ADDRESS",
+    "PHONE",
+    "SSN",
+    "ZIP_CODE"
+  ],
+  "metrics": {
+    "STREET_ADDRESS": {
+      "true_positives": 0,
+      "false_positives": 251,
+      "false_negatives": 0,
+      "precision": 0.0
+    }
+  },
+  "summary": {
+    "total_fixtures": 1100,
+    "total_entities_expected": 0,
+    "total_entities_found": 251
+  },
+  "provisional": false
+}
