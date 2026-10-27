@@ -24,7 +24,7 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 - Model-based: depends on engine tier (see below).
 - Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
 - Parity: zero tolerance unless a PR intentionally updates a fixture.
-- Live parity: compares actual scan() output across Python and Node bindings. WASM parity is verified via smoke test in headless Chromium.
+- Live parity: compares actual scan() output across Python, Node, and WASM bindings. WASM runs via headless Chromium.
 
 **Model engine tiers:**
 - **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
@@ -43,7 +43,7 @@ Provisioning scripts produce per-engine bundles with their own manifests. Regist
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 
 **Scripts wrapped by dfv:**
-- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py
+- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py, scripts/check-gliner2-entity-count.py
 - `smoke`: bindings/python/tests/test_installed.py, scripts/test-node-package.mjs, scripts/test-wasm-package.mjs
 
 ## Correctness
