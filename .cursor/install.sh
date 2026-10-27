@@ -3,44 +3,30 @@ set -euo pipefail
 
 # DataFog Core cloud agent environment install script
 # Installs toolchains and provisions model weights for cargo dfv verification
+#
+# Idempotency: checks for existing bundle-manifest.json before downloading models.
+# Uses 'hf download' (from huggingface_hub) matching dfv-models.yml workflow.
 
 echo "=== DataFog Core Environment Install ==="
 
-# Rust 1.88
-echo "Installing Rust 1.88..."
-if command -v rustup &>/dev/null; then
-    rustup install 1.88 --profile minimal
-    rustup default 1.88
-else
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88 --profile minimal
-    source "$HOME/.cargo/env"
-fi
-rustup target add wasm32-unknown-unknown
+# Skip packages already installed by Dockerfile
+# Rust, Node, and wasm-bindgen-cli are in the Dockerfile
+# This script only handles:
+# - maturin and huggingface_hub pip packages
+# - Playwright browser install
+# - npm dependencies for bindings
+# - Model weights provisioning
 
-# Python 3.12 and maturin
+# Python dependencies (maturin and huggingface_hub for provisioning)
 echo "Installing Python dependencies..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq python3-dev python3.12-venv 2>/dev/null || true
 python3 -m pip install --upgrade pip
-python3 -m pip install maturin
+python3 -m pip install maturin 'huggingface_hub>=0.25.0'
 
-# Node.js 24 (if not already installed)
-echo "Checking Node.js..."
-if ! command -v node &>/dev/null || [[ "$(node --version | cut -d. -f1 | tr -d 'v')" -lt 24 ]]; then
-    echo "Installing Node.js 24..."
-    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-fi
-
-# wasm-bindgen-cli 0.2.127
-echo "Installing wasm-bindgen-cli..."
-cargo install wasm-bindgen-cli --version 0.2.127 --locked
-
-# Playwright Chromium
-echo "Installing Playwright Chromium..."
+# Playwright Chromium browser (Dockerfile installs deps, we need the browser)
+echo "Installing Playwright Chromium browser..."
 cd bindings/wasm
 npm install
-npx playwright install --with-deps chromium
+npx playwright install chromium
 cd ../..
 
 # Install npm dependencies for Node binding
@@ -63,73 +49,47 @@ case "$(uname -s)-$(uname -m)" in
     *)             PLATFORM="" ;;
 esac
 
-# DataFog model (if platform supported and huggingface-cli available)
-if [[ -n "$PLATFORM" ]] && command -v huggingface-cli &>/dev/null; then
+# DataFog model (if platform supported and not already provisioned)
+DATAFOG_MANIFEST="$MODELS_DIR/datafog/bundle-manifest.json"
+if [[ -n "$PLATFORM" ]] && [[ ! -f "$DATAFOG_MANIFEST" ]]; then
     echo "Downloading DataFog model for $PLATFORM..."
     DATAFOG_ARCHIVE="datafog-pii-0.1.0-runtime-0.2.0-$PLATFORM.tar.gz"
     DATAFOG_TMP="/tmp/datafog-assets"
     mkdir -p "$DATAFOG_TMP"
     
-    huggingface-cli download DataFog/pii-en-65m \
+    hf download DataFog/pii-en-65m \
         "runtimes/v0.2.0/$DATAFOG_ARCHIVE" \
         --revision 7cadd41e21f59b2a149e31378d073cf6ca057531 \
-        --local-dir "$DATAFOG_TMP" || true
+        --local-dir "$DATAFOG_TMP"
     
-    if [[ -f "$DATAFOG_TMP/runtimes/v0.2.0/$DATAFOG_ARCHIVE" ]]; then
-        python3 scripts/provision-datafog-model.py \
-            --archive "$DATAFOG_TMP/runtimes/v0.2.0/$DATAFOG_ARCHIVE" \
-            --destination "$MODELS_DIR/datafog" || true
-    fi
+    python3 scripts/provision-datafog-model.py \
+        --archive "$DATAFOG_TMP/runtimes/v0.2.0/$DATAFOG_ARCHIVE" \
+        --destination "$MODELS_DIR/datafog"
+    
     rm -rf "$DATAFOG_TMP"
+elif [[ -f "$DATAFOG_MANIFEST" ]]; then
+    echo "DataFog model already provisioned (found $DATAFOG_MANIFEST)"
 fi
 
-# GLiNER2 model (portable, CPU-only)
-if command -v huggingface-cli &>/dev/null; then
+# GLiNER2 model (portable, CPU-only, if not already provisioned)
+GLINER2_MANIFEST="$MODELS_DIR/gliner2/bundle-manifest.json"
+if [[ ! -f "$GLINER2_MANIFEST" ]]; then
     echo "Downloading GLiNER2 model..."
     GLINER2_TMP="/tmp/gliner2-download"
     mkdir -p "$GLINER2_TMP"
     
-    huggingface-cli download fastino/gliner2-privacy-filter-PII-multi \
+    hf download fastino/gliner2-privacy-filter-PII-multi \
         config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
         --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 \
-        --local-dir "$GLINER2_TMP" || true
+        --local-dir "$GLINER2_TMP"
     
-    if [[ -d "$GLINER2_TMP" ]] && [[ -f "$GLINER2_TMP/model.safetensors" ]]; then
-        python3 scripts/provision-gliner2-model.py \
-            --source "$GLINER2_TMP" \
-            --destination "$MODELS_DIR/gliner2" || true
-    fi
+    python3 scripts/provision-gliner2-model.py \
+        --source "$GLINER2_TMP" \
+        --destination "$MODELS_DIR/gliner2"
+    
     rm -rf "$GLINER2_TMP"
-fi
-
-# Create combined manifest for doctor
-if [[ -d "$MODELS_DIR" ]]; then
-    echo "Creating models manifest..."
-    python3 - <<'MANIFEST_SCRIPT'
-import json
-import hashlib
-from pathlib import Path
-
-models_dir = Path("models")
-manifest = {}
-
-for bundle_dir in models_dir.iterdir():
-    if not bundle_dir.is_dir():
-        continue
-    bundle_manifest = bundle_dir / "bundle-manifest.json"
-    if bundle_manifest.exists():
-        data = json.loads(bundle_manifest.read_text())
-        for name, identity in data.get("files", {}).items():
-            full_path = f"{bundle_dir.name}/{name}"
-            manifest[full_path] = {
-                "path": full_path,
-                "sha256": identity["sha256"]
-            }
-
-if manifest:
-    (models_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
-    print(f"Created manifest with {len(manifest)} files")
-MANIFEST_SCRIPT
+elif [[ -f "$GLINER2_MANIFEST" ]]; then
+    echo "GLiNER2 model already provisioned (found $GLINER2_MANIFEST)"
 fi
 
 echo "=== Install complete ==="

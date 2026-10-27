@@ -2,6 +2,17 @@
 
 DataFog Core supports local model inference via ModelSession. Two backends are available: the DataFog native runtime and GLiNER2 via Python. Model sessions run on Rust, Python, and Node.js; WASM is rule-based only.
 
+## Engine tiers
+
+Model engines are categorized by ownership and CI behavior:
+
+| Tier | Engine | CI on F1 regression | Owner |
+|------|--------|---------------------|-------|
+| **first_party** | datafog | > 1pt fails PR, ≤ 1pt warns | DataFog |
+| **community** | gliner2 | warn-only, never fails PRs | Requires named owner in CODEOWNERS |
+
+Contract checks block for all tiers: pinned revision verified by doctor (sha256 from each bundle's own manifest), engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in `crates/core`) is DataFog's regardless of tier and regression tests for it block.
+
 ## Sub-features
 
 ### Backends
@@ -173,13 +184,10 @@ python scripts/provision-gliner2-model.py \
 ```bash
 cargo dfv doctor              # Check model_weights status
 cargo dfv doctor --json       # Machine-readable, shows model file hashes
-```
-
-Model verification (not yet implemented):
-
-```bash
 cargo dfv check --models      # Include model-based detectors
 cargo dfv eval --models       # Run model evaluation suite
+cargo dfv eval --model datafog   # Evaluate specific engine
+cargo dfv eval --model gliner2   # Evaluate specific engine
 ```
 
 ## Gotchas

@@ -31,7 +31,9 @@ DataFog Core provides consistent APIs across Rust, Python, Node.js, and Browser/
 | `required_tokenization_items` | Query tokens needed | No |
 | `transform_with_resolved_keys` | Transform with pre-resolved keys | No |
 | `transform_with_provider_results` | Transform with pre-resolved providers | No |
-| `restore` | Reverse tokenization | No |
+| `restore` | Reverse tokenization | Yes (sync) |
+
+WASM supports `tokenize` strategy and `restore()`, but not `pseudonymize` strategy (no key provider).
 
 ### Model APIs (Rust, Python, Node only)
 
@@ -134,8 +136,8 @@ with ModelSession.open(config) as session:
 ```javascript
 import {
   scan, transform, scanAndTransform, discoverFields,
-  scanStructured, structuredScanAndTransform,
-  ModelSession
+  scanStructured, scanAndTransformStructured, transformStructured,
+  ModelSession, DataFogError
 } from "@datafog/node";
 
 // Text scanning
@@ -149,10 +151,13 @@ const result = scanAndTransform("Email jane@example.com", {
 console.log(result.text);
 console.log(result.transformations);
 
-// Structured scanning
-const data = JSON.stringify({ email: "jane@example.com" });
+// Structured scanning (takes JsonDocument, not JSON string)
+const data = { email: "jane@example.com" };
 const structured = scanStructured(data);
 const fields = discoverFields(data);
+const transformed = scanAndTransformStructured(data, {
+  transform: { default: { strategy: "redact" } }
+});
 
 // Models
 const session = await ModelSession.open(config);
@@ -161,14 +166,24 @@ try {
 } finally {
   await session.close();
 }
+
+// Error handling
+try {
+  transform("...", [], { default: { strategy: "pseudonymize", key_ref: "k" } });
+} catch (e) {
+  if (e instanceof DataFogError) {
+    console.log(e.code, e.reason);
+  }
+}
 ```
 
 ### Browser/WASM
 
 ```javascript
 import {
-  init, scan, scanAndTransform,
-  discoverFields, scanStructured, structuredScanAndTransform
+  init, scan, transform, scanAndTransform, restore,
+  discoverFields, scanStructured, transformStructured, scanAndTransformStructured,
+  DataFogError
 } from "@datafog/wasm";
 
 await init();  // Required before any other call
@@ -181,9 +196,18 @@ const result = scanAndTransform("Email jane@example.com", {
   transform: { default: { strategy: "redact" } }
 });
 
-// Structured scanning
-const data = JSON.stringify({ email: "jane@example.com" });
+// Tokenize and restore (WASM supports tokenize but not pseudonymize)
+const tokenized = scanAndTransform("Email jane@example.com", {
+  transform: { default: { strategy: "tokenize", token_ref: "t" } }
+});
+const restored = restore(tokenized.text, { scope: "session" });
+
+// Structured scanning (takes JsonDocument, not JSON string)
+const data = { email: "jane@example.com" };
 const structured = scanStructured(data);
+const transformed = scanAndTransformStructured(data, {
+  transform: { default: { strategy: "redact" } }
+});
 ```
 
 ## Driving it with cargo dfv
@@ -224,21 +248,21 @@ Node.js and WASM provide `utf16_range` for JavaScript string indexing.
 
 - Rust: `serde_json::Value`
 - Python: `dict` or `list` (JSON-compatible types only)
-- Node.js: JSON string (not object)
-- WASM: JSON string
+- Node.js: `JsonDocument` (array or object, not a JSON string)
+- WASM: `JsonDocument` (array or object, not a JSON string)
 
-Node.js and WASM structured APIs take serialized JSON strings, not JavaScript objects. Parse before passing to the API.
+Node.js and WASM structured APIs take JavaScript objects/arrays directly (`JsonDocument`), not serialized JSON strings.
 
 ### Error types
 
-| SDK | Configuration | Finding | Provider | Internal |
-|-----|---------------|---------|----------|----------|
-| Rust | `PrivacyError` | `PrivacyError` | `PrivacyError` | `PrivacyError` |
-| Python | `DataFogConfigurationError` | `DataFogFindingError` | `DataFogKeyProviderError` | `DataFogInternalError` |
-| Node.js | `Error` with payload | `Error` with payload | `Error` with payload | `Error` with payload |
-| WASM | `Error` | `Error` | N/A | `Error` |
+| SDK | Error Class | Notes |
+|-----|-------------|-------|
+| Rust | `PrivacyError` | Single error type with `code` discriminant |
+| Python | `DataFogConfigurationError`, `DataFogFindingError`, `DataFogKeyProviderError`, `DataFogInternalError` | Separate exception classes |
+| Node.js | `DataFogError` | Single class with `code`, `reason`, `path`, `findingIndex` |
+| WASM | `DataFogError` | Single class with `code`, `reason`, `path`, `findingIndex` |
 
-All errors include `code`, `reason`, `path`, and optional `finding_index`.
+All errors include `code` and optional `reason`, `path`, and `findingIndex`/`finding_index`.
 
 ### Async vs sync
 

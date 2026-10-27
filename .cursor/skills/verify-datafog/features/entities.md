@@ -130,11 +130,11 @@ cargo dfv check --json       # Machine-readable output
 cargo dfv parity             # Cross-SDK offset verification
 ```
 
-### Model-based detection (not yet implemented)
+### Model-based detection
 
 ```bash
-# When implemented:
 cargo dfv check --models     # Include model detectors
+cargo dfv eval --models      # Per-entity metrics with model detectors
 ```
 
 ### Specific test files
