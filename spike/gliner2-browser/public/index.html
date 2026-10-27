@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLiNER2 Browser Spike</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+    }
+    h1 { color: #333; }
+    .status { 
+      padding: 1rem;
+      background: #f0f0f0;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .status.loading { background: #fff3cd; }
+    .status.ready { background: #d4edda; }
+    .status.error { background: #f8d7da; }
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      resize: vertical;
+    }
+    button {
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0.5rem 0.5rem 0.5rem 0;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #0056b3; }
+    .results {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .entity {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      margin: 0.25rem;
+      background: #e7f3ff;
+      border: 1px solid #b6d4fe;
+      border-radius: 4px;
+    }
+    .entity .label {
+      font-weight: bold;
+      color: #084298;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+    .entity .text { color: #333; }
+    .entity .score { color: #666; font-size: 0.75rem; }
+    .metrics {
+      font-size: 0.875rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+    pre {
+      background: #f0f0f0;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>GLiNER2 Browser Spike</h1>
+  <p>Testing in-browser NER inference via ONNX Runtime Web.</p>
+  
+  <div id="status" class="status">Initializing...</div>
+  
+  <div>
+    <h3>Input Text</h3>
+    <textarea id="input" placeholder="Enter text to analyze...">Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives at 123 Main Street, San Francisco, CA 94105.</textarea>
+  </div>
+  
+  <div style="margin-top: 1rem;">
+    <button id="extract" disabled>Extract Entities</button>
+    <button id="benchmark" disabled>Run Benchmark</button>
+  </div>
+  
+  <div id="results" class="results" style="display: none;">
+    <h3>Results</h3>
+    <div id="entities"></div>
+    <div id="metrics" class="metrics"></div>
+  </div>
+  
+  <div id="benchmark-results" style="display: none;">
+    <h3>Benchmark Results</h3>
+    <pre id="benchmark-output"></pre>
+  </div>
+
+  <script type="module">
+    import { Gliner2Session } from "./src/gliner2-session.mjs";
+    
+    const statusEl = document.getElementById("status");
+    const inputEl = document.getElementById("input");
+    const extractBtn = document.getElementById("extract");
+    const benchmarkBtn = document.getElementById("benchmark");
+    const resultsEl = document.getElementById("results");
+    const entitiesEl = document.getElementById("entities");
+    const metricsEl = document.getElementById("metrics");
+    const benchmarkResultsEl = document.getElementById("benchmark-results");
+    const benchmarkOutputEl = document.getElementById("benchmark-output");
+    
+    let session = null;
+    
+    const DEFAULT_LABELS = [
+      "name", "email", "phone_num", "address", "id_num", "url", "username"
+    ];
+    
+    function setStatus(text, type = "") {
+      statusEl.textContent = text;
+      statusEl.className = "status " + type;
+    }
+    
+    async function init() {
+      try {
+        setStatus("Loading GLiNER2 model...", "loading");
+        
+        const coldStart = performance.now();
+        
+        session = await Gliner2Session.create({
+          modelPath: "./models/model_q8.onnx",
+          tokenizerPath: "./models/tokenizer.json",
+          metadataPath: "./models/model_q8_metadata.json",
+          configPath: "./models/config.json",
+          executionProvider: "wasm",
+        });
+        
+        const coldTime = performance.now() - coldStart;
+        
+        setStatus(
+          `Ready! Backend: ${session.backend}, Model loaded in ${coldTime.toFixed(0)}ms`,
+          "ready"
+        );
+        
+        extractBtn.disabled = false;
+        benchmarkBtn.disabled = false;
+        
+        // Store cold start time for metrics
+        window.coldStartMs = coldTime;
+        
+      } catch (err) {
+        console.error("Init failed:", err);
+        setStatus(`Error: ${err.message}`, "error");
+      }
+    }
+    
+    async function extract() {
+      if (!session) return;
+      
+      const text = inputEl.value.trim();
+      if (!text) return;
+      
+      extractBtn.disabled = true;
+      setStatus("Extracting...", "loading");
+      
+      try {
+        const result = await session.extract(text, DEFAULT_LABELS, 0.5);
+        
+        // Display entities
+        entitiesEl.innerHTML = result.entities.length > 0
+          ? result.entities.map(e => `
+              <div class="entity">
+                <span class="label">${e.label}</span>
+                <span class="text">"${e.text}"</span>
+                <span class="score">(${(e.score * 100).toFixed(1)}%)</span>
+              </div>
+            `).join("")
+          : "<p>No entities found.</p>";
+        
+        metricsEl.textContent = `
+          Inference: ${result.inferenceTimeMs.toFixed(1)}ms | 
+          Tokens: ${result.tokenCount} | 
+          Words: ${result.wordCount} |
+          Entities: ${result.entities.length}
+        `;
+        
+        resultsEl.style.display = "block";
+        setStatus(`Done! Found ${result.entities.length} entities`, "ready");
+        
+      } catch (err) {
+        console.error("Extraction failed:", err);
+        setStatus(`Error: ${err.message}`, "error");
+      } finally {
+        extractBtn.disabled = false;
+      }
+    }
+    
+    async function runBenchmark() {
+      if (!session) return;
+      
+      benchmarkBtn.disabled = true;
+      setStatus("Running benchmark...", "loading");
+      
+      const TEST_TEXTS = [
+        // Short text (~100 chars)
+        "Contact John Smith at john@example.com.",
+        // Medium text (~500 chars)
+        `Dear Customer Support,
+        
+My name is Sarah Johnson and I need help with my account. You can reach me at sarah.johnson@company.org or call +44 20 7946 0958. My customer ID is CUS-2024-78432. I live at 45 Baker Street, London, W1U 8EW, United Kingdom. Please update my billing information.
+
+Best regards,
+Sarah`,
+        // Paste-sized text (~1.5 KB)
+        `MEETING NOTES - Q4 Planning Session
+
+Date: October 15, 2024
+Location: Conference Room A, 500 Technology Drive, Suite 400, Palo Alto, CA 94301
+
+Attendees:
+- Michael Chen (michael.chen@techcorp.io, ext. 4521)
+- Emily Rodriguez (emily.r@techcorp.io, +1 650 555 0147)
+- David Kim (d.kim@techcorp.io)
+- Lisa Wang (lisa.wang@consultant.biz, +1 415 555 0198)
+
+Action Items:
+1. Michael to review budget proposal by Oct 20
+2. Emily to schedule follow-up with vendor at 1234 Innovation Blvd, San Jose
+3. David to update CRM records for accounts #A-78432 and #B-91256
+4. Lisa to prepare presentation for client meeting on Oct 25
+
+Notes:
+- Q4 revenue target: $2.5M
+- New office address starting Nov 1: 789 Enterprise Way, Mountain View, CA 94043
+- Contact IT support at help@techcorp.io for system access
+- Emergency contact: security@techcorp.io or +1 650 555 0199
+
+Next meeting: October 22, 2024 at 2:00 PM PST
+Video link: https://meet.techcorp.io/q4-planning
+
+Please send any questions to the team Slack channel or email planning@techcorp.io.`,
+      ];
+      
+      const results = [];
+      
+      // Warm-up run
+      await session.extract(TEST_TEXTS[0], DEFAULT_LABELS, 0.5);
+      
+      for (const text of TEST_TEXTS) {
+        const times = [];
+        
+        // Run 5 iterations
+        for (let i = 0; i < 5; i++) {
+          const result = await session.extract(text, DEFAULT_LABELS, 0.5);
+          times.push(result.inferenceTimeMs);
+        }
+        
+        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+        const min = Math.min(...times);
+        const max = Math.max(...times);
+        
+        results.push({
+          textLength: text.length,
+          wordCount: text.split(/\s+/).length,
+          avgMs: avg,
+          minMs: min,
+          maxMs: max,
+        });
+      }
+      
+      const output = {
+        backend: session.backend,
+        coldStartMs: window.coldStartMs,
+        modelLoadMs: session.loadTimeMs,
+        tests: results,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+      };
+      
+      benchmarkOutputEl.textContent = JSON.stringify(output, null, 2);
+      benchmarkResultsEl.style.display = "block";
+      
+      setStatus("Benchmark complete!", "ready");
+      benchmarkBtn.disabled = false;
+    }
+    
+    extractBtn.addEventListener("click", extract);
+    benchmarkBtn.addEventListener("click", runBenchmark);
+    
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>

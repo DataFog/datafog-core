@@ -1,0 +1,20 @@
+{
+  "name": "gliner2-browser-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Spike: GLiNER2 in-browser inference via ONNX Runtime Web",
+  "scripts": {
+    "download-model": "node scripts/download-model.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
+    "parity": "node scripts/parity-check.mjs"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.22.0"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
