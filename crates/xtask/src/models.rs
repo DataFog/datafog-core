@@ -275,12 +275,16 @@ fn run_model_integration_check(run_dir: &Path, dry_run: bool) -> ModelCheckResul
 
     let repo = std::env::var("GITHUB_REPOSITORY").unwrap_or_default();
     let sha = std::env::var("GITHUB_SHA").unwrap_or_default();
+    let run_gate = std::env::var("DATAFOG_RUN_MODEL_INTEGRATION").as_deref() == Ok("1");
 
-    if repo.is_empty() || sha.is_empty() {
+    if !run_gate || repo.is_empty() || sha.is_empty() {
         return ModelCheckResult {
             pass: true,
             duration_seconds: start.elapsed().as_secs_f64(),
-            output: Some("Skipped: GITHUB_REPOSITORY or GITHUB_SHA not set".to_string()),
+            output: Some(
+                "Skipped: set DATAFOG_RUN_MODEL_INTEGRATION=1 with GITHUB_REPOSITORY and GITHUB_SHA to run the publication integration gate"
+                    .to_string(),
+            ),
             error: None,
             wrapped_script: Some(script.to_string()),
             command: Some(cmd.to_string()),
