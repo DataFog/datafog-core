@@ -80,6 +80,38 @@ jobs:
             --source "$RUNNER_TEMP/gliner2-download" \
             --destination "models/gliner2"
 
+      # Issue #87 reproduces on gliner2-base-v1 with a four-label described schema.
+      - name: Restore cached GLiNER2 base-v1 assets
+        uses: actions/cache/restore@v4
+        id: gliner2-base-cache
+        with:
+          path: ${{ runner.temp }}/gliner2-base-v1-download
+          key: gliner2-base-v1-${{ hashFiles('scripts/provision-gliner2-model.py') }}
+
+      - name: Download GLiNER2 base-v1 files (if not cached)
+        if: steps.gliner2-base-cache.outputs.cache-hit != 'true'
+        run: |
+          hf download fastino/gliner2-base-v1 \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json \
+            added_tokens.json special_tokens_map.json spm.model model.safetensors README.md \
+            --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+            --local-dir "$RUNNER_TEMP/gliner2-base-v1-download"
+
+      - name: Cache GLiNER2 base-v1 assets
+        uses: actions/cache/save@v4
+        if: steps.gliner2-base-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/gliner2-base-v1-download
+          key: ${{ steps.gliner2-base-cache.outputs.cache-primary-key }}
+
+      - name: Provision GLiNER2 base-v1 for entity-count regression
+        run: |
+          python scripts/provision-gliner2-model.py \
+            --source "$RUNNER_TEMP/gliner2-base-v1-download" \
+            --model-id fastino/gliner2-base-v1 \
+            --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+            --destination "models/gliner2-base-v1"
+
       # DataFog model caching and provisioning
       - name: Restore cached DataFog assets
         uses: actions/cache/restore@v4
@@ -150,40 +182,6 @@ jobs:
         run: |
           WHEEL=$(ls target/wheels/datafog_core-*.whl)
           python -m pip install --force-reinstall "${WHEEL}[gliner2]"
-
-      - name: Write GLiNER2 session config
-        run: |
-          python - <<'PY'
-          import hashlib, json, sys
-          from pathlib import Path
-          bundle = Path("models/gliner2")
-          manifest = bundle / "bundle-manifest.json"
-          if not manifest.exists():
-              raise SystemExit("FAIL: GLiNER2 bundle-manifest.json missing after provision")
-          config = {
-              "bundle": str(bundle.resolve()),
-              "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-              "limits": {
-                  "max_input_bytes": 65536,
-                  "max_response_bytes": 16777216,
-                  "max_findings": 65536,
-                  "timeout_ms": 120000,
-                  "cleanup_timeout_ms": 5000,
-              },
-              "gliner2": {
-                  "python": str(Path(sys.executable).resolve()),
-                  "labels": [{"label": "street_address", "threshold": 0.5}],
-                  "intra_threads": 1,
-                  "chunk_size": 384,
-                  "chunk_overlap": 64,
-              },
-          }
-          path = Path("target/gliner2-session.json")
-          path.parent.mkdir(parents=True, exist_ok=True)
-          path.write_text(json.dumps(config, indent=2))
-          print(path)
-          PY
-          echo "DATAFOG_MODEL_CONFIG=$PWD/target/gliner2-session.json" >> "$GITHUB_ENV"
 
       - name: GLiNER2 entity-count gating regression
         run: cargo test -p datafog-core --all-features --test model_gliner2_entity_count

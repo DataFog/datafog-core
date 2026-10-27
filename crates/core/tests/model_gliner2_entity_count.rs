@@ -19,7 +19,24 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn absolutize(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir().expect("cwd").join(path)
+    }
+}
+
 fn python_interpreter() -> PathBuf {
+    if let Ok(path) = std::env::var("DATAFOG_GLINER2_PYTHON") {
+        return absolutize(PathBuf::from(path));
+    }
+    let venv = workspace_root().join("target/gliner2-venv/bin/python");
+    if venv.exists() {
+        // Do not canonicalize: the venv `python` symlink must stay a venv path
+        // so `python -I` still sees venv site-packages.
+        return absolutize(venv);
+    }
     let output = std::process::Command::new("python3")
         .args(["-c", "import sys; print(sys.executable)"])
         .output()
@@ -29,9 +46,9 @@ fn python_interpreter() -> PathBuf {
         "python3 -c sys.executable failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
-        .canonicalize()
-        .expect("python interpreter path must be canonical")
+    absolutize(PathBuf::from(
+        String::from_utf8(output.stdout).unwrap().trim(),
+    ))
 }
 
 fn config_from_bundle(bundle: &Path) -> ModelSessionConfig {
@@ -51,7 +68,12 @@ fn config_from_bundle(bundle: &Path) -> ModelSessionConfig {
         },
         "gliner2": {
             "python": python,
-            "labels": [{"label": "street_address", "threshold": 0.5}],
+            "labels": [
+                {"label": "person", "threshold": 0.5, "description": "A person's full name"},
+                {"label": "street_address", "threshold": 0.5, "description": "A street address including house number and street name"},
+                {"label": "current_employer", "threshold": 0.5, "description": "The organization the caller currently works for"},
+                {"label": "salary", "threshold": 0.5, "description": "A compensation amount"}
+            ],
             "intra_threads": 1,
             "chunk_size": 384,
             "chunk_overlap": 64
@@ -68,14 +90,17 @@ fn load_gliner2_config() -> Option<ModelSessionConfig> {
             return Some(config);
         }
     }
-    let bundle = workspace_root().join("models/gliner2");
-    if bundle.join("bundle-manifest.json").exists() {
-        return Some(config_from_bundle(&bundle));
+    let root = workspace_root();
+    for name in ["models/gliner2-base-v1", "models/gliner2"] {
+        let bundle = root.join(name);
+        if bundle.join("bundle-manifest.json").exists() {
+            return Some(config_from_bundle(&bundle));
+        }
     }
     if std::env::var_os("DATAFOG_REQUIRE_GLINER2").as_deref() == Some(std::ffi::OsStr::new("1")) {
         panic!(
-            "DATAFOG_REQUIRE_GLINER2=1 but GLiNER2 is not provisioned at {}",
-            bundle.display()
+            "DATAFOG_REQUIRE_GLINER2=1 but GLiNER2 is not provisioned under {}",
+            root.join("models").display()
         );
     }
     None

@@ -14,8 +14,12 @@ from pathlib import Path
 from datafog_core import ModelSession
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = ROOT / "models" / "gliner2"
-MANIFEST = BUNDLE / "bundle-manifest.json"
+# Issue #87 reproduces on fastino/gliner2-base-v1 with a four-label described
+# schema. Prefer that bundle; fall back to the privacy-filter engine bundle.
+BUNDLE_CANDIDATES = (
+    ROOT / "models" / "gliner2-base-v1",
+    ROOT / "models" / "gliner2",
+)
 
 # Exact reproduction inputs from https://github.com/DataFog/datafog-core/issues/87
 POSITIVE = [
@@ -34,22 +38,44 @@ NEGATIVE = [
 ]
 
 
-def require_bundle() -> bool:
+def selected_bundle() -> Path | None:
+    for bundle in BUNDLE_CANDIDATES:
+        if (bundle / "bundle-manifest.json").exists():
+            return bundle
+    return None
+
+
+def require_bundle() -> Path | None:
     required = os.environ.get("DATAFOG_REQUIRE_GLINER2") == "1"
-    if MANIFEST.exists():
-        return True
-    message = f"GLiNER2 bundle missing: {MANIFEST}"
+    bundle = selected_bundle()
+    if bundle is not None:
+        return bundle
+    message = "GLiNER2 bundle missing (looked for models/gliner2-base-v1 and models/gliner2)"
     if required:
         raise SystemExit(f"FAIL: {message} (DATAFOG_REQUIRE_GLINER2=1)")
     print(f"SKIP: {message}")
-    return False
+    return None
 
 
-def session_config() -> dict:
-    sha256 = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
-    python = Path(sys.executable).resolve()
+def python_interpreter() -> Path:
+    """Absolute interpreter path without resolving a venv `python` symlink.
+
+    ModelSession launches `python -I`. Resolving `venv/bin/python` to
+    `/usr/bin/python3` would drop the venv site-packages and fail the load.
+    """
+    if override := os.environ.get("DATAFOG_GLINER2_PYTHON"):
+        path = Path(override)
+    else:
+        venv = ROOT / "target" / "gliner2-venv" / "bin" / "python"
+        path = venv if venv.exists() else Path(sys.executable)
+    return path if path.is_absolute() else (Path.cwd() / path)
+
+
+def session_config(bundle: Path) -> dict:
+    sha256 = hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest()
+    python = python_interpreter()
     return {
-        "bundle": str(BUNDLE),
+        "bundle": str(bundle),
         "manifest_sha256": sha256,
         "limits": {
             "max_input_bytes": 65536,
@@ -60,7 +86,23 @@ def session_config() -> dict:
         },
         "gliner2": {
             "python": str(python),
-            "labels": [{"label": "street_address", "threshold": 0.5}],
+            # Four-label described schema from issue #87. Descriptions change
+            # count-head behavior; a single unlabeled street_address task does
+            # not reproduce the skip on gliner2-base-v1.
+            "labels": [
+                {"label": "person", "threshold": 0.5, "description": "A person's full name"},
+                {
+                    "label": "street_address",
+                    "threshold": 0.5,
+                    "description": "A street address including house number and street name",
+                },
+                {
+                    "label": "current_employer",
+                    "threshold": 0.5,
+                    "description": "The organization the caller currently works for",
+                },
+                {"label": "salary", "threshold": 0.5, "description": "A compensation amount"},
+            ],
             "intra_threads": 1,
             "chunk_size": 384,
             "chunk_overlap": 64,
@@ -73,9 +115,11 @@ def addresses(result) -> list[str]:
 
 
 def main() -> int:
-    if not require_bundle():
+    bundle = require_bundle()
+    if bundle is None:
         return 0
-    config = session_config()
+    print(f"Using bundle {bundle}")
+    config = session_config(bundle)
     failures = []
     with ModelSession.open(config) as session:
         for text, expected in POSITIVE:
