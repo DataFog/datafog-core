@@ -16,6 +16,13 @@
     "ZIP_CODE"
   ],
   "metrics": {
+    "STREET_ADDRESS": {
+      "true_positives": 0,
+      "false_positives": 241,
+      "false_negatives": 38,
+      "precision": 0.0,
+      "recall": 0.0
+    },
     "PERSON": {
       "true_positives": 41,
       "false_positives": 200,
@@ -23,13 +30,6 @@
       "precision": 0.17012448132780084,
       "recall": 0.9761904761904762,
       "f1": 0.28975265017667845
-    },
-    "STREET_ADDRESS": {
-      "true_positives": 0,
-      "false_positives": 241,
-      "false_negatives": 38,
-      "precision": 0.0,
-      "recall": 0.0
     }
   },
   "summary": {

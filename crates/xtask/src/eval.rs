@@ -34,10 +34,13 @@ pub struct ModelEvalResult {
     pub contract: ContractResult,
     /// Accuracy metrics and comparison
     pub accuracy: AccuracyResult,
-    /// Raw metrics per entity type
+    /// Raw metrics per entity type (exact match)
     pub metrics: HashMap<String, EntityMetrics>,
-    /// Summary statistics
+    /// Summary statistics (exact match)
     pub summary: EvalSummary,
+    /// Lenient (overlap) metrics per entity type
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lenient_metrics: Option<HashMap<String, LenientEntityMetrics>>,
     /// ADR 004 detection bar results (GLiNER2 only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adr004_bar: Option<Adr004Bar>,
@@ -109,6 +112,20 @@ pub enum AccuracyStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityMetrics {
+    pub true_positives: usize,
+    pub false_positives: usize,
+    pub false_negatives: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precision: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recall: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub f1: Option<f64>,
+}
+
+/// Lenient (overlap) metrics: a match requires same label and overlapping ranges.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LenientEntityMetrics {
     pub true_positives: usize,
     pub false_positives: usize,
     pub false_negatives: usize,
@@ -228,7 +245,26 @@ fn entity_metrics_from_counts(tp: usize, fp: usize, fn_: usize) -> EntityMetrics
 
 /// Print per-entity metrics table to stdout
 fn print_metrics_table(metrics: &HashMap<String, EntityMetrics>) {
-    println!("Per-entity metrics:");
+    println!("Per-entity metrics (exact match):");
+    let mut sorted_entities: Vec<_> = metrics.iter().collect();
+    sorted_entities.sort_by_key(|(k, _)| k.as_str());
+    for (entity_type, m) in sorted_entities {
+        println!(
+            "  {}: P={} R={} F1={} (TP={} FP={} FN={})",
+            entity_type,
+            format_opt_metric(m.precision),
+            format_opt_metric(m.recall),
+            format_opt_metric(m.f1),
+            m.true_positives,
+            m.false_positives,
+            m.false_negatives
+        );
+    }
+}
+
+/// Print lenient (overlap) metrics table to stdout
+fn print_lenient_metrics_table(metrics: &HashMap<String, LenientEntityMetrics>) {
+    println!("Per-entity metrics (lenient/overlap match):");
     let mut sorted_entities: Vec<_> = metrics.iter().collect();
     sorted_entities.sort_by_key(|(k, _)| k.as_str());
     for (entity_type, m) in sorted_entities {
@@ -411,16 +447,30 @@ print(json.dumps(result))
     serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim()).ok()
 }
 
+/// Check if two ranges overlap (non-empty intersection).
+fn ranges_overlap(start1: usize, end1: usize, start2: usize, end2: usize) -> bool {
+    start1 < end2 && start2 < end1
+}
+
+/// Model metrics result including exact and lenient (overlap) scoring.
+pub struct ModelMetricsResult {
+    pub exact_metrics: HashMap<String, EntityMetrics>,
+    pub lenient_metrics: HashMap<String, LenientEntityMetrics>,
+    pub summary: EvalSummary,
+    pub excluded_types: Vec<String>,
+}
+
 fn compute_model_metrics(
     fixtures: &[FixtureRecord],
     engine: &EngineConfig,
     python_bin: &Path,
     root: &Path,
     json_output: bool,
-) -> Option<(HashMap<String, EntityMetrics>, EvalSummary, Vec<String>)> {
+) -> Option<ModelMetricsResult> {
     let scored_types = engine.scored_types_set();
 
-    let mut entity_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
+    let mut exact_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
+    let mut lenient_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
     let mut total_expected = 0;
     let mut total_found = 0;
     let mut excluded_types: HashSet<String> = HashSet::new();
@@ -473,16 +523,27 @@ fn compute_model_metrics(
             }
 
             total_expected += 1;
-            let stats = entity_stats.entry(exp.label.clone()).or_insert((0, 0, 0));
+            let exact = exact_stats.entry(exp.label.clone()).or_insert((0, 0, 0));
+            let lenient = lenient_stats.entry(exp.label.clone()).or_insert((0, 0, 0));
 
-            let matched = found
+            let exact_match = found
                 .iter()
                 .any(|f| f.0 == exp.label && f.2 == exp.start && f.3 == exp.end);
 
-            if matched {
-                stats.0 += 1;
+            let lenient_match = found
+                .iter()
+                .any(|f| f.0 == exp.label && ranges_overlap(f.2, f.3, exp.start, exp.end));
+
+            if exact_match {
+                exact.0 += 1;
             } else {
-                stats.2 += 1;
+                exact.2 += 1;
+            }
+
+            if lenient_match {
+                lenient.0 += 1;
+            } else {
+                lenient.2 += 1;
             }
         }
 
@@ -493,14 +554,24 @@ fn compute_model_metrics(
 
             total_found += 1;
 
-            let matched = fixture
+            let exact_match = fixture
                 .entities
                 .iter()
                 .any(|e| e.label == f.0 && e.start == f.2 && e.end == f.3);
 
-            if !matched {
-                let stats = entity_stats.entry(f.0.clone()).or_insert((0, 0, 0));
-                stats.1 += 1;
+            let lenient_match = fixture
+                .entities
+                .iter()
+                .any(|e| e.label == f.0 && ranges_overlap(f.2, f.3, e.start, e.end));
+
+            if !exact_match {
+                let exact = exact_stats.entry(f.0.clone()).or_insert((0, 0, 0));
+                exact.1 += 1;
+            }
+
+            if !lenient_match {
+                let lenient = lenient_stats.entry(f.0.clone()).or_insert((0, 0, 0));
+                lenient.1 += 1;
             }
         }
     }
@@ -509,19 +580,35 @@ fn compute_model_metrics(
         eprintln!();
     }
 
-    let mut metrics = HashMap::new();
+    let mut exact_metrics = HashMap::new();
     let mut total_precision = 0.0;
     let mut total_recall = 0.0;
     let mut defined_count = 0;
 
-    for (entity_type, (tp, fp, fn_)) in &entity_stats {
+    for (entity_type, (tp, fp, fn_)) in &exact_stats {
         let m = entity_metrics_from_counts(*tp, *fp, *fn_);
         if let (Some(p), Some(r)) = (m.precision, m.recall) {
             total_precision += p;
             total_recall += r;
             defined_count += 1;
         }
-        metrics.insert(entity_type.clone(), m);
+        exact_metrics.insert(entity_type.clone(), m);
+    }
+
+    let mut lenient_metrics = HashMap::new();
+    for (entity_type, (tp, fp, fn_)) in &lenient_stats {
+        let m = entity_metrics_from_counts(*tp, *fp, *fn_);
+        lenient_metrics.insert(
+            entity_type.clone(),
+            LenientEntityMetrics {
+                true_positives: m.true_positives,
+                false_positives: m.false_positives,
+                false_negatives: m.false_negatives,
+                precision: m.precision,
+                recall: m.recall,
+                f1: m.f1,
+            },
+        );
     }
 
     let macro_precision = if defined_count > 0 {
@@ -551,7 +638,12 @@ fn compute_model_metrics(
     let mut excluded: Vec<_> = excluded_types.into_iter().collect();
     excluded.sort();
 
-    Some((metrics, summary, excluded))
+    Some(ModelMetricsResult {
+        exact_metrics,
+        lenient_metrics,
+        summary,
+        excluded_types: excluded,
+    })
 }
 
 fn compute_rule_metrics(
@@ -1062,7 +1154,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             .map(|s| s.to_string())
             .collect();
 
-        let Some((metrics, summary, excluded)) =
+        let Some(metrics_result) =
             compute_model_metrics(&fixtures, engine, &env.python_bin, &root, json_output)
         else {
             let err = serde_json::json!({
@@ -1077,6 +1169,10 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             }
             return ExitCode::FAILURE;
         };
+        let metrics = metrics_result.exact_metrics;
+        let lenient_metrics = metrics_result.lenient_metrics;
+        let summary = metrics_result.summary;
+        let excluded = metrics_result.excluded_types;
 
         let baseline_path = engine.baseline_path(&root);
 
@@ -1148,6 +1244,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             accuracy: accuracy.clone(),
             metrics: metrics.clone(),
             summary: summary.clone(),
+            lenient_metrics: Some(lenient_metrics.clone()),
             adr004_bar,
             duration_seconds: duration,
             run_directory: run_dir.clone(),
@@ -1236,11 +1333,13 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             print_eval_summary(&summary, true);
             println!();
             print_metrics_table(&metrics);
+            println!();
+            print_lenient_metrics_table(&lenient_metrics);
 
             // ADR 004 detection bar reporting for GLiNER2
             if engine.name == "gliner2" {
                 println!();
-                println!("ADR 004 Detection Bar:");
+                println!("ADR 004 Detection Bar (exact match):");
 
                 // PERSON: at least 90% recall required
                 let person_recall = metrics.get("PERSON").and_then(|m| m.recall);
@@ -1268,6 +1367,20 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                     None => {
                         println!("  STREET_ADDRESS recall: n/a (no gold labels)");
                     }
+                }
+
+                // Lenient metrics show boundary disagreement vs real misses
+                println!();
+                println!("ADR 004 Detection Bar (lenient/overlap):");
+                let person_lenient = lenient_metrics.get("PERSON").and_then(|m| m.recall);
+                match person_lenient {
+                    Some(r) => println!("  PERSON recall: {:.1}%", r * 100.0),
+                    None => println!("  PERSON recall: n/a"),
+                }
+                let addr_lenient = lenient_metrics.get("STREET_ADDRESS").and_then(|m| m.recall);
+                match addr_lenient {
+                    Some(r) => println!("  STREET_ADDRESS recall: {:.1}%", r * 100.0),
+                    None => println!("  STREET_ADDRESS recall: n/a"),
                 }
             }
 
