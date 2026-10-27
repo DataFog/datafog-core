@@ -1,9 +1,10 @@
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
+use std::sync::OnceLock;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +21,17 @@ pub struct ParityResult {
     pub live: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sdk_results: Option<HashMap<String, Vec<SdkFinding>>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<ParityError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParityError {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixture_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sdk: Option<String>,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +42,10 @@ pub struct SdkFinding {
     pub codepoint_end: usize,
     pub byte_start: usize,
     pub byte_end: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utf16_start: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utf16_end: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,294 +58,238 @@ pub struct ParityDiscrepancy {
     pub value_b: serde_json::Value,
 }
 
+type ScanResult = Result<Vec<SdkFinding>, String>;
+const LIVE_SDKS: [&str; 3] = ["python", "node", "wasm"];
+
+fn command_output(command: &mut Command, stage: &str) -> Result<Output, String> {
+    let output = command
+        .output()
+        .map_err(|error| format!("{stage}: could not start process ({})", error.kind()))?;
+    if !output.status.success() {
+        // Child output can contain source text. Reports retain a bounded category only.
+        return Err(format!("{stage}: process failed ({})", output.status));
+    }
+    Ok(output)
+}
+
+fn parse_scan_output(output: Output) -> ScanResult {
+    let stdout =
+        std::str::from_utf8(&output.stdout).map_err(|_| "scan output is not UTF-8".to_string())?;
+    serde_json::from_str(stdout.trim())
+        .map_err(|_| "scan output is not a findings array".to_string())
+}
+
 struct PythonEnv {
     python_bin: PathBuf,
 }
 
-static PYTHON_ENV: std::sync::OnceLock<Option<PythonEnv>> = std::sync::OnceLock::new();
-
-fn init_python_env(root: &std::path::Path) -> Option<&'static PythonEnv> {
-    PYTHON_ENV
-        .get_or_init(|| {
-            let wheel_dir = root.join("target").join("wheels");
-            let wheel = if wheel_dir.exists() {
-                fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
-                    entries.find_map(|e| {
-                        e.ok().and_then(|entry| {
-                            let name = entry.file_name();
-                            if name.to_string_lossy().ends_with(".whl") {
-                                Some(entry.path())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                })
-            } else {
-                None
-            }?;
-
-            let venv_dir = root.join("target").join("dfv_parity_venv");
-            let python_bin = if cfg!(windows) {
-                venv_dir.join("Scripts").join("python.exe")
-            } else {
-                venv_dir.join("bin").join("python")
-            };
-
-            if !python_bin.exists() {
-                let venv_status = Command::new("python3")
-                    .args(["-m", "venv"])
-                    .arg(&venv_dir)
-                    .status()
-                    .ok()?;
-
-                if !venv_status.success() {
-                    return None;
-                }
-
-                let pip_install = Command::new(&python_bin)
-                    .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-                    .arg(&wheel)
-                    .status()
-                    .ok()?;
-
-                if !pip_install.success() {
-                    return None;
-                }
-            }
-
-            Some(PythonEnv { python_bin })
-        })
-        .as_ref()
+fn init_python_env(root: &std::path::Path) -> Result<PythonEnv, String> {
+    let wheel_dir = root.join("target/wheels");
+    let mut wheels = fs::read_dir(&wheel_dir)
+        .map_err(|_| "Python setup: built wheel directory is missing or unreadable".to_string())?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Python setup: could not read wheel directory".to_string())?;
+    wheels.retain(|path| path.extension().is_some_and(|extension| extension == "whl"));
+    if wheels.len() != 1 {
+        return Err(
+            "Python setup: expected exactly one built wheel; run cargo dfv build".to_string(),
+        );
+    }
+    let venv_dir = root.join("target/dfv_parity_venv");
+    let python_bin = if cfg!(windows) {
+        venv_dir.join("Scripts/python.exe")
+    } else {
+        venv_dir.join("bin/python")
+    };
+    if !python_bin.exists() {
+        command_output(
+            Command::new("python3").args(["-m", "venv"]).arg(&venv_dir),
+            "Python environment creation",
+        )?;
+    }
+    // Refresh even an existing venv so a prior run cannot hide a changed wheel.
+    command_output(
+        Command::new(&python_bin)
+            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
+            .arg(&wheels[0]),
+        "Python wheel installation",
+    )?;
+    Ok(PythonEnv { python_bin })
 }
 
-fn scan_with_python(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
-    let env = init_python_env(root)?;
-
+fn scan_with_python(text: &str, root: &std::path::Path, env: &PythonEnv) -> ScanResult {
+    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
     let code = format!(
         r#"
 import json
 from datafog_core import scan
-findings = scan({})
+findings = scan({text_json})
 result = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
     codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end,
     byte_start=f.byte_range.start, byte_end=f.byte_range.end) for f in findings]
 print(json.dumps(result))
 "#,
-        serde_json::to_string(text).unwrap()
     );
-
-    let output = Command::new(&env.python_bin)
-        .args(["-c", &code])
-        .current_dir(root)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim()).ok()
+    parse_scan_output(command_output(
+        Command::new(&env.python_bin)
+            .args(["-I", "-c", &code])
+            .current_dir(root),
+        "Python scan",
+    )?)
 }
 
-fn scan_with_node(text: &str, root: &std::path::Path) -> Option<Vec<SdkFinding>> {
-    let node_dir = root.join("bindings").join("node");
-    let index_js = node_dir.join("index.js");
-
-    if !index_js.exists() {
-        return None;
+fn scan_with_node(text: &str, root: &std::path::Path) -> ScanResult {
+    let node_dir = root.join("bindings/node");
+    if !node_dir.join("index.js").is_file() {
+        return Err("Node setup: binding index.js is missing".to_string());
     }
-
-    let escaped_text = serde_json::to_string(text).unwrap();
+    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
     let code = format!(
         r#"
-const {{ scan }} = require('./index.js');
-const findings = scan({escaped_text});
+import {{ scan }} from './index.js';
+const findings = scan({text_json});
 const result = findings.map(f => ({{
     entity_type: f.entityType,
     matched_text: f.matchedText,
     codepoint_start: f.codepointRange.start,
     codepoint_end: f.codepointRange.end,
     byte_start: f.byteRange.start,
-    byte_end: f.byteRange.end
+    byte_end: f.byteRange.end,
+    utf16_start: f.utf16Range.start,
+    utf16_end: f.utf16Range.end
 }}));
 console.log(JSON.stringify(result));
-"#
+"#,
     );
-
-    let output = Command::new("node")
-        .args(["-e", &code])
-        .current_dir(&node_dir)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim()).ok()
+    parse_scan_output(command_output(
+        Command::new("node")
+            .args(["--input-type=module", "-e", &code])
+            .current_dir(&node_dir),
+        "Node scan",
+    )?)
 }
 
 struct WasmEnv {
     temp_dir: PathBuf,
 }
 
-static WASM_ENV: std::sync::OnceLock<Option<WasmEnv>> = std::sync::OnceLock::new();
-
-fn init_wasm_env(root: &std::path::Path, run_dir: &std::path::Path) -> Option<&'static WasmEnv> {
-    WASM_ENV
-        .get_or_init(|| {
-            let wasm_dir = root.join("bindings").join("wasm");
-            let dist_dir = wasm_dir.join("dist");
-            if !dist_dir.exists() {
-                return None;
-            }
-
-            let packed = Command::new("npm")
-                .args(["pack", "--json"])
-                .current_dir(&wasm_dir)
-                .output()
-                .ok()?;
-
-            if !packed.status.success() {
-                return None;
-            }
-
-            let stdout = String::from_utf8_lossy(&packed.stdout);
-            let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).ok()?;
-            let tarball_name = parsed.first()?.get("filename")?.as_str()?;
-            let tarball = wasm_dir.join(tarball_name);
-
-            let temp_dir = run_dir.join("wasm_parity_project");
-            let _ = fs::create_dir_all(&temp_dir);
-
-            let package_json = r#"{"name": "wasm-parity-test", "private": true, "type": "module"}"#;
-            let _ = fs::write(temp_dir.join("package.json"), package_json);
-
-            let npm_install = Command::new("npm")
-                .args(["install", "--ignore-scripts"])
-                .arg(&tarball)
-                .current_dir(&temp_dir)
-                .status()
-                .ok()?;
-
-            let _ = fs::remove_file(&tarball);
-
-            if !npm_install.success() {
-                return None;
-            }
-
-            let playwright_install = Command::new("npm")
-                .args(["install", "playwright"])
-                .current_dir(&temp_dir)
-                .status()
-                .ok()?;
-
-            if !playwright_install.success() {
-                return None;
-            }
-
-            let browser_install = Command::new("npx")
-                .args(["playwright", "install", "--with-deps", "chromium"])
-                .current_dir(&temp_dir)
-                .status()
-                .ok()?;
-
-            if !browser_install.success() {
-                return None;
-            }
-
-            let _ = fs::write(
-                temp_dir.join("index.html"),
-                "<!doctype html><title>WASM parity test</title>",
-            );
-
-            Some(WasmEnv { temp_dir })
-        })
-        .as_ref()
+fn init_wasm_env(root: &std::path::Path, run_dir: &std::path::Path) -> Result<WasmEnv, String> {
+    let wasm_dir = root.join("bindings/wasm");
+    if !wasm_dir.join("dist").is_dir() {
+        return Err("WASM setup: built dist directory is missing".to_string());
+    }
+    let temp_dir = run_dir.join("wasm_parity_project");
+    fs::create_dir_all(&temp_dir).map_err(|_| "WASM setup: could not create project directory")?;
+    let packed = command_output(
+        Command::new("npm")
+            .args(["pack", "--json", "--pack-destination"])
+            .arg(&temp_dir)
+            .current_dir(&wasm_dir),
+        "WASM package creation",
+    )?;
+    let parsed: Vec<serde_json::Value> = serde_json::from_slice(&packed.stdout)
+        .map_err(|_| "WASM setup: invalid npm pack output")?;
+    let tarball_name = parsed
+        .first()
+        .and_then(|value| value.get("filename"))
+        .and_then(|value| value.as_str())
+        .ok_or("WASM setup: npm pack returned no filename")?;
+    let tarball = temp_dir.join(tarball_name);
+    fs::write(
+        temp_dir.join("package.json"),
+        r#"{"name":"wasm-parity-test","private":true,"type":"module"}"#,
+    )
+    .map_err(|_| "WASM setup: could not write package.json")?;
+    command_output(
+        Command::new("npm")
+            .args(["install", "--ignore-scripts"])
+            .arg(&tarball)
+            .current_dir(&temp_dir),
+        "WASM package installation",
+    )?;
+    fs::remove_file(&tarball).map_err(|_| "WASM setup: could not remove package archive")?;
+    // Use the repository's pinned Playwright dependency rather than installing latest.
+    let package: serde_json::Value = serde_json::from_slice(
+        &fs::read(wasm_dir.join("package.json"))
+            .map_err(|_| "WASM setup: could not read package.json")?,
+    )
+    .map_err(|_| "WASM setup: invalid package.json")?;
+    let playwright = package["devDependencies"]["playwright"]
+        .as_str()
+        .ok_or("WASM setup: missing Playwright version")?;
+    command_output(
+        Command::new("npm")
+            .args(["install", "--ignore-scripts"])
+            .arg(format!("playwright@{playwright}"))
+            .current_dir(&temp_dir),
+        "WASM browser dependency installation",
+    )?;
+    command_output(
+        Command::new("npx")
+            .args(["--no-install", "playwright", "install", "chromium"])
+            .current_dir(&temp_dir),
+        "WASM browser installation",
+    )?;
+    fs::write(
+        temp_dir.join("index.html"),
+        "<!doctype html><title>WASM parity test</title>",
+    )
+    .map_err(|_| "WASM setup: could not write browser page")?;
+    Ok(WasmEnv { temp_dir })
 }
 
-fn scan_with_wasm(
-    text: &str,
-    root: &std::path::Path,
-    run_dir: &std::path::Path,
-) -> Option<Vec<SdkFinding>> {
-    let env = init_wasm_env(root, run_dir)?;
-
-    let escaped_text = serde_json::to_string(text).unwrap();
+fn scan_with_wasm(text: &str, env: &WasmEnv) -> ScanResult {
+    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
     let server_code = format!(
         r#"
 import {{ createServer }} from "node:http";
 import {{ readFileSync }} from "node:fs";
 import path from "node:path";
-
+import {{ chromium }} from "playwright";
 const tempDir = process.argv[2];
-const port = 8766;
-
-function contentType(file) {{
-  if (file.endsWith(".html")) return "text/html; charset=utf-8";
-  if (file.endsWith(".js") || file.endsWith(".mjs")) return "text/javascript; charset=utf-8";
-  if (file.endsWith(".wasm")) return "application/wasm";
-  return "application/octet-stream";
-}}
-
 const server = createServer((req, res) => {{
   const pathname = new URL(req.url, "http://localhost").pathname;
   const file = path.resolve(tempDir, `./${{pathname === "/" ? "/index.html" : pathname}}`);
-  try {{
-    res.writeHead(200, {{ "content-type": contentType(file) }});
-    res.end(readFileSync(file));
-  }} catch {{
-    res.writeHead(404).end();
-  }}
+  const type = file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".html") ? "text/html" : "text/javascript";
+  try {{ res.writeHead(200, {{ "content-type": type }}); res.end(readFileSync(file)); }}
+  catch {{ res.writeHead(404).end(); }}
 }});
-
-server.listen(port, "127.0.0.1", async () => {{
-  const {{ chromium }} = await import("playwright");
-  const browser = await chromium.launch();
-  try {{
-    const page = await browser.newPage();
-    await page.goto(`http://127.0.0.1:${{port}}`);
-    const result = await page.evaluate(async () => {{
-      const {{ init, scan }} = await import("/node_modules/@datafog/wasm/index.js");
-      await init();
-      const text = {escaped_text};
-      const findings = scan(text);
-      return findings.map(f => ({{
-        entity_type: f.entityType,
-        matched_text: f.matchedText,
-        codepoint_start: f.codepointRange.start,
-        codepoint_end: f.codepointRange.end,
-        byte_start: f.byteRange.start,
-        byte_end: f.byteRange.end
-      }}));
-    }});
-    console.log(JSON.stringify(result));
-  }} finally {{
-    await browser.close();
-    server.close();
-  }}
-}});
-"#
+let browser;
+try {{
+  await new Promise((resolve, reject) => {{
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  }});
+  browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.goto(`http://127.0.0.1:${{server.address().port}}`);
+  const result = await page.evaluate(async () => {{
+    const {{ init, scan }} = await import("/node_modules/@datafog/wasm/index.js");
+    await init();
+    return scan({text_json}).map(f => ({{
+      entity_type: f.entityType, matched_text: f.matchedText,
+      codepoint_start: f.codepointRange.start, codepoint_end: f.codepointRange.end,
+      byte_start: f.byteRange.start, byte_end: f.byteRange.end,
+      utf16_start: f.utf16Range.start, utf16_end: f.utf16Range.end
+    }}));
+  }});
+  console.log(JSON.stringify(result));
+}} finally {{
+  try {{ if (browser) await browser.close(); }}
+  finally {{ await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }}
+}}
+"#,
     );
-
-    let script_path = env.temp_dir.join("parity-scan.mjs");
-    let _ = fs::write(&script_path, &server_code);
-
-    let output = Command::new("node")
-        .args(["parity-scan.mjs", env.temp_dir.to_str().unwrap()])
-        .current_dir(&env.temp_dir)
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim()).ok()
+    fs::write(env.temp_dir.join("parity-scan.mjs"), server_code)
+        .map_err(|_| "WASM scan: could not write browser script")?;
+    parse_scan_output(command_output(
+        Command::new("node")
+            .arg("parity-scan.mjs")
+            .arg(&env.temp_dir)
+            .current_dir(&env.temp_dir),
+        "WASM browser scan",
+    )?)
 }
 
 /// Identifies if a fixture contains multibyte characters that could cause offset drift.
@@ -479,9 +439,129 @@ fn compare_sdk_findings(
                 value_b: serde_json::json!([fb.byte_start, fb.byte_end]),
             });
         }
+        if let (Some(a_start), Some(a_end), Some(b_start), Some(b_end)) =
+            (fa.utf16_start, fa.utf16_end, fb.utf16_start, fb.utf16_end)
+        {
+            if (a_start, a_end) != (b_start, b_end) {
+                discrepancies.push(ParityDiscrepancy {
+                    fixture_id: fixture_id.to_string(),
+                    field: format!("finding[{i}].utf16_range"),
+                    sdk_a: sdk_a.to_string(),
+                    sdk_b: sdk_b.to_string(),
+                    value_a: serde_json::json!([a_start, a_end]),
+                    value_b: serde_json::json!([b_start, b_end]),
+                });
+            }
+        }
     }
 
     discrepancies
+}
+
+fn load_live_fixtures(root: &std::path::Path) -> Result<Vec<FixtureMeta>, String> {
+    let mut fixtures = Vec::new();
+    let mut ids = HashSet::new();
+    for filename in ["development.jsonl", "final.jsonl"] {
+        let content = fs::read_to_string(root.join("fixtures").join(filename))
+            .map_err(|_| format!("could not read fixtures/{filename}"))?;
+        for (line_index, line) in content.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let record = serde_json::from_str(line)
+                .ok()
+                .and_then(|record| FixtureMeta::from_record(&record))
+                .ok_or_else(|| format!("invalid fixture at {filename}:{}", line_index + 1))?;
+            if record.id.is_empty() || !ids.insert(record.id.clone()) {
+                return Err(format!(
+                    "empty or duplicate fixture ID at {filename}:{}",
+                    line_index + 1
+                ));
+            }
+            fixtures.push(record);
+        }
+    }
+    if fixtures.is_empty() {
+        return Err("no live parity fixtures were loaded".to_string());
+    }
+    Ok(fixtures)
+}
+
+fn validate_sdk_findings(text: &str, sdk: &str, findings: &[SdkFinding]) -> Result<(), String> {
+    for (index, finding) in findings.iter().enumerate() {
+        let prefix = text.get(..finding.byte_start);
+        let end_prefix = text.get(..finding.byte_end);
+        if finding.byte_start >= finding.byte_end
+            || text.get(finding.byte_start..finding.byte_end) != Some(finding.matched_text.as_str())
+            || prefix.map(|value| value.chars().count()) != Some(finding.codepoint_start)
+            || end_prefix.map(|value| value.chars().count()) != Some(finding.codepoint_end)
+        {
+            return Err(format!(
+                "finding[{index}] has invalid byte/codepoint offsets or matched text"
+            ));
+        }
+        let requires_utf16 =
+            sdk != "python" || finding.utf16_start.is_some() || finding.utf16_end.is_some();
+        if requires_utf16
+            && (finding.utf16_start.is_none()
+                || finding.utf16_end.is_none()
+                || prefix.map(|value| value.encode_utf16().count()) != finding.utf16_start
+                || end_prefix.map(|value| value.encode_utf16().count()) != finding.utf16_end)
+        {
+            return Err(format!(
+                "finding[{index}] has missing or invalid UTF-16 offsets"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn record_live_fixture(
+    result: &mut ParityResult,
+    fixture: &FixtureMeta,
+    scans: [(&str, ScanResult); 3],
+) {
+    result.fixtures_checked += 1;
+    let mut valid = Vec::new();
+    for (sdk, scan) in scans {
+        let validated = scan.and_then(|findings| {
+            validate_sdk_findings(&fixture.text, sdk, &findings)?;
+            Ok(findings)
+        });
+        match validated {
+            Ok(findings) => {
+                result
+                    .sdk_results
+                    .get_or_insert_with(HashMap::new)
+                    .insert(format!("{}_{sdk}", fixture.id), findings.clone());
+                valid.push((sdk, findings));
+            }
+            Err(message) => {
+                result.pass = false;
+                result.sdks_compared.retain(|name| name != sdk);
+                result.errors.push(ParityError {
+                    fixture_id: Some(fixture.id.clone()),
+                    sdk: Some(sdk.to_string()),
+                    message,
+                });
+            }
+        }
+    }
+    if valid.len() < 2 {
+        result.sdks_compared.clear();
+    }
+    for (index, (sdk_a, findings_a)) in valid.iter().enumerate() {
+        for (sdk_b, findings_b) in &valid[index + 1..] {
+            result.discrepancies.extend(compare_sdk_findings(
+                &fixture.id,
+                sdk_a,
+                findings_a,
+                sdk_b,
+                findings_b,
+            ));
+        }
+    }
+    result.pass &= result.discrepancies.is_empty();
 }
 
 fn run_live_parity(
@@ -491,142 +571,84 @@ fn run_live_parity(
     sample_size: Option<usize>,
 ) -> ParityResult {
     let start = Instant::now();
-    let fixtures_dir = root.join("fixtures");
-    let fixture_files = ["development.jsonl", "final.jsonl"];
-
-    // Load all fixtures with metadata
-    let mut all_fixtures: Vec<FixtureMeta> = Vec::new();
-    for fixture_file in &fixture_files {
-        let fixture_path = fixtures_dir.join(fixture_file);
-        if !fixture_path.exists() {
-            continue;
-        }
-        let content = match fs::read_to_string(&fixture_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        for line in content.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
-                if let Some(meta) = FixtureMeta::from_record(&record) {
-                    all_fixtures.push(meta);
-                }
-            }
-        }
-    }
-
-    // Select fixtures based on sample size
-    let fixtures_to_check: Vec<&FixtureMeta> = if let Some(n) = sample_size {
-        select_sample_fixtures(&all_fixtures, n)
-    } else {
-        all_fixtures.iter().collect()
-    };
-
-    let priority_count = fixtures_to_check.iter().filter(|f| f.is_priority()).count();
-
-    let mut all_discrepancies = Vec::new();
-    let mut fixtures_checked = 0;
-    let mut sdk_results: HashMap<String, Vec<SdkFinding>> = HashMap::new();
-    let mut sdks_available: Vec<String> = Vec::new();
-
-    if !json_output {
-        if sample_size.is_some() {
-            println!(
-                "Running live cross-SDK parity check ({} of {} fixtures, {} priority)...",
-                fixtures_to_check.len(),
-                all_fixtures.len(),
-                priority_count
-            );
-        } else {
-            println!(
-                "Running live cross-SDK parity check ({} fixtures)...",
-                fixtures_to_check.len()
-            );
-        }
-        println!("(Python, Node; WASM via headless Chromium for UTF-16 offset verification)");
-        println!();
-    }
-
-    for fixture in &fixtures_to_check {
-        fixtures_checked += 1;
-
-        let python_findings = scan_with_python(&fixture.text, root);
-        let node_findings = scan_with_node(&fixture.text, root);
-        let wasm_findings = scan_with_wasm(&fixture.text, root, run_dir);
-
-        let sdk_map: Vec<(&str, Option<&Vec<SdkFinding>>)> = vec![
-            ("python", python_findings.as_ref()),
-            ("node", node_findings.as_ref()),
-            ("wasm", wasm_findings.as_ref()),
-        ];
-
-        if fixtures_checked == 1 {
-            for (name, findings) in &sdk_map {
-                if findings.is_some() && !sdks_available.contains(&name.to_string()) {
-                    sdks_available.push(name.to_string());
-                }
-            }
-        }
-
-        let available: Vec<_> = sdk_map
-            .iter()
-            .filter_map(|(name, f)| f.map(|findings| (*name, findings)))
-            .collect();
-
-        for (name, findings) in &available {
-            sdk_results
-                .entry(format!("{}_{name}", fixture.id))
-                .or_default()
-                .extend(findings.iter().cloned());
-        }
-
-        for i in 0..available.len() {
-            for j in (i + 1)..available.len() {
-                let (sdk_a, findings_a) = available[i];
-                let (sdk_b, findings_b) = available[j];
-                let discrepancies =
-                    compare_sdk_findings(&fixture.id, sdk_a, findings_a, sdk_b, findings_b);
-                all_discrepancies.extend(discrepancies);
-            }
-        }
-    }
-
-    let duration = start.elapsed().as_secs_f64();
-    let pass = all_discrepancies.is_empty();
-
-    let parity_result = ParityResult {
-        pass,
-        fixtures_checked,
-        sdks_compared: if sdks_available.is_empty() {
-            vec![
-                "rust".to_string(),
-                "python".to_string(),
-                "node".to_string(),
-                "wasm".to_string(),
-            ]
-        } else {
-            sdks_available
-        },
-        discrepancies: all_discrepancies,
-        duration_seconds: duration,
+    let mut result = ParityResult {
+        pass: true,
+        fixtures_checked: 0,
+        sdks_compared: Vec::new(),
+        discrepancies: Vec::new(),
+        duration_seconds: 0.0,
         run_directory: run_dir.to_path_buf(),
         dry_run: None,
         live: Some(true),
-        sdk_results: if sdk_results.is_empty() {
-            None
-        } else {
-            Some(sdk_results)
-        },
+        sdk_results: None,
+        errors: Vec::new(),
     };
-
-    let report_path = run_dir.join("parity_live.json");
-    if let Ok(json) = serde_json::to_string_pretty(&parity_result) {
-        let _ = fs::write(&report_path, json);
+    let loaded = load_live_fixtures(root).and_then(|fixtures| {
+        if sample_size == Some(0) {
+            return Err("live parity sample must be greater than zero".to_string());
+        }
+        Ok(fixtures)
+    });
+    match loaded {
+        Err(message) => {
+            result.pass = false;
+            result.errors.push(ParityError {
+                fixture_id: None,
+                sdk: None,
+                message,
+            });
+        }
+        Ok(fixtures) => {
+            let selected = match sample_size {
+                Some(size) => select_sample_fixtures(&fixtures, size),
+                None => fixtures.iter().collect(),
+            };
+            if !json_output {
+                println!(
+                    "Running live cross-SDK parity check ({} of {} fixtures)...",
+                    selected.len(),
+                    fixtures.len()
+                );
+            }
+            result.sdks_compared = LIVE_SDKS.iter().map(|sdk| (*sdk).to_string()).collect();
+            let python_env = OnceLock::new();
+            let wasm_env = OnceLock::new();
+            for fixture in selected {
+                let python = python_env
+                    .get_or_init(|| init_python_env(root))
+                    .as_ref()
+                    .map_err(Clone::clone)
+                    .and_then(|env| scan_with_python(&fixture.text, root, env));
+                let node = scan_with_node(&fixture.text, root);
+                let wasm = wasm_env
+                    .get_or_init(|| init_wasm_env(root, run_dir))
+                    .as_ref()
+                    .map_err(Clone::clone)
+                    .and_then(|env| scan_with_wasm(&fixture.text, env));
+                record_live_fixture(
+                    &mut result,
+                    fixture,
+                    [("python", python), ("node", node), ("wasm", wasm)],
+                );
+                if !result.errors.is_empty() {
+                    break;
+                }
+            }
+        }
     }
-
-    parity_result
+    result.duration_seconds = start.elapsed().as_secs_f64();
+    let write_report = serde_json::to_vec_pretty(&result)
+        .map_err(std::io::Error::other)
+        .and_then(|bytes| fs::write(run_dir.join("parity_live.json"), bytes));
+    if write_report.is_err() {
+        result.pass = false;
+        result.errors.push(ParityError {
+            fixture_id: None,
+            sdk: None,
+            message: "could not write live parity report".to_string(),
+        });
+    }
+    result
 }
 
 pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
@@ -634,12 +656,26 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
     let live = args.iter().any(|a| a == "--live");
     let full = args.iter().any(|a| a == "--full");
 
-    // Parse --sample N
-    let sample_size: Option<usize> = args
-        .iter()
-        .position(|a| a == "--sample")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|s| s.parse().ok());
+    let sample_size = match args.iter().position(|argument| argument == "--sample") {
+        None => None,
+        Some(index) => match args
+            .get(index + 1)
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            Some(size) if size > 0 => Some(size),
+            _ => {
+                if json_output {
+                    println!(
+                        "{}",
+                        serde_json::json!({"pass": false, "error": "sample must be a positive integer"})
+                    );
+                } else {
+                    eprintln!("Parity sample must be a positive integer");
+                }
+                return ExitCode::FAILURE;
+            }
+        },
+    };
 
     // Default: sample 100 for live parity on PRs, unless --full is specified
     let effective_sample = if full {
@@ -670,6 +706,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             dry_run: Some(true),
             live: if live { Some(true) } else { None },
             sdk_results: None,
+            errors: Vec::new(),
         };
 
         if json_output {
@@ -699,7 +736,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             }
             println!();
             println!("Fixtures: development.jsonl, final.jsonl");
-            println!("SDKs compared: rust, python, node, wasm");
+            println!("SDKs compared: {}", result.sdks_compared.join(", "));
             println!();
             if live {
                 println!("Note: --live runs actual scans through installed SDKs.");
@@ -709,7 +746,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
                 }
                 println!("Requires built Python wheel and Node package.");
                 println!("Both wrap the same Rust core, so this tests binding correctness.");
-                println!("WASM parity is verified via `cargo dfv smoke` in headless Chromium.");
+                println!("WASM scans run in headless Chromium and include UTF-16 ranges.");
             } else {
                 println!("Note: This validates fixture offset self-consistency.");
                 println!("All SDKs must produce identical spans for the same fixture.");
@@ -719,7 +756,13 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let run_dir = create_run_directory().expect("failed to create run directory");
+    let run_dir = match create_run_directory() {
+        Ok(directory) => directory,
+        Err(error) => {
+            eprintln!("Could not create parity report directory: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     let root = workspace_root();
 
     if live {
@@ -738,11 +781,20 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
             println!("  Duration: {:.1}s", parity_result.duration_seconds);
             println!();
 
+            for error in &parity_result.errors {
+                println!(
+                    "  Error (SDK: {}, fixture: {}): {}",
+                    error.sdk.as_deref().unwrap_or("none"),
+                    error.fixture_id.as_deref().unwrap_or("none"),
+                    error.message
+                );
+            }
             if parity_result.pass {
                 println!("✓ All SDKs produce identical outputs");
             } else {
                 println!(
-                    "✗ Found {} discrepancies:",
+                    "✗ Live parity failed: {} execution/validation errors, {} discrepancies",
+                    parity_result.errors.len(),
                     parity_result.discrepancies.len()
                 );
                 for d in parity_result.discrepancies.iter().take(10) {
@@ -932,6 +984,7 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
         dry_run: None,
         live: None,
         sdk_results: None,
+        errors: Vec::new(),
     };
 
     let report_path = run_dir.join("parity.json");
@@ -978,5 +1031,282 @@ pub fn run_parity(args: &[String], json_output: bool) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestDirectory(PathBuf);
+    impl TestDirectory {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "datafog-live-parity-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(path.join("fixtures")).unwrap();
+            fs::create_dir_all(path.join("reports")).unwrap();
+            Self(path)
+        }
+        fn fixtures(&self) {
+            for name in ["development.jsonl", "final.jsonl"] {
+                fs::write(
+                    self.0.join("fixtures").join(name),
+                    format!(
+                        "{{\"id\":\"{name}\",\"text\":\"No sensitive values.\",\"entities\":[]}}\n"
+                    ),
+                )
+                .unwrap();
+            }
+        }
+    }
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn live_parity_rejects_missing_bindings_without_claiming_sdk_comparisons() {
+        let directory = TestDirectory::new();
+        directory.fixtures();
+        let result = run_live_parity(&directory.0.join("reports"), &directory.0, true, None);
+        assert!(!result.pass, "missing bindings must fail live parity");
+        assert!(result.sdks_compared.is_empty());
+    }
+
+    #[test]
+    fn live_parity_rejects_missing_fixtures() {
+        let directory = TestDirectory::new();
+        let result = run_live_parity(&directory.0.join("reports"), &directory.0, true, None);
+        assert!(!result.pass, "zero fixtures cannot prove parity");
+        assert!(result.sdks_compared.is_empty());
+    }
+
+    fn report() -> ParityResult {
+        ParityResult {
+            pass: true,
+            fixtures_checked: 0,
+            sdks_compared: LIVE_SDKS.iter().map(|sdk| (*sdk).to_string()).collect(),
+            discrepancies: Vec::new(),
+            duration_seconds: 0.0,
+            run_directory: PathBuf::new(),
+            dry_run: None,
+            live: Some(true),
+            sdk_results: None,
+            errors: Vec::new(),
+        }
+    }
+
+    fn fixture(id: &str) -> FixtureMeta {
+        FixtureMeta::from_record(&serde_json::json!({"id": id, "text": "👋 é jane@example.com"}))
+            .unwrap()
+    }
+
+    fn finding() -> SdkFinding {
+        SdkFinding {
+            entity_type: "EMAIL".to_string(),
+            matched_text: "jane@example.com".to_string(),
+            byte_start: 9,
+            byte_end: 25,
+            codepoint_start: 5,
+            codepoint_end: 21,
+            utf16_start: Some(6),
+            utf16_end: Some(22),
+        }
+    }
+
+    fn successful_scans() -> [(&'static str, ScanResult); 3] {
+        LIVE_SDKS.map(|sdk| {
+            let mut finding = finding();
+            if sdk == "python" {
+                finding.utf16_start = None;
+                finding.utf16_end = None;
+            }
+            (sdk, Ok(vec![finding]))
+        })
+    }
+
+    #[test]
+    fn live_parity_requires_each_sdk_even_after_an_earlier_successful_fixture() {
+        for failed_sdk in LIVE_SDKS {
+            let mut result = report();
+            record_live_fixture(&mut result, &fixture("first"), successful_scans());
+            assert!(result.pass);
+            let mut scans = successful_scans();
+            scans
+                .iter_mut()
+                .find(|(sdk, _)| *sdk == failed_sdk)
+                .unwrap()
+                .1 = Err("scan process failed".to_string());
+            record_live_fixture(&mut result, &fixture("second"), scans);
+            assert!(!result.pass);
+            assert_eq!(result.errors.len(), 1);
+            assert_eq!(result.errors[0].sdk.as_deref(), Some(failed_sdk));
+            assert_eq!(result.errors[0].fixture_id.as_deref(), Some("second"));
+            assert!(!result.sdks_compared.iter().any(|sdk| sdk == failed_sdk));
+        }
+    }
+
+    #[test]
+    fn successful_unicode_and_empty_scans_prove_all_three_bindings_ran() {
+        let mut result = report();
+        record_live_fixture(&mut result, &fixture("unicode"), successful_scans());
+        record_live_fixture(
+            &mut result,
+            &fixture("negative"),
+            LIVE_SDKS.map(|sdk| (sdk, Ok(Vec::new()))),
+        );
+        assert!(result.pass);
+        assert_eq!(result.sdks_compared, LIVE_SDKS);
+        assert_eq!(result.fixtures_checked, 2);
+        let stored = result.sdk_results.as_ref().unwrap();
+        assert_eq!(stored.len(), 6);
+        assert!(stored["negative_wasm"].is_empty());
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json.get("errors").is_none());
+        assert_eq!(json["sdk_results"]["unicode_wasm"][0]["utf16_start"], 6);
+    }
+
+    #[test]
+    fn live_parity_still_fails_for_different_binding_findings() {
+        let mut result = report();
+        let mut scans = successful_scans();
+        scans[1].1.as_mut().unwrap()[0].entity_type = "PERSON".to_string();
+        record_live_fixture(&mut result, &fixture("different"), scans);
+        assert!(!result.pass);
+        assert!(result.errors.is_empty());
+        assert!(
+            result
+                .discrepancies
+                .iter()
+                .any(|d| d.field == "finding[0].entity_type")
+        );
+    }
+
+    #[test]
+    fn scan_output_rejects_invalid_json_utf8_and_missing_fields() {
+        for bytes in [b"".as_slice(), b"not JSON", b"{}", b"[{}]", &[0xff]] {
+            let output = Output {
+                status: Default::default(),
+                stdout: bytes.to_vec(),
+                stderr: Vec::new(),
+            };
+            let mut result = report();
+            let mut scans = successful_scans();
+            scans[2].1 = parse_scan_output(output);
+            record_live_fixture(&mut result, &fixture("bad-response"), scans);
+            assert!(!result.pass);
+            assert_eq!(result.errors[0].sdk.as_deref(), Some("wasm"));
+        }
+    }
+
+    #[test]
+    fn live_parity_rejects_shared_bad_offsets_not_just_disagreements() {
+        let mut result = report();
+        let mut scans = successful_scans();
+        for (_, scan) in &mut scans {
+            scan.as_mut().unwrap()[0].byte_start = 8;
+        }
+        record_live_fixture(&mut result, &fixture("bad-bytes"), scans);
+        assert!(!result.pass);
+        assert_eq!(result.errors.len(), 3);
+        assert!(result.sdks_compared.is_empty());
+    }
+
+    #[test]
+    fn live_parity_validates_utf16_even_when_both_javascript_bindings_agree() {
+        for offsets in [
+            (Some(5), Some(21)),
+            (Some(1), Some(2)),
+            (None, None),
+            (Some(6), None),
+        ] {
+            let mut result = report();
+            let mut scans = successful_scans();
+            for (_, scan) in &mut scans[1..] {
+                let finding = &mut scan.as_mut().unwrap()[0];
+                (finding.utf16_start, finding.utf16_end) = offsets;
+            }
+            record_live_fixture(&mut result, &fixture("bad-utf16"), scans);
+            assert!(!result.pass);
+            assert_eq!(result.errors.len(), 2);
+            assert!(
+                result
+                    .errors
+                    .iter()
+                    .all(|error| error.message.contains("UTF-16"))
+            );
+            assert!(
+                result.sdks_compared.is_empty(),
+                "a lone SDK was not compared"
+            );
+        }
+    }
+
+    #[test]
+    fn command_start_and_nonzero_browser_process_failures_are_errors() {
+        let directory = TestDirectory::new();
+        let unavailable = command_output(
+            &mut Command::new(directory.0.join("missing-runtime")),
+            "Python scan",
+        );
+        assert!(unavailable.unwrap_err().contains("could not start process"));
+        #[cfg(unix)]
+        let failed = command_output(
+            Command::new("/bin/sh").args(["-c", "echo sensitive-source >&2; exit 7"]),
+            "WASM browser scan",
+        );
+        #[cfg(windows)]
+        let failed = command_output(
+            Command::new("cmd").args(["/C", "echo sensitive-source 1>&2 & exit /b 7"]),
+            "WASM browser scan",
+        );
+        let message = failed.unwrap_err();
+        assert!(message.contains("WASM browser scan: process failed"));
+        assert!(!message.contains("sensitive-source"));
+        let mut result = report();
+        let mut scans = successful_scans();
+        scans[2].1 = Err(message);
+        record_live_fixture(&mut result, &fixture("browser-failure"), scans);
+        assert!(!result.pass);
+        assert_eq!(result.errors[0].sdk.as_deref(), Some("wasm"));
+    }
+
+    #[test]
+    fn live_parity_rejects_empty_or_malformed_fixture_inputs() {
+        for source in ["", "\n", "not json", r#"{"id":"broken"}"#] {
+            let directory = TestDirectory::new();
+            for name in ["development.jsonl", "final.jsonl"] {
+                fs::write(directory.0.join("fixtures").join(name), source).unwrap();
+            }
+            let result = run_live_parity(&directory.0.join("reports"), &directory.0, true, None);
+            assert!(!result.pass);
+            assert_eq!(result.fixtures_checked, 0);
+            assert!(!result.errors.is_empty());
+        }
+    }
+
+    #[test]
+    fn live_parity_rejects_unwritable_evidence() {
+        let directory = TestDirectory::new();
+        directory.fixtures();
+        let result = run_live_parity(
+            &directory.0.join("missing-directory"),
+            &directory.0,
+            true,
+            None,
+        );
+        assert!(!result.pass);
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|error| error.message.contains("report"))
+        );
     }
 }

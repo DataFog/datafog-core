@@ -17,4 +17,5 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 - GLiNER2 entity-count gating now floors predictions at 1, preventing valid spans from being skipped when the count classifier selects 0 (#112)
