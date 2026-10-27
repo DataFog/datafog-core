@@ -84,3 +84,14 @@ single-file asset layout and extraction methods used by this adapter. A manifest
 does not add GLiNER2.5 boundary support, another inference architecture or runtime
 dependencies. Omit `--manifest`, `--model-id` and `--revision` to keep
 provisioning the original pinned PII checkpoint with the existing setup commands.
+
+## Entity-count gating
+
+GLiNER2's span runtime uses a count head to predict how many entities to extract.
+When this head predicts zero, the upstream runtime skips span decoding entirely,
+which can cause valid high-confidence spans to be missed.
+
+Core's GLiNER2 worker floors the count prediction at 1 so that span decoding
+always runs. Core's threshold filtering handles any resulting false positives.
+This ensures inputs like "My home address is 27 Willow Lane." return the expected
+street address findings even when the count head would otherwise predict zero.
