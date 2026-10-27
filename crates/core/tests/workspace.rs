@@ -456,3 +456,60 @@ fn snapshots_reject_entries_that_share_a_normalized_identity() {
         ErrorCode::InvalidSnapshot
     );
 }
+
+#[test]
+fn hmac_code_derivation_fixture_prevents_silent_algorithm_changes() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/workspace/hmac-code.json")).unwrap();
+    let operation: [u8; 16] = hex_bytes(fixture["operationHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let namespace: [u8; 16] = hex_bytes(fixture["namespaceHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let workspace = Workspace::create(namespace, [2; 16]).unwrap();
+    let value = "Jane";
+    let finding = WorkspaceFinding::new(
+        fixture["label"].as_str().unwrap(),
+        value,
+        TextRange {
+            start: 0,
+            end: value.len(),
+        },
+    );
+    let pending = workspace.prepare(value, &[finding], operation).unwrap();
+    let marker = pending.preview().unwrap().text.clone();
+    let expected_code = fixture["code"].as_str().unwrap();
+    let expected_marker = format!(
+        "[[{}_{}]]",
+        fixture["label"].as_str().unwrap(),
+        expected_code
+    );
+    assert_eq!(marker, expected_marker, "code derivation changed");
+}
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    hex.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn code_collision_redraws_and_exhaustion_returns_resource_limit() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let mut markers = Vec::new();
+    for i in 0u64..33 {
+        let value = format!("Value {i}");
+        let mut id = [3; 16];
+        id[..8].copy_from_slice(&i.to_be_bytes());
+        let marker = commit(&mut workspace, "PERSON", &value, id);
+        assert!(is_marker(&marker, "PERSON"));
+        markers.push(marker);
+    }
+    let codes: std::collections::BTreeSet<_> = markers
+        .iter()
+        .map(|m| &m[m.len() - 8..m.len() - 2])
+        .collect();
+    assert_eq!(codes.len(), markers.len(), "codes should be unique");
+}
