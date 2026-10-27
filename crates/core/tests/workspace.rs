@@ -639,3 +639,100 @@ fn snapshots_reject_entries_that_share_a_normalized_identity() {
         ErrorCode::InvalidSnapshot
     );
 }
+
+#[test]
+fn identity_key_handles_unicode_case_and_whitespace_edge_cases() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+
+    let eszett = commit(&mut workspace, "PERSON", "Straße", [3; 16]);
+    let upper_eszett = commit(&mut workspace, "PERSON", "STRAßE", [4; 16]);
+    assert_eq!(eszett, upper_eszett, "Straße and STRAßE share identity");
+    assert_eq!(workspace.restore(&eszett).unwrap(), "Straße");
+
+    let strasse = commit(&mut workspace, "PERSON", "STRASSE", [5; 16]);
+    assert_ne!(
+        eszett, strasse,
+        "ß and SS are distinct: to_lowercase(ß) = ß, not ss"
+    );
+
+    let dotted_i = commit(&mut workspace, "PERSON", "İstanbul", [6; 16]);
+    let lower_dotted = commit(&mut workspace, "PERSON", "i̇stanbul", [7; 16]);
+    assert_eq!(
+        dotted_i, lower_dotted,
+        "İ lowercases to i + combining dot above"
+    );
+
+    let nbsp = commit(&mut workspace, "PERSON", "John\u{00A0}Doe", [8; 16]);
+    let space = commit(&mut workspace, "PERSON", "John Doe", [9; 16]);
+    assert_eq!(nbsp, space, "NBSP and space share identity");
+
+    let tabs = commit(&mut workspace, "PERSON", "Jane\t\tSmith", [10; 16]);
+    let spaces = commit(&mut workspace, "PERSON", "Jane Smith", [11; 16]);
+    assert_eq!(tabs, spaces, "tabs collapse to single space");
+
+    let leading = commit(&mut workspace, "PERSON", "  Alice  ", [12; 16]);
+    let trimmed = commit(&mut workspace, "PERSON", "Alice", [13; 16]);
+    assert_eq!(leading, trimmed, "surrounding spaces share identity");
+    assert_eq!(
+        workspace.restore(&leading).unwrap(),
+        "  Alice  ",
+        "first spelling (with spaces) is restored"
+    );
+}
+
+#[test]
+fn hmac_code_derivation_fixture_prevents_silent_algorithm_changes() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/workspace/hmac-code.json")).unwrap();
+    let operation: [u8; 16] = hex_bytes(fixture["operationHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let namespace: [u8; 16] = hex_bytes(fixture["namespaceHex"].as_str().unwrap())
+        .try_into()
+        .unwrap();
+    let workspace = Workspace::create(namespace, [2; 16]).unwrap();
+    let value = "Jane";
+    let finding = WorkspaceFinding::new(
+        fixture["label"].as_str().unwrap(),
+        value,
+        TextRange {
+            start: 0,
+            end: value.len(),
+        },
+    );
+    let pending = workspace.prepare(value, &[finding], operation).unwrap();
+    let marker = pending.preview().unwrap().text.clone();
+    let expected_code = fixture["code"].as_str().unwrap();
+    let expected_marker = format!(
+        "[[{}_{}]]",
+        fixture["label"].as_str().unwrap(),
+        expected_code
+    );
+    assert_eq!(marker, expected_marker, "code derivation changed");
+}
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    hex.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn code_collision_redraws_and_exhaustion_returns_resource_limit() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let mut markers = Vec::new();
+    for i in 0u64..33 {
+        let value = format!("Value {i}");
+        let mut id = [3; 16];
+        id[..8].copy_from_slice(&i.to_be_bytes());
+        let marker = commit(&mut workspace, "PERSON", &value, id);
+        assert!(is_marker(&marker, "PERSON"));
+        markers.push(marker);
+    }
+    let codes: std::collections::BTreeSet<_> = markers
+        .iter()
+        .map(|m| &m[m.len() - 8..m.len() - 2])
+        .collect();
+    assert_eq!(codes.len(), markers.len(), "codes should be unique");
+}
