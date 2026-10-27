@@ -1,15 +1,16 @@
-## Objective
+<!--
+Describe what changes and why. Include relevant design decisions and verification;
+keep the description proportional to the change.
 
-Describe the single problem or maintenance goal this PR addresses.
+Add a bullet under [Unreleased] in CHANGELOG.md for user-facing changes.
+For an exemption, apply no-changelog and include Changelog exemption: <reason>.
+See CONTRIBUTING.md for the policy, effective October 22, 2026.
+-->
 
-## Changes
+## Local verification
 
-Describe the smallest set of changes made to achieve the objective.
-
-## Verification
-
+- [ ] `cargo dfv check`
 - [ ] `cargo fmt --all --check`
 - [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [ ] `cargo test --workspace --all-features`
 - [ ] New or changed detection behavior includes positive and negative tests
-- [ ] I reviewed the diff for unrelated refactoring or duplicated binding logic

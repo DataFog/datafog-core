@@ -71,3 +71,15 @@ Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the C
 
 - Keep each pull request focused on one behavior or maintenance goal.
 - Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-features` before merging Rust changes.
+- From October 22, 2026, user-facing changes require a concise entry under `[Unreleased]` in `CHANGELOG.md`; earlier changes are not backfilled.
+- Changes with no user-facing effect require both the `no-changelog` PR label and `Changelog exemption: <reason>` in the PR body. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- Check the whole PR against its target branch; do not duplicate changelog entries for each follow-up commit.
+
+## Pull request writing
+
+- Lead with what changes and why, using concrete behavior and direct language.
+- Keep descriptions proportional to the change; a few short paragraphs usually suffice. Use headings and lists only when they help the reviewer.
+- Explain design decisions needed to assess the change. Keep file inventories, implementation walkthroughs, and future roadmaps in linked documentation.
+- Include relevant test results or measurements. Let CI carry routine checklists.
+- State material limitations once and directly. Avoid hedging, repeated caveats, and speculative warnings.
+- Describe the final change for a reviewer without conversation context.
