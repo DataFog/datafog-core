@@ -378,12 +378,34 @@ fn compute_model_metrics(
     let mut total_found = 0;
     let mut excluded_types: HashSet<String> = HashSet::new();
 
+    let texts: Vec<String> = fixtures
+        .iter()
+        .map(|fixture| fixture.text.clone())
+        .collect();
+    if !json_output {
+        eprintln!(
+            "Scanning {} fixtures with one {} session...",
+            texts.len(),
+            engine.name
+        );
+    }
+    let all_detected = engine.scan_many(&texts, python_bin, root)?;
+    if all_detected.len() != fixtures.len() {
+        eprintln!(
+            "{} scan returned {} results for {} fixtures",
+            engine.name,
+            all_detected.len(),
+            fixtures.len()
+        );
+        return None;
+    }
+
     for (i, fixture) in fixtures.iter().enumerate() {
         if !json_output && i % 100 == 0 {
-            eprint!("\rProcessing fixture {}/{}...", i + 1, fixtures.len());
+            eprint!("\rScoring fixture {}/{}...", i + 1, fixtures.len());
         }
 
-        let detected = engine.scan(&fixture.text, python_bin, root)?;
+        let detected = &all_detected[i];
 
         let found: Vec<_> = detected
             .iter()

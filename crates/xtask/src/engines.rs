@@ -17,8 +17,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Engine ownership tier determining accuracy gate behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,30 +179,47 @@ impl EngineConfig {
         })
     }
 
-    /// Run model scan on text, returns detected entities
-    pub fn scan(&self, text: &str, python_bin: &Path, root: &Path) -> Option<Vec<DetectedEntity>> {
+    /// Scan many texts with one ModelSession so the worker loads once.
+    pub fn scan_many(
+        &self,
+        texts: &[String],
+        python_bin: &Path,
+        root: &Path,
+    ) -> Option<Vec<Vec<DetectedEntity>>> {
         let manifest_info = self.manifest_info(root)?;
         let bundle_path = self.bundle_path(root);
         let config = (self.build_config)(&bundle_path, &manifest_info.sha256, python_bin);
-        let text_escaped = serde_json::to_string(text).unwrap();
+        let payload = serde_json::to_string(texts).ok()?;
 
         let code = format!(
             r#"
-import json
+import json, sys
 from datafog_core import ModelSession
 config = {config}
+texts = json.load(sys.stdin)
 with ModelSession.open(config) as session:
-    result = session.scan_model({text_escaped})
-    findings = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
-        codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in result.findings]
-    print(json.dumps(findings))
+    out = []
+    for text in texts:
+        result = session.scan_model(text)
+        out.append([dict(entity_type=f.entity_type, matched_text=f.matched_text,
+            codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in result.findings])
+    print(json.dumps(out))
 "#
         );
 
         let output = Command::new(python_bin)
             .args(["-c", &code])
             .current_dir(root)
-            .output()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin.write_all(payload.as_bytes())?;
+                }
+                child.wait_with_output()
+            })
             .ok()?;
 
         if !output.status.success() {
