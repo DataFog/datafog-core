@@ -35,6 +35,86 @@ pub struct TestSuiteResult {
     pub command: Option<String>,
 }
 
+fn run_fixture_offset_validation(run_dir: &Path, dry_run: bool) -> TestSuiteResult {
+    let cmd = "python3 scripts/validate-fixture-offsets.py";
+    let wrapped = "scripts/validate-fixture-offsets.py";
+
+    if dry_run {
+        return TestSuiteResult {
+            pass: true,
+            duration_seconds: 0.0,
+            output: None,
+            error: None,
+            failing_fixtures: vec![],
+            wrapped_script: Some(wrapped.to_string()),
+            command: Some(cmd.to_string()),
+        };
+    }
+
+    let start = Instant::now();
+    let root = workspace_root();
+
+    let output = Command::new("python3")
+        .arg(root.join("scripts").join("validate-fixture-offsets.py"))
+        .current_dir(&root)
+        .output();
+
+    let duration = start.elapsed().as_secs_f64();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let combined = format!("{stdout}\n{stderr}");
+
+            let log_path = run_dir.join("fixture_offset_validation.log");
+            let _ = fs::write(&log_path, &combined);
+
+            if out.status.success() {
+                TestSuiteResult {
+                    pass: true,
+                    duration_seconds: duration,
+                    output: Some(combined),
+                    error: None,
+                    failing_fixtures: vec![],
+                    wrapped_script: Some(wrapped.to_string()),
+                    command: Some(cmd.to_string()),
+                }
+            } else {
+                let failing = extract_offset_failures(&combined);
+                TestSuiteResult {
+                    pass: false,
+                    duration_seconds: duration,
+                    output: Some(combined),
+                    error: Some("offset validation failed".to_string()),
+                    failing_fixtures: failing,
+                    wrapped_script: Some(wrapped.to_string()),
+                    command: Some(cmd.to_string()),
+                }
+            }
+        }
+        Err(e) => TestSuiteResult {
+            pass: false,
+            duration_seconds: duration,
+            output: None,
+            error: Some(format!("failed to run offset validation: {e}")),
+            failing_fixtures: vec![],
+            wrapped_script: Some(wrapped.to_string()),
+            command: Some(cmd.to_string()),
+        },
+    }
+}
+
+fn extract_offset_failures(output: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    for line in output.lines() {
+        if line.contains("offset mismatch") || line.contains("exceeds text length") {
+            failures.push(line.trim().to_string());
+        }
+    }
+    failures
+}
+
 fn run_rust_tests(run_dir: &Path, dry_run: bool) -> TestSuiteResult {
     let cmd = "cargo test --workspace --all-features";
 
@@ -543,6 +623,23 @@ Run without --models to verify rule-based detectors:
     };
 
     let mut tests = HashMap::new();
+
+    if !json_output && !dry_run {
+        println!("Validating fixture offsets...");
+    }
+    let fixture_offset_result = run_fixture_offset_validation(&run_dir, dry_run);
+    if !json_output {
+        if dry_run {
+            println!(
+                "  fixture_offsets: {} (wraps {})",
+                fixture_offset_result.command.as_deref().unwrap_or(""),
+                fixture_offset_result.wrapped_script.as_deref().unwrap_or("")
+            );
+        } else {
+            print_test_result("fixture_offsets", &fixture_offset_result);
+        }
+    }
+    tests.insert("fixture_offsets".to_string(), fixture_offset_result);
 
     if !json_output && !dry_run {
         println!("Running Rust tests...");

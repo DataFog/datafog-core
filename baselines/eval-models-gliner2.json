@@ -17,20 +17,28 @@
   ],
   "metrics": {
     "PERSON": {
-      "true_positives": 0,
-      "false_positives": 0,
-      "false_negatives": 0
+      "true_positives": 41,
+      "false_positives": 200,
+      "false_negatives": 1,
+      "precision": 0.17012448132780084,
+      "recall": 0.9761904761904762,
+      "f1": 0.28975265017667845
     },
     "STREET_ADDRESS": {
       "true_positives": 0,
-      "false_positives": 251,
-      "false_negatives": 0
+      "false_positives": 241,
+      "false_negatives": 38,
+      "precision": 0.0,
+      "recall": 0.0
     }
   },
   "summary": {
-    "total_fixtures": 1100,
-    "total_entities_expected": 0,
-    "total_entities_found": 251
+    "total_fixtures": 1185,
+    "total_entities_expected": 80,
+    "total_entities_found": 482,
+    "macro_precision": 0.08506224066390042,
+    "macro_recall": 0.4880952380952381,
+    "macro_f1": 0.14487632508833923
   },
-  "provisional": true
+  "provisional": false
 }

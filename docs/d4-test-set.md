@@ -17,7 +17,7 @@ them. The D4 set measures how well GLiNER2 (and later models) close that gap.
 
 ## Fixture file
 
-`fixtures/d4-names-addresses.jsonl` — 86 records with 53 `PERSON` and 45
+`fixtures/d4-names-addresses.jsonl` — 85 records with 53 `PERSON` and 45
 `STREET_ADDRESS` entities, plus hard negatives.
 
 ## Entity coverage

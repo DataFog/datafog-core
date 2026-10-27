@@ -38,10 +38,24 @@ pub struct ModelEvalResult {
     pub metrics: HashMap<String, EntityMetrics>,
     /// Summary statistics
     pub summary: EvalSummary,
+    /// ADR 004 detection bar results (GLiNER2 only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adr004_bar: Option<Adr004Bar>,
     /// Execution time
     pub duration_seconds: f64,
     /// Run directory path
     pub run_directory: PathBuf,
+}
+
+/// ADR 004 detection bar results for name/address detection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Adr004Bar {
+    /// PERSON recall (target: ≥90%)
+    pub person_recall: Option<f64>,
+    /// Whether PERSON recall meets the 90% bar
+    pub person_pass: bool,
+    /// STREET_ADDRESS recall (open measurement, no threshold)
+    pub street_address_recall: Option<f64>,
 }
 
 /// Contract checks - blocking for all tiers.
@@ -286,7 +300,11 @@ fn print_eval_summary(summary: &EvalSummary, scored_only: bool) {
 
 fn load_fixtures(fixture_dir: &Path) -> Vec<FixtureRecord> {
     let mut records = Vec::new();
-    let fixture_files = ["development.jsonl", "final.jsonl"];
+    let fixture_files = [
+        "d4-names-addresses.jsonl",
+        "development.jsonl",
+        "final.jsonl",
+    ];
 
     for file in &fixture_files {
         let path = fixture_dir.join(file);
@@ -1108,6 +1126,20 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
 
         let duration = start.elapsed().as_secs_f64();
 
+        // Build ADR 004 bar for GLiNER2
+        let adr004_bar = if engine.name == "gliner2" {
+            let person_recall = metrics.get("PERSON").and_then(|m| m.recall);
+            let person_pass = person_recall.map(|r| r >= 0.90).unwrap_or(false);
+            let street_address_recall = metrics.get("STREET_ADDRESS").and_then(|m| m.recall);
+            Some(Adr004Bar {
+                person_recall,
+                person_pass,
+                street_address_recall,
+            })
+        } else {
+            None
+        };
+
         let model_result = ModelEvalResult {
             pass,
             engine: engine.name.to_string(),
@@ -1116,6 +1148,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             accuracy: accuracy.clone(),
             metrics: metrics.clone(),
             summary: summary.clone(),
+            adr004_bar,
             duration_seconds: duration,
             run_directory: run_dir.clone(),
         };
@@ -1203,6 +1236,41 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             print_eval_summary(&summary, true);
             println!();
             print_metrics_table(&metrics);
+
+            // ADR 004 detection bar reporting for GLiNER2
+            if engine.name == "gliner2" {
+                println!();
+                println!("ADR 004 Detection Bar:");
+
+                // PERSON: at least 90% recall required
+                let person_recall = metrics
+                    .get("PERSON")
+                    .and_then(|m| m.recall);
+                match person_recall {
+                    Some(r) if r >= 0.90 => {
+                        println!("  PERSON recall: {:.1}% ✓ (≥90% required)", r * 100.0);
+                    }
+                    Some(r) => {
+                        println!("  PERSON recall: {:.1}% ✗ FAIL (<90%)", r * 100.0);
+                    }
+                    None => {
+                        println!("  PERSON recall: n/a (no gold labels)");
+                    }
+                }
+
+                // STREET_ADDRESS: open measurement (no threshold yet)
+                let addr_recall = metrics
+                    .get("STREET_ADDRESS")
+                    .and_then(|m| m.recall);
+                match addr_recall {
+                    Some(r) => {
+                        println!("  STREET_ADDRESS recall: {:.1}% (open measurement)", r * 100.0);
+                    }
+                    None => {
+                        println!("  STREET_ADDRESS recall: n/a (no gold labels)");
+                    }
+                }
+            }
 
             let accuracy_icon = match accuracy_status {
                 AccuracyStatus::Pass => "✓ pass",
