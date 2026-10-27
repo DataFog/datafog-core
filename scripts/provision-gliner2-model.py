@@ -88,7 +88,18 @@ def main():
     else:
         root = Path(__file__).resolve().parent.parent
         lock = json.loads((root / "crates/core/src/models/gliner2-lock.json").read_text())
-        manifest = {"platform": "portable-cpu", "files": lock["files"]}
+        # Default PII checkpoint: record model identity so eval/doctor can
+        # verify id+revision without hardcoded engine fallbacks.
+        manifest = validate_manifest({
+            "schema_version": 1,
+            "model": {
+                "backend": "gliner2",
+                "id": lock["model"],
+                "revision": lock["revision"],
+            },
+            "platform": "portable-cpu",
+            "files": lock["files"],
+        })
     for name, identity in manifest["files"].items():
         validate_asset(name, identity)
     destination = args.destination.absolute()
