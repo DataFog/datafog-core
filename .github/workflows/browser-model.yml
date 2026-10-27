@@ -1,0 +1,39 @@
+name: Browser model
+
+on:
+  pull_request:
+    paths: ["spike/gliner2-browser/**", ".github/workflows/browser-model.yml"]
+  push:
+    branches: [main]
+    paths: ["spike/gliner2-browser/**", ".github/workflows/browser-model.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-model-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  extraction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: spike/gliner2-browser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: spike/gliner2-browser/package-lock.json
+      - run: npm ci
+      - run: npm run download-model
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-entities
+          path: spike/gliner2-browser/results/entities.json

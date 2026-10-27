@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GLiNER2.5 Small — entity extraction</title>
+  <style>
+    body {
+      max-width: 850px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      font: 16px/1.5 system-ui;
+      color: #162536;
+    }
+    textarea,
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 0.7rem;
+      font: inherit;
+    }
+    textarea {
+      min-height: 160px;
+    }
+    label {
+      display: block;
+      margin: 1rem 0 0.3rem;
+      font-weight: 600;
+    }
+    button {
+      margin: 1rem 0;
+      padding: 0.6rem 1rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    td,
+    th {
+      padding: 0.5rem;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    pre {
+      padding: 1rem;
+      background: #f3f5f7;
+      overflow: auto;
+    }
+    #status[role="alert"] {
+      color: #a00020;
+    }
+  </style>
+  <h1>Entity extraction</h1>
+  <p>
+    GLiNER2.5 Small runs locally in your browser. Choose the entity types to
+    extract.
+  </p>
+  <p id="status" role="status">Ready to load the model (about 297 MB).</p>
+  <button id="load">Load model</button>
+  <label for="text">Text</label>
+  <textarea id="text">
+Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives at 123 Main Street, San Francisco, CA 94105. His username is jsmith.</textarea
+  >
+  <label for="labels">Entity types, separated by commas</label>
+  <input id="labels" />
+  <button id="extract" disabled>Extract entities</button>
+  <table hidden id="entities">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Text</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <pre id="json" hidden></pre>
+  <script type="module">
+    import { GlinerSession } from "/src/session.mjs";
+    import { DEFAULT_LABELS } from "/src/model.mjs";
+    const $ = (id) => document.getElementById(id);
+    $("labels").value = DEFAULT_LABELS.join(", ");
+    let session;
+    function status(text, error = false) {
+      $("status").textContent = text;
+      $("status").setAttribute("role", error ? "alert" : "status");
+    }
+    $("load").onclick = async () => {
+      $("load").disabled = true;
+      status("Loading GLiNER2.5 Small…");
+      try {
+        session = await GlinerSession.create();
+        $("extract").disabled = false;
+        status("Model ready.");
+      } catch (error) {
+        status(error.message, true);
+        $("load").disabled = false;
+      }
+    };
+    $("extract").onclick = async () => {
+      $("extract").disabled = true;
+      $("entities").hidden = true;
+      $("json").hidden = true;
+      try {
+        const result = await session.extract($("text").value, {
+          labels: $("labels")
+            .value.split(",")
+            .map((label) => label.trim()),
+        });
+        const body = $("entities").querySelector("tbody");
+        body.replaceChildren();
+        for (const entity of result.entities) {
+          const row = document.createElement("tr");
+          for (const value of [
+            entity.label,
+            entity.text,
+            entity.score.toFixed(3),
+          ]) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.append(cell);
+          }
+          body.append(row);
+        }
+        $("entities").hidden = false;
+        $("json").textContent = JSON.stringify(result, null, 2);
+        $("json").hidden = false;
+        status(`${result.entities.length} entities detected.`);
+      } catch (error) {
+        status(error.message, true);
+      } finally {
+        $("extract").disabled = false;
+      }
+    };
+  </script>
+</html>
