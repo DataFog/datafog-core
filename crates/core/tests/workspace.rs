@@ -274,28 +274,25 @@ fn marker_issued_in_same_batch_is_rejected_with_expected_error() {
     let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let saved = workspace.export_bundle().unwrap();
     let finding = WorkspaceFinding::new("PERSON", "Alice", TextRange { start: 0, end: 5 });
+    let op_id = [3; 16];
     let input1 = WorkspaceInput {
         text: "Alice",
         findings: std::slice::from_ref(&finding),
     };
-    let marker_from_first = workspace
-        .prepare_batch(&[input1], [3; 16])
-        .unwrap()
-        .preview()
-        .unwrap()
-        .text
-        .clone();
+    let mut plan = workspace.prepare_batch(&[input1], op_id).unwrap();
+    let marker_from_first = plan.preview().unwrap().text.clone();
     let text_with_new_marker = format!("Then {marker_from_first}");
-    let input2 = WorkspaceInput {
-        text: &text_with_new_marker,
-        findings: &[],
-    };
+    plan.discard();
     let input1_again = WorkspaceInput {
         text: "Alice",
         findings: std::slice::from_ref(&finding),
     };
+    let input2 = WorkspaceInput {
+        text: &text_with_new_marker,
+        findings: &[],
+    };
     let error = workspace
-        .prepare_batch(&[input1_again, input2], [4; 16])
+        .prepare_batch(&[input1_again, input2], op_id)
         .err()
         .unwrap();
     assert_eq!(error.code, ErrorCode::InvalidMarker);
@@ -1116,7 +1113,7 @@ fn hex_bytes(hex: &str) -> Vec<u8> {
 }
 
 #[test]
-fn code_collision_redraws_and_exhaustion_returns_resource_limit() {
+fn thirty_three_sequential_codes_are_unique() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let mut markers = Vec::new();
     for i in 0u64..33 {
