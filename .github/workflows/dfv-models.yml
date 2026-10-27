@@ -187,6 +187,11 @@ jobs:
         run: cargo test -p datafog-core --all-features --test model_gliner2_entity_count
 
       - name: Run model checks
+        env:
+          # Publication integration gate needs a model-datafog.yml run for this
+          # SHA. That is not a PR check; leave the vars unset so it skips.
+          GITHUB_REPOSITORY: ""
+          GITHUB_SHA: ""
         run: cargo dfv check --models --json
 
       - name: Verify model weight hashes
