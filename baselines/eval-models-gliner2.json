@@ -3,6 +3,7 @@
   "revision": "1cb4166094dc58fa8d836429f060d6c95f62b495",
   "manifest_sha256": "a209c40940256af28e25beca8b9938da5f7260b644e4af078e3d001fee7236a3",
   "scored_entity_types": [
+    "PERSON",
     "STREET_ADDRESS"
   ],
   "excluded_entity_types": [
@@ -15,6 +16,11 @@
     "ZIP_CODE"
   ],
   "metrics": {
+    "PERSON": {
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0
+    },
     "STREET_ADDRESS": {
       "true_positives": 0,
       "false_positives": 251,

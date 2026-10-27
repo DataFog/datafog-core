@@ -60,7 +60,7 @@ fn gliner2_config(bundle_path: &Path, manifest_sha256: &str, python_bin: &Path) 
     let bundle_str = bundle_path.to_string_lossy().replace('\\', "\\\\");
     let python_str = python_bin.to_string_lossy().replace('\\', "\\\\");
     format!(
-        r#"{{"bundle": "{bundle_str}", "manifest_sha256": "{manifest_sha256}", "limits": {{"max_input_bytes": 65536, "max_response_bytes": 16777216, "max_findings": 65536, "timeout_ms": 120000, "cleanup_timeout_ms": 5000}}, "gliner2": {{"python": "{python_str}", "labels": [{{"label": "street_address", "threshold": 0.5}}], "intra_threads": 1, "chunk_size": 384, "chunk_overlap": 64}}}}"#
+        r#"{{"bundle": "{bundle_str}", "manifest_sha256": "{manifest_sha256}", "limits": {{"max_input_bytes": 65536, "max_response_bytes": 16777216, "max_findings": 65536, "timeout_ms": 120000, "cleanup_timeout_ms": 5000}}, "gliner2": {{"python": "{python_str}", "labels": [{{"label": "person", "threshold": 0.5}}, {{"label": "street_address", "threshold": 0.5}}], "intra_threads": 1, "chunk_size": 384, "chunk_overlap": 64}}}}"#
     )
 }
 
@@ -93,7 +93,7 @@ pub static ENGINE_REGISTRY: &[EngineConfig] = &[
         description: "GLiNER2 privacy-filter PII model (community)",
         tier: EngineTier::Community,
         provision_script: "scripts/provision-gliner2-model.py",
-        scored_entity_types: &["STREET_ADDRESS"],
+        scored_entity_types: &["PERSON", "STREET_ADDRESS"],
         build_config: gliner2_config,
     },
 ];
