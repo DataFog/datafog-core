@@ -27,3 +27,4 @@ zeroize = "1"
 
 [dev-dependencies]
 futures = "0.3"
+sha2 = "0.10"
