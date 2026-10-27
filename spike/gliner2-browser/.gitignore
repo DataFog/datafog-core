@@ -1,12 +1,5 @@
-# Model files (downloaded, not committed)
-models/
-
-# Node modules
 node_modules/
-
-# Test outputs
-parity-results.json
-benchmark-results.json
-
-# npm pack artifacts
-*.tgz
+artifacts/
+results/
+models/
+*.log

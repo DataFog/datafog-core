@@ -204,23 +204,81 @@ spike/gliner2-browser/
 └── models/                  # Downloaded files (gitignored)
 ```
 
+## Benchmark Matrix
+
+See [docs/benchmark-matrix.md](docs/benchmark-matrix.md) for the full benchmark
+matrix comparing GLiNER2 model variants.
+
+### Model Variants Evaluated
+
+| Model | Size | Runtime Compatibility | Notes |
+|-------|------|----------------------|-------|
+| okasi Q8 | 525 MB | Requires ORT 1.22+ | Highest accuracy (SPY F1 0.534) |
+| okasi Q4 | 473 MB | ORT 1.18+ | Smaller, lower accuracy (SPY F1 0.516) |
+| GLiNER2.5-Decide-mobile Q4F16 | 329 MB | ORT 1.18+ | Smallest, not PII-specific |
+
+### Tokenization Status
+
+**Working:** Transformers.js tokenization now matches the Python reference:
+
+```bash
+npm run verify-tokenization
+# ✓ Token IDs MATCH exactly!
+# ✓ Word indices MATCH exactly!
+# ✓ Start mapping MATCH exactly!
+# ✓ End mapping MATCH exactly!
+```
+
+The preprocessing uses the GLiNER2 schema format:
+```
+( [P] entities ( [E] name [E] address ... ) ) [SEP_TEXT] lowercased tokens...
+```
+
+### Runtime Compatibility
+
+The okasi ONNX export uses **MatMulNBits** for weight quantization:
+
+| Quantization | Min ORT Version | Node Status | Browser Status |
+|--------------|-----------------|-------------|----------------|
+| Q4 (4-bit) | 1.18 | Works | TBD |
+| Q8 (8-bit) | 1.22 | Fails | TBD |
+
+**Issue:** onnxruntime-node 1.21.x only supports 4-bit MatMulNBits. The Q8 model
+(recommended by okasi for best accuracy) requires onnxruntime 1.22+.
+
+### Running the Benchmark
+
+```bash
+npm run benchmark-matrix                    # All models
+npm run benchmark-matrix -- --skip-download # Use cached
+npm run benchmark-matrix -- --verbose       # Debug output
+```
+
 ## Recommendation
 
 **GLiNER2 can run in the browser.** The model loads successfully via ONNX
 Runtime Web, and the ~526 MB Q8 variant is acceptable for a Chrome extension.
 
+**Sweet Spot:** okasi Q8 (~525 MB) for highest accuracy  
+**Runner-up:** GLiNER2.5-mobile Q4F16 (~329 MB) for smallest download
+
+The trade-off is straightforward:
+- Q8 provides best accuracy but requires newer ORT (1.22+)
+- Q4 works with older ORT but may have quantization artifacts
+- Mobile variant is smallest but not PII-trained
+
 **Key constraints:**
-- ~526 MB one-time download (cacheable)
-- ~3.5s cold start (model load)
-- Requires proper SentencePiece tokenizer
+- ~325-525 MB one-time download (cacheable)
+- ~1.5-3.5s cold start depending on model
+- Requires transformers.js or matching tokenizer
 - Single-threaded WASM unless cross-origin isolation is available
 
 **Estimated production work:**
-- Tokenizer: M (either port Python or integrate transformers.js)
+- Tokenizer: ✅ Done (transformers.js integration)
 - Session management: S
 - Weight hosting/verification: S
 - Count-floor verification/fix: S
-- Parity testing: S
+- Parity testing: M (blocked on ORT version for Q8)
 - WebGPU support: M (optional)
 
 The production work should wait for the shared model-engine interface (step 6
