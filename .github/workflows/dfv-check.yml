@@ -1,0 +1,79 @@
+name: Verification CLI
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dfv-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect docs-only changes
+        id: scope
+        shell: bash
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          code=true
+          if [[ -n "$BASE" && "$BASE" != 0000000000000000000000000000000000000000 ]] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
+            if [[ -n "$files" ]]; then
+              code=false
+              while IFS= read -r file; do
+                case "$file" in docs/*|*.md|*.mdx) ;; *) code=true ;; esac
+              done <<< "$files"
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.code == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: wasm32-unknown-unknown
+      - if: steps.scope.outputs.code == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - if: steps.scope.outputs.code == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: steps.scope.outputs.code == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - if: steps.scope.outputs.code == 'true'
+        run: python3 -m pip install maturin
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - if: steps.scope.outputs.code == 'true'
+        run: npm ci --prefix bindings/wasm && npx --prefix bindings/wasm playwright install --with-deps chromium
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv build
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv doctor --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv check --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv parity --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv eval --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv smoke --json
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv parity --live --json
+      - if: always() && steps.scope.outputs.code == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dfv-reports
+          path: target/dfv/runs/
+          retention-days: 30
