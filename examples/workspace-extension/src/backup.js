@@ -47,11 +47,13 @@ function decodeBackup(bytes) {
     fields(v.recovery, ["version", "salt", "nonce", "wrappedRoot"]);
     fields(r, ["version", "head", ...recordFields]); fields(r.head, ["revision", "commitId"]);
     if (v.version !== 2) throw new HostError("invalid_backup");
+    const vaultSizes = {vaultId: 16, vaultKeyId: 16, workspaceId: 16, salt: 16, rootNonce: 12, wrappedRoot: 48};
+    const recordSizes = {vaultId: 16, workspaceId: 16, keyId: 16, keyNonce: 12, wrappedKey: 48, nonce: 12, ciphertext: 16 * 1024 * 1024 + 16};
     const vault = {version: v.version, profile: v.profile, accessGeneration: randomId(),
-      ...Object.fromEntries(vaultFields.map(key => [key, fromBase64url(v[key], 48)])),
+      ...Object.fromEntries(vaultFields.map(key => [key, fromBase64url(v[key], vaultSizes[key])])),
       recovery: {version: v.recovery.version, salt: fromBase64url(v.recovery.salt, 16), nonce: fromBase64url(v.recovery.nonce, 12), wrappedRoot: fromBase64url(v.recovery.wrappedRoot, 48)}};
     const record = {version: r.version, head: {revision: r.head.revision, commitId: Array.from(fromBase64url(r.head.commitId, 16))},
-      ...Object.fromEntries(recordFields.map(key => [key, fromBase64url(r[key], key === "ciphertext" ? 16 * 1024 * 1024 + 16 : 48)]))};
+      ...Object.fromEntries(recordFields.map(key => [key, fromBase64url(r[key], recordSizes[key])]))};
     validateVault(vault); validateRecord(record, vault);
     const nonce = fromBase64url(file.nonce, 12), tag = fromBase64url(file.tag, 16);
     if (nonce.length !== 12 || tag.length !== 16 || JSON.stringify({payload: payload(vault, record, body.exportedAt), nonce: toBase64url(nonce), tag: toBase64url(tag)}) !== source) throw new HostError("invalid_backup");

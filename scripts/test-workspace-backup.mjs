@@ -48,6 +48,9 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   check(await page.locator("#recovery-created").count() === 1, "G1 vault creation supplies an offline recovery code");
   const recoveryCode = await page.locator("#recovery-created").inputValue();
   check(/^DFR1\.[A-Za-z0-9_-]{43}$/.test(recoveryCode), "G1 versioned random recovery code");
+  await page.locator("#lock").click(); await status(page, "locked");
+  check(await page.locator("#recovery-created").inputValue() === "", "G1 lock clears the one-time recovery code display");
+  await unlock(page);
   const output = await prepare(page);
   await page.locator("#approve").click(); await status(page, "saved");
   const unsaved = await markName(page, "Unsaved Synthetic", status);
@@ -119,6 +122,38 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
     await close();
   }
   console.log("PASS G1/G3 encrypted backup, both credentials, fresh storage and rollback-safe alias reuse");
+
+  page = await launch("v1-vault-compat");
+  const v1VaultWorks = await page.evaluate(async password => {
+    const encoder = new TextEncoder();
+    const randomId = () => crypto.getRandomValues(new Uint8Array(16));
+    const random = length => crypto.getRandomValues(new Uint8Array(length));
+    function concat(...arrays) {
+      const result = new Uint8Array(arrays.reduce((n, a) => n + a.length, 0));
+      let offset = 0; for (const array of arrays) { result.set(array, offset); offset += array.length; }
+      return result;
+    }
+    async function importKey(raw) { return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]); }
+    async function encrypt(key, iv, aad, plaintext) { return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, plaintext)); }
+    async function decrypt(key, iv, aad, ciphertext) { return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, ciphertext)); }
+    function passwordAAD(vault) { return concat(encoder.encode(`DFG${vault.version}:PW:`), vault.vaultId, vault.vaultKeyId, new Uint8Array([vault.profile]), vault.salt); }
+    const v1Vault = { version: 1, vaultId: randomId(), vaultKeyId: randomId(), workspaceId: randomId(), profile: 1, salt: random(16), rootNonce: random(12), accessGeneration: randomId() };
+    const root = random(32);
+    const derived = random(32);
+    try {
+      const wrappedRoot = await encrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), root);
+      const decrypted = await decrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), wrappedRoot);
+      if (decrypted.length !== 32 || !decrypted.every((b, i) => b === root[i])) return {error: "round-trip failed"};
+      const v2AAD = concat(encoder.encode("DFG2:PW:"), v1Vault.vaultId, v1Vault.vaultKeyId, new Uint8Array([v1Vault.profile]), v1Vault.salt);
+      try {
+        await decrypt(await importKey(derived), v1Vault.rootNonce, v2AAD, wrappedRoot);
+        return {error: "v2 AAD should not decrypt v1 vault"};
+      } catch { /* expected rejection */ }
+      return {success: true};
+    } finally { root.fill(0); derived.fill(0); }
+  }, password);
+  check(v1VaultWorks.success === true, `G1 v1 vault AAD compatibility: DFG1:PW: decrypts, DFG2:PW: rejects${v1VaultWorks.error ? ` (${v1VaultWorks.error})` : ""}`);
+  await close();
 
   page = await launch("backup-rejections");
   const empty = await fingerprint(page);

@@ -56,6 +56,8 @@ The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/work
 
 Passwords and raw key buffers are cleared where possible, and runtime Web Crypto keys are nonextractable. JavaScript/native memory erasure is best effort; this does not provide hardware-bound key storage or protection from malicious extension code. IndexedDB transaction completion and requested strict durability do not establish a guarantee against every OS/power failure. Authenticated snapshots do not prove that no newer history exists.
 
+**Backup export security:** Exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB memory, 3 iterations). This profile is tuned for browser KDF latency and is not designed to resist sustained offline attacks. Whether exports should use a stronger (slower) KDF profile is an open question for the planned encryption review.
+
 Initial limits are **development guardrails**, not production capacity claims: 1 MiB source, 10,000 findings, 20,000 entries and 16 MiB bundle/output. Finding transport is also bounded before JSON serialization, including repeated object references. Exceeding limits rejects the whole operation. Full-year capacity, final marker preservation/overhead and production security review remain later qualification.
 
 Batches accept 1–32 inputs. Source bytes, findings and preview output limits apply
