@@ -25,12 +25,6 @@ pub const MAX_LABEL_BYTES: usize = 32;
 pub const MARKER_CODE_LENGTH: usize = 6;
 pub type PublicId = [u8; 16];
 
-const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
-/// with slack so moderately damaged markers are still recognized and rejected.
-const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
-const MAX_CODE_ATTEMPTS: u32 = 32;
-
 /// Complete optimistic-concurrency identity, not an authorization credential.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Head {
@@ -589,6 +583,12 @@ impl Workspace {
         Ok(output)
     }
 }
+
+const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/// Longest `[[...]]` interior inspected as a possible marker: label, separator and code,
+/// with slack so moderately damaged markers are still recognized and rejected.
+const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
+const MAX_CODE_ATTEMPTS: u32 = 32;
 
 /// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {

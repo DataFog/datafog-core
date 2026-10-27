@@ -196,6 +196,41 @@ fn unknown_markers_reject_batches_without_admitting_pending_aliases() {
 }
 
 #[test]
+fn marker_issued_in_same_batch_is_rejected_with_expected_error() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let saved = workspace.export_bundle().unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "Alice", TextRange { start: 0, end: 5 });
+    let input1 = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let marker_from_first = workspace
+        .prepare_batch(&[input1], [3; 16])
+        .unwrap()
+        .preview()
+        .unwrap()
+        .text
+        .clone();
+    let text_with_new_marker = format!("Then {marker_from_first}");
+    let input2 = WorkspaceInput {
+        text: &text_with_new_marker,
+        findings: &[],
+    };
+    let input1_again = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let error = workspace
+        .prepare_batch(&[input1_again, input2], [4; 16])
+        .err()
+        .unwrap();
+    assert_eq!(error.code, ErrorCode::InvalidMarker);
+    assert_eq!(error.input_index, Some(1));
+    assert_eq!(error.finding_index, None);
+    assert_eq!(workspace.export_bundle().unwrap(), saved);
+}
+
+#[test]
 fn a_batch_shares_aliases_and_commits_one_snapshot_after_approval() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let original = workspace.export_bundle().unwrap();
