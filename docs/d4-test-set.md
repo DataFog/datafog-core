@@ -17,12 +17,12 @@ them. The D4 set measures how well GLiNER2 (and later models) close that gap.
 
 ## Fixture file
 
-`fixtures/d4-names-addresses.jsonl` — 85 records with 53 `PERSON` and 45
-`STREET_ADDRESS` entities, plus hard negatives.
+`fixtures/d4-names-addresses.jsonl` — 85 records with 42 `PERSON` and 38
+`STREET_ADDRESS` entities, plus 22 hard negatives.
 
 ## Entity coverage
 
-### PERSON (53 entities across 44 positive fixtures)
+### PERSON (42 entities across 38 positive fixtures)
 
 - **Multi-part names:** First + Last, First + Middle + Last
 - **Hyphenated names:** García-López, Tanaka-Williams, O'Reilly-Chen
@@ -34,7 +34,7 @@ them. The D4 set measures how well GLiNER2 (and later models) close that gap.
 - **Names with punctuation:** Titles (Dr.), suffixes (Jr.), colons, parentheses
 - **ALL CAPS names:** WONG, DAVID MING-HO
 
-### STREET_ADDRESS (45 entities across 35 positive fixtures)
+### STREET_ADDRESS (38 entities across 36 positive fixtures)
 
 - **US addresses:** Standard (123 Main Street, City, ST 12345), with ZIP+4
 - **Apartment/unit numbers:** Apt 4B, Suite 3400, Unit 7, Floor 12
@@ -45,7 +45,7 @@ them. The D4 set measures how well GLiNER2 (and later models) close that gap.
 - **Directionals:** N., S.W., NW
 - **Named streets:** Martin Luther King Jr. Blvd, Massachusetts Ave
 
-### Hard negatives (20 fixtures)
+### Hard negatives (22 fixtures)
 
 - **Company names:** Apple, Microsoft
 - **Publication names:** The Washington Post
