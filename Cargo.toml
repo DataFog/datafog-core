@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/core",
+  "crates/xtask",
   "bindings/python",
   "bindings/node",
   "bindings/wasm",
