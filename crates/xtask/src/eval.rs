@@ -1243,9 +1243,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 println!("ADR 004 Detection Bar:");
 
                 // PERSON: at least 90% recall required
-                let person_recall = metrics
-                    .get("PERSON")
-                    .and_then(|m| m.recall);
+                let person_recall = metrics.get("PERSON").and_then(|m| m.recall);
                 match person_recall {
                     Some(r) if r >= 0.90 => {
                         println!("  PERSON recall: {:.1}% ✓ (≥90% required)", r * 100.0);
@@ -1259,12 +1257,13 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 }
 
                 // STREET_ADDRESS: open measurement (no threshold yet)
-                let addr_recall = metrics
-                    .get("STREET_ADDRESS")
-                    .and_then(|m| m.recall);
+                let addr_recall = metrics.get("STREET_ADDRESS").and_then(|m| m.recall);
                 match addr_recall {
                     Some(r) => {
-                        println!("  STREET_ADDRESS recall: {:.1}% (open measurement)", r * 100.0);
+                        println!(
+                            "  STREET_ADDRESS recall: {:.1}% (open measurement)",
+                            r * 100.0
+                        );
                     }
                     None => {
                         println!("  STREET_ADDRESS recall: n/a (no gold labels)");

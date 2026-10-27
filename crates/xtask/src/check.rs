@@ -633,7 +633,10 @@ Run without --models to verify rule-based detectors:
             println!(
                 "  fixture_offsets: {} (wraps {})",
                 fixture_offset_result.command.as_deref().unwrap_or(""),
-                fixture_offset_result.wrapped_script.as_deref().unwrap_or("")
+                fixture_offset_result
+                    .wrapped_script
+                    .as_deref()
+                    .unwrap_or("")
             );
         } else {
             print_test_result("fixture_offsets", &fixture_offset_result);
