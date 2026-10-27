@@ -187,6 +187,7 @@ GLiNER2 supports the PII checkpoint and compatible general-purpose span models w
 
 ## Documentation and development
 
+- [Roadmap](ROADMAP.md)
 - [Installation and runtime requirements](docs/get-started/installation.mdx)
 - [Python](docs/reference/python.mdx) · [Node.js](docs/reference/node.mdx) · [Rust](docs/reference/rust.mdx) · [Browser / WASM](docs/reference/browser-wasm.mdx) API references
 - [Structured JSON scans and name-field discovery](docs/guides/person-discovery.mdx)
