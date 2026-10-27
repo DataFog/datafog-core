@@ -30,9 +30,15 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 - **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
 - **community** (e.g. gliner2): F1 regression is warn-only, never fails PRs. Requires named owner in CODEOWNERS.
 
-Contract checks block for all tiers: pinned revision verified by doctor (sha256 verified from each bundle's own manifest against its files), engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
+Contract checks block for all tiers: file hashes verified by doctor (sha256 from `models/manifest.json` against actual files), engine loads behind its feature/config, spans have valid offsets matching across SDKs. Integration code (e.g. GLiNER2 entity-count gating in crates/core) is ours regardless of tier and regression tests for it block.
 
-**TODO:** Provisioning from ENGINE_REGISTRY (issue #87 - GLiNER2 runtime step).
+### Model weight verification
+
+`cargo dfv doctor` checks model weights when `models/manifest.json` exists. Doctor hashes each file listed in the manifest using SHA-256 and compares against the expected digest. It does not verify the model revision or download weights.
+
+If the manifest is missing, doctor emits a warning but does not fail. Model weights are optional for rule-based verification.
+
+Provisioning scripts produce per-engine bundles with their own manifests. Registry-driven provisioning will follow the unified model-engine interface (see [ROADMAP.md](ROADMAP.md)). The GLiNER2 baseline belongs with [issue #87](https://github.com/DataFog/datafog-core/issues/87).
 
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 
