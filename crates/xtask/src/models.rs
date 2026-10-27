@@ -523,6 +523,77 @@ fn run_model_fault_conformance(
     }
 }
 
+fn run_gliner2_entity_count(run_dir: &Path, dry_run: bool) -> ModelCheckResult {
+    let script = "scripts/check-gliner2-entity-count.py";
+    let cmd = format!("python3 {script}");
+
+    if dry_run {
+        return ModelCheckResult {
+            pass: true,
+            duration_seconds: 0.0,
+            output: None,
+            error: None,
+            wrapped_script: Some(script.to_string()),
+            command: Some(cmd),
+        };
+    }
+
+    let start = Instant::now();
+    let root = workspace_root();
+    let script_path = root.join(script);
+    if !script_path.exists() {
+        return ModelCheckResult {
+            pass: false,
+            duration_seconds: start.elapsed().as_secs_f64(),
+            output: None,
+            error: Some("entity-count regression script not found".to_string()),
+            wrapped_script: Some(script.to_string()),
+            command: Some(cmd),
+        };
+    }
+
+    let output = Command::new("python3")
+        .arg(&script_path)
+        .current_dir(&root)
+        .output();
+    let duration = start.elapsed().as_secs_f64();
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let combined = format!("{stdout}\n{stderr}");
+            let _ = fs::write(run_dir.join("gliner2_entity_count.log"), &combined);
+            if out.status.success() {
+                ModelCheckResult {
+                    pass: true,
+                    duration_seconds: duration,
+                    output: Some(combined),
+                    error: None,
+                    wrapped_script: Some(script.to_string()),
+                    command: Some(cmd),
+                }
+            } else {
+                ModelCheckResult {
+                    pass: false,
+                    duration_seconds: duration,
+                    output: Some(combined),
+                    error: Some("GLiNER2 entity-count gating regression failed".to_string()),
+                    wrapped_script: Some(script.to_string()),
+                    command: Some(cmd),
+                }
+            }
+        }
+        Err(e) => ModelCheckResult {
+            pass: false,
+            duration_seconds: duration,
+            output: None,
+            error: Some(format!("failed to run script: {e}")),
+            wrapped_script: Some(script.to_string()),
+            command: Some(cmd),
+        },
+    }
+}
+
 fn print_model_check_result(name: &str, result: &ModelCheckResult) {
     if result.pass {
         println!("  ✓ {name} passed in {:.1}s", result.duration_seconds);
@@ -675,6 +746,23 @@ pub fn run_models_check(args: &[String], json_output: bool) -> ExitCode {
         }
     }
     checks.insert("fault_conformance".to_string(), fault_result);
+
+    if !json_output && !dry_run {
+        println!("Running GLiNER2 entity-count gating regression...");
+    }
+    let entity_count_result = run_gliner2_entity_count(&run_dir, dry_run);
+    if !json_output {
+        if dry_run {
+            println!(
+                "  gliner2_entity_count: {} (wraps {})",
+                entity_count_result.command.as_deref().unwrap_or(""),
+                entity_count_result.wrapped_script.as_deref().unwrap_or("")
+            );
+        } else {
+            print_model_check_result("gliner2_entity_count", &entity_count_result);
+        }
+    }
+    checks.insert("gliner2_entity_count".to_string(), entity_count_result);
 
     // At least one engine from the registry must be provisioned
     let models_ready = ENGINE_REGISTRY.iter().any(|engine| {

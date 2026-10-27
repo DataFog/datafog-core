@@ -1,4 +1,4 @@
-use crate::engines::{DetectedEntity, EngineConfig, EngineTier};
+use crate::engines::{DetectedEntity, ENGINE_REGISTRY, EngineConfig, EngineTier};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -284,17 +284,13 @@ struct PythonEnv {
     python_bin: PathBuf,
 }
 
-fn setup_python_env(root: &Path) -> Option<PythonEnv> {
+fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
     let venv_dir = root.join("target").join("dfv_eval_venv");
     let python_bin = if cfg!(windows) {
         venv_dir.join("Scripts").join("python.exe")
     } else {
         venv_dir.join("bin").join("python")
     };
-
-    if python_bin.exists() {
-        return Some(PythonEnv { python_bin });
-    }
 
     let wheel_dir = root.join("target").join("wheels");
     let wheel = fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
@@ -310,20 +306,33 @@ fn setup_python_env(root: &Path) -> Option<PythonEnv> {
         })
     })?;
 
-    Command::new("python3")
-        .args(["-m", "venv"])
-        .arg(&venv_dir)
-        .status()
-        .ok()?;
+    if !python_bin.exists() {
+        Command::new("python3")
+            .args(["-m", "venv"])
+            .arg(&venv_dir)
+            .status()
+            .ok()?;
 
-    let status = Command::new(&python_bin)
-        .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-        .arg(&wheel)
-        .status()
-        .ok()?;
+        let status = Command::new(&python_bin)
+            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
+            .arg(&wheel)
+            .status()
+            .ok()?;
 
-    if !status.success() {
-        return None;
+        if !status.success() {
+            return None;
+        }
+    }
+
+    for extra in extras {
+        let status = Command::new(&python_bin)
+            .args(["-m", "pip", "install", "-q"])
+            .arg(format!("{}[{extra}]", wheel.display()))
+            .status()
+            .ok()?;
+        if !status.success() {
+            return None;
+        }
     }
 
     Some(PythonEnv { python_bin })
@@ -506,7 +515,7 @@ fn compute_rule_metrics(
     root: &Path,
     json_output: bool,
 ) -> Option<(HashMap<String, EntityMetrics>, EvalSummary)> {
-    let env = setup_python_env(root)?;
+    let env = setup_python_env(root, &[])?;
 
     let mut entity_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
     let mut total_expected = 0;
@@ -807,6 +816,63 @@ fn compare_with_rule_baseline(
     })
 }
 
+fn run_all_model_evals(json_output: bool, update_baseline: bool, dry_run: bool) -> ExitCode {
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Error: failed to locate xtask binary: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut pass = true;
+    let mut engines = Vec::new();
+    for engine in ENGINE_REGISTRY {
+        if dry_run {
+            engines.push(serde_json::json!({
+                "engine": engine.name,
+                "command": format!("eval --model {}", engine.name),
+            }));
+            continue;
+        }
+        let mut command = Command::new(&exe);
+        command.args(["eval", "--model", engine.name]);
+        if json_output {
+            command.arg("--json");
+        }
+        if update_baseline {
+            command.arg("--update-baseline");
+        }
+        let status = command.status();
+        let engine_pass = status.as_ref().map(|s| s.success()).unwrap_or(false);
+        pass &= engine_pass;
+        engines.push(serde_json::json!({
+            "engine": engine.name,
+            "pass": engine_pass,
+        }));
+        if !engine_pass && !json_output {
+            eprintln!("Engine {} eval failed", engine.name);
+        }
+    }
+    let result = serde_json::json!({
+        "pass": pass,
+        "engines": engines,
+        "dry_run": if dry_run { Some(true) } else { None::<bool> },
+    });
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+    } else if dry_run {
+        println!(
+            "Dry run - would evaluate engines: {:?}",
+            EngineConfig::names()
+        );
+    }
+    if pass {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let update_baseline = args.iter().any(|a| a == "--update-baseline");
@@ -915,7 +981,12 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             println!();
         }
 
-        let env = match setup_python_env(&root) {
+        let extras: &[&str] = if engine.name == "gliner2" {
+            &["gliner2"]
+        } else {
+            &[]
+        };
+        let env = match setup_python_env(&root, extras) {
             Some(e) => e,
             None => {
                 let err = serde_json::json!({
@@ -1188,6 +1259,10 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         } else {
             ExitCode::FAILURE
         };
+    }
+
+    if args.iter().any(|a| a == "--models") {
+        return run_all_model_evals(json_output, update_baseline, dry_run);
     }
 
     if !json_output {

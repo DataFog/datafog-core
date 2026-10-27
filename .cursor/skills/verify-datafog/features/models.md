@@ -247,6 +247,29 @@ Models run on:
 
 WASM does not support models.
 
+### GLiNER2 entity-count gating
+
+GLiNER2 2.1.0's span runtime treats `count_pred` as a structural-instance
+budget. When the head predicts 0 it skips span scoring for that task. Entity
+decoding then uses only instance 0 and returns every span above threshold, so
+a 0 prediction drops *all* mentions of a type — including a second
+`street_address` in the same sentence. A prediction of 2+ does not add extra
+entity spans.
+
+There is no upstream extract-time option to disable this gate on the pinned
+span checkpoint. Core's `_gliner2_worker.py` wraps `count_pred` (it must stay
+a `torch.nn.Module`) and floors a 0 prediction at 1. Core still applies
+per-label thresholds. Relation/record counts are unchanged because the worker
+only builds `schema.entities(...)`.
+
+This is DataFog integration code, not a community-tier accuracy waiver.
+`scripts/check-gliner2-entity-count.py` and
+`crates/core/tests/model_gliner2_entity_count.rs` run un-ignored in
+`cargo dfv check --models` and the dfv-models job (`DATAFOG_REQUIRE_GLINER2=1`
+fails if the bundle is missing).
+
+Rust, Python, and Node share that worker. WASM has no model path.
+
 ### GLiNER2 label mapping
 
 GLiNER2 labels map to uppercase output types:

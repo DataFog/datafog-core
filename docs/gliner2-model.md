@@ -87,11 +87,30 @@ provisioning the original pinned PII checkpoint with the existing setup commands
 
 ## Entity-count gating
 
-GLiNER2's span runtime uses a count head to predict how many entities to extract.
-When this head predicts zero, the upstream runtime skips span decoding entirely,
-which can cause valid high-confidence spans to be missed.
+GLiNER2 2.1.0's span runtime (`gliner2/inference/runtime.py`) uses a count head
+(`model.count_pred`, a 20-way classifier over instance budgets 0–19) as a
+**structural-instance budget**, not as a cap on how many entity spans survive.
 
-Core's GLiNER2 worker floors the count prediction at 1 so that span decoding
-always runs. Core's threshold filtering handles any resulting false positives.
-This ensures inputs like "My home address is 27 Willow Lane." return the expected
-street address findings even when the count head would otherwise predict zero.
+1. `_compute_direct_span_logits_batched` argmaxes the count head. If the class
+   is 0 it `continue`s and never builds `count_embed` queries or span logits.
+2. For **entity** tasks the runtime then keeps only structural instance 0
+   (`struct_proj = struct_proj[:1]`). `_extract_entities` / `_find_spans`
+   return every span above the caller threshold on that instance. A predicted
+   count of 2+ does not add extra entity mentions; a predicted count of 0
+   drops all of them — including a second same-type address in one sentence.
+3. Relation and JSON-structure decoders *do* iterate `range(pred_count)`.
+   DataFog's worker only builds `schema.entities(...)`, so flooring a 0→1
+   count does not change record or relation instance counts.
+
+Upstream 2.1.0 has no extract-time flag to disable this gate. The boundary /
+record path that replaces `count_pred` is a different architecture and is not
+this pinned span checkpoint.
+
+Core's worker therefore wraps `count_pred` with a `torch.nn.Module` that boosts
+the count=1 logit when the argmax would otherwise be 0. Threshold filtering
+in Core still drops low-score spans. Set
+`DATAFOG_GLINER2_DISABLE_COUNT_FLOOR=1` only to reproduce the pre-fix skip.
+
+Rust, Python, and Node ModelSessions all spawn
+`datafog_core._gliner2_worker`. WASM is rule-based and has no model path, so
+the worker wrap is the single supported fix.

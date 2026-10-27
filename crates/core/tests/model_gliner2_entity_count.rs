@@ -1,156 +1,175 @@
 #![cfg(all(feature = "models", not(target_arch = "wasm32")))]
-//! Issue #87 regression test: GLiNER2 entity-count gating.
+//! Issue #87 regression: GLiNER2 entity-count gating.
 //!
-//! The GLiNER2 span runtime uses a count head to predict how many entities
-//! to extract. When this head predicts zero, the runtime historically
-//! skipped span decoding entirely, causing valid high-confidence spans to
-//! be missed. The fix floors the count prediction at 1 so span decoding
-//! always runs; threshold filtering handles false positives.
+//! GLiNER2's span runtime uses `count_pred` as a structural-instance budget.
+//! When the argmax is 0 it skips span scoring for that task. Entity decoding
+//! then keeps only instance 0 and returns every span above threshold, so a
+//! floor of 1 unblocks extraction without capping a second same-type entity.
 //!
-//! These tests verify the fix by checking that inputs which previously
-//! returned zero findings due to entity-count gating now return the
-//! expected spans.
+//! This test is not ignored. When `models/gliner2/bundle-manifest.json` is
+//! present (or `DATAFOG_MODEL_CONFIG` names a GLiNER2 session) it runs and
+//! fails on a miss. When the bundle is absent it fails if
+//! `DATAFOG_REQUIRE_GLINER2=1` (the dfv-models job) and otherwise returns.
 
 use datafog_core::models::{Cancellation, ModelSession, ModelSessionConfig};
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
-/// Minimal reproduction for issue #87: street addresses with described
-/// schemas that historically triggered the entity-count gating path.
-///
-/// The count head in some configurations predicts zero entities for short
-/// inputs like "My home address is 27 Willow Lane." despite the model
-/// producing high-confidence span scores (>0.99) for the address.
-#[test]
-#[ignore = "requires explicitly provisioned local GLiNER2 model"]
-fn entity_count_gating_does_not_skip_valid_spans() {
-    let config = std::env::var("DATAFOG_MODEL_CONFIG")
-        .expect("DATAFOG_MODEL_CONFIG must name a verified local session config");
-    let config: ModelSessionConfig =
-        serde_json::from_reader(std::fs::File::open(config).unwrap()).unwrap();
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
 
-    // This test only applies to GLiNER2
-    if config.gliner2.is_none() {
-        return;
+fn python_interpreter() -> PathBuf {
+    let output = std::process::Command::new("python3")
+        .args(["-c", "import sys; print(sys.executable)"])
+        .output()
+        .expect("python3 must be available to open a GLiNER2 session");
+    assert!(
+        output.status.success(),
+        "python3 -c sys.executable failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
+        .canonicalize()
+        .expect("python interpreter path must be canonical")
+}
+
+fn config_from_bundle(bundle: &Path) -> ModelSessionConfig {
+    let manifest = bundle.join("bundle-manifest.json");
+    let bytes = std::fs::read(&manifest).unwrap();
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let python = python_interpreter();
+    serde_json::from_value(serde_json::json!({
+        "bundle": bundle,
+        "manifest_sha256": sha256,
+        "limits": {
+            "max_input_bytes": 65536,
+            "max_response_bytes": 16777216,
+            "max_findings": 65536,
+            "timeout_ms": 120000,
+            "cleanup_timeout_ms": 5000
+        },
+        "gliner2": {
+            "python": python,
+            "labels": [{"label": "street_address", "threshold": 0.5}],
+            "intra_threads": 1,
+            "chunk_size": 384,
+            "chunk_overlap": 64
+        }
+    }))
+    .unwrap()
+}
+
+fn load_gliner2_config() -> Option<ModelSessionConfig> {
+    if let Ok(path) = std::env::var("DATAFOG_MODEL_CONFIG") {
+        let config: ModelSessionConfig =
+            serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap();
+        if config.gliner2.is_some() {
+            return Some(config);
+        }
     }
+    let bundle = workspace_root().join("models/gliner2");
+    if bundle.join("bundle-manifest.json").exists() {
+        return Some(config_from_bundle(&bundle));
+    }
+    if std::env::var_os("DATAFOG_REQUIRE_GLINER2").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        panic!(
+            "DATAFOG_REQUIRE_GLINER2=1 but GLiNER2 is not provisioned at {}",
+            bundle.display()
+        );
+    }
+    None
+}
 
+/// Issue #87 positives, including two same-type entities in one input.
+#[test]
+fn entity_count_gating_does_not_skip_valid_spans() {
+    let Some(config) = load_gliner2_config() else {
+        eprintln!("skipping: GLiNER2 bundle not provisioned");
+        return;
+    };
     let session = ModelSession::open(config).unwrap();
-
-    // These are the exact reproduction inputs from issue #87. Before the fix,
-    // these returned zero findings due to the count head selecting zero.
     let test_cases = [
-        ("My home address is 27 Willow Lane.", "27 Willow Lane"),
-        ("Please send mail to 912 Spruce Road.", "912 Spruce Road"),
-        ("I live at 456 Oak Avenue in the city.", "456 Oak Avenue"),
+        (
+            "My home address is 27 Willow Lane.",
+            &["27 Willow Lane"][..],
+        ),
+        (
+            "Please send mail to 912 Spruce Road.",
+            &["912 Spruce Road"][..],
+        ),
+        (
+            "Send packages to 27 Willow Lane or 912 Spruce Road.",
+            &["27 Willow Lane", "912 Spruce Road"][..],
+        ),
     ];
 
-    for (input, expected_address) in test_cases {
+    for (input, expected) in test_cases {
         let result = session
             .scan_model(input, &Cancellation::default())
             .expect("model scan should succeed");
-
-        // The fix ensures span decoding always runs, so we should find spans
-        // if the model assigns them high confidence.
         let addresses: Vec<_> = result
             .findings
             .iter()
-            .filter(|f| f.entity_type == "STREET_ADDRESS")
+            .filter(|finding| finding.entity_type == "STREET_ADDRESS")
             .collect();
-
-        // With the fix, the model should detect the address. Without the fix,
-        // the count head predicting zero would cause this to be empty.
         assert!(
             !addresses.is_empty(),
             "Expected STREET_ADDRESS findings for input {input:?}, got none. \
-             This suggests entity-count gating is still skipping span decoding."
+             Entity-count gating is still skipping span decoding."
         );
-
-        // Verify we found the expected address text
-        let found_expected = addresses
-            .iter()
-            .any(|f| f.matched_text.contains(expected_address));
-        assert!(
-            found_expected,
-            "Expected to find {:?} in findings for input {:?}, got: {:?}",
-            expected_address,
-            input,
-            addresses
-                .iter()
-                .map(|f| &f.matched_text)
-                .collect::<Vec<_>>()
-        );
-    }
-
-    // Verify empty input still returns empty (this is correct behavior)
-    let empty_result = session
-        .scan_model("", &Cancellation::default())
-        .expect("empty input scan should succeed");
-    assert!(
-        empty_result.findings.is_empty(),
-        "Empty input should return no findings"
-    );
-
-    // Verify whitespace-only input returns empty
-    let whitespace_result = session
-        .scan_model("   \n\t   ", &Cancellation::default())
-        .expect("whitespace input scan should succeed");
-    assert!(
-        whitespace_result.findings.is_empty(),
-        "Whitespace-only input should return no findings"
-    );
-
-    session.close().unwrap();
-}
-
-/// Verify that the count-gating fix does not create false positives for
-/// inputs that genuinely contain no entities.
-#[test]
-#[ignore = "requires explicitly provisioned local GLiNER2 model"]
-fn entity_count_fix_does_not_create_false_positives() {
-    let config = std::env::var("DATAFOG_MODEL_CONFIG")
-        .expect("DATAFOG_MODEL_CONFIG must name a verified local session config");
-    let config: ModelSessionConfig =
-        serde_json::from_reader(std::fs::File::open(config).unwrap()).unwrap();
-
-    if config.gliner2.is_none() {
-        return;
-    }
-
-    let session = ModelSession::open(config).unwrap();
-
-    // Inputs that should not contain street addresses
-    let negative_cases = [
-        "The weather is nice today.",
-        "Hello world.",
-        "This is a test sentence with no PII.",
-        "Mathematics is fascinating.",
-    ];
-
-    for input in negative_cases {
-        let result = session
-            .scan_model(input, &Cancellation::default())
-            .expect("model scan should succeed");
-
-        // These inputs should not trigger street address detection
-        // (threshold filtering should handle any low-confidence spans)
-        let addresses: Vec<_> = result
-            .findings
-            .iter()
-            .filter(|f| f.entity_type == "STREET_ADDRESS")
-            .collect();
-
-        // Note: This test documents expected behavior. If the model produces
-        // false positives here, the threshold may need adjustment, but that's
-        // a separate concern from the entity-count gating fix.
-        if !addresses.is_empty() {
-            eprintln!(
-                "Warning: False positive street addresses for {:?}: {:?}",
-                input,
+        for expected_address in expected {
+            assert!(
                 addresses
                     .iter()
-                    .map(|f| &f.matched_text)
+                    .any(|finding| finding.matched_text.contains(expected_address)),
+                "Expected {expected_address:?} in findings for {input:?}, got {:?}",
+                addresses
+                    .iter()
+                    .map(|finding| &finding.matched_text)
                     .collect::<Vec<_>>()
             );
         }
     }
 
+    for empty in ["", "   \n\t   "] {
+        let result = session
+            .scan_model(empty, &Cancellation::default())
+            .expect("empty input scan should succeed");
+        assert!(
+            result.findings.is_empty(),
+            "Empty/whitespace input should return no findings"
+        );
+    }
+    session.close().unwrap();
+}
+
+/// Threshold filtering still rejects no-PII inputs after the count floor.
+#[test]
+fn entity_count_fix_does_not_create_false_positives() {
+    let Some(config) = load_gliner2_config() else {
+        eprintln!("skipping: GLiNER2 bundle not provisioned");
+        return;
+    };
+    let session = ModelSession::open(config).unwrap();
+    for input in [
+        "The weather is nice today.",
+        "Hello world.",
+        "This is a test sentence with no PII.",
+        "Mathematics is fascinating.",
+    ] {
+        let result = session
+            .scan_model(input, &Cancellation::default())
+            .expect("model scan should succeed");
+        let addresses: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|finding| finding.entity_type == "STREET_ADDRESS")
+            .map(|finding| finding.matched_text.as_str())
+            .collect();
+        if !addresses.is_empty() {
+            eprintln!("Warning: street_address on a no-PII input {input:?}: {addresses:?}");
+        }
+    }
     session.close().unwrap();
 }

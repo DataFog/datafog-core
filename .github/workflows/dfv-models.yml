@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - 'crates/core/src/models/**'
+      - 'crates/core/tests/model_gliner2_entity_count.rs'
       - 'crates/xtask/**'
+      - 'bindings/python/python/datafog_core/_gliner2_worker.py'
       - 'scripts/provision-*'
       - 'scripts/model-*'
       - 'scripts/*model*'
+      - 'scripts/check-gliner2-entity-count.py'
       - 'baselines/eval-models-*.json'
+      - '.cursor/install.sh'
   schedule:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
   workflow_dispatch:
@@ -27,6 +31,7 @@ jobs:
     env:
       DATAFOG_PLATFORM: linux-x86_64
       PYTHONUTF8: "1"
+      DATAFOG_REQUIRE_GLINER2: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -140,6 +145,51 @@ jobs:
           PY
 
       - run: cargo dfv build --sdk python
+
+      - name: Install Python wheel for model checks
+        run: |
+          WHEEL=$(ls target/wheels/datafog_core-*.whl)
+          python -m pip install --force-reinstall "${WHEEL}[gliner2]"
+
+      - name: Write GLiNER2 session config
+        run: |
+          python - <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          bundle = Path("models/gliner2")
+          manifest = bundle / "bundle-manifest.json"
+          if not manifest.exists():
+              raise SystemExit("FAIL: GLiNER2 bundle-manifest.json missing after provision")
+          config = {
+              "bundle": str(bundle.resolve()),
+              "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+              "limits": {
+                  "max_input_bytes": 65536,
+                  "max_response_bytes": 16777216,
+                  "max_findings": 65536,
+                  "timeout_ms": 120000,
+                  "cleanup_timeout_ms": 5000,
+              },
+              "gliner2": {
+                  "python": str(Path(sys.executable).resolve()),
+                  "labels": [{"label": "street_address", "threshold": 0.5}],
+                  "intra_threads": 1,
+                  "chunk_size": 384,
+                  "chunk_overlap": 64,
+              },
+          }
+          path = Path("target/gliner2-session.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps(config, indent=2))
+          print(path)
+          PY
+          echo "DATAFOG_MODEL_CONFIG=$PWD/target/gliner2-session.json" >> "$GITHUB_ENV"
+
+      - name: GLiNER2 entity-count gating regression
+        run: cargo test -p datafog-core --all-features --test model_gliner2_entity_count
+
+      - name: Run model checks
+        run: cargo dfv check --models --json
 
       - name: Verify model weight hashes
         run: |

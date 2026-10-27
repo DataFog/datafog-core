@@ -7,6 +7,7 @@ Never write input, native exceptions or local paths to the response protocol.
 from contextlib import redirect_stdout
 from importlib.metadata import version
 import json
+import os
 import platform
 from pathlib import Path
 import sys
@@ -22,30 +23,50 @@ def respond(value):
 
 
 def _patch_count_pred(model, torch):
-    """Wrap the count_pred layer to floor predictions at 1.
+    """Wrap the count_pred module to floor a zero count prediction at 1.
 
-    GLiNER2's span runtime uses a count head to predict how many entities to
-    extract per task. When this head predicts 0, the runtime skips span
-    decoding entirely (runtime.py lines 745-750), causing valid high-confidence
-    spans to be missed. This wrapper ensures at least one structural slot is
-    always decoded; Core's threshold filtering handles false positives.
+    GLiNER2's span runtime (`inference/runtime.py`) uses `count_pred` as a
+    structural-instance budget, not a span cap:
+
+    * `_compute_direct_span_logits_batched` argmaxes the count head and, when
+      the class is 0, skips `count_embed` and span scoring for that task.
+    * For entity tasks the runtime then keeps only structural instance 0
+      (`struct_proj = struct_proj[:1]`) and `_find_spans` returns every span
+      above threshold on that instance. A predicted count of 2+ does not
+      add extra entity spans; a predicted count of 0 drops all of them.
+    * Relation and JSON-structure decoders *do* iterate `range(pred_count)`.
+      This worker only builds `schema.entities(...)`, so flooring does not
+      change record or relation instance counts.
+
+    Flooring a 0→1 prediction therefore unblocks entity span decoding without
+    dropping a second same-type entity. Upstream 2.1.0 has no extract-time
+    option to disable this gate (the boundary/record path that replaces
+    `count_pred` is a different architecture and is not this checkpoint).
+    `count_pred` is a `torch.nn.Module`; it must stay one so
+    `Module.__setattr__` accepts the wrap.
     """
-    original_count_pred = model.count_pred
+    if os.environ.get("DATAFOG_GLINER2_DISABLE_COUNT_FLOOR") == "1":
+        return
 
-    def floored_count_pred(x):
-        logits = original_count_pred(x)
-        batch_size = logits.shape[0]
-        floor_boost = torch.zeros_like(logits)
-        floor_boost[:, 1] = 100.0
-        zero_pred = logits.argmax(dim=-1) == 0
-        boosted = torch.where(
-            zero_pred.unsqueeze(-1),
-            logits + floor_boost,
-            logits,
-        )
-        return boosted
+    class FlooredCountPred(torch.nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
 
-    model.count_pred = floored_count_pred
+        def forward(self, x):
+            logits = self.inner(x)
+            if logits.shape[-1] < 2:
+                return logits
+            floor_boost = torch.zeros_like(logits)
+            floor_boost[..., 1] = 100.0
+            zero_pred = logits.argmax(dim=-1) == 0
+            return torch.where(
+                zero_pred.unsqueeze(-1),
+                logits + floor_boost,
+                logits,
+            )
+
+    model.count_pred = FlooredCountPred(model.count_pred)
 
 
 def main():
