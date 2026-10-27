@@ -5,7 +5,7 @@ import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
-import { MODEL } from "../src/model.mjs";
+import { MODEL } from "../../../bindings/wasm/models/model.mjs";
 
 const directory = new URL("../models/", import.meta.url);
 async function verify(path, expected) {

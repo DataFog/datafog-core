@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Optional browser Small model sessions return canonical findings for the scan/transform flow, with Core-owned entity routing and score evidence.
+
 - Experimental browser entity extraction using pinned GLiNER2.5 Small ONNX assets, configurable labels, and explicit Unicode ranges (#116)
 
 - Agent-friendly verification CLI (`cargo dfv`) with `doctor`, `build`, `check`, `parity`, `eval`, `bench`, and `smoke` commands for cross-SDK testing (#108, #109)

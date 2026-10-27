@@ -1,6 +1,6 @@
 # Third-party notices
 
-`src/preprocessor.mjs` and `src/decode.mjs` adapt the NER-only schema packing and boundary decoder from [Pastel-Cloud OÜ’s gliner2.5-onnx-webgpu](https://github.com/Pastel-Org/gliner2.5-onnx-webgpu/tree/9f8173223d84bb65e6952d070137a990f93ef298). Classification, relation extraction, record assignment, and alternate model paths are omitted. Input validation and explicit offset ranges are local additions.
+`preprocessor.mjs` and `decode.mjs` adapt the NER-only schema packing and boundary decoder from [Pastel-Cloud OÜ’s gliner2.5-onnx-webgpu](https://github.com/Pastel-Org/gliner2.5-onnx-webgpu/tree/9f8173223d84bb65e6952d070137a990f93ef298). Classification, relation extraction, record assignment, and alternate model paths are omitted. Input validation and explicit offset ranges are local additions.
 
 MIT License
 

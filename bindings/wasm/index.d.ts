@@ -69,6 +69,12 @@ export type DataFogErrorCode =
   | "token_provider_unavailable"
   | "token_provider_error"
   | "unsupported_strategy"
+  | "model_load_failed"
+  | "model_inference_failed"
+  | "model_resource_exhausted"
+  | "model_session_busy"
+  | "model_session_closed"
+  | "model_cleanup_failed"
   | "internal_error";
 
 export declare class DataFogError extends Error {

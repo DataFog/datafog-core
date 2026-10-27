@@ -31,15 +31,21 @@ try {
       route.fulfill({ status: 404, body: "missing" }),
     );
     const message = await page.evaluate(async () => {
-      const { GlinerSession } = await import("/src/session.mjs");
+      const { ModelSession } = await import("@datafog/wasm/models");
       try {
-        await GlinerSession.create();
+        await ModelSession.open({
+          modelBaseUrl: new URL("/models/", location.href),
+          wasmPaths: new URL(
+            "/node_modules/onnxruntime-web/dist/",
+            location.href,
+          ).href,
+        });
         return "unexpected success";
       } catch (error) {
-        return error.message;
+        return error.code;
       }
     });
-    assert.match(message, /Cannot load onnx\/model.onnx: HTTP 404/);
+    assert.equal(message, "model_load_failed");
     await page.unroute("**/models/onnx/model.onnx");
   });
   await check("same-size corrupted asset fails its checksum", async () => {
@@ -53,15 +59,21 @@ try {
       route.fulfill({ status: 200, body: corrupt }),
     );
     const message = await page.evaluate(async () => {
-      const { GlinerSession } = await import("/src/session.mjs");
+      const { ModelSession } = await import("@datafog/wasm/models");
       try {
-        await GlinerSession.create();
+        await ModelSession.open({
+          modelBaseUrl: new URL("/models/", location.href),
+          wasmPaths: new URL(
+            "/node_modules/onnxruntime-web/dist/",
+            location.href,
+          ).href,
+        });
         return "unexpected success";
       } catch (error) {
-        return error.message;
+        return error.code;
       }
     });
-    assert.match(message, /checksum mismatch: tokenizer_config.json/);
+    assert.equal(message, "model_load_failed");
     await page.unroute("**/models/tokenizer_config.json");
   });
   await check("UI loads the pinned Small model", async () => {
@@ -71,60 +83,76 @@ try {
       { timeout: 120000 },
     );
     assert.equal(
-      await page.getByRole("button", { name: "Extract entities" }).isEnabled(),
+      await page.getByRole("button", { name: "Scan text" }).isEnabled(),
       true,
     );
   });
   await check("broader defaults return actual entities in the UI", async () => {
     results.sampleText = await page.locator("#text").inputValue();
-    await page.getByRole("button", { name: "Extract entities" }).click();
+    await page.getByRole("button", { name: "Scan text" }).click();
     await page.waitForFunction(() => !document.getElementById("json").hidden);
     results.sample = JSON.parse(await page.locator("#json").textContent());
     assert.ok(
-      results.sample.entities.some(
-        (entity) => entity.label === "person" && entity.text === "John Smith",
+      results.sample.findings.some(
+        (entity) =>
+          entity.entityType === "PERSON" && entity.matchedText === "John Smith",
       ),
     );
     assert.ok(
-      results.sample.entities.some(
+      results.sample.findings.some(
         (entity) =>
-          entity.label === "email" && entity.text === "john.smith@example.com",
+          entity.entityType === "EMAIL" &&
+          entity.matchedText === "john.smith@example.com",
       ),
     );
-    for (const entity of results.sample.entities)
+    for (const entity of results.sample.findings)
       assert.equal(
         results.sampleText.slice(
           entity.utf16Range.start,
           entity.utf16Range.end,
         ),
-        entity.text,
+        entity.matchedText,
       );
   });
   await check(
-    "custom entity types are not restricted to names and addresses",
+    "custom labels remain available through an explicit session mapping",
     async () => {
-      await page
-        .locator("#text")
-        .fill("Apple CEO Tim Cook announced iPhone 15 in Cupertino yesterday.");
-      await page.locator("#labels").fill("company, person, product, location");
-      await page.getByRole("button", { name: "Extract entities" }).click();
-      await page.waitForFunction(() => !document.getElementById("json").hidden);
-      const custom = JSON.parse(await page.locator("#json").textContent());
-      assert.ok(
-        custom.entities.some(
-          (entity) => entity.label === "company" && entity.text === "Apple",
-        ),
-      );
-      assert.ok(
-        custom.entities.some(
-          (entity) => entity.label === "product" && entity.text === "iPhone 15",
-        ),
-      );
-      assert.ok(
-        custom.entities.some(
-          (entity) => entity.label === "person" && entity.text === "Tim Cook",
-        ),
-      );
+      const custom = await page.evaluate(async () => {
+        const { ModelSession } = await import("@datafog/wasm/models");
+        const session = await ModelSession.open({
+          modelBaseUrl: new URL("/models/", location.href),
+          wasmPaths: new URL(
+            "/node_modules/onnxruntime-web/dist/",
+            location.href,
+          ).href,
+          labels: {
+            company: "COMPANY",
+            person: "PERSON",
+            product: "PRODUCT",
+            location: "LOCATION",
+          },
+        });
+        try {
+          return await session.scanModel(
+            "Apple CEO Tim Cook announced iPhone 15 in Cupertino yesterday.",
+          );
+        } finally {
+          await session.close();
+        }
+      });
+      for (const [entityType, matchedText] of [
+        ["COMPANY", "Apple"],
+        ["PERSON", "Tim Cook"],
+        ["PRODUCT", "iPhone 15"],
+      ]) {
+        assert.ok(
+          custom.findings.some(
+            (finding) =>
+              finding.entityType === entityType &&
+              finding.matchedText === matchedText,
+          ),
+        );
+      }
       results.customSample = custom;
     },
   );
@@ -133,71 +161,99 @@ try {
     "API handles negatives, empty input, invalid input, Unicode, and closure",
     async () => {
       const api = await page.evaluate(async () => {
-        const { GlinerSession } = await import("/src/session.mjs");
-        const session = await GlinerSession.create();
+        const { ModelSession } = await import("@datafog/wasm/models");
+        const session = await ModelSession.open({
+          modelBaseUrl: new URL("/models/", location.href),
+          wasmPaths: new URL(
+            "/node_modules/onnxruntime-web/dist/",
+            location.href,
+          ).href,
+        });
         const output = {};
         try {
-          output.negative = await session.extract("Turn off the lights.", {
-            labels: ["person", "address"],
+          output.negative = await session.scan("Turn off the lights.", {
+            entities: ["PERSON", "ADDRESS"],
           });
-          output.empty = await session.extract(" \n ");
-          output.unicodeText = "👋 Contact María García in Madrid.";
-          output.unicode = await session.extract(output.unicodeText, {
-            labels: ["person", "location"],
+          output.empty = await session.scan(" \n ");
+          output.unicodeText = "👋 Contact María García at maria@example.com.";
+          output.unicode = await session.scan(output.unicodeText, {
+            entities: ["PERSON", "EMAIL"],
           });
+          const { transform } = await import("@datafog/wasm");
+          output.transformed = transform(
+            output.unicodeText,
+            output.unicode.findings,
+            { default: { strategy: "redact" } },
+          );
           output.failures = [];
-          for (const [text, options] of [
-            ["text", { labels: [] }],
-            ["text", { threshold: 0 }],
-            ["text", { threshold: NaN }],
-            ["word ".repeat(600), {}],
+          for (const [text, config] of [
+            ["text", { entities: [] }],
+            ["text", { entities: ["UNKNOWN"] }],
+            ["text", { entities: ["PERSON", "PERSON"] }],
+            ["text", { locale: "bogus" }],
+            ["word ".repeat(600), { entities: ["PERSON"] }],
             ["\uD800", {}],
+            ["text", null],
+            ["x".repeat(65537), { entities: ["EMAIL"] }],
           ]) {
             try {
-              await session.extract(text, options);
+              await session.scan(text, config);
               output.failures.push("unexpected success");
             } catch (error) {
-              output.failures.push(error.message);
+              output.failures.push(error.code || error.message);
             }
           }
-          const running = session.extract("Contact John Smith.");
+          const config = { entities: ["PERSON"] };
+          const running = session.scan("Contact John Smith.", config);
+          config.entities[0] = "EMAIL";
           try {
-            await session.extract("Contact Jane Doe.");
+            await session.scan("Contact Jane Doe.");
             output.concurrent = "unexpected success";
           } catch (error) {
-            output.concurrent = error.message;
+            output.concurrent = error.code;
           }
-          await running;
+          // A rule-only request bypasses model admission even during inference.
+          output.ruleOnly = await session.scan("Email jane@example.com", {
+            entities: ["EMAIL"],
+          });
+          try {
+            await session.close();
+            output.busyClose = "unexpected success";
+          } catch (error) {
+            output.busyClose = error.code;
+          }
+          output.originalSelection = await running;
         } finally {
           await session.close();
         }
         await session.close();
         try {
-          await session.extract("John Smith");
+          await session.scan("John Smith");
           output.closed = "unexpected success";
         } catch (error) {
-          output.closed = error.message;
+          output.closed = error.code;
         }
         return output;
       });
-      assert.deepEqual(api.negative.entities, []);
-      assert.deepEqual(api.empty.entities, []);
+      assert.deepEqual(api.negative.findings, []);
+      assert.deepEqual(api.empty.findings, []);
       assert.ok(
-        api.unicode.entities.some(
+        api.unicode.findings.some(
           (entity) =>
-            entity.label === "person" && entity.text === "María García",
+            entity.entityType === "PERSON" &&
+            entity.matchedText === "María García",
         ),
       );
-      for (const e of api.unicode.entities) {
+      for (const e of api.unicode.findings) {
         assert.equal(
           api.unicodeText.slice(e.utf16Range.start, e.utf16Range.end),
-          e.text,
+          e.matchedText,
         );
         assert.equal(
           Array.from(api.unicodeText)
             .slice(e.codepointRange.start, e.codepointRange.end)
             .join(""),
-          e.text,
+          e.matchedText,
         );
         assert.equal(
           new TextDecoder().decode(
@@ -205,16 +261,46 @@ try {
               .encode(api.unicodeText)
               .slice(e.byteRange.start, e.byteRange.end),
           ),
-          e.text,
+          e.matchedText,
         );
       }
-      assert.match(api.failures[0], /entity labels/);
-      assert.match(api.failures[1], /threshold/);
-      assert.match(api.failures[2], /threshold/);
-      assert.match(api.failures[3], /exceed 512/);
-      assert.match(api.failures[4], /valid Unicode/);
-      assert.match(api.concurrent, /already running/);
-      assert.match(api.closed, /closed/);
+      assert.deepEqual(
+        api.failures.slice(0, 4),
+        new Array(4).fill("invalid_configuration"),
+      );
+      assert.equal(api.failures[4], "model_inference_failed");
+      assert.match(api.failures[5], /well-formed/);
+      assert.equal(api.failures[6], "invalid_configuration");
+      assert.equal(api.failures[7], "model_resource_exhausted");
+      assert.ok(
+        api.originalSelection.findings.some(
+          (finding) =>
+            finding.entityType === "PERSON" &&
+            finding.matchedText === "John Smith",
+        ),
+      );
+      assert.equal(api.concurrent, "model_session_busy");
+      assert.equal(api.busyClose, "model_session_busy");
+      assert.equal(api.closed, "model_session_closed");
+      assert.equal(api.ruleOnly.findings.length, 1);
+      assert.equal(api.ruleOnly.findings[0].entityType, "EMAIL");
+      assert.ok(!api.ruleOnly.findings[0].detectorName.includes("/model/"));
+      assert.ok(!api.transformed.text.includes("María García"));
+      assert.ok(!api.transformed.text.includes("maria@example.com"));
+      const person = api.unicode.findings.find(
+        (finding) => finding.entityType === "PERSON",
+      );
+      assert.equal(person.confidence, undefined);
+      const evidence = api.unicode.evidence.find(
+        (item) =>
+          api.unicode.findings[item.finding_index].entityType === "PERSON",
+      );
+      assert.equal(
+        evidence.sources[0].raw_score.scale_id,
+        "gliner25_pair_sigmoid",
+      );
+      assert.ok(evidence.sources[0].raw_score.value > 0.5);
+      assert.equal(evidence.sources[0].calibrated_confidence, undefined);
     },
   );
   await check(
@@ -235,18 +321,26 @@ try {
         await fallback.goto(`http://127.0.0.1:${server.address().port}`);
         const detected = await fallback.evaluate(async () => {
           if (crossOriginIsolated) throw new Error("Fallback test is isolated");
-          const { GlinerSession } = await import("/src/session.mjs");
-          const session = await GlinerSession.create();
+          const { ModelSession } = await import("@datafog/wasm/models");
+          const session = await ModelSession.open({
+            modelBaseUrl: new URL("/models/", location.href),
+            wasmPaths: new URL(
+              "/node_modules/onnxruntime-web/dist/",
+              location.href,
+            ).href,
+          });
           try {
-            return await session.extract("John Smith lives in Boston.", {
-              labels: ["person"],
+            return await session.scan("John Smith lives in Boston.", {
+              entities: ["PERSON"],
             });
           } finally {
             await session.close();
           }
         });
         assert.ok(
-          detected.entities.some((entity) => entity.text === "John Smith"),
+          detected.findings.some(
+            (entity) => entity.matchedText === "John Smith",
+          ),
         );
       } finally {
         await fallback.close();

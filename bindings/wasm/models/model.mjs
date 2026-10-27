@@ -20,15 +20,6 @@ export const MODEL = Object.freeze({
   }),
 });
 
-export const DEFAULT_LABELS = Object.freeze([
-  "person",
-  "address",
-  "email",
-  "phone number",
-  "identification number",
-  "url",
-  "username",
-]);
 export const MAX_INPUT_TOKENS = 512;
 
 export function validateLabels(labels) {

@@ -2,7 +2,7 @@
 <html lang="en">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GLiNER2.5 Small — entity extraction</title>
+  <title>GLiNER2.5 Small — browser scan</title>
   <style>
     body {
       max-width: 850px;
@@ -51,10 +51,10 @@
       color: #a00020;
     }
   </style>
-  <h1>Entity extraction</h1>
+  <h1>PII scan</h1>
   <p>
     GLiNER2.5 Small runs locally in your browser. Choose the entity types to
-    extract.
+    scan. Rules detect structured PII; Small detects the other requested types.
   </p>
   <p id="status" role="status">Ready to load the model (about 297 MB).</p>
   <button id="load">Load model</button>
@@ -64,23 +64,33 @@ Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives
   >
   <label for="labels">Entity types, separated by commas</label>
   <input id="labels" />
-  <button id="extract" disabled>Extract entities</button>
+  <button id="extract" disabled>Scan text</button>
   <table hidden id="entities">
     <thead>
       <tr>
         <th>Type</th>
         <th>Text</th>
-        <th>Score</th>
+        <th>Raw model score</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
   <pre id="json" hidden></pre>
+  <script type="importmap">
+    {
+      "imports": {
+        "@datafog/wasm": "/sdk/index.js",
+        "@datafog/wasm/models": "/sdk/models/index.js",
+        "onnxruntime-web/wasm": "/node_modules/onnxruntime-web/dist/ort.wasm.min.mjs",
+        "@huggingface/tokenizers": "/node_modules/@huggingface/tokenizers/dist/tokenizers.mjs"
+      }
+    }
+  </script>
   <script type="module">
-    import { GlinerSession } from "/src/session.mjs";
-    import { DEFAULT_LABELS } from "/src/model.mjs";
+    import { ModelSession } from "@datafog/wasm/models";
     const $ = (id) => document.getElementById(id);
-    $("labels").value = DEFAULT_LABELS.join(", ");
+    $("labels").value =
+      "PERSON, ADDRESS, EMAIL, PHONE, IDENTIFICATION_NUMBER, URL, USERNAME";
     let session;
     function status(text, error = false) {
       $("status").textContent = text;
@@ -90,7 +100,13 @@ Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives
       $("load").disabled = true;
       status("Loading GLiNER2.5 Small…");
       try {
-        session = await GlinerSession.create();
+        session = await ModelSession.open({
+          modelBaseUrl: new URL("/models/", location.href),
+          wasmPaths: new URL(
+            "/node_modules/onnxruntime-web/dist/",
+            location.href,
+          ).href,
+        });
         $("extract").disabled = false;
         status("Model ready.");
       } catch (error) {
@@ -103,19 +119,21 @@ Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives
       $("entities").hidden = true;
       $("json").hidden = true;
       try {
-        const result = await session.extract($("text").value, {
-          labels: $("labels")
+        const result = await session.scan($("text").value, {
+          entities: $("labels")
             .value.split(",")
             .map((label) => label.trim()),
         });
         const body = $("entities").querySelector("tbody");
         body.replaceChildren();
-        for (const entity of result.entities) {
+        for (const [index, entity] of result.findings.entries()) {
           const row = document.createElement("tr");
           for (const value of [
-            entity.label,
-            entity.text,
-            entity.score.toFixed(3),
+            entity.entityType,
+            entity.matchedText,
+            result.evidence[index].sources
+              .find((source) => source.raw_score)
+              ?.raw_score.value.toFixed(3) ?? "—",
           ]) {
             const cell = document.createElement("td");
             cell.textContent = value;
@@ -126,7 +144,7 @@ Contact John Smith at john.smith@example.com or call +1 (415) 555-0123. He lives
         $("entities").hidden = false;
         $("json").textContent = JSON.stringify(result, null, 2);
         $("json").hidden = false;
-        status(`${result.entities.length} entities detected.`);
+        status(`${result.findings.length} entities detected.`);
       } catch (error) {
         status(error.message, true);
       } finally {

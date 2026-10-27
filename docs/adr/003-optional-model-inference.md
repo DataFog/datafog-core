@@ -6,7 +6,11 @@ Status: Accepted; implementation tracked in #56, #45 and #55.
 
 DataFog Core loads the DataFog and GLiNER2 models locally and exposes the same
 findings and errors through Rust, Python and Node. Existing rule-based APIs keep
-their 0.4.4 behavior. The Rust `models` feature is optional; WASM stays rule-based.
+their 0.4.4 behavior. The Rust `models` feature is optional. The synchronous WASM
+scanner stays rule-based; [browser model sessions](../browser-model.md) add an
+explicit English GLiNER2.5 Small ONNX path without a Python worker. Browser and
+native adapters share Core routing, output validation and evidence composition.
+The native process lifecycle below does not apply to browser sessions.
 
 Supported native platforms are Linux x86_64 GNU, Linux ARM64 GNU, macOS ARM64,
 macOS Intel and Windows x86_64 MSVC. Platform-specific runtime dependencies must
@@ -57,7 +61,9 @@ change. Existing rule-based JSON and transformation APIs remain available.
 
 ## Verification and release
 
-Routine CI checks Core and the installed bindings without downloading models.
+Routine CI checks Core and installed bindings. The scoped browser-model workflow
+downloads pinned Small assets for real browser scans; native qualification remains
+manually dispatched.
 The manually dispatched model integration workflow checks both models through
 Rust and installed Python/Node packages on all five native platforms. Test
 loading, returned spans and scores, Unicode offsets, reuse, errors, cancellation
