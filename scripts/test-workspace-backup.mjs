@@ -125,8 +125,10 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
 
   page = await launch("v1-vault-compat");
   const v1VaultWorks = await page.evaluate(async password => {
+    const {openVault, randomId} = await import("./vault.js");
+    const {init, Workspace} = await import("./vendor/package/index.js");
+    await init();
     const encoder = new TextEncoder();
-    const randomId = () => crypto.getRandomValues(new Uint8Array(16));
     const random = length => crypto.getRandomValues(new Uint8Array(length));
     function concat(...arrays) {
       const result = new Uint8Array(arrays.reduce((n, a) => n + a.length, 0));
@@ -135,24 +137,41 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
     }
     async function importKey(raw) { return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]); }
     async function encrypt(key, iv, aad, plaintext) { return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, plaintext)); }
-    async function decrypt(key, iv, aad, ciphertext) { return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, ciphertext)); }
+    function keyAAD(record) { return concat(encoder.encode("DFG1:WK:"), record.vaultId, record.workspaceId, record.keyId); }
+    function revisionBytes(head) {
+      const revision = BigInt(head.revision);
+      const array = new Uint8Array(8); new DataView(array.buffer).setBigUint64(0, revision, false);
+      return array;
+    }
+    function snapshotAAD(record) { return concat(encoder.encode("DFG1:SN:"), record.vaultId, record.workspaceId, record.keyId, revisionBytes(record.head), new Uint8Array(record.head.commitId)); }
     function passwordAAD(vault) { return concat(encoder.encode(`DFG${vault.version}:PW:`), vault.vaultId, vault.vaultKeyId, new Uint8Array([vault.profile]), vault.salt); }
-    const v1Vault = { version: 1, vaultId: randomId(), vaultKeyId: randomId(), workspaceId: randomId(), profile: 1, salt: random(16), rootNonce: random(12), accessGeneration: randomId() };
-    const root = random(32);
-    const derived = random(32);
+    const namespace = randomId();
+    const workspace = Workspace.create(namespace, randomId());
     try {
-      const wrappedRoot = await encrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), root);
-      const decrypted = await decrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), wrappedRoot);
-      if (decrypted.length !== 32 || !decrypted.every((b, i) => b === root[i])) return {error: "round-trip failed"};
-      const v2AAD = concat(encoder.encode("DFG2:PW:"), v1Vault.vaultId, v1Vault.vaultKeyId, new Uint8Array([v1Vault.profile]), v1Vault.salt);
+      const bundle = workspace.exportBundle(), head = workspace.head();
+      const v1Vault = { version: 1, vaultId: randomId(), vaultKeyId: randomId(), workspaceId: namespace, profile: 1, salt: random(16), rootNonce: random(12), accessGeneration: randomId() };
+      const root = random(32), data = random(32);
+      const worker = new Worker("./kdf-worker.js", { type: "module" });
+      const derived = await new Promise((resolve, reject) => {
+        worker.onmessage = ({data}) => { worker.terminate(); resolve(data.key); };
+        worker.onerror = () => { worker.terminate(); reject(new Error("KDF failed")); };
+        worker.postMessage({password, salt: v1Vault.salt});
+      });
       try {
-        await decrypt(await importKey(derived), v1Vault.rootNonce, v2AAD, wrappedRoot);
-        return {error: "v2 AAD should not decrypt v1 vault"};
-      } catch { /* expected rejection */ }
-      return {success: true};
-    } finally { root.fill(0); derived.fill(0); }
+        v1Vault.wrappedRoot = await encrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), root);
+        const rootKey = await importKey(root);
+        const record = {version: 1, vaultId: v1Vault.vaultId, workspaceId: v1Vault.workspaceId, keyId: randomId(), head, keyNonce: random(12), nonce: random(12)};
+        record.wrappedKey = await encrypt(rootKey, record.keyNonce, keyAAD(record), data);
+        const dataKey = await importKey(data);
+        record.ciphertext = await encrypt(dataKey, record.nonce, snapshotAAD(record), bundle);
+        const opened = await openVault(password, v1Vault, record);
+        if (!opened.bundle || opened.bundle.length === 0) return {error: "openVault returned no bundle"};
+        opened.bundle.fill(0);
+        return {success: true};
+      } finally { root.fill(0); data.fill(0); derived.fill(0); }
+    } finally { workspace.close(); }
   }, password);
-  check(v1VaultWorks.success === true, `G1 v1 vault AAD compatibility: DFG1:PW: decrypts, DFG2:PW: rejects${v1VaultWorks.error ? ` (${v1VaultWorks.error})` : ""}`);
+  check(v1VaultWorks.success === true, `G1 v1 vault unlocks via openVault with DFG1:PW: AAD${v1VaultWorks.error ? ` (${v1VaultWorks.error})` : ""}`);
   await close();
 
   page = await launch("backup-rejections");
