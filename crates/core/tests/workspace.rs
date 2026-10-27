@@ -915,7 +915,7 @@ fn hex_bytes(hex: &str) -> Vec<u8> {
 }
 
 #[test]
-fn code_collision_redraws_and_exhaustion_returns_resource_limit() {
+fn thirty_three_sequential_codes_are_unique() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let mut markers = Vec::new();
     for i in 0u64..33 {
