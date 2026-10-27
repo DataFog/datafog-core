@@ -20,22 +20,21 @@ npm test                # Run automated tests
 
 ### 1. Runtime Path: onnxruntime-web (WASM) is viable
 
-**Finding:** ONNX Runtime Web with the WASM backend successfully loads and
-initializes the GLiNER2 Q8 model in headless Chromium.
+**Finding:** ONNX Runtime Web 1.31.1 with the WASM backend successfully runs
+GLiNER2 Q8 and Q4 inference in headless Chromium with real accuracy metrics.
 
 | Option | Status | Notes |
 |--------|--------|-------|
-| **onnxruntime-web (WASM)** | Works | Model loads in ~3.4s, inference requires proper tokenizer |
+| **onnxruntime-web (WASM)** | ✅ Works | Full inference working with transformers.js tokenizer |
 | **onnxruntime-web (WebGPU)** | Not tested | Chrome/Edge only, likely faster |
 | **Rust ONNX compiled to WASM** | Not viable | ORT is too large to compile to WASM |
 
-**Measured (headless Chromium, Linux x86_64 VM):**
-- WASM runtime init: ~500ms
-- Model loading (509 MB): ~3.4 seconds from localhost
-- Total cold start: ~3.9 seconds
+**Measured (headless Chromium, Linux x86_64 VM, ORT 1.31.1):**
+- Cold load (model + session): 3.3-3.5s
+- Warm inference latency: ~1000ms per 1KB text
+- Peak memory: ~600 MB
 
-**Recommendation:** Use onnxruntime-web with WASM as primary backend. WebGPU can
-be optional acceleration for Chrome/Edge users.
+**Recommendation:** Use onnxruntime-web 1.31.1+ with WASM as primary backend.
 
 ### 2. Model Size and Download Cost
 
@@ -49,57 +48,40 @@ be optional acceleration for Chrome/Edge users.
 | Other config | <1 MB | Labels, metadata |
 | **Total** | **~526 MB** | |
 
-**Comparison with other quantizations (from research):**
+**Measured accuracy on D4 fixtures (85 test cases, PERSON + STREET_ADDRESS):**
 
-| Variant | Total Size | Accuracy (SPY F1) |
-|---------|------------|-------------------|
-| fp32 | ~1.23 GB | baseline (0.490) |
-| fp16 | ~643 MB | ~same |
-| Q8 (okasi) | ~526 MB | 0.534 (improved!) |
-| Q4 (okasi) | ~458 MB | 0.516 |
+| Variant | Size | PERSON Recall | PERSON F1 | Overall F1 | ADR-004 |
+|---------|------|---------------|-----------|------------|---------|
+| Q8 (okasi) | 525 MB | 88.1% | 73.3% | 59.4% | ✗ |
+| Q4 (okasi) | 473 MB | 88.1% | 74.7% | 63.6% | ✗ |
 
-**Finding:** Q8 is the best tradeoff. The ~526 MB download is acceptable for a
-one-time cached load in a Chrome extension. The Q8 quantization actually
-*improves* F1 on SPY benchmark (likely regularization effect).
+**Finding:** Q4 slightly outperforms Q8 on these fixtures (better precision).
+Neither clears ADR-004's 90% PERSON recall threshold, but both achieve 88.1%.
 
 ### 3. Latency
 
-**Measured (model loading only, inference incomplete):**
+**Measured (full inference, D4 fixtures):**
 
-| Metric | Time | Notes |
-|--------|------|-------|
-| Cold start (model load) | 3350-3450ms | From localhost |
-| Empty input inference | <1ms | Returns immediately |
-| Non-empty inference | Not measured | Tokenizer issue |
+| Runtime | Cold Load | Warm Latency (1KB) | Memory |
+|---------|-----------|-------------------|--------|
+| Node.js (ORT 1.31.1, CPU) | 750-880 ms | 120-330 ms | 150-170 MB |
+| Browser (ORT 1.31.1, WASM) | 3.3-3.5 s | ~1000 ms | ~600 MB |
 
-**Why inference wasn't fully measured:**
-
-The okasi ONNX export uses a simplified input interface:
-- `input_ids`: tokenized text (int64)
-- `attention_mask`: attention mask (int64)
-- `text_word_indices`: start position of each word (int64)
-- `text_word_counts`: number of words (int64)
-
-This requires exact SentencePiece tokenization matching the model's training.
-My minimal tokenizer implementation doesn't produce compatible token sequences,
-resulting in shape/type errors during inference.
-
-**Production path:** Use a proper SentencePiece tokenizer (e.g.,
-`@xenova/transformers` or port the Python preprocessing).
+**Browser/Node ratio:** Browser is ~3.5x slower for cold load and ~8x slower
+for inference due to WASM overhead.
 
 ### 4. Parity
 
-**Blocked:** Parity testing requires working inference. The spike demonstrates:
+**Browser vs Node.js:** Verified on D4 fixtures.
 
-1. Model loads successfully
-2. WASM backend initializes correctly
-3. External data files are handled properly
-4. Empty inputs return empty results correctly
+| Metric | Node.js | Browser | Status |
+|--------|---------|---------|--------|
+| PERSON Recall | 88.1% | 88.1% | ✅ Match |
+| PERSON F1 | 73.3% | 73.3% | ✅ Match |
+| STREET_ADDRESS F1 | 42.1% | 41.4% | ~Match (±0.7%) |
 
-Full parity verification needs:
-- Matching SentencePiece tokenizer
-- Span decoding logic matching Python GLiNER2
-- Count-floor fix for issue #87
+**Rust core parity:** Not yet measured. Requires running the Rust GLiNER2
+integration on the same D4 fixtures (blocked on issue #87).
 
 ### 5. License and Redistribution
 
@@ -211,11 +193,14 @@ matrix comparing GLiNER2 model variants.
 
 ### Model Variants Evaluated
 
-| Model | Size | Runtime Compatibility | Notes |
-|-------|------|----------------------|-------|
-| okasi Q8 | 525 MB | Requires ORT 1.22+ | Highest accuracy (SPY F1 0.534) |
-| okasi Q4 | 473 MB | ORT 1.18+ | Smaller, lower accuracy (SPY F1 0.516) |
-| GLiNER2.5-Decide-mobile Q4F16 | 329 MB | ORT 1.18+ | Smallest, not PII-specific |
+| Model | Size | Runtime | PERSON F1 | Notes |
+|-------|------|---------|-----------|-------|
+| okasi Q8 | 525 MB | ORT 1.22+ | 73.3% | Working, measured |
+| okasi Q4 | 473 MB | ORT 1.18+ | 74.7% | Working, measured |
+| GLiNER2.5-mobile Q4F16 | 337 MB | — | — | ✗ Incompatible input schema |
+
+**Note:** GLiNER2.5 models use a different input schema (`marker_positions`)
+that is incompatible with our okasi-style preprocessor.
 
 ### Tokenization Status
 
@@ -240,11 +225,11 @@ The okasi ONNX export uses **MatMulNBits** for weight quantization:
 
 | Quantization | Min ORT Version | Node Status | Browser Status |
 |--------------|-----------------|-------------|----------------|
-| Q4 (4-bit) | 1.18 | Works | TBD |
-| Q8 (8-bit) | 1.22 | Fails | TBD |
+| Q4 (4-bit) | 1.18 | ✅ Works | ✅ Works |
+| Q8 (8-bit) | 1.22 | ✅ Works | ✅ Works |
 
-**Issue:** onnxruntime-node 1.21.x only supports 4-bit MatMulNBits. The Q8 model
-(recommended by okasi for best accuracy) requires onnxruntime 1.22+.
+**Resolved:** onnxruntime 1.31.1 supports both Q4 and Q8 MatMulNBits.
+Prior versions (1.21.x) only supported Q4.
 
 ### Running the Benchmark
 
@@ -256,30 +241,31 @@ npm run benchmark-matrix -- --verbose       # Debug output
 
 ## Recommendation
 
-**GLiNER2 can run in the browser.** The model loads successfully via ONNX
-Runtime Web, and the ~526 MB Q8 variant is acceptable for a Chrome extension.
+**GLiNER2 can run in the browser.** Full inference is working with measured
+accuracy, and both Q8 and Q4 variants are viable for a Chrome extension.
 
-**Sweet Spot:** okasi Q8 (~525 MB) for highest accuracy  
-**Runner-up:** GLiNER2.5-mobile Q4F16 (~329 MB) for smallest download
+**Neither variant clears ADR-004** (88.1% PERSON recall < 90% threshold).
 
-The trade-off is straightforward:
-- Q8 provides best accuracy but requires newer ORT (1.22+)
-- Q4 works with older ORT but may have quantization artifacts
-- Mobile variant is smallest but not PII-trained
+**If proceeding despite ADR-004:**
+- **Sweet Spot:** okasi Q4 (~473 MB) — slightly better F1, smaller download
+- **Alternative:** okasi Q8 (~525 MB) — larger but same recall
+
+The Q4 variant slightly outperforms Q8 on our test fixtures (74.7% vs 73.3%
+PERSON F1), likely due to better regularization from quantization.
 
 **Key constraints:**
-- ~325-525 MB one-time download (cacheable)
-- ~1.5-3.5s cold start depending on model
-- Requires transformers.js or matching tokenizer
-- Single-threaded WASM unless cross-origin isolation is available
+- ~473-525 MB one-time download (cacheable)
+- ~3.5s cold start in browser
+- ~1s inference per 1KB text in browser
+- Requires onnxruntime-web 1.31.1+
+- Requires transformers.js for tokenization
 
-**Estimated production work:**
+**Production readiness:**
 - Tokenizer: ✅ Done (transformers.js integration)
-- Session management: S
-- Weight hosting/verification: S
-- Count-floor verification/fix: S
-- Parity testing: M (blocked on ORT version for Q8)
-- WebGPU support: M (optional)
+- Inference: ✅ Working (full accuracy measured)
+- Parity (browser/Node): ✅ Verified
+- ADR-004: ✗ Not met (88.1% < 90%)
+- Rust core parity: ⏳ Blocked on issue #87
 
 The production work should wait for the shared model-engine interface (step 6
 in ROADMAP.md) so GLiNER2, DataFog, and future engines share the same WASM API.

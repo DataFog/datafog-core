@@ -10,20 +10,21 @@
     "test": "node scripts/run-tests.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "benchmark-matrix": "node scripts/benchmark-matrix.mjs",
+    "benchmark-browser": "node scripts/benchmark-browser.mjs",
     "parity": "node scripts/parity-check.mjs",
     "verify-tokenization": "node scripts/verify-tokenization.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.5.1",
-    "onnxruntime-node": "1.21.0",
-    "onnxruntime-web": "1.21.0"
+    "onnxruntime-node": "1.31.1",
+    "onnxruntime-web": "1.31.1"
   },
   "devDependencies": {
     "playwright": "1.62.1"
   },
   "overrides": {
     "@huggingface/transformers": {
-      "onnxruntime-node": "1.21.0"
+      "onnxruntime-node": "1.31.1"
     }
   }
 }
