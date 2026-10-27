@@ -172,11 +172,12 @@ impl Drop for Entry {
 ///
 /// Uses [`str::split_whitespace`], which recognizes Unicode whitespace including
 /// NBSP (U+00A0) and tabs, so leading/trailing spaces, NBSP and multiple interior
-/// spaces all collapse. Uses [`char::to_lowercase`] for Unicode-aware lowercasing,
-/// so `ß` maps to `ss` and Turkish `İ` maps to `i` + combining dot.
+/// spaces all collapse. Uses [`char::to_lowercase`] for Unicode-aware lowercasing:
+/// `ß` stays `ß` (not `ss`), and Turkish `İ` maps to `i` + combining dot.
 ///
 /// This means values that differ only in case, spacing type or whitespace amount
-/// share one entry. The stored `display` is the first spelling seen, untrimmed.
+/// share one entry. The stored `display` is the first spelling seen (ADR 004
+/// lines 73–74: "the first spelling seen is stored and restored"), untrimmed.
 fn identity_key(value: &str) -> String {
     let mut key = String::with_capacity(value.len());
     for word in value.split_whitespace() {
