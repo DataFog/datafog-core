@@ -50,6 +50,10 @@ jobs:
           # Pull requests reuse caches from main without adding their own.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - if: steps.scope.outputs.code == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: steps.scope.outputs.code == 'true'
         run: cargo fmt --all --check
       - if: steps.scope.outputs.code == 'true'
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

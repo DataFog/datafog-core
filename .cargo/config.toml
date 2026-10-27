@@ -1,0 +1,2 @@
+[alias]
+dfv = "run --package xtask --"
