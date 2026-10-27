@@ -183,6 +183,35 @@ fn format_opt_metric(v: Option<f64>) -> String {
     }
 }
 
+/// Build per-entity metrics. Entities with zero gold labels (TP+FN=0) report
+/// precision/recall/F1 as n/a and are excluded from macro averages and the
+/// accuracy gate — do not pin precision=0 from false positives alone.
+fn entity_metrics_from_counts(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
+    let (precision, recall, f1) = if tp + fn_ == 0 {
+        (None, None, None)
+    } else {
+        let precision = if tp + fp > 0 {
+            Some(tp as f64 / (tp + fp) as f64)
+        } else {
+            None
+        };
+        let recall = Some(tp as f64 / (tp + fn_) as f64);
+        let f1 = match (precision, recall) {
+            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+            _ => None,
+        };
+        (precision, recall, f1)
+    };
+    EntityMetrics {
+        true_positives: tp,
+        false_positives: fp,
+        false_negatives: fn_,
+        precision,
+        recall,
+        f1,
+    }
+}
+
 /// Print per-entity metrics table to stdout
 fn print_metrics_table(metrics: &HashMap<String, EntityMetrics>) {
     println!("Per-entity metrics:");
@@ -468,38 +497,13 @@ fn compute_model_metrics(
     let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
-        let precision = if *tp + *fp > 0 {
-            Some(*tp as f64 / (*tp + *fp) as f64)
-        } else {
-            None // undefined when TP+FP=0
-        };
-        let recall = if *tp + *fn_ > 0 {
-            Some(*tp as f64 / (*tp + *fn_) as f64)
-        } else {
-            None // undefined when TP+FN=0
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-
-        metrics.insert(
-            entity_type.clone(),
-            EntityMetrics {
-                true_positives: *tp,
-                false_positives: *fp,
-                false_negatives: *fn_,
-                precision,
-                recall,
-                f1,
-            },
-        );
-
-        if let (Some(p), Some(r)) = (precision, recall) {
+        let m = entity_metrics_from_counts(*tp, *fp, *fn_);
+        if let (Some(p), Some(r)) = (m.precision, m.recall) {
             total_precision += p;
             total_recall += r;
             defined_count += 1;
         }
+        metrics.insert(entity_type.clone(), m);
     }
 
     let macro_precision = if defined_count > 0 {
@@ -606,38 +610,13 @@ fn compute_rule_metrics(
     let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
-        let precision = if *tp + *fp > 0 {
-            Some(*tp as f64 / (*tp + *fp) as f64)
-        } else {
-            None // undefined when TP+FP=0
-        };
-        let recall = if *tp + *fn_ > 0 {
-            Some(*tp as f64 / (*tp + *fn_) as f64)
-        } else {
-            None // undefined when TP+FN=0
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-
-        metrics.insert(
-            entity_type.clone(),
-            EntityMetrics {
-                true_positives: *tp,
-                false_positives: *fp,
-                false_negatives: *fn_,
-                precision,
-                recall,
-                f1,
-            },
-        );
-
-        if let (Some(p), Some(r)) = (precision, recall) {
+        let m = entity_metrics_from_counts(*tp, *fp, *fn_);
+        if let (Some(p), Some(r)) = (m.precision, m.recall) {
             total_precision += p;
             total_recall += r;
             defined_count += 1;
         }
+        metrics.insert(entity_type.clone(), m);
     }
 
     let macro_precision = if defined_count > 0 {
@@ -1159,6 +1138,12 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             .to_string();
 
         if update_baseline {
+            // A baseline with no defined F1 on any scored type (e.g. zero gold
+            // labels for every scored entity) is provisional: it records
+            // contract identity but gives no accuracy signal.
+            let provisional = !scored_types
+                .iter()
+                .any(|entity| metrics.get(entity).and_then(|m| m.f1).is_some());
             let baseline_data = ModelBaseline {
                 model_id: manifest_info
                     .model_id
@@ -1171,7 +1156,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 excluded_entity_types: excluded.clone(),
                 metrics: metrics.clone(),
                 summary: summary.clone(),
-                provisional: false,
+                provisional,
             };
 
             if let Some(parent) = baseline_path.parent() {
@@ -1392,28 +1377,18 @@ mod tests {
     use std::collections::HashMap;
 
     fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
-        let precision = if tp + fp > 0 {
-            Some(tp as f64 / (tp + fp) as f64)
-        } else {
-            None
-        };
-        let recall = if tp + fn_ > 0 {
-            Some(tp as f64 / (tp + fn_) as f64)
-        } else {
-            None
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-        EntityMetrics {
-            true_positives: tp,
-            false_positives: fp,
-            false_negatives: fn_,
-            precision,
-            recall,
-            f1,
-        }
+        entity_metrics_from_counts(tp, fp, fn_)
+    }
+
+    #[test]
+    fn zero_gold_labels_are_na_not_precision_zero() {
+        let m = entity_metrics_from_counts(0, 251, 0);
+        assert_eq!(m.true_positives, 0);
+        assert_eq!(m.false_positives, 251);
+        assert_eq!(m.false_negatives, 0);
+        assert!(m.precision.is_none());
+        assert!(m.recall.is_none());
+        assert!(m.f1.is_none());
     }
 
     #[test]

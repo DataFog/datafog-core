@@ -108,8 +108,11 @@ this pinned span checkpoint.
 
 Core's worker therefore wraps `count_pred` with a `torch.nn.Module` that boosts
 the count=1 logit when the argmax would otherwise be 0. Threshold filtering
-in Core still drops low-score spans. Set
-`DATAFOG_GLINER2_DISABLE_COUNT_FLOOR=1` only to reproduce the pre-fix skip.
+in Core still drops low-score spans.
+
+`DATAFOG_GLINER2_DISABLE_COUNT_FLOOR=1` is test-only and unsupported: it
+disables the floor so the pre-fix skip can be reproduced. Never set it in
+production, qualification, or release paths.
 
 Rust, Python, and Node ModelSessions all spawn
 `datafog_core._gliner2_worker`. WASM is rule-based and has no model path, so

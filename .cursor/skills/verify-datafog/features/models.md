@@ -266,9 +266,24 @@ This is DataFog integration code, not a community-tier accuracy waiver.
 `scripts/check-gliner2-entity-count.py` and
 `crates/core/tests/model_gliner2_entity_count.rs` run un-ignored in
 `cargo dfv check --models` and the dfv-models job (`DATAFOG_REQUIRE_GLINER2=1`
-fails if the bundle is missing).
+fails if the bundle is missing). The regression prefers
+`models/gliner2-base-v1` (four-label described schema from issue #87);
+`.cursor/install.sh` provisions that checkpoint idempotently.
+
+`DATAFOG_GLINER2_DISABLE_COUNT_FLOOR=1` is **test-only and unsupported**. It
+disables the floor so the pre-fix skip can be reproduced. Never set it in
+production, qualification, or release paths.
 
 Rust, Python, and Node share that worker. WASM has no model path.
+
+### GLiNER2 eval baseline
+
+`baselines/eval-models-gliner2.json` is **provisional**. The current fixture
+suite has no `STREET_ADDRESS` gold labels, so the scored entity has zero gold
+(TP+FN=0). Precision/recall/F1 are reported as n/a and excluded from the
+accuracy gate; the baseline records model id, revision, and manifest sha256
+for contract checks only. It gives no accuracy signal until labelled address
+fixtures exist.
 
 ### GLiNER2 label mapping
 

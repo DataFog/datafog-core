@@ -192,9 +192,10 @@ fn entity_count_fix_does_not_create_false_positives() {
             .filter(|finding| finding.entity_type == "STREET_ADDRESS")
             .map(|finding| finding.matched_text.as_str())
             .collect();
-        if !addresses.is_empty() {
-            eprintln!("Warning: street_address on a no-PII input {input:?}: {addresses:?}");
-        }
+        assert!(
+            addresses.is_empty(),
+            "Expected no STREET_ADDRESS findings for no-PII input {input:?}, got {addresses:?}"
+        );
     }
     session.close().unwrap();
 }

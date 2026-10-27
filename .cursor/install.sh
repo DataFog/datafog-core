@@ -45,7 +45,7 @@ from pathlib import Path
 models_dir = Path("models")
 manifest = {}
 
-for engine in ("gliner2", "datafog"):
+for engine in ("gliner2", "gliner2-base-v1", "datafog"):
     engine_manifest = models_dir / engine / "bundle-manifest.json"
     if not engine_manifest.exists():
         continue
@@ -122,6 +122,34 @@ else
         --destination "$GLINER2_DEST"
 
     rm -rf "$GLINER2_TMP"
+fi
+
+# GLiNER2 base-v1 (issue #87 regression checkpoint; portable, CPU-only)
+GLINER2_BASE_DEST="$MODELS_DIR/gliner2-base-v1"
+if [[ -f "$GLINER2_BASE_DEST/bundle-manifest.json" ]]; then
+    echo "Skipping GLiNER2 base-v1 (found $GLINER2_BASE_DEST/bundle-manifest.json)"
+else
+    if [[ -d "$GLINER2_BASE_DEST" ]]; then
+        echo "Removing incomplete GLiNER2 base-v1 bundle (no bundle-manifest.json)"
+        rm -rf "$GLINER2_BASE_DEST"
+    fi
+    echo "Downloading GLiNER2 base-v1 for entity-count regression..."
+    GLINER2_BASE_TMP="/tmp/gliner2-base-v1-download"
+    mkdir -p "$GLINER2_BASE_TMP"
+
+    hf download fastino/gliner2-base-v1 \
+        config.json encoder_config/config.json tokenizer.json tokenizer_config.json \
+        added_tokens.json special_tokens_map.json spm.model model.safetensors README.md \
+        --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+        --local-dir "$GLINER2_BASE_TMP"
+
+    python3 scripts/provision-gliner2-model.py \
+        --source "$GLINER2_BASE_TMP" \
+        --model-id fastino/gliner2-base-v1 \
+        --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+        --destination "$GLINER2_BASE_DEST"
+
+    rm -rf "$GLINER2_BASE_TMP"
 fi
 
 write_combined_manifest

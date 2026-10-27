@@ -138,7 +138,7 @@ def main() -> int:
             found = addresses(session.scan_model(text))
             print(f"NEGATIVE {text!r} found={found}")
             if found:
-                print(f"  warning: street_address on a no-PII input: {found}", file=sys.stderr)
+                failures.append(f"no-PII input {text!r} returned street_address {found}")
     if failures:
         print("FAIL: entity-count gating still drops valid spans:")
         for item in failures:

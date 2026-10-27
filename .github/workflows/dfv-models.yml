@@ -150,26 +150,16 @@ jobs:
           models_dir = Path("models")
           manifest = {}
 
-          # GLiNER2 manifest
-          gliner2_manifest_path = models_dir / "gliner2" / "bundle-manifest.json"
-          if gliner2_manifest_path.exists():
-              gliner2_manifest = json.loads(gliner2_manifest_path.read_text())
-              for name, info in gliner2_manifest.get("files", {}).items():
-                  manifest[f"gliner2/{name}"] = {
-                      "path": f"gliner2/{name}",
+          for engine in ("gliner2", "gliner2-base-v1", "datafog"):
+              engine_manifest_path = models_dir / engine / "bundle-manifest.json"
+              if not engine_manifest_path.exists():
+                  continue
+              engine_manifest = json.loads(engine_manifest_path.read_text())
+              for name, info in engine_manifest.get("files", {}).items():
+                  manifest[f"{engine}/{name}"] = {
+                      "path": f"{engine}/{name}",
                       "sha256": info["sha256"],
-                      "bytes": info["bytes"]
-                  }
-
-          # DataFog manifest
-          datafog_manifest_path = models_dir / "datafog" / "bundle-manifest.json"
-          if datafog_manifest_path.exists():
-              datafog_manifest = json.loads(datafog_manifest_path.read_text())
-              for name, info in datafog_manifest.get("files", {}).items():
-                  manifest[f"datafog/{name}"] = {
-                      "path": f"datafog/{name}",
-                      "sha256": info["sha256"],
-                      "bytes": info["bytes"]
+                      "bytes": info["bytes"],
                   }
 
           (models_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))

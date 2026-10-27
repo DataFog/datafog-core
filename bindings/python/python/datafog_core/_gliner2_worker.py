@@ -45,6 +45,8 @@ def _patch_count_pred(model, torch):
     `count_pred` is a `torch.nn.Module`; it must stay one so
     `Module.__setattr__` accepts the wrap.
     """
+    # Test-only / unsupported: disables the floor so issue #87 can be
+    # reproduced. Never set this in production or CI qualification.
     if os.environ.get("DATAFOG_GLINER2_DISABLE_COUNT_FLOOR") == "1":
         return
 

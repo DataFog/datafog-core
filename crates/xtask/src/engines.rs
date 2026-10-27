@@ -144,38 +144,35 @@ impl EngineConfig {
         let sha256 = format!("{:x}", hasher.finalize());
 
         let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
-        let from_manifest = manifest.get("model").map(|model| {
-            (
-                model.get("id").and_then(|v| v.as_str()).map(String::from),
-                model
-                    .get("revision")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-            )
-        });
-        let (model_id, revision) = if let Some((id, rev)) = from_manifest {
-            (id, rev)
-        } else if self.name == "gliner2" {
-            (
-                Some("fastino/gliner2-privacy-filter-PII-multi".to_string()),
-                Some("1cb4166094dc58fa8d836429f060d6c95f62b495".to_string()),
-            )
-        } else {
-            let config_path = bundle_path.join("config.json");
-            let config_content = std::fs::read_to_string(&config_path).ok();
-            let config: Option<serde_json::Value> =
-                config_content.and_then(|c| serde_json::from_str(&c).ok());
-            let rev = config
-                .as_ref()
-                .and_then(|c| c.get("model_revision"))
+        if let Some(model) = manifest.get("model") {
+            let model_id = model.get("id").and_then(|v| v.as_str()).map(String::from)?;
+            let revision = model
+                .get("revision")
                 .and_then(|v| v.as_str())
-                .map(String::from);
-            (Some("DataFog/pii-en-65m".to_string()), rev)
-        };
-
+                .map(String::from)?;
+            return Some(ManifestInfo {
+                sha256,
+                model_id: Some(model_id),
+                revision: Some(revision),
+            });
+        }
+        // GLiNER2 requires model identity in the bundle manifest. Do not
+        // hardcode id/revision — re-provision with --model-id/--revision.
+        if self.name == "gliner2" {
+            return None;
+        }
+        let config_path = bundle_path.join("config.json");
+        let config_content = std::fs::read_to_string(&config_path).ok();
+        let config: Option<serde_json::Value> =
+            config_content.and_then(|c| serde_json::from_str(&c).ok());
+        let revision = config
+            .as_ref()
+            .and_then(|c| c.get("model_revision"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
         Some(ManifestInfo {
             sha256,
-            model_id,
+            model_id: Some("DataFog/pii-en-65m".to_string()),
             revision,
         })
     }
