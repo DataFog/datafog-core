@@ -115,6 +115,9 @@ the grammar before the freeze, not after.
 
 ## Extension
 
+The Chrome extension lives in its own repository and is owned by Josh. All items
+below are extension-side work.
+
 1. **Bootstrap.** Port the harness broker, vault, storage, backup and RPC code.
    Pin `@datafog/wasm` to a beta. Keep fault-injection hooks out of release builds.
 2. **Vault interface.** Open, save-if-head-matches, lock, export, import, over a

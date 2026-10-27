@@ -1,7 +1,7 @@
 # ADR 004: Workspace Aliasing V1 Decisions
 
-- **Status:** Proposed
-- **Date:** 2026-10-26
+- **Status:** Accepted
+- **Date:** 2026-10-27
 
 ## Context
 
