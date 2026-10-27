@@ -21,6 +21,33 @@ def respond(value):
     print(json.dumps(value, ensure_ascii=True, allow_nan=False), flush=True)
 
 
+def _patch_count_pred(model, torch):
+    """Wrap the count_pred layer to floor predictions at 1.
+
+    GLiNER2's span runtime uses a count head to predict how many entities to
+    extract per task. When this head predicts 0, the runtime skips span
+    decoding entirely (runtime.py lines 745-750), causing valid high-confidence
+    spans to be missed. This wrapper ensures at least one structural slot is
+    always decoded; Core's threshold filtering handles false positives.
+    """
+    original_count_pred = model.count_pred
+
+    def floored_count_pred(x):
+        logits = original_count_pred(x)
+        batch_size = logits.shape[0]
+        floor_boost = torch.zeros_like(logits)
+        floor_boost[:, 1] = 100.0
+        zero_pred = logits.argmax(dim=-1) == 0
+        boosted = torch.where(
+            zero_pred.unsqueeze(-1),
+            logits + floor_boost,
+            logits,
+        )
+        return boosted
+
+    model.count_pred = floored_count_pred
+
+
 def main():
     # Private JSONL is UTF-8 on every host, independent of Windows' console locale.
     sys.stdin.reconfigure(encoding="utf-8")
@@ -49,6 +76,9 @@ def main():
             torch.set_num_interop_threads(1)
             model = GLiNER2.from_pretrained(str(bundle), local_files_only=True, map_location="cpu")
             model.eval()
+            # Issue #87: Floor the count head at 1 to prevent skipping span
+            # decoding when it predicts zero entities.
+            _patch_count_pred(model, torch)
             # Keep the official strict mode explicit: never accept per-sample failures as empty findings.
             model.strict_extraction = True
             # The pinned processor otherwise appends punctuation, creating spans
