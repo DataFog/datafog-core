@@ -24,7 +24,7 @@ Doctor checks:
 - wasm_target: wasm32-unknown-unknown rustup target
 - playwright_chromium: Playwright Chromium browser
 - python_binding_fresh: built wheel or .so, fresher than crates/core/src
-- node_binding_fresh: built index.js or .node file
+- node_binding_fresh: built native.js or .node file (not the hand-written index.js wrapper)
 - wasm_binding_fresh: built dist/datafog_wasm_bg.wasm
 - model_weights (optional): files in models/ match manifest.json sha256 hashes
 
