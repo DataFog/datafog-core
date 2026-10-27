@@ -1,6 +1,6 @@
-import * as ort from "../node_modules/onnxruntime-web/dist/ort.all.min.mjs";
-import { Tokenizer } from "../node_modules/@huggingface/tokenizers/dist/tokenizers.mjs";
-import { MODEL, DEFAULT_LABELS, validateLabels } from "./model.mjs";
+import * as ort from "onnxruntime-web/wasm";
+import { Tokenizer } from "@huggingface/tokenizers";
+import { MODEL, validateLabels } from "./model.mjs";
 import { prepareInput } from "./preprocessor.mjs";
 import { decodeEntities } from "./decode.mjs";
 
@@ -24,10 +24,8 @@ async function verifiedAsset(baseUrl, path) {
 }
 
 export class GlinerSession {
-  static async create({
-    modelBaseUrl = new URL("../models/", import.meta.url),
-    numThreads = 4,
-  } = {}) {
+  static async create({ modelBaseUrl, wasmPaths, numThreads = 4 } = {}) {
+    if (!modelBaseUrl) throw new TypeError("modelBaseUrl is required");
     if (!Number.isInteger(numThreads) || numThreads < 1 || numThreads > 4)
       throw new RangeError("numThreads must be between 1 and 4");
     const base = new URL(
@@ -40,10 +38,7 @@ export class GlinerSession {
       ),
     );
     const tokenizer = new Tokenizer(definition, config);
-    ort.env.wasm.wasmPaths = new URL(
-      "../node_modules/onnxruntime-web/dist/",
-      import.meta.url,
-    ).href;
+    if (wasmPaths !== undefined) ort.env.wasm.wasmPaths = wasmPaths;
     ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? numThreads : 1;
     const buffer = await verifiedAsset(base, "onnx/model.onnx");
     const session = await ort.InferenceSession.create(buffer, {
@@ -59,7 +54,7 @@ export class GlinerSession {
     this.busy = false;
   }
 
-  async extract(text, { labels = DEFAULT_LABELS, threshold = 0.5 } = {}) {
+  async extract(text, { labels, threshold = 0.5 } = {}) {
     if (!this.session) throw new Error("Session is closed");
     if (this.busy) throw new Error("An extraction is already running");
     if (typeof text !== "string") throw new TypeError("text must be a string");

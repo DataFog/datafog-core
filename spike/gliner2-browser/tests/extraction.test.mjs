@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { Tokenizer } from "@huggingface/tokenizers";
-import { prepareInput } from "../src/preprocessor.mjs";
-import { decodeEntities } from "../src/decode.mjs";
-import { DEFAULT_LABELS, validateLabels } from "../src/model.mjs";
+import { prepareInput } from "../../../bindings/wasm/models/preprocessor.mjs";
+import { decodeEntities } from "../../../bindings/wasm/models/decode.mjs";
+import { validateLabels } from "../../../bindings/wasm/models/model.mjs";
 
 const tokenizerJson = JSON.parse(
   await readFile(new URL("../models/tokenizer.json", import.meta.url), "utf8"),
@@ -63,9 +63,6 @@ test("custom labels route queries only from schema markers, never from text", ()
   assert.deepEqual(
     prepared.words.map((word) => word.value),
     ["[", "e", "]", "tim", "cook", "leads", "apple", "."],
-  );
-  assert.ok(
-    DEFAULT_LABELS.includes("email") && DEFAULT_LABELS.includes("phone number"),
   );
 });
 

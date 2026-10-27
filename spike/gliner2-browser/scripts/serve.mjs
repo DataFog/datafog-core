@@ -14,6 +14,8 @@ const mime = {
   ".wasm": "application/wasm",
 };
 
+const sdkRoot = resolve(root, "../../bindings/wasm");
+
 export function createModelServer() {
   return createServer(async (request, response) => {
     try {
@@ -27,21 +29,32 @@ export function createModelServer() {
       );
       if (
         path !== "/" &&
-        !/^\/(?:src|public|models|node_modules)\//.test(path)
+        !/^\/(?:sdk|public|models|node_modules)\//.test(path)
       ) {
         response.writeHead(404);
         response.end();
         return;
       }
+      const sdk = path.startsWith("/sdk/");
+      const allowedRoot = sdk ? sdkRoot : root;
       const file = await realpath(
-        resolve(root, path === "/" ? "public/index.html" : "." + path),
+        resolve(
+          allowedRoot,
+          sdk
+            ? "." + path.slice(4)
+            : path === "/"
+              ? "public/index.html"
+              : "." + path,
+        ),
       );
-      // realpath also prevents symlinks from exposing files outside this spike.
+      // realpath prevents symlinks from exposing files outside the allowed package roots.
       if (
-        !file.startsWith(root + sep) ||
-        !["src", "public", "models", "node_modules"].includes(
-          relative(root, file).split(sep)[0],
-        ) ||
+        !file.startsWith(allowedRoot + sep) ||
+        !(
+          sdk
+            ? ["index.js", "index.d.ts", "models", "dist"]
+            : ["public", "models", "node_modules"]
+        ).includes(relative(allowedRoot, file).split(sep)[0]) ||
         !(await stat(file)).isFile()
       ) {
         response.writeHead(404);

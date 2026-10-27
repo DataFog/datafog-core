@@ -10,6 +10,7 @@ pub use capabilities::{
 };
 mod german;
 mod jwt;
+pub mod model_scan;
 #[cfg(all(feature = "models", not(target_arch = "wasm32")))]
 pub mod models;
 mod npi;

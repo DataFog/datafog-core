@@ -2,10 +2,22 @@ name: Browser model
 
 on:
   pull_request:
-    paths: ["spike/gliner2-browser/**", ".github/workflows/browser-model.yml"]
+    paths:
+      - "spike/gliner2-browser/**"
+      - "bindings/wasm/**"
+      - "crates/core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/browser-model.yml"
   push:
     branches: [main]
-    paths: ["spike/gliner2-browser/**", ".github/workflows/browser-model.yml"]
+    paths:
+      - "spike/gliner2-browser/**"
+      - "bindings/wasm/**"
+      - "crates/core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/browser-model.yml"
 
 permissions:
   contents: read
@@ -17,7 +29,7 @@ concurrency:
 jobs:
   extraction:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: spike/gliner2-browser
@@ -28,6 +40,16 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: spike/gliner2-browser/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: npm ci --prefix ../../bindings/wasm
+      - run: npm run build --prefix ../../bindings/wasm
       - run: npm ci
       - run: npm run download-model
       - run: npx playwright install --with-deps chromium
