@@ -2,31 +2,26 @@
 set -euo pipefail
 
 # DataFog Core cloud agent environment install script
-# Installs toolchains and provisions model weights for cargo dfv verification
+# Provisions model weights for cargo dfv verification.
 #
-# Idempotency: checks for existing bundle-manifest.json before downloading models.
+# Idempotency: checks for existing models/manifest.json before downloading.
 # Uses 'hf download' (from huggingface_hub) matching dfv-models.yml workflow.
 
 echo "=== DataFog Core Environment Install ==="
 
-# Skip packages already installed by Dockerfile
-# Rust, Node, and wasm-bindgen-cli are in the Dockerfile
-# This script only handles:
-# - maturin and huggingface_hub pip packages
-# - Playwright browser install
+# Add ~/.local/bin to PATH for hf CLI
+export PATH="$HOME/.local/bin:$PATH"
+
+# Rust, Node, wasm-bindgen-cli, maturin, huggingface_hub, and Playwright
+# are installed by the Dockerfile. This script only handles:
 # - npm dependencies for bindings
 # - Model weights provisioning
+# - Combined manifest creation
 
-# Python dependencies (maturin and huggingface_hub for provisioning)
-echo "Installing Python dependencies..."
-python3 -m pip install --upgrade pip
-python3 -m pip install maturin 'huggingface_hub>=0.25.0'
-
-# Playwright Chromium browser (Dockerfile installs deps, we need the browser)
-echo "Installing Playwright Chromium browser..."
+# Install npm dependencies for WASM binding (includes Playwright)
+echo "Installing WASM binding dependencies..."
 cd bindings/wasm
 npm install
-npx playwright install chromium
 cd ../..
 
 # Install npm dependencies for Node binding
@@ -38,6 +33,15 @@ cd ../..
 # Model weights provisioning
 echo "Provisioning model weights..."
 MODELS_DIR="$PWD/models"
+
+# Check idempotency via combined manifest
+if [[ -f "$MODELS_DIR/manifest.json" ]]; then
+    echo "Models already provisioned (found $MODELS_DIR/manifest.json)"
+    echo "=== Install complete ==="
+    echo "Run 'cargo dfv doctor' to verify the environment."
+    exit 0
+fi
+
 mkdir -p "$MODELS_DIR"
 
 # Determine platform
@@ -49,9 +53,8 @@ case "$(uname -s)-$(uname -m)" in
     *)             PLATFORM="" ;;
 esac
 
-# DataFog model (if platform supported and not already provisioned)
-DATAFOG_MANIFEST="$MODELS_DIR/datafog/bundle-manifest.json"
-if [[ -n "$PLATFORM" ]] && [[ ! -f "$DATAFOG_MANIFEST" ]]; then
+# DataFog model (platform-specific native runtime)
+if [[ -n "$PLATFORM" ]]; then
     echo "Downloading DataFog model for $PLATFORM..."
     DATAFOG_ARCHIVE="datafog-pii-0.1.0-runtime-0.2.0-$PLATFORM.tar.gz"
     DATAFOG_TMP="/tmp/datafog-assets"
@@ -67,30 +70,60 @@ if [[ -n "$PLATFORM" ]] && [[ ! -f "$DATAFOG_MANIFEST" ]]; then
         --destination "$MODELS_DIR/datafog"
     
     rm -rf "$DATAFOG_TMP"
-elif [[ -f "$DATAFOG_MANIFEST" ]]; then
-    echo "DataFog model already provisioned (found $DATAFOG_MANIFEST)"
+else
+    echo "Skipping DataFog model (unsupported platform: $(uname -s)-$(uname -m))"
 fi
 
-# GLiNER2 model (portable, CPU-only, if not already provisioned)
-GLINER2_MANIFEST="$MODELS_DIR/gliner2/bundle-manifest.json"
-if [[ ! -f "$GLINER2_MANIFEST" ]]; then
-    echo "Downloading GLiNER2 model..."
-    GLINER2_TMP="/tmp/gliner2-download"
-    mkdir -p "$GLINER2_TMP"
-    
-    hf download fastino/gliner2-privacy-filter-PII-multi \
-        config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
-        --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 \
-        --local-dir "$GLINER2_TMP"
-    
-    python3 scripts/provision-gliner2-model.py \
-        --source "$GLINER2_TMP" \
-        --destination "$MODELS_DIR/gliner2"
-    
-    rm -rf "$GLINER2_TMP"
-elif [[ -f "$GLINER2_MANIFEST" ]]; then
-    echo "GLiNER2 model already provisioned (found $GLINER2_MANIFEST)"
-fi
+# GLiNER2 model (portable, CPU-only)
+echo "Downloading GLiNER2 model..."
+GLINER2_TMP="/tmp/gliner2-download"
+mkdir -p "$GLINER2_TMP"
+
+hf download fastino/gliner2-privacy-filter-PII-multi \
+    config.json encoder_config/config.json tokenizer.json tokenizer_config.json model.safetensors README.md \
+    --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 \
+    --local-dir "$GLINER2_TMP"
+
+python3 scripts/provision-gliner2-model.py \
+    --source "$GLINER2_TMP" \
+    --destination "$MODELS_DIR/gliner2"
+
+rm -rf "$GLINER2_TMP"
+
+# Create combined manifest for doctor (same as dfv-models.yml)
+echo "Creating combined models/manifest.json..."
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+models_dir = Path("models")
+manifest = {}
+
+# GLiNER2 manifest
+gliner2_manifest_path = models_dir / "gliner2" / "bundle-manifest.json"
+if gliner2_manifest_path.exists():
+    gliner2_manifest = json.loads(gliner2_manifest_path.read_text())
+    for name, info in gliner2_manifest.get("files", {}).items():
+        manifest[f"gliner2/{name}"] = {
+            "path": f"gliner2/{name}",
+            "sha256": info["sha256"],
+            "bytes": info["bytes"]
+        }
+
+# DataFog manifest
+datafog_manifest_path = models_dir / "datafog" / "bundle-manifest.json"
+if datafog_manifest_path.exists():
+    datafog_manifest = json.loads(datafog_manifest_path.read_text())
+    for name, info in datafog_manifest.get("files", {}).items():
+        manifest[f"datafog/{name}"] = {
+            "path": f"datafog/{name}",
+            "sha256": info["sha256"],
+            "bytes": info["bytes"]
+        }
+
+(models_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+print(f"Created manifest with {len(manifest)} entries")
+PY
 
 echo "=== Install complete ==="
 echo "Run 'cargo dfv doctor' to verify the environment."

@@ -26,9 +26,9 @@ Doctor checks:
 - python_binding_fresh: built wheel or .so, fresher than crates/core/src
 - node_binding_fresh: built index.js or .node file
 - wasm_binding_fresh: built dist/datafog_wasm_bg.wasm
-- model_weights (optional): files in models/ match bundle-manifest.json sha256 hashes
+- model_weights (optional): files in models/ match manifest.json sha256 hashes
 
-Doctor hashes the files listed in each `models/<engine>/bundle-manifest.json` using sha256. It does not verify the model revision. If no bundle manifests exist, doctor emits a warning but does not fail.
+Doctor hashes the files listed in `models/manifest.json` using sha256. It does not verify the model revision. If the manifest is missing, doctor emits a warning but does not fail.
 
 ## Doctor
 
@@ -118,7 +118,7 @@ Each run directory includes:
 Evidence directories accumulate. Remove old runs manually when disk space is a concern.
 
 ```bash
-cd target/dfv/runs && ls -t | tail -n +10 | xargs rm -rf
+(cd target/dfv/runs && ls -t | tail -n +10 | xargs rm -rf)
 ```
 
 Do not delete the most recent run directory before the PR is merged.
