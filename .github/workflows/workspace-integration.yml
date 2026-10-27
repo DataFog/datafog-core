@@ -2,7 +2,24 @@ name: Workspace integration
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'crates/core/src/workspace.rs'
+      - 'crates/core/src/workspace/**'
+      - 'crates/core/tests/workspace.rs'
+      - 'bindings/wasm/**'
+      - 'examples/workspace-extension/**'
+      - 'fixtures/workspace/**'
+      - '.github/workflows/workspace-integration.yml'
   pull_request:
+    paths:
+      - 'crates/core/src/workspace.rs'
+      - 'crates/core/src/workspace/**'
+      - 'crates/core/tests/workspace.rs'
+      - 'bindings/wasm/**'
+      - 'examples/workspace-extension/**'
+      - 'fixtures/workspace/**'
+      - '.github/workflows/workspace-integration.yml'
 
 permissions:
   contents: read

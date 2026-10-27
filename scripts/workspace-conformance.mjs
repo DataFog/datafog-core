@@ -30,7 +30,10 @@ export async function verifyWorkspace(api, counters) {
   check(grouped.previews()[1].text === previews[1].text, "batch marker reuse");
   grouped.discard(); throws(() => grouped.previews(), "inactive_plan");
   throws(() => batch.prepareBatch([], id(24)), "invalid_batch");
-  throws(() => batch.prepareBatch(Array(33).fill(inputs[0]), id(24)), "resource_limit");
+  const exactly32 = batch.prepareBatch(Array(32).fill(inputs[0]), id(24));
+  check(exactly32.previews().length === 32, "exactly 32 inputs accepted");
+  exactly32.discard();
+  throws(() => batch.prepareBatch(Array(33).fill(inputs[0]), id(25)), "resource_limit");
   const largeInput = {text: "x".repeat(512 * 1024 + 1), findings: []};
   throws(() => batch.prepareBatch([largeInput, largeInput], id(24)), "resource_limit");
   throws(() => batch.prepareBatch([inputs[0], {text: "Jane", findings: [{...name, range: {...name.range, unit: "utf16"}}]}], id(24)), "invalid_finding");
