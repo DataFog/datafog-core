@@ -7,6 +7,7 @@ Never write input, native exceptions or local paths to the response protocol.
 from contextlib import redirect_stdout
 from importlib.metadata import version
 import json
+import os
 import platform
 from pathlib import Path
 import sys
@@ -19,6 +20,55 @@ if sys.platform == "darwin" and platform.machine() == "x86_64":
 
 def respond(value):
     print(json.dumps(value, ensure_ascii=True, allow_nan=False), flush=True)
+
+
+def _patch_count_pred(model, torch):
+    """Wrap the count_pred module to floor a zero count prediction at 1.
+
+    GLiNER2's span runtime (`inference/runtime.py`) uses `count_pred` as a
+    structural-instance budget, not a span cap:
+
+    * `_compute_direct_span_logits_batched` argmaxes the count head and, when
+      the class is 0, skips `count_embed` and span scoring for that task.
+    * For entity tasks the runtime then keeps only structural instance 0
+      (`struct_proj = struct_proj[:1]`) and `_find_spans` returns every span
+      above threshold on that instance. A predicted count of 2+ does not
+      add extra entity spans; a predicted count of 0 drops all of them.
+    * Relation and JSON-structure decoders *do* iterate `range(pred_count)`.
+      This worker only builds `schema.entities(...)`, so flooring does not
+      change record or relation instance counts.
+
+    Flooring a 0→1 prediction therefore unblocks entity span decoding without
+    dropping a second same-type entity. Upstream 2.1.0 has no extract-time
+    option to disable this gate (the boundary/record path that replaces
+    `count_pred` is a different architecture and is not this checkpoint).
+    `count_pred` is a `torch.nn.Module`; it must stay one so
+    `Module.__setattr__` accepts the wrap.
+    """
+    # Test-only / unsupported: disables the floor so issue #87 can be
+    # reproduced. Never set this in production or CI qualification.
+    if os.environ.get("DATAFOG_GLINER2_DISABLE_COUNT_FLOOR") == "1":
+        return
+
+    class FlooredCountPred(torch.nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
+
+        def forward(self, x):
+            logits = self.inner(x)
+            if logits.shape[-1] < 2:
+                return logits
+            floor_boost = torch.zeros_like(logits)
+            floor_boost[..., 1] = 100.0
+            zero_pred = logits.argmax(dim=-1) == 0
+            return torch.where(
+                zero_pred.unsqueeze(-1),
+                logits + floor_boost,
+                logits,
+            )
+
+    model.count_pred = FlooredCountPred(model.count_pred)
 
 
 def main():
@@ -49,6 +99,9 @@ def main():
             torch.set_num_interop_threads(1)
             model = GLiNER2.from_pretrained(str(bundle), local_files_only=True, map_location="cpu")
             model.eval()
+            # Issue #87: Floor the count head at 1 to prevent skipping span
+            # decoding when it predicts zero entities.
+            _patch_count_pred(model, torch)
             # Keep the official strict mode explicit: never accept per-sample failures as empty findings.
             model.strict_extraction = True
             # The pinned processor otherwise appends punctuation, creating spans

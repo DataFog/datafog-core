@@ -379,23 +379,28 @@ pub fn check_python_binding(root: &Path, core_mtime: Option<std::time::SystemTim
 }
 
 pub fn check_node_binding(root: &Path, core_mtime: Option<std::time::SystemTime>) -> DoctorCheck {
-    let index_js = root.join("bindings").join("node").join("index.js");
-    if index_js.exists() {
-        return check_binding_freshness("node", &index_js, core_mtime);
+    let node_dir = root.join("bindings").join("node");
+    // Prefer NAPI build artifacts over the hand-written index.js wrapper,
+    // which is committed source and is not rewritten by `napi build`.
+    let native_js = node_dir.join("native.js");
+    if native_js.exists() {
+        return check_binding_freshness("node", &native_js, core_mtime);
     }
 
-    let node_file = root
-        .join("bindings")
-        .join("node")
-        .join("datafog-node.linux-x64-gnu.node");
-    if node_file.exists() {
-        return check_binding_freshness("node", &node_file, core_mtime);
+    if let Ok(entries) = fs::read_dir(&node_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.ends_with(".node") {
+                return check_binding_freshness("node", &entry.path(), core_mtime);
+            }
+        }
     }
 
     DoctorCheck::fail(
         "node_binding_fresh",
         Some("not built"),
-        "built index.js",
+        "built native.js or .node",
         "cargo dfv build --sdk node",
         true,
     )

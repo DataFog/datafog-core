@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - 'crates/core/src/models/**'
+      - 'crates/core/tests/model_gliner2_entity_count.rs'
       - 'crates/xtask/**'
+      - 'bindings/python/python/datafog_core/_gliner2_worker.py'
       - 'scripts/provision-*'
       - 'scripts/model-*'
       - 'scripts/*model*'
+      - 'scripts/check-gliner2-entity-count.py'
       - 'baselines/eval-models-*.json'
+      - '.cursor/install.sh'
   schedule:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
   workflow_dispatch:
@@ -27,6 +31,7 @@ jobs:
     env:
       DATAFOG_PLATFORM: linux-x86_64
       PYTHONUTF8: "1"
+      DATAFOG_REQUIRE_GLINER2: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,6 +80,38 @@ jobs:
             --source "$RUNNER_TEMP/gliner2-download" \
             --destination "models/gliner2"
 
+      # Issue #87 reproduces on gliner2-base-v1 with a four-label described schema.
+      - name: Restore cached GLiNER2 base-v1 assets
+        uses: actions/cache/restore@v4
+        id: gliner2-base-cache
+        with:
+          path: ${{ runner.temp }}/gliner2-base-v1-download
+          key: gliner2-base-v1-${{ hashFiles('scripts/provision-gliner2-model.py') }}
+
+      - name: Download GLiNER2 base-v1 files (if not cached)
+        if: steps.gliner2-base-cache.outputs.cache-hit != 'true'
+        run: |
+          hf download fastino/gliner2-base-v1 \
+            config.json encoder_config/config.json tokenizer.json tokenizer_config.json \
+            added_tokens.json special_tokens_map.json spm.model model.safetensors README.md \
+            --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+            --local-dir "$RUNNER_TEMP/gliner2-base-v1-download"
+
+      - name: Cache GLiNER2 base-v1 assets
+        uses: actions/cache/save@v4
+        if: steps.gliner2-base-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/gliner2-base-v1-download
+          key: ${{ steps.gliner2-base-cache.outputs.cache-primary-key }}
+
+      - name: Provision GLiNER2 base-v1 for entity-count regression
+        run: |
+          python scripts/provision-gliner2-model.py \
+            --source "$RUNNER_TEMP/gliner2-base-v1-download" \
+            --model-id fastino/gliner2-base-v1 \
+            --revision f9634218e53580c56edf0de97ca1a7d3f1c2354e \
+            --destination "models/gliner2-base-v1"
+
       # DataFog model caching and provisioning
       - name: Restore cached DataFog assets
         uses: actions/cache/restore@v4
@@ -113,26 +150,16 @@ jobs:
           models_dir = Path("models")
           manifest = {}
 
-          # GLiNER2 manifest
-          gliner2_manifest_path = models_dir / "gliner2" / "bundle-manifest.json"
-          if gliner2_manifest_path.exists():
-              gliner2_manifest = json.loads(gliner2_manifest_path.read_text())
-              for name, info in gliner2_manifest.get("files", {}).items():
-                  manifest[f"gliner2/{name}"] = {
-                      "path": f"gliner2/{name}",
+          for engine in ("gliner2", "gliner2-base-v1", "datafog"):
+              engine_manifest_path = models_dir / engine / "bundle-manifest.json"
+              if not engine_manifest_path.exists():
+                  continue
+              engine_manifest = json.loads(engine_manifest_path.read_text())
+              for name, info in engine_manifest.get("files", {}).items():
+                  manifest[f"{engine}/{name}"] = {
+                      "path": f"{engine}/{name}",
                       "sha256": info["sha256"],
-                      "bytes": info["bytes"]
-                  }
-
-          # DataFog manifest
-          datafog_manifest_path = models_dir / "datafog" / "bundle-manifest.json"
-          if datafog_manifest_path.exists():
-              datafog_manifest = json.loads(datafog_manifest_path.read_text())
-              for name, info in datafog_manifest.get("files", {}).items():
-                  manifest[f"datafog/{name}"] = {
-                      "path": f"datafog/{name}",
-                      "sha256": info["sha256"],
-                      "bytes": info["bytes"]
+                      "bytes": info["bytes"],
                   }
 
           (models_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
@@ -140,6 +167,17 @@ jobs:
           PY
 
       - run: cargo dfv build --sdk python
+
+      - name: Install Python wheel for model checks
+        run: |
+          WHEEL=$(ls target/wheels/datafog_core-*.whl)
+          python -m pip install --force-reinstall "${WHEEL}[gliner2]"
+
+      - name: GLiNER2 entity-count gating regression
+        run: cargo test -p datafog-core --all-features --test model_gliner2_entity_count
+
+      - name: Run model checks
+        run: cargo dfv check --models --json
 
       - name: Verify model weight hashes
         run: |

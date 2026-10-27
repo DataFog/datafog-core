@@ -1,4 +1,4 @@
-use crate::engines::{DetectedEntity, EngineConfig, EngineTier};
+use crate::engines::{DetectedEntity, ENGINE_REGISTRY, EngineConfig, EngineTier};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -183,6 +183,35 @@ fn format_opt_metric(v: Option<f64>) -> String {
     }
 }
 
+/// Build per-entity metrics. Entities with zero gold labels (TP+FN=0) report
+/// precision/recall/F1 as n/a and are excluded from macro averages and the
+/// accuracy gate — do not pin precision=0 from false positives alone.
+fn entity_metrics_from_counts(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
+    let (precision, recall, f1) = if tp + fn_ == 0 {
+        (None, None, None)
+    } else {
+        let precision = if tp + fp > 0 {
+            Some(tp as f64 / (tp + fp) as f64)
+        } else {
+            None
+        };
+        let recall = Some(tp as f64 / (tp + fn_) as f64);
+        let f1 = match (precision, recall) {
+            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
+            _ => None,
+        };
+        (precision, recall, f1)
+    };
+    EntityMetrics {
+        true_positives: tp,
+        false_positives: fp,
+        false_negatives: fn_,
+        precision,
+        recall,
+        f1,
+    }
+}
+
 /// Print per-entity metrics table to stdout
 fn print_metrics_table(metrics: &HashMap<String, EntityMetrics>) {
     println!("Per-entity metrics:");
@@ -284,17 +313,13 @@ struct PythonEnv {
     python_bin: PathBuf,
 }
 
-fn setup_python_env(root: &Path) -> Option<PythonEnv> {
+fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
     let venv_dir = root.join("target").join("dfv_eval_venv");
     let python_bin = if cfg!(windows) {
         venv_dir.join("Scripts").join("python.exe")
     } else {
         venv_dir.join("bin").join("python")
     };
-
-    if python_bin.exists() {
-        return Some(PythonEnv { python_bin });
-    }
 
     let wheel_dir = root.join("target").join("wheels");
     let wheel = fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
@@ -310,20 +335,33 @@ fn setup_python_env(root: &Path) -> Option<PythonEnv> {
         })
     })?;
 
-    Command::new("python3")
-        .args(["-m", "venv"])
-        .arg(&venv_dir)
-        .status()
-        .ok()?;
+    if !python_bin.exists() {
+        Command::new("python3")
+            .args(["-m", "venv"])
+            .arg(&venv_dir)
+            .status()
+            .ok()?;
 
-    let status = Command::new(&python_bin)
-        .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-        .arg(&wheel)
-        .status()
-        .ok()?;
+        let status = Command::new(&python_bin)
+            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
+            .arg(&wheel)
+            .status()
+            .ok()?;
 
-    if !status.success() {
-        return None;
+        if !status.success() {
+            return None;
+        }
+    }
+
+    for extra in extras {
+        let status = Command::new(&python_bin)
+            .args(["-m", "pip", "install", "-q"])
+            .arg(format!("{}[{extra}]", wheel.display()))
+            .status()
+            .ok()?;
+        if !status.success() {
+            return None;
+        }
     }
 
     Some(PythonEnv { python_bin })
@@ -369,12 +407,34 @@ fn compute_model_metrics(
     let mut total_found = 0;
     let mut excluded_types: HashSet<String> = HashSet::new();
 
+    let texts: Vec<String> = fixtures
+        .iter()
+        .map(|fixture| fixture.text.clone())
+        .collect();
+    if !json_output {
+        eprintln!(
+            "Scanning {} fixtures with one {} session...",
+            texts.len(),
+            engine.name
+        );
+    }
+    let all_detected = engine.scan_many(&texts, python_bin, root)?;
+    if all_detected.len() != fixtures.len() {
+        eprintln!(
+            "{} scan returned {} results for {} fixtures",
+            engine.name,
+            all_detected.len(),
+            fixtures.len()
+        );
+        return None;
+    }
+
     for (i, fixture) in fixtures.iter().enumerate() {
         if !json_output && i % 100 == 0 {
-            eprint!("\rProcessing fixture {}/{}...", i + 1, fixtures.len());
+            eprint!("\rScoring fixture {}/{}...", i + 1, fixtures.len());
         }
 
-        let detected = engine.scan(&fixture.text, python_bin, root)?;
+        let detected = &all_detected[i];
 
         let found: Vec<_> = detected
             .iter()
@@ -437,38 +497,13 @@ fn compute_model_metrics(
     let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
-        let precision = if *tp + *fp > 0 {
-            Some(*tp as f64 / (*tp + *fp) as f64)
-        } else {
-            None // undefined when TP+FP=0
-        };
-        let recall = if *tp + *fn_ > 0 {
-            Some(*tp as f64 / (*tp + *fn_) as f64)
-        } else {
-            None // undefined when TP+FN=0
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-
-        metrics.insert(
-            entity_type.clone(),
-            EntityMetrics {
-                true_positives: *tp,
-                false_positives: *fp,
-                false_negatives: *fn_,
-                precision,
-                recall,
-                f1,
-            },
-        );
-
-        if let (Some(p), Some(r)) = (precision, recall) {
+        let m = entity_metrics_from_counts(*tp, *fp, *fn_);
+        if let (Some(p), Some(r)) = (m.precision, m.recall) {
             total_precision += p;
             total_recall += r;
             defined_count += 1;
         }
+        metrics.insert(entity_type.clone(), m);
     }
 
     let macro_precision = if defined_count > 0 {
@@ -506,7 +541,7 @@ fn compute_rule_metrics(
     root: &Path,
     json_output: bool,
 ) -> Option<(HashMap<String, EntityMetrics>, EvalSummary)> {
-    let env = setup_python_env(root)?;
+    let env = setup_python_env(root, &[])?;
 
     let mut entity_stats: HashMap<String, (usize, usize, usize)> = HashMap::new();
     let mut total_expected = 0;
@@ -575,38 +610,13 @@ fn compute_rule_metrics(
     let mut defined_count = 0;
 
     for (entity_type, (tp, fp, fn_)) in &entity_stats {
-        let precision = if *tp + *fp > 0 {
-            Some(*tp as f64 / (*tp + *fp) as f64)
-        } else {
-            None // undefined when TP+FP=0
-        };
-        let recall = if *tp + *fn_ > 0 {
-            Some(*tp as f64 / (*tp + *fn_) as f64)
-        } else {
-            None // undefined when TP+FN=0
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-
-        metrics.insert(
-            entity_type.clone(),
-            EntityMetrics {
-                true_positives: *tp,
-                false_positives: *fp,
-                false_negatives: *fn_,
-                precision,
-                recall,
-                f1,
-            },
-        );
-
-        if let (Some(p), Some(r)) = (precision, recall) {
+        let m = entity_metrics_from_counts(*tp, *fp, *fn_);
+        if let (Some(p), Some(r)) = (m.precision, m.recall) {
             total_precision += p;
             total_recall += r;
             defined_count += 1;
         }
+        metrics.insert(entity_type.clone(), m);
     }
 
     let macro_precision = if defined_count > 0 {
@@ -807,6 +817,63 @@ fn compare_with_rule_baseline(
     })
 }
 
+fn run_all_model_evals(json_output: bool, update_baseline: bool, dry_run: bool) -> ExitCode {
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Error: failed to locate xtask binary: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut pass = true;
+    let mut engines = Vec::new();
+    for engine in ENGINE_REGISTRY {
+        if dry_run {
+            engines.push(serde_json::json!({
+                "engine": engine.name,
+                "command": format!("eval --model {}", engine.name),
+            }));
+            continue;
+        }
+        let mut command = Command::new(&exe);
+        command.args(["eval", "--model", engine.name]);
+        if json_output {
+            command.arg("--json");
+        }
+        if update_baseline {
+            command.arg("--update-baseline");
+        }
+        let status = command.status();
+        let engine_pass = status.as_ref().map(|s| s.success()).unwrap_or(false);
+        pass &= engine_pass;
+        engines.push(serde_json::json!({
+            "engine": engine.name,
+            "pass": engine_pass,
+        }));
+        if !engine_pass && !json_output {
+            eprintln!("Engine {} eval failed", engine.name);
+        }
+    }
+    let result = serde_json::json!({
+        "pass": pass,
+        "engines": engines,
+        "dry_run": if dry_run { Some(true) } else { None::<bool> },
+    });
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+    } else if dry_run {
+        println!(
+            "Dry run - would evaluate engines: {:?}",
+            EngineConfig::names()
+        );
+    }
+    if pass {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let update_baseline = args.iter().any(|a| a == "--update-baseline");
@@ -915,7 +982,12 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             println!();
         }
 
-        let env = match setup_python_env(&root) {
+        let extras: &[&str] = if engine.name == "gliner2" {
+            &["gliner2"]
+        } else {
+            &[]
+        };
+        let env = match setup_python_env(&root, extras) {
             Some(e) => e,
             None => {
                 let err = serde_json::json!({
@@ -1066,6 +1138,12 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
             .to_string();
 
         if update_baseline {
+            // A baseline with no defined F1 on any scored type (e.g. zero gold
+            // labels for every scored entity) is provisional: it records
+            // contract identity but gives no accuracy signal.
+            let provisional = !scored_types
+                .iter()
+                .any(|entity| metrics.get(entity).and_then(|m| m.f1).is_some());
             let baseline_data = ModelBaseline {
                 model_id: manifest_info
                     .model_id
@@ -1078,7 +1156,7 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
                 excluded_entity_types: excluded.clone(),
                 metrics: metrics.clone(),
                 summary: summary.clone(),
-                provisional: false,
+                provisional,
             };
 
             if let Some(parent) = baseline_path.parent() {
@@ -1190,6 +1268,10 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
         };
     }
 
+    if args.iter().any(|a| a == "--models") {
+        return run_all_model_evals(json_output, update_baseline, dry_run);
+    }
+
     if !json_output {
         println!("Running rule-based eval...");
         println!();
@@ -1295,28 +1377,18 @@ mod tests {
     use std::collections::HashMap;
 
     fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
-        let precision = if tp + fp > 0 {
-            Some(tp as f64 / (tp + fp) as f64)
-        } else {
-            None
-        };
-        let recall = if tp + fn_ > 0 {
-            Some(tp as f64 / (tp + fn_) as f64)
-        } else {
-            None
-        };
-        let f1 = match (precision, recall) {
-            (Some(p), Some(r)) if p + r > 0.0 => Some(2.0 * p * r / (p + r)),
-            _ => None,
-        };
-        EntityMetrics {
-            true_positives: tp,
-            false_positives: fp,
-            false_negatives: fn_,
-            precision,
-            recall,
-            f1,
-        }
+        entity_metrics_from_counts(tp, fp, fn_)
+    }
+
+    #[test]
+    fn zero_gold_labels_are_na_not_precision_zero() {
+        let m = entity_metrics_from_counts(0, 251, 0);
+        assert_eq!(m.true_positives, 0);
+        assert_eq!(m.false_positives, 251);
+        assert_eq!(m.false_negatives, 0);
+        assert!(m.precision.is_none());
+        assert!(m.recall.is_none());
+        assert!(m.f1.is_none());
     }
 
     #[test]

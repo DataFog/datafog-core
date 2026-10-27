@@ -17,8 +17,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Engine ownership tier determining accuracy gate behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,66 +143,81 @@ impl EngineConfig {
         hasher.update(content.as_bytes());
         let sha256 = format!("{:x}", hasher.finalize());
 
-        // Try to get model info from config.json (datafog) or bundle-manifest.json
+        let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
+        if let Some(model) = manifest.get("model") {
+            let model_id = model.get("id").and_then(|v| v.as_str()).map(String::from)?;
+            let revision = model
+                .get("revision")
+                .and_then(|v| v.as_str())
+                .map(String::from)?;
+            return Some(ManifestInfo {
+                sha256,
+                model_id: Some(model_id),
+                revision: Some(revision),
+            });
+        }
+        // GLiNER2 requires model identity in the bundle manifest. Do not
+        // hardcode id/revision — re-provision with --model-id/--revision.
+        if self.name == "gliner2" {
+            return None;
+        }
         let config_path = bundle_path.join("config.json");
-        let (model_id, revision) = if config_path.exists() {
-            let config_content = std::fs::read_to_string(&config_path).ok();
-            let config: Option<serde_json::Value> =
-                config_content.and_then(|c| serde_json::from_str(&c).ok());
-            let rev = config
-                .as_ref()
-                .and_then(|c| c.get("model_revision"))
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            // For datafog, use the HF repo name as model_id
-            (Some("DataFog/pii-en-65m".to_string()), rev)
-        } else {
-            // For gliner2 and others, try bundle-manifest.json model field
-            let manifest: serde_json::Value = serde_json::from_str(&content).ok()?;
-            let model_id = manifest
-                .get("model")
-                .and_then(|m| m.get("id"))
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            let revision = manifest
-                .get("model")
-                .and_then(|m| m.get("revision"))
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            (model_id, revision)
-        };
-
+        let config_content = std::fs::read_to_string(&config_path).ok();
+        let config: Option<serde_json::Value> =
+            config_content.and_then(|c| serde_json::from_str(&c).ok());
+        let revision = config
+            .as_ref()
+            .and_then(|c| c.get("model_revision"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
         Some(ManifestInfo {
             sha256,
-            model_id,
+            model_id: Some("DataFog/pii-en-65m".to_string()),
             revision,
         })
     }
 
-    /// Run model scan on text, returns detected entities
-    pub fn scan(&self, text: &str, python_bin: &Path, root: &Path) -> Option<Vec<DetectedEntity>> {
+    /// Scan many texts with one ModelSession so the worker loads once.
+    pub fn scan_many(
+        &self,
+        texts: &[String],
+        python_bin: &Path,
+        root: &Path,
+    ) -> Option<Vec<Vec<DetectedEntity>>> {
         let manifest_info = self.manifest_info(root)?;
         let bundle_path = self.bundle_path(root);
         let config = (self.build_config)(&bundle_path, &manifest_info.sha256, python_bin);
-        let text_escaped = serde_json::to_string(text).unwrap();
+        let payload = serde_json::to_string(texts).ok()?;
 
         let code = format!(
             r#"
-import json
+import json, sys
 from datafog_core import ModelSession
 config = {config}
+texts = json.load(sys.stdin)
 with ModelSession.open(config) as session:
-    result = session.scan_model({text_escaped})
-    findings = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
-        codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in result.findings]
-    print(json.dumps(findings))
+    out = []
+    for text in texts:
+        result = session.scan_model(text)
+        out.append([dict(entity_type=f.entity_type, matched_text=f.matched_text,
+            codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end) for f in result.findings])
+    print(json.dumps(out))
 "#
         );
 
         let output = Command::new(python_bin)
             .args(["-c", &code])
             .current_dir(root)
-            .output()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin.write_all(payload.as_bytes())?;
+                }
+                child.wait_with_output()
+            })
             .ok()?;
 
         if !output.status.success() {
