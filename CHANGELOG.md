@@ -13,8 +13,17 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
-- Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
+- Protected follow-up text in Rust and WASM. Committed workspace pseudonyms stay
+  unchanged; unknown or uncommitted markers and overlapping findings block the
+  operation. The synthetic browser workflow requires local preview and approval.
+- Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved
+  snapshot; a rejected input blocks the whole batch. The synthetic browser harness
+  supports explicit input removal followed by a fresh preview and approval.
+- Workspace values of one type that differ only in letter case or spacing share
+  one marker, so `JOHN SMITH` and `John  Smith` are one person. Restoration
+  returns the first spelling seen. Whitespace-only findings are rejected.
+  **Migration note:** development snapshots with case-variant duplicate entries
+  will fail to decode; discard them and start fresh.
 - Persistent workspace pseudonyms in Rust and WASM, with exact local restoration.
   Markers are short typed codes such as `[[PERSON_7KQ4ZM]]`, unique within the
   workspace. A synthetic browser harness verifies approval, encrypted mapping
@@ -31,6 +40,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - `ROADMAP.md` documenting current and planned work, engine maintenance policy, and process for proposing new engines (#110)
 - Cursor Cloud Agent environment with Dockerfile, install script, and verification skill for `cargo dfv` workflows (#111)
 - Documentation for GLiNER2 model integration in `docs/gliner2-model.md` (#112)
+
+- Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
+- Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
 

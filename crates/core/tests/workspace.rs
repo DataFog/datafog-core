@@ -1,6 +1,6 @@
 use datafog_core::{
     TextRange,
-    workspace::{ErrorCode, Workspace, WorkspaceFinding, byte_range_from_utf16},
+    workspace::{ErrorCode, Workspace, WorkspaceFinding, WorkspaceInput, byte_range_from_utf16},
 };
 
 /// `[[LABEL_CODE]]` with a six-character canonical Crockford base32 code.
@@ -33,6 +33,381 @@ fn commit(workspace: &mut Workspace, label: &str, value: &str, id: [u8; 16]) -> 
         .activate_saved(&mut pending, parent, candidate)
         .unwrap();
     marker
+}
+
+fn saved_person(namespace: [u8; 16]) -> (Workspace, String) {
+    let mut workspace = Workspace::create(namespace, [2; 16]).unwrap();
+    let marker = commit(&mut workspace, "PERSON", "Jane", [3; 16]);
+    (workspace, marker)
+}
+
+#[test]
+fn committed_markers_pass_through_followups_after_reopening() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let mut reopened = Workspace::open_bundle(&saved).unwrap();
+    let source = format!("👋 e\u{301} {marker} vs John, then {marker}.");
+    let start = source.find("John").unwrap();
+    let range = TextRange {
+        start,
+        end: start + 4,
+    };
+    let finding = WorkspaceFinding::new("PERSON", "John", range);
+    let mut pending = reopened.prepare(&source, &[finding], [4; 16]).unwrap();
+    let preview = pending.preview().unwrap();
+    assert_eq!(preview.text.matches(&marker).count(), 2);
+    assert_eq!(preview.transformations.len(), 1);
+    let transformation = &preview.transformations[0];
+    assert_eq!(transformation.source_byte_range, range);
+    assert_eq!(
+        transformation.source_codepoint_range.start,
+        source[..start].chars().count()
+    );
+    assert_eq!(
+        transformation.source_utf16_range.start,
+        source[..start].encode_utf16().count()
+    );
+    let replacement =
+        &preview.text[transformation.output_byte_range.start..transformation.output_byte_range.end];
+    assert_eq!(preview.text, source.replace("John", replacement));
+    assert!(is_marker(replacement, "PERSON") && replacement != marker);
+    let output = preview.text.clone();
+    assert_eq!(reopened.export_bundle().unwrap(), saved);
+    let parent = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    reopened
+        .activate_saved(&mut pending, parent, candidate)
+        .unwrap();
+    assert_eq!(
+        reopened.restore(&output).unwrap(),
+        source.replace(&marker, "Jane")
+    );
+    let saved = reopened.export_bundle().unwrap();
+    let next = Workspace::open_bundle(&saved).unwrap();
+    let unchanged = next.prepare(&output, &[], [5; 16]).unwrap();
+    assert_eq!(unchanged.preview().unwrap().text, output);
+    assert!(unchanged.preview().unwrap().transformations.is_empty());
+    assert_eq!(
+        unchanged.expected_head().unwrap(),
+        unchanged.candidate_head().unwrap()
+    );
+    assert_eq!(unchanged.export_candidate_bundle().unwrap(), saved);
+}
+
+#[test]
+fn findings_cannot_replace_or_cross_existing_markers() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let source = format!("John{marker}Jane");
+    let end = 4 + marker.len();
+    let outside = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    for range in [
+        TextRange { start: 4, end },
+        TextRange { start: 5, end: 6 },
+        TextRange { start: 3, end: 5 },
+        TextRange {
+            start: end - 1,
+            end: end + 1,
+        },
+        TextRange {
+            start: 0,
+            end: source.len(),
+        },
+    ] {
+        let inside = WorkspaceFinding::new("PERSON", &source[range.start..range.end], range);
+        let failure = workspace
+            .prepare(&source, &[outside.clone(), inside], [4; 16])
+            .err()
+            .unwrap();
+        assert_eq!(failure.code, ErrorCode::InvalidFinding);
+        assert_eq!(failure.input_index, Some(0));
+        assert_eq!(failure.finding_index, Some(1));
+        assert_eq!(failure.to_string(), "invalid_finding");
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+    }
+    let right = WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange {
+            start: end,
+            end: source.len(),
+        },
+    );
+    let pending = workspace
+        .prepare(&source, &[outside, right], [4; 16])
+        .unwrap();
+    let preview = pending.preview().unwrap();
+    assert_eq!(preview.transformations.len(), 2);
+    assert_eq!(preview.text.matches(&marker).count(), 2);
+    assert!(preview.text.ends_with(&format!("{marker}{marker}")));
+    let first = &preview.transformations[0];
+    let first_marker = &preview.text[first.output_byte_range.start..first.output_byte_range.end];
+    assert!(is_marker(first_marker, "PERSON") && first_marker != marker);
+}
+
+#[test]
+fn unknown_markers_reject_batches_without_admitting_pending_aliases() {
+    let (workspace, marker) = saved_person([1; 16]);
+    let (_, foreign) = saved_person([9; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    let mut pending = workspace
+        .prepare("John", &[finding.clone()], [4; 16])
+        .unwrap();
+    let uncommitted = pending.preview().unwrap().text.clone();
+    let code = &marker[9..15];
+    let other_code = if code == "000000" { "000001" } else { "000000" };
+    for bad in [
+        foreign,
+        uncommitted.clone(),
+        marker.replace("PERSON", "OTHER"),
+        marker.replace(code, other_code),
+        "[[PERSON_ZZZZZZ]]".to_owned(),
+    ] {
+        let source = format!("{marker} then {bad}");
+        let inputs = [
+            WorkspaceInput {
+                text: "John",
+                findings: std::slice::from_ref(&finding),
+            },
+            WorkspaceInput {
+                text: &source,
+                findings: &[],
+            },
+        ];
+        // The first member allocates the same candidate alias as `pending`;
+        // validation must still use only the workspace's committed registry.
+        let failure = workspace.prepare_batch(&inputs, [4; 16]).err().unwrap();
+        assert_eq!(failure.code, ErrorCode::InvalidMarker);
+        assert_eq!(failure.input_index, Some(1));
+        assert_eq!(failure.finding_index, None);
+        assert_eq!(failure.to_string(), "invalid_marker");
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+    }
+    pending.discard();
+    assert_eq!(
+        workspace
+            .prepare(&uncommitted, &[], [5; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::InvalidMarker
+    );
+}
+
+#[test]
+fn marker_issued_in_same_batch_is_rejected_with_expected_error() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let saved = workspace.export_bundle().unwrap();
+    let finding = WorkspaceFinding::new("PERSON", "Alice", TextRange { start: 0, end: 5 });
+    let op_id = [3; 16];
+    let input1 = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let mut plan = workspace.prepare_batch(&[input1], op_id).unwrap();
+    let marker_from_first = plan.preview().unwrap().text.clone();
+    let text_with_new_marker = format!("Then {marker_from_first}");
+    plan.discard();
+    let input1_again = WorkspaceInput {
+        text: "Alice",
+        findings: std::slice::from_ref(&finding),
+    };
+    let input2 = WorkspaceInput {
+        text: &text_with_new_marker,
+        findings: &[],
+    };
+    let error = workspace
+        .prepare_batch(&[input1_again, input2], op_id)
+        .err()
+        .unwrap();
+    assert_eq!(error.code, ErrorCode::InvalidMarker);
+    assert_eq!(error.input_index, Some(1));
+    assert_eq!(error.finding_index, None);
+    assert_eq!(workspace.export_bundle().unwrap(), saved);
+}
+
+#[test]
+fn a_batch_shares_aliases_and_commits_one_snapshot_after_approval() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let original = workspace.export_bundle().unwrap();
+    let findings = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane | -10 USD",
+            findings: &findings,
+        },
+        WorkspaceInput {
+            text: "Jane | -20 USD",
+            findings: &findings,
+        },
+    ];
+    let mut pending = workspace.prepare_batch(&inputs, [3; 16]).unwrap();
+    let previews = pending.previews().unwrap();
+    assert_eq!(previews.len(), 2);
+    let first = previews[0].text.clone();
+    let second = previews[1].text.clone();
+    assert_eq!(
+        first.strip_suffix(" | -10 USD"),
+        second.strip_suffix(" | -20 USD")
+    );
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    assert_eq!(pending.candidate_head().unwrap().revision, 1);
+    assert!(pending.preview().is_err());
+    let saved = pending.export_candidate_bundle().unwrap().to_vec();
+    let parent = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    workspace
+        .activate_saved(&mut pending, parent, candidate)
+        .unwrap();
+    assert!(pending.previews().is_err());
+    let reopened = Workspace::open_bundle(&saved).unwrap();
+    assert_eq!(reopened.restore(&first).unwrap(), inputs[0].text);
+    assert_eq!(reopened.restore(&second).unwrap(), inputs[1].text);
+    let again = reopened.prepare_batch(&inputs, [4; 16]).unwrap();
+    assert_eq!(again.previews().unwrap()[0].text, first);
+    assert_eq!(again.previews().unwrap()[1].text, second);
+    assert_eq!(again.candidate_head().unwrap(), candidate);
+}
+
+#[test]
+fn rejected_batch_members_preserve_committed_state_and_report_local_indexes() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let original = workspace.export_bundle().unwrap();
+    let valid = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let invalid = [WorkspaceFinding::new(
+        "PERSON",
+        "wrong",
+        TextRange { start: 5, end: 9 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &valid,
+        },
+        WorkspaceInput {
+            text: "👋 Jane",
+            findings: &invalid,
+        },
+    ];
+    let failure = workspace.prepare_batch(&inputs, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::InvalidFinding);
+    assert_eq!(failure.input_index, Some(1));
+    assert_eq!(failure.finding_index, Some(0));
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    let collision = [
+        inputs[0],
+        WorkspaceInput {
+            text: "a literal [[PERSON_ZZZZZZ]] collision",
+            findings: &[],
+        },
+    ];
+    let failure = workspace.prepare_batch(&collision, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::InvalidMarker);
+    assert_eq!(failure.input_index, Some(1));
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    let reduced = workspace.prepare_batch(&inputs[..1], [4; 16]).unwrap();
+    assert!(is_marker(&reduced.preview().unwrap().text, "PERSON"));
+}
+
+#[test]
+fn batch_limits_are_aggregate_and_ranges_remain_local_to_each_input() {
+    use datafog_core::workspace::{MAX_FINDINGS, MAX_INPUTS, MAX_SOURCE_BYTES};
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let first = [WorkspaceFinding::new(
+        "PERSON",
+        "Jane",
+        TextRange { start: 0, end: 4 },
+    )];
+    let second = [WorkspaceFinding::new(
+        "PERSON",
+        "John",
+        TextRange { start: 5, end: 9 },
+    )];
+    let inputs = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &first,
+        },
+        WorkspaceInput {
+            text: "👋 John",
+            findings: &second,
+        },
+    ];
+    let mut pending = workspace.prepare_batch(&inputs, [3; 16]).unwrap();
+    let previews = pending.previews().unwrap();
+    assert!(is_marker(&previews[0].text, "PERSON"));
+    let john = previews[1].text.strip_prefix("👋 ").unwrap();
+    assert!(is_marker(john, "PERSON") && john != previews[0].text);
+    assert_eq!(
+        previews[1].transformations[0].source_utf16_range,
+        TextRange { start: 3, end: 7 }
+    );
+    assert_eq!(
+        previews[1].transformations[0].source_byte_range,
+        TextRange { start: 5, end: 9 }
+    );
+    pending.discard();
+    assert!(pending.previews().is_err());
+    assert_eq!(
+        workspace.prepare_batch(&[], [3; 16]).err().unwrap().code,
+        ErrorCode::InvalidBatch
+    );
+    let too_many: Vec<_> = (0..=MAX_INPUTS)
+        .map(|_| WorkspaceInput {
+            text: "",
+            findings: &[],
+        })
+        .collect();
+    assert_eq!(
+        workspace
+            .prepare_batch(&too_many, [3; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
+    let text = "x".repeat(MAX_SOURCE_BYTES / 2 + 1);
+    let too_large = [
+        WorkspaceInput {
+            text: &text,
+            findings: &[],
+        },
+        WorkspaceInput {
+            text: &text,
+            findings: &[],
+        },
+    ];
+    let failure = workspace.prepare_batch(&too_large, [3; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::ResourceLimit);
+    assert_eq!(failure.input_index, Some(1));
+    let repeated = vec![first[0].clone(); MAX_FINDINGS / 2 + 1];
+    let too_many_findings = [
+        WorkspaceInput {
+            text: "Jane",
+            findings: &repeated,
+        },
+        WorkspaceInput {
+            text: "Jane",
+            findings: &repeated,
+        },
+    ];
+    assert_eq!(
+        workspace
+            .prepare_batch(&too_many_findings, [3; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
 }
 
 #[test]
@@ -173,7 +548,8 @@ fn committed_markers_restore_atomically_and_pending_changes_are_single_use() {
             ErrorCode::InvalidMarker
         );
     }
-    assert!(workspace.prepare(&marker, &[], [4; 16]).is_err());
+    let passthrough = workspace.prepare(&marker, &[], [4; 16]).unwrap();
+    assert_eq!(passthrough.preview().unwrap().text, marker);
     let mut no_change = workspace.prepare("Jane", &[finding], [4; 16]).unwrap();
     assert_eq!(
         no_change.expected_head().unwrap(),
@@ -334,7 +710,7 @@ fn markers_are_short_unique_codes_and_restore_tolerates_case_and_crockford_subst
 }
 
 #[test]
-fn damaged_markers_fail_restore_but_are_plain_text_in_new_source() {
+fn damaged_markers_fail_restore_but_remain_plain_text_in_new_source() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let marker = commit(&mut workspace, "PERSON", "Jane", [3; 16]);
     let shortened = format!("{}]]", &marker[..marker.len() - 3]);
@@ -347,7 +723,7 @@ fn damaged_markers_fail_restore_but_are_plain_text_in_new_source() {
             ErrorCode::InvalidMarker,
             "{damaged}"
         );
-        let text = format!("Note: {damaged}");
+        let text = format!("{marker} and {damaged}");
         let mut pending = workspace.prepare(&text, &[], [4; 16]).unwrap();
         assert_eq!(pending.preview().unwrap().text, text);
         pending.discard();
@@ -402,6 +778,98 @@ fn snapshots_require_canonical_unique_codes() {
     assert_eq!(
         Workspace::open_bundle(&excluded).err().unwrap().code,
         ErrorCode::InvalidSnapshot
+    );
+}
+
+#[test]
+fn spellings_differing_only_in_case_or_spacing_share_one_marker_and_restore_the_first() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let first = commit(&mut workspace, "PERSON", "JOHN SMITH", [3; 16]);
+    let second = commit(&mut workspace, "PERSON", "John  Smith", [4; 16]);
+    let third = commit(&mut workspace, "PERSON", " john\tsmith ", [5; 16]);
+    let account = commit(&mut workspace, "ACCOUNT_NUMBER", "JOHN SMITH", [6; 16]);
+    assert_eq!(first, second);
+    assert_eq!(first, third);
+    assert!(is_marker(&account, "ACCOUNT_NUMBER"));
+    assert_eq!(workspace.restore(&first).unwrap(), "JOHN SMITH");
+    let reopened = Workspace::open_bundle(&workspace.export_bundle().unwrap()).unwrap();
+    let later = [WorkspaceFinding::new(
+        "PERSON",
+        "John Smith",
+        TextRange { start: 0, end: 10 },
+    )];
+    let next = reopened.prepare("John Smith", &later, [7; 16]).unwrap();
+    assert_eq!(next.preview().unwrap().text, first);
+    assert_eq!(
+        next.expected_head().unwrap(),
+        next.candidate_head().unwrap()
+    );
+    let blank = [WorkspaceFinding::new(
+        "PERSON",
+        " \t",
+        TextRange { start: 1, end: 3 },
+    )];
+    assert_eq!(
+        reopened
+            .prepare("x \tx", &blank, [8; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::InvalidFinding
+    );
+}
+
+#[test]
+fn snapshots_reject_entries_that_share_a_normalized_identity() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    commit(&mut workspace, "PERSON", "Jane", [3; 16]);
+    commit(&mut workspace, "PERSON", "Kane", [4; 16]);
+    let mut bundle = workspace.export_bundle().unwrap();
+    let at = bundle.windows(4).position(|w| w == b"Kane").unwrap();
+    bundle[at] = b'j';
+    assert_eq!(
+        Workspace::open_bundle(&bundle).err().unwrap().code,
+        ErrorCode::InvalidSnapshot
+    );
+}
+
+#[test]
+fn identity_key_handles_unicode_case_and_whitespace_edge_cases() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+
+    let eszett = commit(&mut workspace, "PERSON", "Straße", [3; 16]);
+    let upper_eszett = commit(&mut workspace, "PERSON", "STRAßE", [4; 16]);
+    assert_eq!(eszett, upper_eszett, "Straße and STRAßE share identity");
+    assert_eq!(workspace.restore(&eszett).unwrap(), "Straße");
+
+    let strasse = commit(&mut workspace, "PERSON", "STRASSE", [5; 16]);
+    assert_ne!(
+        eszett, strasse,
+        "ß and SS are distinct: to_lowercase(ß) = ß, not ss"
+    );
+
+    let dotted_i = commit(&mut workspace, "PERSON", "İstanbul", [6; 16]);
+    let lower_dotted = commit(&mut workspace, "PERSON", "i̇stanbul", [7; 16]);
+    assert_eq!(
+        dotted_i, lower_dotted,
+        "İ lowercases to i + combining dot above"
+    );
+
+    let nbsp = commit(&mut workspace, "PERSON", "John\u{00A0}Doe", [8; 16]);
+    let space = commit(&mut workspace, "PERSON", "John Doe", [9; 16]);
+    assert_eq!(nbsp, space, "NBSP and space share identity");
+
+    let tabs = commit(&mut workspace, "PERSON", "Jane\t\tSmith", [10; 16]);
+    let spaces = commit(&mut workspace, "PERSON", "Jane Smith", [11; 16]);
+    assert_eq!(tabs, spaces, "tabs collapse to single space");
+
+    let leading = commit(&mut workspace, "PERSON", "  Alice  ", [12; 16]);
+    let trimmed = commit(&mut workspace, "PERSON", "Alice", [13; 16]);
+    assert_eq!(leading, trimmed, "surrounding spaces share identity");
+    assert_eq!(
+        workspace.restore(&leading).unwrap(),
+        "  Alice  ",
+        "first spelling (with spaces) is restored"
     );
 }
 

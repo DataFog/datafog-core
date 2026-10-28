@@ -16,6 +16,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FINDINGS: usize = 10_000;
+pub const MAX_INPUTS: usize = 32;
 pub const MAX_ENTRIES: usize = 20_000;
 pub const MAX_BUNDLE_BYTES: usize = 16 * 1024 * 1024;
 /// Entity type labels are uppercase ASCII and appear verbatim inside markers.
@@ -37,6 +38,7 @@ pub enum ErrorCode {
     InactivePlan,
     WorkspaceConflict,
     InvalidFinding,
+    InvalidBatch,
     InvalidMarker,
     InvalidSnapshot,
     InvalidId,
@@ -50,6 +52,7 @@ impl ErrorCode {
             Self::InactivePlan => "inactive_plan",
             Self::WorkspaceConflict => "workspace_conflict",
             Self::InvalidFinding => "invalid_finding",
+            Self::InvalidBatch => "invalid_batch",
             Self::InvalidMarker => "invalid_marker",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidId => "invalid_operation_id",
@@ -58,11 +61,12 @@ impl ErrorCode {
     }
 }
 
-/// Content-free machine-readable failure. Indexes refer to supplied findings.
+/// Content-free failure. Input indexes identify batch members; finding indexes are input-local.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkspaceError {
     pub code: ErrorCode,
     pub finding_index: Option<usize>,
+    pub input_index: Option<usize>,
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -75,6 +79,7 @@ fn error(code: ErrorCode) -> WorkspaceError {
     WorkspaceError {
         code,
         finding_index: None,
+        input_index: None,
     }
 }
 type Result<T> = std::result::Result<T, WorkspaceError>;
@@ -107,6 +112,13 @@ impl WorkspaceFinding {
     }
 }
 
+/// One batch member. Ranges are local to this input; order is preserved in previews.
+#[derive(Clone, Copy)]
+pub struct WorkspaceInput<'a> {
+    pub text: &'a str,
+    pub findings: &'a [WorkspaceFinding],
+}
+
 /// A transformed span, with explicit zero-based, end-exclusive coordinate systems.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transformation {
@@ -128,23 +140,53 @@ impl Drop for Preview {
     }
 }
 
+/// Values of one type that differ only in letter case or spacing share an identity,
+/// so `JOHN SMITH` in one paste and `John  Smith` in the next get one marker.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Identity {
     entity_type: String,
-    original: String,
+    key: String,
 }
 impl Drop for Identity {
     fn drop(&mut self) {
-        self.original.zeroize();
+        self.key.zeroize();
     }
 }
+/// `display` is the first spelling seen and is what restoration returns.
 /// `code` is canonical uppercase Crockford base32 and unique within the workspace.
 /// `issuance` records the operation that created the entry; it never leaves the vault.
 #[derive(Clone)]
 struct Entry {
+    display: String,
     code: String,
     issuance: PublicId,
     counter: u64,
+}
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.display.zeroize();
+    }
+}
+
+/// Derive the normalized identity key for workspace lookup.
+///
+/// Uses [`str::split_whitespace`], which recognizes Unicode whitespace including
+/// NBSP (U+00A0) and tabs, so leading/trailing spaces, NBSP and multiple interior
+/// spaces all collapse. Uses [`char::to_lowercase`] for Unicode-aware lowercasing:
+/// `ß` stays `ß` (not `ss`), and Turkish `İ` maps to `i` + combining dot.
+///
+/// This means values that differ only in case, spacing type or whitespace amount
+/// share one entry. The stored `display` is the first spelling seen (ADR 004
+/// lines 73–74: "the first spelling seen is stored and restored"), untrimmed.
+fn identity_key(value: &str) -> String {
+    let mut key = String::with_capacity(value.len());
+    for word in value.split_whitespace() {
+        if !key.is_empty() {
+            key.push(' ');
+        }
+        key.extend(word.chars().flat_map(char::to_lowercase));
+    }
+    key
 }
 #[derive(Clone)]
 struct State {
@@ -159,7 +201,7 @@ struct Pending {
     parent: Head,
     candidate: State,
     bundle: Zeroizing<Vec<u8>>,
-    preview: Preview,
+    previews: Vec<Preview>,
 }
 
 /// An immutable pending change. Preview/export do not consume it; activation or discard do.
@@ -177,8 +219,15 @@ impl PreparedChange {
         }
         Ok(pending)
     }
+    /// Single-input convenience; use `previews` for a multi-input plan.
     pub fn preview(&self) -> Result<&Preview> {
-        Ok(&self.pending()?.preview)
+        match self.previews()? {
+            [preview] => Ok(preview),
+            _ => Err(error(ErrorCode::InvalidBatch)),
+        }
+    }
+    pub fn previews(&self) -> Result<&[Preview]> {
+        Ok(&self.pending()?.previews)
     }
     pub fn expected_head(&self) -> Result<Head> {
         Ok(self.pending()?.parent)
@@ -246,28 +295,111 @@ impl Workspace {
         self.state = None;
     }
 
+    /// Preserve exact committed markers and transform supplied findings outside them.
     pub fn prepare(
         &self,
         text: &str,
         findings: &[WorkspaceFinding],
         operation_id: PublicId,
     ) -> Result<PreparedChange> {
+        self.prepare_batch(&[WorkspaceInput { text, findings }], operation_id)
+    }
+
+    /// Prepare all inputs as one immutable change. A failure returns no partial plan.
+    /// Size and finding limits apply to the aggregate batch; no inputs are omitted.
+    /// Marker references must already be committed before this batch begins.
+    pub fn prepare_batch(
+        &self,
+        inputs: &[WorkspaceInput<'_>],
+        operation_id: PublicId,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
-        source_limit(text)?;
-        if marker_spans(text)?
-            .iter()
-            .any(|span| span.canonical.is_some())
-        {
-            return Err(error(ErrorCode::InvalidMarker));
+        if inputs.is_empty() {
+            return Err(error(ErrorCode::InvalidBatch));
         }
-        if findings.len() > MAX_FINDINGS {
+        if inputs.len() > MAX_INPUTS {
             return Err(error(ErrorCode::ResourceLimit));
+        }
+        let mut source_bytes = 0usize;
+        let mut finding_count = 0usize;
+        for (input_index, input) in inputs.iter().enumerate() {
+            source_bytes = source_bytes.saturating_add(input.text.len());
+            finding_count = finding_count.saturating_add(input.findings.len());
+            if source_bytes > MAX_SOURCE_BYTES || finding_count > MAX_FINDINGS {
+                return Err(WorkspaceError {
+                    code: ErrorCode::ResourceLimit,
+                    input_index: Some(input_index),
+                    finding_index: None,
+                });
+            }
         }
         if state.head.commit_id == operation_id
             || state.entries.values().any(|e| e.issuance == operation_id)
         {
             return Err(error(ErrorCode::InvalidId));
         }
+        let committed = marker_lookup(state);
+        let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
+        let mut candidate = state.clone();
+        let mut previews = Vec::with_capacity(inputs.len());
+        let mut output_bytes = 0usize;
+        for (input_index, input) in inputs.iter().enumerate() {
+            let preview = self
+                .prepare_input(
+                    input.text,
+                    input.findings,
+                    operation_id,
+                    &committed,
+                    &mut codes,
+                    &mut candidate,
+                )
+                .map_err(|mut failure| {
+                    failure.input_index = Some(input_index);
+                    failure
+                })?;
+            output_bytes = output_bytes.saturating_add(preview.text.len());
+            if output_bytes > MAX_BUNDLE_BYTES {
+                return Err(WorkspaceError {
+                    code: ErrorCode::ResourceLimit,
+                    input_index: Some(input_index),
+                    finding_index: None,
+                });
+            }
+            previews.push(preview);
+        }
+        if candidate.entries.len() != state.entries.len() {
+            candidate.head = Head {
+                revision: state
+                    .head
+                    .revision
+                    .checked_add(1)
+                    .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
+                commit_id: operation_id,
+            };
+        }
+        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        Ok(PreparedChange {
+            pending: Some(Pending {
+                lifetime: Arc::clone(&self.lifetime),
+                parent: state.head,
+                candidate,
+                bundle,
+                previews,
+            }),
+        })
+    }
+
+    fn prepare_input(
+        &self,
+        text: &str,
+        findings: &[WorkspaceFinding],
+        operation_id: PublicId,
+        committed: &BTreeMap<String, &str>,
+        codes: &mut BTreeSet<String>,
+        candidate: &mut State,
+    ) -> Result<Preview> {
+        source_limit(text)?;
+        let markers = committed_marker_ranges(text, committed)?;
         let mut index = TextIndex::new(text);
         let mut adapted = Vec::with_capacity(findings.len());
         let mut total_bytes = 0usize;
@@ -275,10 +407,15 @@ impl Workspace {
             let invalid = || WorkspaceError {
                 code: ErrorCode::InvalidFinding,
                 finding_index: Some(finding_index),
+                input_index: None,
             };
             if !valid_type(&finding.entity_type)
                 || finding.byte_range.start >= finding.byte_range.end
+                || finding.matched_text.trim().is_empty()
                 || crate::validate_utf8_range(text, finding.byte_range).is_err()
+                || markers
+                    .get(markers.partition_point(|marker| marker.end <= finding.byte_range.start))
+                    .is_some_and(|marker| marker.start < finding.byte_range.end)
                 || finding
                     .detector_name
                     .as_ref()
@@ -314,17 +451,15 @@ impl Workspace {
             crate::select_findings(text, &adapted, &config).map_err(|e| WorkspaceError {
                 code: ErrorCode::InvalidFinding,
                 finding_index: e.finding_index(),
+                input_index: None,
             })?;
-        let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
-        let mut candidate = state.clone();
         let mut output = String::new();
         let mut transformations = Vec::with_capacity(selected.len());
         let mut cursor = 0;
-        let mut changed = false;
         for finding in selected {
             let identity = Identity {
                 entity_type: finding.entity_type.clone(),
-                original: finding.matched_text.clone(),
+                key: identity_key(&finding.matched_text),
             };
             if !candidate.entries.contains_key(&identity) {
                 if candidate.entries.len() >= MAX_ENTRIES {
@@ -342,9 +477,10 @@ impl Workspace {
                     operation_id,
                     &finding.entity_type,
                     counter,
-                    &mut codes,
+                    codes,
                 )?;
                 let entry = Entry {
+                    display: finding.matched_text.clone(),
                     code,
                     issuance: operation_id,
                     counter,
@@ -353,7 +489,6 @@ impl Workspace {
                     .counters
                     .insert(finding.entity_type.clone(), counter);
                 candidate.entries.insert(identity.clone(), entry);
-                changed = true;
             }
             let entry = candidate
                 .entries
@@ -389,28 +524,9 @@ impl Workspace {
                 .utf16_range(range)
                 .map_err(|_| error(ErrorCode::InvalidFinding))?;
         }
-        if changed {
-            candidate.head = Head {
-                revision: state
-                    .head
-                    .revision
-                    .checked_add(1)
-                    .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
-                commit_id: operation_id,
-            };
-        }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
-        Ok(PreparedChange {
-            pending: Some(Pending {
-                lifetime: Arc::clone(&self.lifetime),
-                parent: state.head,
-                candidate,
-                bundle,
-                preview: Preview {
-                    text: output,
-                    transformations,
-                },
-            }),
+        Ok(Preview {
+            text: output,
+            transformations,
         })
     }
 
@@ -475,7 +591,7 @@ const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
 const MAX_CODE_ATTEMPTS: u32 = 32;
 
-/// Canonical marker text → original value, for every committed entry.
+/// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
     state
         .entries
@@ -483,7 +599,7 @@ fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
         .map(|(identity, entry)| {
             (
                 marker(&identity.entity_type, &entry.code),
-                identity.original.as_str(),
+                entry.display.as_str(),
             )
         })
         .collect()
@@ -537,6 +653,25 @@ fn marker_spans(text: &str) -> Result<Vec<MarkerSpan>> {
         cursor = interior_end + 2;
     }
     Ok(spans)
+}
+
+/// Ranges of committed markers in source text. Well-formed markers that are not
+/// committed are rejected; damaged marker-like spans are ordinary text there.
+fn committed_marker_ranges(
+    text: &str,
+    committed: &BTreeMap<String, &str>,
+) -> Result<Vec<TextRange>> {
+    let mut ranges = Vec::new();
+    for span in marker_spans(text)? {
+        let Some(canonical) = span.canonical else {
+            continue;
+        };
+        if !committed.contains_key(&canonical) {
+            return Err(error(ErrorCode::InvalidMarker));
+        }
+        ranges.push(span.range);
+    }
+    Ok(ranges)
 }
 
 fn canonical_marker(interior: &str) -> Option<String> {

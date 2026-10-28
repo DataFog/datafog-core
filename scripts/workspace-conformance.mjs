@@ -9,6 +9,38 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+  const batch = api.Workspace.create(id(21), id(22));
+  const name = { entityType: "PERSON", matchedText: "Jane", range: { unit: "utf8_bytes", start: 0, end: 4 } };
+  const inputs = [{ text: "Jane | -10 USD", findings: [name] }, { text: "Jane | -20 USD", findings: [name] }];
+  let grouped = batch.prepareBatch(inputs, id(23));
+  const previews = grouped.previews();
+  check(previews.length === 2 && previews[0].text.replace("-10", "-20") === previews[1].text, "batch shares aliases and preserves input order");
+  throws(() => grouped.preview(), "invalid_batch");
+  const batchSaved = grouped.exportCandidateBundle();
+  check(grouped.heads().candidateHead.revision === "1", "one batch revision");
+  batch.activateSaved(grouped, grouped.heads().expectedHead, grouped.heads().candidateHead);
+  throws(() => grouped.previews(), "inactive_plan");
+  const batchReopened = api.Workspace.openBundle(batchSaved);
+  check(previews.every((p, i) => batchReopened.restore(p.text) === inputs[i].text), "batch restores each input after reopen");
+  try { batch.prepareBatch([inputs[0], { text: "Jane", findings: [{ ...name, matchedText: "wrong" }] }], id(24)); throw new Error("missing rejection"); }
+  catch (error) { check(error.code === "invalid_finding" && error.inputIndex === 1 && error.findingIndex === 0, "safe batch and finding indexes"); }
+  throws(() => batch.prepareBatch([inputs[0], {text: "[[PERSON_ZZZZZZ]] literal", findings: []}], id(24)), "invalid_marker");
+  check(equal(batch.exportBundle(), batchSaved), "rejected batch preserves complete saved bundle");
+  grouped = batchReopened.prepareBatch(inputs, id(24));
+  check(grouped.previews()[1].text === previews[1].text, "batch marker reuse");
+  grouped.discard(); throws(() => grouped.previews(), "inactive_plan");
+  throws(() => batch.prepareBatch([], id(24)), "invalid_batch");
+  const exactly32 = batch.prepareBatch(Array(32).fill(inputs[0]), id(24));
+  check(exactly32.previews().length === 32, "exactly 32 inputs accepted");
+  exactly32.discard();
+  throws(() => batch.prepareBatch(Array(33).fill(inputs[0]), id(25)), "resource_limit");
+  const largeInput = {text: "x".repeat(512 * 1024 + 1), findings: []};
+  throws(() => batch.prepareBatch([largeInput, largeInput], id(24)), "resource_limit");
+  throws(() => batch.prepareBatch([inputs[0], {text: "Jane", findings: [{...name, range: {...name.range, unit: "utf16"}}]}], id(24)), "invalid_finding");
+  let getterRead = false;
+  throws(() => batch.prepareBatch([{get text() { getterRead = true; return "Jane"; }, findings: []}], id(24)), "invalid_batch");
+  check(!getterRead, "batch transport rejects accessors without invoking them");
+  batch.close(); batchReopened.close();
   const w = api.Workspace.create(id(1), id(2));
   const finding = { entityType: "CLIENT_NAME", matchedText: "Jane Smith", range: { unit: "utf8_bytes", start: 13, end: 23 } };
   const source = "2026-01-06 | Jane Smith | -40.00 USD";
@@ -31,7 +63,10 @@ export async function verifyWorkspace(api, counters) {
   for (const bad of [marker.replace("CLIENT_NAME", "PERSON"), "[[CLIENT_NAME_ABC]]", "[[CLIENT_NAME_ZZZZZZ]]"]) {
     throws(() => w.restore(`${marker} ${bad}`), "invalid_marker");
   }
-  throws(() => w.prepare(marker, [], id(4)), "invalid_marker");
+  const passthrough = w.prepare(`${marker}${marker}`, [], id(4));
+  check(passthrough.preview().text === `${marker}${marker}` && passthrough.preview().transformations.length === 0, "committed markers pass through without new transformations");
+  check(equal(passthrough.exportCandidateBundle(), saved), "marker-only follow-up preserves the saved snapshot");
+  passthrough.discard();
   throws(() => w.prepare(source, [finding], id(3)), "invalid_operation_id");
   change = w.prepare(source, [finding], id(4));
   check(change.heads().expectedHead.revision === change.heads().candidateHead.revision, "no-change head");
@@ -42,6 +77,32 @@ export async function verifyWorkspace(api, counters) {
   check(change.preview().text === preview.text, "reopen preserves exact full marker");
   throws(() => w.activateSaved(change, change.heads().expectedHead, change.heads().candidateHead), "workspace_conflict");
   change.discard(); throws(() => change.preview(), "inactive_plan");
+  const followup = api.Workspace.openBundle(saved);
+  const question = `👋 é Compare ${marker} with John Smith, then ${marker}.`;
+  const start = question.indexOf("John Smith");
+  const freshFinding = {entityType: "CLIENT_NAME", matchedText: "John Smith", range: api.workspaceByteRangeFromUtf16(question, start, start + 10)};
+  let answer = followup.prepare(question, [freshFinding], id(10));
+  const answerPreview = answer.preview(), markers = answerPreview.text.match(/\[\[[A-Z][A-Z0-9_]*_[0-9A-HJKMNP-TV-Z]{6}\]\]/g);
+  check(markers.length === 3 && markers[0] === marker && markers[2] === marker && isMarker(markers[1], "CLIENT_NAME") && markers[1] !== marker, "follow-up preserves old markers and allocates only the new exact value");
+  check(answerPreview.text === question.replace("John Smith", markers[1]), "follow-up preserves all unselected text");
+  check(answerPreview.transformations.length === 1 && answerPreview.transformations[0].sourceUtf16Range.start === start && answerPreview.transformations[0].sourceByteRange.start === freshFinding.range.start, "follow-up keeps input-local Unicode offsets");
+  throws(() => followup.prepare(answerPreview.text, [], id(11)), "invalid_marker");
+  const markerStart = question.indexOf(marker);
+  throws(() => followup.prepare(question, [{entityType: "PERSON", matchedText: marker, range: api.workspaceByteRangeFromUtf16(question, markerStart, markerStart + marker.length)}], id(11)), "invalid_finding");
+  const foreign = api.Workspace.create(id(9), id(2));
+  const foreignPlan = foreign.prepare(source, [finding], id(3)), foreignMarker = foreignPlan.preview().text.match(/\[\[[A-Z][A-Z0-9_]*_[0-9A-HJKMNP-TV-Z]{6}\]\]/)[0];
+  foreign.activateSaved(foreignPlan, foreignPlan.heads().expectedHead, foreignPlan.heads().candidateHead);
+  for (const bad of [foreignMarker, marker.replace("CLIENT_NAME", "OTHER"), "[[CLIENT_NAME_ZZZZZZ]]"]) {
+    try { followup.prepareBatch([{text: question, findings: [freshFinding]}, {text: `${marker} ${bad}`, findings: []}], id(11)); throw new Error("missing follow-up rejection"); }
+    catch (error) { check(error.code === "invalid_marker" && error.inputIndex === 1 && error.findingIndex == null && error.message === "invalid_marker", "invalid follow-up markers reject the whole batch without source content"); }
+    check(equal(followup.exportBundle(), saved), "rejected follow-up preserves committed mappings");
+  }
+  followup.activateSaved(answer, answer.heads().expectedHead, answer.heads().candidateHead);
+  const followupSaved = followup.exportBundle(), followupReopened = api.Workspace.openBundle(followupSaved);
+  check(followupReopened.restore(answerPreview.text) === question.replaceAll(marker, finding.matchedText), "follow-up markers restore exactly after reopen");
+  answer = followupReopened.prepare(answerPreview.text, [], id(12));
+  check(answer.preview().text === answerPreview.text && equal(answer.exportCandidateBundle(), followupSaved), "saved follow-up aliases remain unchanged on resubmission");
+  answer.discard(); followup.close(); followupReopened.close(); foreign.close();
   const selection = api.workspaceByteRangeFromUtf16("👋 é Jane", 6, 10);
   check(selection.start === 9 && selection.end === 13 && selection.unit === "utf8_bytes", "Core UTF-16 conversion");
   throws(() => api.workspaceByteRangeFromUtf16("👋 Jane", 1, 7), "invalid_finding");
@@ -65,6 +126,9 @@ export async function verifyWorkspace(api, counters) {
     const high = api.Workspace.openBundle(bytes);
     check(high.head().revision === fixture.revision, "lossless exposed uint64 revision");
     check(equal(bytes, high.exportBundle()) && high.restore(fixture.marker) === "Jane", "CBOR uint64 fixture round trip");
+    const unchanged = high.prepare(fixture.marker, [], id(6));
+    check(unchanged.preview().text === fixture.marker && equal(unchanged.exportCandidateBundle(), bytes), "marker-only input does not advance even a maximum uint64 counter");
+    unchanged.discard();
     const fresh = { entityType: "PERSON", matchedText: "John", range: { unit: "utf8_bytes", start: 0, end: 4 } };
     if (name === "maximum") throws(() => high.prepare("John", [fresh], id(6)), "resource_limit");
     else {
