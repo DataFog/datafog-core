@@ -64,7 +64,7 @@ impl ResourceLimits {
 #[serde(deny_unknown_fields)]
 pub struct ModelSessionConfig {
     /// Omission retains legacy selection from the presence of `gliner2` settings.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_engine")]
     pub engine: Option<ModelEngine>,
     #[serde(default)]
     pub gliner2: Option<Gliner2Config>,
@@ -79,6 +79,13 @@ pub struct ModelSessionConfig {
 pub enum ModelEngine {
     Datafog,
     Gliner2,
+}
+
+fn deserialize_engine<'de, D>(deserializer: D) -> Result<Option<ModelEngine>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    ModelEngine::deserialize(deserializer).map(Some)
 }
 
 impl ModelSessionConfig {
