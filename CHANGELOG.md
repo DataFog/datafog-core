@@ -17,9 +17,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Dev environment setup documentation in CONTRIBUTING.md covering devcontainer and local install paths, verification steps, and troubleshooting
 - `scripts/pin.sh` helper to read pinned tool versions from repository files
 - Optional browser Small model sessions return canonical findings for the scan/transform flow, with Core-owned entity routing and score evidence.
-
 - Experimental browser entity extraction using pinned GLiNER2.5 Small ONNX assets, configurable labels, and explicit Unicode ranges (#116)
-
 - Agent-friendly verification CLI (`cargo dfv`) with `doctor`, `build`, `check`, `parity`, `eval`, `bench`, and `smoke` commands for cross-SDK testing (#108, #109)
 - Per-entity precision/recall/F1 evaluation with tiered accuracy gating: first-party engines fail on F1 drops >1pt, community engines warn only (#109)
 - Provisional baselines for DataFog and GLiNER2 models; regressions against provisional baselines warn but do not block PRs (#109, #112)

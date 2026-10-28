@@ -23,12 +23,13 @@ Install toolchains from the repository pin files.
 ```bash
 # Rust (rustup reads rust-toolchain.toml automatically)
 brew install rustup
-rustup-init -y && source "$HOME/.cargo/env"
-rustup show
+rustup default stable && source "$HOME/.cargo/env"
+rustup show  # verifies pinned version from rust-toolchain.toml
 
 # Node (fnm reads .nvmrc)
 brew install fnm
-eval "$(fnm env)"
+echo 'eval "$(fnm env --use-on-cd)"' >> ~/.zshrc  # or ~/.bashrc
+eval "$(fnm env --use-on-cd)"
 fnm install
 
 # wasm-bindgen-cli (exact version from Cargo.lock)
@@ -101,7 +102,9 @@ Doctor reads versions from pin files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lo
 
 ### Before reviewing a PR
 
-| Change type | Run these | Measured time |
+Timings measured on a Linux cloud VM (4 vCPU, 16 GB RAM):
+
+| Change type | Run these | Time |
 | --- | --- | --- |
 | Any code change | `cargo dfv build && cargo dfv check` | ~75s |
 | Detection logic | Add `cargo dfv smoke` | +25s |

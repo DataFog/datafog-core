@@ -304,12 +304,8 @@ pub fn check_node(pins: &VersionPins) -> DoctorCheck {
         Ok(out) if out.status.success() => {
             let version = String::from_utf8_lossy(&out.stdout);
             let version = version.trim();
-            let major: Option<u32> = version
-                .strip_prefix('v')
-                .and_then(|v| v.split('.').next())
-                .and_then(|m| m.parse().ok());
 
-            if major.is_some_and(|m| m >= expected_major) {
+            if node_satisfies(version, expected_major) {
                 DoctorCheck::pass("node", version, true)
             } else {
                 DoctorCheck::fail(
@@ -338,6 +334,28 @@ fn extract_wasm_bindgen_version(output: &str) -> Option<&str> {
         .trim()
         .strip_prefix("wasm-bindgen ")
         .map(|s| s.split_whitespace().next().unwrap_or(s))
+}
+
+/// Parse Node version string (e.g. "v25.1.0") and check if major >= pin.
+pub fn node_satisfies(found: &str, pin: u32) -> bool {
+    found
+        .strip_prefix('v')
+        .and_then(|v| v.split('.').next())
+        .and_then(|m| m.parse::<u32>().ok())
+        .is_some_and(|m| m >= pin)
+}
+
+/// Extract Playwright version from CLI output (e.g. "Version 1.64.1" -> "1.64.1").
+pub fn extract_playwright_version(output: &str) -> &str {
+    output
+        .trim()
+        .strip_prefix("Version ")
+        .unwrap_or(output.trim())
+}
+
+/// Check if found Playwright version exactly matches pin.
+pub fn playwright_matches(found: &str, pin: &str) -> bool {
+    extract_playwright_version(found) == pin
 }
 
 pub fn check_wasm_bindgen_cli(pins: &VersionPins) -> DoctorCheck {
@@ -415,9 +433,9 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
     match output {
         Ok(out) if out.status.success() => {
             let raw = String::from_utf8_lossy(&out.stdout);
-            let found_version = raw.trim().strip_prefix("Version ").unwrap_or(raw.trim());
+            let found_version = extract_playwright_version(&raw);
 
-            if found_version == expected {
+            if playwright_matches(&raw, expected) {
                 let chromium_output = Command::new("npx")
                     .args(["playwright", "chromium", "--version"])
                     .current_dir(&wasm_dir)
@@ -858,30 +876,14 @@ mod tests {
     }
 
     #[test]
-    fn node_25_passes_against_pin_24() {
-        let tmp = make_temp_dir();
-        fs::write(tmp.join(".nvmrc"), "24\n").unwrap();
-        let major = read_node_major(&tmp).unwrap();
-        assert_eq!(major, 24);
-        let pins = VersionPins {
-            rust_channel: String::new(),
-            node_major: major,
-            wasm_bindgen: String::new(),
-            playwright: String::new(),
-        };
-        assert!(25 >= pins.node_major);
-        cleanup(&tmp);
-    }
-
-    #[test]
-    fn node_22_fails_against_pin_24() {
-        let pins = VersionPins {
-            rust_channel: String::new(),
-            node_major: 24,
-            wasm_bindgen: String::new(),
-            playwright: String::new(),
-        };
-        assert!(22 < pins.node_major);
+    fn node_satisfies_major_version_comparison() {
+        assert!(node_satisfies("v25.1.0", 24), "Node 25 passes pin 24");
+        assert!(node_satisfies("v24.0.0", 24), "Node 24 passes pin 24");
+        assert!(node_satisfies("v24.22.1", 24), "Node 24.22.1 passes pin 24");
+        assert!(!node_satisfies("v22.23.4", 24), "Node 22 fails pin 24");
+        assert!(!node_satisfies("v23.0.0", 24), "Node 23 fails pin 24");
+        assert!(!node_satisfies("invalid", 24), "Invalid version fails");
+        assert!(!node_satisfies("", 24), "Empty version fails");
     }
 
     #[test]
@@ -964,9 +966,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
     }
 
     #[test]
-    fn playwright_mismatch_fails() {
-        let expected = "1.62.1";
-        let found = "1.64.1";
-        assert_ne!(found, expected);
+    fn playwright_version_matching() {
+        assert!(
+            playwright_matches("Version 1.62.1", "1.62.1"),
+            "Exact match passes"
+        );
+        assert!(
+            playwright_matches("1.62.1", "1.62.1"),
+            "Without prefix passes"
+        );
+        assert!(
+            !playwright_matches("Version 1.64.1", "1.62.1"),
+            "Mismatch fails"
+        );
+        assert!(
+            !playwright_matches("Version 1.62.0", "1.62.1"),
+            "Patch mismatch fails"
+        );
+    }
+
+    #[test]
+    fn playwright_version_extraction() {
+        assert_eq!(extract_playwright_version("Version 1.62.1"), "1.62.1");
+        assert_eq!(extract_playwright_version("Version 1.64.1\n"), "1.64.1");
+        assert_eq!(extract_playwright_version("1.62.1"), "1.62.1");
     }
 }

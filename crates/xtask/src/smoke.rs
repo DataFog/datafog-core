@@ -1,6 +1,7 @@
 use crate::doctor::{CheckStatus, run_doctor_internal};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -632,13 +633,14 @@ pub fn run_smoke(args: &[String], json_output: bool) -> ExitCode {
                 .collect();
 
             if json_output {
-                let result = SmokeResult {
-                    pass: false,
-                    tests: HashMap::new(),
-                    duration_seconds: 0.0,
-                    run_directory: PathBuf::new(),
-                    dry_run: None,
-                };
+                let result = json!({
+                    "pass": false,
+                    "doctor_pass": false,
+                    "doctor_failures": failures,
+                    "tests": {},
+                    "duration_seconds": 0.0,
+                    "run_directory": ""
+                });
                 println!("{}", serde_json::to_string_pretty(&result).unwrap());
             } else {
                 eprintln!("Environment check failed:");
