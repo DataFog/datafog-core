@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 #[test]
 fn versioned_manifest_selects_identity_without_a_compiled_model_catalog() {
@@ -221,7 +222,7 @@ fn results_keep_scores_and_reindex_duplicate_evidence() {
     )
     .unwrap();
     entries.push(entries[0].clone());
-    let result = session.compose(entries).unwrap();
+    let result = session.descriptor.compose(entries).unwrap();
     assert_eq!(result.findings.len(), 1);
     assert_eq!(result.evidence[0].sources.len(), 2);
     assert_eq!(result.evidence[0].finding_index, 0);
