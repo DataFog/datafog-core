@@ -3,7 +3,10 @@
 DataFog Core supports DataFog and GLiNER2 on Linux x86_64 GNU, Linux ARM64 GNU,
 macOS ARM64, macOS Intel and Windows x86_64 MSVC. Existing rule-based APIs are
 unchanged. No model downloads or model-runtime imports happen on ordinary import.
-Rust callers enable the optional `models` feature. WASM remains rule-based.
+Rust callers enable the optional `models` feature. Browsers can explicitly open
+[GLiNER2.5 Small ONNX sessions](browser-model.md); the synchronous WASM scan API
+remains rule-based. The native setup and lifecycle below apply to Python, Node
+and Rust sessions.
 
 ## DataFog setup
 
@@ -132,7 +135,8 @@ options object with a `TypeError`.
 
 ## Tests and publication
 
-Routine CI does not download models. Manually run the `Model integration`
+The scoped browser-model CI downloads the pinned Small assets for browser tests.
+Native model qualification remains manual. Run the `Model integration`
 workflow for DataFog, PII GLiNER2 and general-purpose GLiNER2 on all five native
 platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.

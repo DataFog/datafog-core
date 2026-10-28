@@ -15,12 +15,17 @@
   "files": [
     "index.js",
     "index.d.ts",
-    "dist"
+    "dist",
+    "models"
   ],
   "exports": {
     ".": {
       "types": "./index.d.ts",
       "import": "./index.js"
+    },
+    "./models": {
+      "types": "./models/index.d.ts",
+      "import": "./models/index.js"
     }
   },
   "types": "./index.d.ts",
@@ -38,5 +43,9 @@
   "devDependencies": {
     "playwright": "1.62.1",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
+    "onnxruntime-web": "1.31.1"
   }
 }

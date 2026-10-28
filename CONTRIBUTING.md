@@ -2,6 +2,158 @@
 
 Follow [AGENTS.md](AGENTS.md) for repository rules and PR writing guidance.
 
+## Dev environment setup
+
+Two paths to a working environment. Pick one.
+
+### Option A: Devcontainer (recommended)
+
+Zero local setup. Open the repo in:
+- **VS Code**: Install the Dev Containers extension, then "Reopen in Container"
+- **Cursor**: Same flow as VS Code
+- **GitHub Codespaces**: Click "Code → Codespaces → New codespace"
+
+The container builds from `.cursor/Dockerfile`, which reads the pin files automatically.
+
+### Option B: Local install
+
+Install toolchains from the repository pin files.
+
+**macOS (fnm + Homebrew):**
+```bash
+# Rust (rustup reads rust-toolchain.toml automatically)
+brew install rustup
+rustup default stable && source "$HOME/.cargo/env"
+rustup show  # verifies pinned version from rust-toolchain.toml
+
+# Node (fnm reads .nvmrc)
+brew install fnm
+echo 'eval "$(fnm env --use-on-cd)"' >> ~/.zshrc  # or ~/.bashrc
+eval "$(fnm env --use-on-cd)"
+fnm install
+
+# wasm-bindgen-cli (exact version from Cargo.lock)
+cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
+
+# wasm target (for WASM builds only)
+rustup target add wasm32-unknown-unknown
+
+# maturin (for Python builds)
+pipx install maturin  # or: python3 -m venv .venv && .venv/bin/pip install maturin
+
+# Playwright Chromium (for WASM tests)
+npx playwright@$(./scripts/pin.sh playwright) install chromium
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+rustup show
+
+# Node (fnm reads .nvmrc)
+curl -fsSL https://fnm.vercel.app/install | bash
+source ~/.bashrc
+fnm install
+
+# wasm-bindgen-cli
+cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
+
+# wasm target
+rustup target add wasm32-unknown-unknown
+
+# maturin
+pipx install maturin
+
+# Playwright Chromium
+npx playwright@$(./scripts/pin.sh playwright) install --with-deps chromium
+```
+
+### Verify your setup
+
+Build bindings first (required for freshness checks), then run doctor:
+
+```bash
+cargo dfv build
+cargo dfv doctor
+```
+
+**Passing output:**
+```
+Environment check:
+
+  ✓ rust_toolchain: rustc 1.88.0 (...)
+  ✓ python: Python 3.12.x
+  ✓ maturin: maturin 1.x.x
+  ✓ node: v24.x.x
+  ✓ wasm_bindgen_cli: wasm-bindgen 0.2.127
+  ✓ wasm_target: wasm32-unknown-unknown
+  ✓ playwright_chromium: Playwright 1.62.1 (Chromium ...)
+  ✓ python_binding_fresh: up to date
+  ✓ node_binding_fresh: up to date
+  ✓ wasm_binding_fresh: up to date
+  ...
+
+All required checks passed.
+```
+
+Doctor reads versions from pin files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`). A missing pin file is a hard error. Doctor never installs anything—it only reports what to fix.
+
+### Before reviewing a PR
+
+Timings measured on a Linux cloud VM (4 vCPU, 16 GB RAM):
+
+| Change type | Run these | Time |
+| --- | --- | --- |
+| Any code change | `cargo dfv build && cargo dfv check` | ~75s |
+| Detection logic | Add `cargo dfv smoke` | +25s |
+| Docs-only | CI handles it; no local run needed | — |
+
+For a full verification before merge:
+```bash
+cargo dfv build && cargo dfv doctor && cargo dfv check && cargo dfv smoke
+```
+
+### Troubleshooting
+
+**Wrong Rust version:**
+```
+✗ rust_toolchain: rustc 1.82.0
+    expected: rustc 1.88.0
+    fix: rustup show
+```
+Run `rustup show` in the repo root. The `rust-toolchain.toml` tells rustup which version to use.
+
+**Wrong Node version:**
+```
+✗ node: v22.3.0
+    expected: Node.js 24+
+    fix: Install Node >= 24 (nvm install / fnm install / mise install)
+```
+Run `fnm install` (reads `.nvmrc`) or your preferred version manager. Restart your shell if needed.
+
+**Wrong wasm-bindgen-cli:**
+```
+✗ wasm_bindgen_cli: wasm-bindgen 0.2.100
+    expected: wasm-bindgen 0.2.127
+    fix: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+```
+The version must exactly match `Cargo.lock`. Run the fix command shown.
+
+**Missing Playwright Chromium:**
+```
+✗ playwright_chromium
+    expected: Playwright 1.62.1 with Chromium
+    fix: npx playwright@1.62.1 install chromium
+```
+Run the fix command. On Linux, add `--with-deps` for system dependencies.
+
+**PATH issues:**
+- Rust: Ensure `~/.cargo/bin` is in PATH. Run `source "$HOME/.cargo/env"`.
+- Node: Ensure fnm/nvm shim is loaded. Restart your terminal or source your shell config.
+- After installing tools, run `cargo dfv doctor` again to verify.
+
 ## Changelog policy
 
 Effective October 22, 2026, every PR that changes user-facing
