@@ -1,0 +1,54 @@
+name: Development container
+
+on:
+  pull_request:
+    paths:
+      - ".cursor/Dockerfile"
+      - ".cursor/environment.json"
+      - ".devcontainer/**"
+      - "scripts/pin.sh"
+      - "rust-toolchain.toml"
+      - ".nvmrc"
+      - "Cargo.lock"
+      - "bindings/wasm/package.json"
+      - ".github/workflows/devcontainer.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".cursor/Dockerfile"
+      - ".cursor/environment.json"
+      - ".devcontainer/**"
+      - "scripts/pin.sh"
+      - "rust-toolchain.toml"
+      - ".nvmrc"
+      - "Cargo.lock"
+      - "bindings/wasm/package.json"
+      - ".github/workflows/devcontainer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-doctor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build development image
+        run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-devcontainer:ci .
+      - name: Build bindings and verify the container environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_id=$(docker create datafog-devcontainer:ci sleep infinity)
+          trap 'docker rm --force "$container_id" > /dev/null' EXIT
+          docker start "$container_id"
+          git archive HEAD | docker exec --interactive --user root "$container_id" tar --extract --directory=/workspace
+          docker exec --user root "$container_id" chown -R ubuntu:ubuntu /workspace
+          docker exec "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
+          docker exec "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
