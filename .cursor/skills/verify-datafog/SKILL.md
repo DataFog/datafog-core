@@ -7,6 +7,18 @@ description: Verify DataFog Core detection and transformation logic across all S
 
 Verify detection semantics and cross-SDK parity using `cargo dfv`. The CLI drives installed packages (Python wheel, Node package, browser WASM bundle, Rust crate) the way a user does.
 
+## IMPORTANT: Run doctor --fix first
+
+**Before any verification**, run:
+
+```bash
+cargo dfv doctor --fix
+```
+
+This reads required versions from `.cursor/Dockerfile` (NODE_VERSION, RUST_VERSION, WASM_BINDGEN_VERSION, PLAYWRIGHT_VERSION) and auto-installs them if missing or wrong. Static code inspection does not prove correctness; only running the verification CLI with the correct toolchain does.
+
+If doctor cannot auto-fix an issue (e.g., no nvm/fnm for Node), it prints manual steps and exits non-zero. **Report this as a blocker** rather than skipping verification.
+
 ## Launch
 
 Ensure the environment is ready before verification.
@@ -16,13 +28,13 @@ cargo dfv doctor --json
 ```
 
 Doctor checks:
-- rust_toolchain: Rust 1.88
+- rust_toolchain: version from .cursor/Dockerfile RUST_VERSION
 - python: Python 3.10+
 - maturin: maturin installed
-- node: Node.js 24+
-- wasm_bindgen_cli: wasm-bindgen 0.2.127
+- node: version from .cursor/Dockerfile NODE_VERSION (currently 24)
+- wasm_bindgen_cli: version from .cursor/Dockerfile WASM_BINDGEN_VERSION
 - wasm_target: wasm32-unknown-unknown rustup target
-- playwright_chromium: Playwright Chromium browser
+- playwright_chromium: version from .cursor/Dockerfile PLAYWRIGHT_VERSION
 - python_binding_fresh: built wheel or .so, fresher than crates/core/src
 - node_binding_fresh: built native.js or .node file (not the hand-written index.js wrapper)
 - wasm_binding_fresh: built dist/datafog_wasm_bg.wasm
@@ -35,7 +47,8 @@ Doctor hashes the files listed in `models/manifest.json` using sha256. It does n
 Fix failures before running check or parity.
 
 ```bash
-cargo dfv doctor
+cargo dfv doctor --fix   # Auto-fix toolchain mismatches
+cargo dfv doctor         # Check only, no auto-fix
 ```
 
 If bindings are stale or missing:
@@ -128,13 +141,13 @@ Do not delete the most recent run directory before the PR is merged.
 ### Quick verification after a detection change
 
 ```bash
-cargo dfv doctor --json && cargo dfv check --json
+cargo dfv doctor --fix && cargo dfv check --json
 ```
 
 ### Full verification before release
 
 ```bash
-cargo dfv doctor
+cargo dfv doctor --fix
 cargo dfv build
 cargo dfv check
 cargo dfv parity

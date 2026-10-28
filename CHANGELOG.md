@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- `cargo dfv doctor` now reads required versions from `.cursor/Dockerfile` (NODE_VERSION, RUST_VERSION, WASM_BINDGEN_VERSION, PLAYWRIGHT_VERSION) instead of hardcoded values. A `--fix` flag auto-installs missing or wrong toolchain versions via nvm/fnm, nodesource, rustup, or cargo install. `check` and `smoke` commands fail fast with version mismatch details before running tests.
+
 - Optional browser Small model sessions return canonical findings for the scan/transform flow, with Core-owned entity routing and score evidence.
 
 - Experimental browser entity extraction using pinned GLiNER2.5 Small ONNX assets, configurable labels, and explicit Unicode ranges (#116)

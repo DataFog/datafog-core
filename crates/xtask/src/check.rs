@@ -1,4 +1,4 @@
-use crate::doctor::{CheckStatus, run_doctor_internal};
+use crate::doctor::{CheckStatus, run_doctor_internal, run_toolchain_check_internal};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -467,7 +467,66 @@ Run without --models to verify rule-based detectors:
     let dry_run = args.iter().any(|a| a == "--dry-run");
 
     if !json_output && !dry_run {
-        println!("Running environment check...");
+        println!("Running toolchain version check...");
+    }
+
+    let toolchain_result = run_toolchain_check_internal();
+    if !toolchain_result.pass && !dry_run {
+        let failures: Vec<String> = toolchain_result
+            .checks
+            .iter()
+            .filter(|c| c.required && c.status == CheckStatus::Fail)
+            .map(|c| {
+                format!(
+                    "{}: found {} (expected {})",
+                    c.name,
+                    c.found.as_deref().unwrap_or("not installed"),
+                    c.expected.as_deref().unwrap_or("installed")
+                )
+            })
+            .collect();
+
+        let run_dir = create_run_directory().ok();
+
+        let check_result = CheckResult {
+            pass: false,
+            doctor_pass: false,
+            tests: HashMap::new(),
+            duration_seconds: 0.0,
+            run_directory: run_dir.clone().unwrap_or_default(),
+            doctor_failures: Some(failures.clone()),
+            dry_run: None,
+        };
+
+        if let Some(ref dir) = run_dir {
+            let report_path = dir.join("check.json");
+            if let Ok(json) = serde_json::to_string_pretty(&check_result) {
+                let _ = fs::write(&report_path, json);
+            }
+        }
+
+        if json_output {
+            println!("{}", serde_json::to_string_pretty(&check_result).unwrap());
+        } else {
+            eprintln!();
+            eprintln!("Toolchain version mismatch detected:");
+            for f in &failures {
+                eprintln!("  - {f}");
+            }
+            eprintln!();
+            eprintln!("Run `cargo dfv doctor --fix` to install the correct versions.");
+
+            if let Some(ref dir) = run_dir {
+                eprintln!();
+                eprintln!("Report saved to: {}", dir.display());
+            }
+        }
+
+        return ExitCode::FAILURE;
+    }
+
+    if !json_output && !dry_run {
+        println!("Running full environment check...");
     }
 
     let doctor_result = run_doctor_internal();
@@ -515,7 +574,7 @@ Run without --models to verify rule-based detectors:
                 eprintln!("  - {f}");
             }
             eprintln!();
-            eprintln!("Run `cargo dfv doctor` for details.");
+            eprintln!("Run `cargo dfv doctor --fix` for details.");
 
             if let Some(ref dir) = run_dir {
                 eprintln!();

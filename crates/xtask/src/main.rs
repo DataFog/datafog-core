@@ -8,6 +8,7 @@ mod models;
 mod parity;
 mod report;
 mod smoke;
+mod toolchain;
 
 use std::env;
 use std::process::ExitCode;
@@ -69,6 +70,9 @@ OPTIONS:
     --json           Machine-readable JSON output
     --dry-run        Print commands without executing
 
+DOCTOR OPTIONS:
+    --fix            Auto-fix toolchain mismatches where possible
+
 CHECK OPTIONS:
     --models         Run model-based detector tier (GLiNER2/DataFog)
                      Wraps: scripts/provision-*.py, scripts/model-*.py
@@ -95,6 +99,7 @@ EVAL OPTIONS (MODEL):
 
 EXAMPLES:
     cargo dfv doctor                   # Check if environment is ready
+    cargo dfv doctor --fix             # Auto-fix toolchain mismatches
     cargo dfv doctor --json            # JSON output for automation
     cargo dfv build                    # Build all bindings
     cargo dfv build --sdk python       # Build only Python binding

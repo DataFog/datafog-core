@@ -6,6 +6,7 @@ Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
 
 ```bash
 cargo dfv doctor              # Check environment readiness
+cargo dfv doctor --fix        # Auto-fix toolchain mismatches
 cargo dfv build               # Build all bindings
 cargo dfv check               # Run all rule-based detector tests
 cargo dfv check --models      # Run model tier checks (GLiNER2/DataFog)
@@ -16,6 +17,10 @@ cargo dfv smoke               # Install and test packages as a user would
 cargo dfv parity              # Cross-SDK fixture offset verification
 cargo dfv parity --live       # Run scan() through each SDK and diff outputs
 ```
+
+**Before any verification**, run `cargo dfv doctor --fix`. This reads required versions from `.cursor/Dockerfile` (NODE_VERSION, RUST_VERSION, WASM_BINDGEN_VERSION, PLAYWRIGHT_VERSION) and installs them if missing or wrong. Static code inspection does not prove correctness; only running the verification CLI with the correct toolchain does.
+
+If doctor cannot auto-fix an issue (e.g., no nvm/fnm for Node on macOS system Node), it prints manual steps and exits non-zero. Report this as a blocker.
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
 

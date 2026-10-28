@@ -1,3 +1,4 @@
+use crate::doctor::{CheckStatus, run_toolchain_check_internal};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -607,6 +608,49 @@ pub fn run_smoke(args: &[String], json_output: bool) -> ExitCode {
         .position(|a| a == "--sdk")
         .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str());
+
+    if !dry_run {
+        if !json_output {
+            println!("Running toolchain version check...");
+        }
+
+        let toolchain_result = run_toolchain_check_internal();
+        if !toolchain_result.pass {
+            let failures: Vec<String> = toolchain_result
+                .checks
+                .iter()
+                .filter(|c| c.required && c.status == CheckStatus::Fail)
+                .map(|c| {
+                    format!(
+                        "{}: found {} (expected {})",
+                        c.name,
+                        c.found.as_deref().unwrap_or("not installed"),
+                        c.expected.as_deref().unwrap_or("installed")
+                    )
+                })
+                .collect();
+
+            if json_output {
+                let err = serde_json::json!({
+                    "pass": false,
+                    "error": "toolchain_mismatch",
+                    "failures": failures,
+                    "fix": "cargo dfv doctor --fix"
+                });
+                println!("{}", serde_json::to_string_pretty(&err).unwrap());
+            } else {
+                eprintln!();
+                eprintln!("Toolchain version mismatch detected:");
+                for f in &failures {
+                    eprintln!("  - {f}");
+                }
+                eprintln!();
+                eprintln!("Run `cargo dfv doctor --fix` to install the correct versions.");
+            }
+
+            return ExitCode::FAILURE;
+        }
+    }
 
     if !json_output && !dry_run {
         println!("Running smoke tests (installed package verification)...");

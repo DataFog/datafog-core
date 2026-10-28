@@ -1,4 +1,8 @@
 use crate::report::{create_run_directory, workspace_root};
+use crate::toolchain::{
+    ToolchainConfig, VersionMatch, compare_exact_version, compare_node_version,
+    compare_rust_version,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -11,6 +15,8 @@ pub struct DoctorResult {
     pub checks: Vec<DoctorCheck>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run_directory: Option<std::path::PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +32,8 @@ pub struct DoctorCheck {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
     pub required: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_fixable: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +55,7 @@ impl DoctorCheck {
             fix_command: None,
             details: None,
             required,
+            auto_fixable: None,
         }
     }
 
@@ -65,6 +74,26 @@ impl DoctorCheck {
             fix_command: Some(fix.to_string()),
             details: None,
             required,
+            auto_fixable: Some(true),
+        }
+    }
+
+    pub fn fail_manual(
+        name: &str,
+        found: Option<&str>,
+        expected: &str,
+        fix: &str,
+        required: bool,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            status: CheckStatus::Fail,
+            found: found.map(String::from),
+            expected: Some(expected.to_string()),
+            fix_command: Some(fix.to_string()),
+            details: None,
+            required,
+            auto_fixable: Some(false),
         }
     }
 
@@ -77,35 +106,43 @@ impl DoctorCheck {
             fix_command: None,
             details: Some(details.to_string()),
             required,
+            auto_fixable: None,
         }
     }
 }
 
-pub fn check_rust_toolchain() -> DoctorCheck {
-    let expected = "1.88";
+fn get_toolchain_config() -> Option<ToolchainConfig> {
+    ToolchainConfig::from_workspace()
+}
+
+pub fn check_rust_toolchain(config: Option<&ToolchainConfig>) -> DoctorCheck {
+    let expected = config.map(|c| c.rust_version.as_str()).unwrap_or("1.88.0");
     let output = Command::new("rustc").arg("--version").output();
 
     match output {
         Ok(out) if out.status.success() => {
-            let version = String::from_utf8_lossy(&out.stdout);
-            let version = version.trim();
-            if version.contains(expected) {
-                DoctorCheck::pass("rust_toolchain", version, true)
-            } else {
-                DoctorCheck::fail(
+            let version_str = String::from_utf8_lossy(&out.stdout);
+            let version_str = version_str.trim();
+            let found_version = version_str.split_whitespace().nth(1).unwrap_or(version_str);
+
+            match compare_rust_version(found_version, expected) {
+                VersionMatch::Exact => DoctorCheck::pass("rust_toolchain", version_str, true),
+                _ => DoctorCheck::fail(
                     "rust_toolchain",
-                    Some(version),
+                    Some(version_str),
                     &format!("rustc {expected}"),
                     &format!("rustup install {expected} && rustup default {expected}"),
                     true,
-                )
+                ),
             }
         }
         _ => DoctorCheck::fail(
             "rust_toolchain",
             None,
             &format!("rustc {expected}"),
-            "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && rustup install 1.88",
+            &format!(
+                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && rustup install {expected}"
+            ),
             true,
         ),
     }
@@ -126,7 +163,7 @@ pub fn check_python() -> DoctorCheck {
             {
                 DoctorCheck::pass("python", version, true)
             } else {
-                DoctorCheck::fail(
+                DoctorCheck::fail_manual(
                     "python",
                     Some(version),
                     "Python 3.10+",
@@ -135,7 +172,7 @@ pub fn check_python() -> DoctorCheck {
                 )
             }
         }
-        _ => DoctorCheck::fail(
+        _ => DoctorCheck::fail_manual(
             "python",
             None,
             "Python 3.10+",
@@ -173,61 +210,98 @@ pub fn check_maturin() -> DoctorCheck {
     }
 }
 
-pub fn check_node() -> DoctorCheck {
-    let expected_major = 24;
+pub fn check_node(config: Option<&ToolchainConfig>) -> DoctorCheck {
+    let expected = config.map(|c| c.node_version.as_str()).unwrap_or("24");
+    let expected_major: u32 = expected.parse().unwrap_or(24);
     let output = Command::new("node").arg("--version").output();
 
     match output {
         Ok(out) if out.status.success() => {
             let version = String::from_utf8_lossy(&out.stdout);
             let version = version.trim();
-            let major: Option<u32> = version
-                .strip_prefix('v')
-                .and_then(|v| v.split('.').next())
-                .and_then(|m| m.parse().ok());
 
-            if major.is_some_and(|m| m >= expected_major) {
-                DoctorCheck::pass("node", version, true)
-            } else {
-                DoctorCheck::fail(
-                    "node",
-                    Some(version),
-                    &format!("Node.js {expected_major}+"),
-                    &format!(
-                        "nvm install {expected_major} && nvm use {expected_major}  # or: brew install node@{expected_major}"
-                    ),
-                    true,
-                )
+            match compare_node_version(version, expected) {
+                VersionMatch::Exact => DoctorCheck::pass("node", version, true),
+                _ => {
+                    let fix_cmd = detect_node_fix_command(expected_major);
+                    let auto_fixable = fix_cmd.starts_with("nvm ")
+                        || fix_cmd.starts_with("fnm ")
+                        || fix_cmd.contains("nodesource");
+
+                    DoctorCheck {
+                        name: "node".to_string(),
+                        status: CheckStatus::Fail,
+                        found: Some(version.to_string()),
+                        expected: Some(format!("Node.js {expected}")),
+                        fix_command: Some(fix_cmd),
+                        details: None,
+                        required: true,
+                        auto_fixable: Some(auto_fixable),
+                    }
+                }
             }
         }
-        _ => DoctorCheck::fail(
-            "node",
-            None,
-            &format!("Node.js {expected_major}+"),
-            "curl -fsSL https://fnm.vercel.app/install | bash && fnm install 24",
-            true,
-        ),
+        _ => {
+            let fix_cmd = detect_node_fix_command(expected_major);
+            let auto_fixable = fix_cmd.starts_with("nvm ")
+                || fix_cmd.starts_with("fnm ")
+                || fix_cmd.contains("nodesource");
+
+            DoctorCheck {
+                name: "node".to_string(),
+                status: CheckStatus::Fail,
+                found: None,
+                expected: Some(format!("Node.js {expected}")),
+                fix_command: Some(fix_cmd),
+                details: None,
+                required: true,
+                auto_fixable: Some(auto_fixable),
+            }
+        }
     }
 }
 
-pub fn check_wasm_bindgen_cli() -> DoctorCheck {
-    let expected = "0.2.127";
+fn detect_node_fix_command(version: u32) -> String {
+    if Command::new("nvm").arg("--version").output().is_ok() {
+        return format!("nvm install {version} && nvm use {version}");
+    }
+
+    if Command::new("fnm").arg("--version").output().is_ok() {
+        return format!("fnm install {version} && fnm use {version}");
+    }
+
+    if cfg!(target_os = "linux") {
+        return format!(
+            "curl -fsSL https://deb.nodesource.com/setup_{version}.x | sudo -E bash - && sudo apt-get install -y nodejs"
+        );
+    }
+
+    if cfg!(target_os = "macos") {
+        return format!("brew install node@{version}");
+    }
+
+    format!("Install Node.js {version} from https://nodejs.org")
+}
+
+pub fn check_wasm_bindgen_cli(config: Option<&ToolchainConfig>) -> DoctorCheck {
+    let expected = config
+        .map(|c| c.wasm_bindgen_version.as_str())
+        .unwrap_or("0.2.127");
     let output = Command::new("wasm-bindgen").arg("--version").output();
 
     match output {
         Ok(out) if out.status.success() => {
             let version = String::from_utf8_lossy(&out.stdout);
             let version = version.trim();
-            if version.contains(expected) {
-                DoctorCheck::pass("wasm_bindgen_cli", version, true)
-            } else {
-                DoctorCheck::fail(
+            match compare_exact_version(version, expected) {
+                VersionMatch::Exact => DoctorCheck::pass("wasm_bindgen_cli", version, true),
+                _ => DoctorCheck::fail(
                     "wasm_bindgen_cli",
                     Some(version),
                     &format!("wasm-bindgen {expected}"),
                     &format!("cargo install wasm-bindgen-cli --version {expected} --locked"),
                     true,
-                )
+                ),
             }
         }
         _ => DoctorCheck::fail(
@@ -270,7 +344,10 @@ pub fn check_wasm_target() -> DoctorCheck {
     }
 }
 
-pub fn check_playwright_chromium() -> DoctorCheck {
+pub fn check_playwright_chromium(config: Option<&ToolchainConfig>) -> DoctorCheck {
+    let expected_version = config
+        .map(|c| c.playwright_version.as_str())
+        .unwrap_or("1.62.1");
     let root = workspace_root();
     let wasm_dir = root.join("bindings").join("wasm");
 
@@ -287,8 +364,8 @@ pub fn check_playwright_chromium() -> DoctorCheck {
         _ => DoctorCheck::fail(
             "playwright_chromium",
             None,
-            "Playwright Chromium browser",
-            "npx --prefix bindings/wasm playwright install --with-deps chromium",
+            &format!("Playwright Chromium (version {expected_version})"),
+            &format!("npx playwright@{expected_version} install chromium"),
             true,
         ),
     }
@@ -326,6 +403,7 @@ fn check_binding_freshness(
             fix_command: Some(format!("cargo dfv build --sdk {name}")),
             details: None,
             required: true,
+            auto_fixable: Some(true),
         };
     }
 
@@ -346,6 +424,7 @@ fn check_binding_freshness(
             fix_command: Some(format!("cargo dfv build --sdk {name}")),
             details: None,
             required: false,
+            auto_fixable: Some(true),
         },
         _ => DoctorCheck::pass(&check_name, "present (mtime check skipped)", true),
     }
@@ -369,19 +448,20 @@ pub fn check_python_binding(root: &Path, core_mtime: Option<std::time::SystemTim
         return check_binding_freshness("python", &debug_so, core_mtime);
     }
 
-    DoctorCheck::fail(
-        "python_binding_fresh",
-        Some("not built"),
-        "built wheel or .so",
-        "cargo dfv build --sdk python",
-        true,
-    )
+    DoctorCheck {
+        name: "python_binding_fresh".to_string(),
+        status: CheckStatus::Fail,
+        found: Some("not built".to_string()),
+        expected: Some("built wheel or .so".to_string()),
+        fix_command: Some("cargo dfv build --sdk python".to_string()),
+        details: None,
+        required: true,
+        auto_fixable: Some(true),
+    }
 }
 
 pub fn check_node_binding(root: &Path, core_mtime: Option<std::time::SystemTime>) -> DoctorCheck {
     let node_dir = root.join("bindings").join("node");
-    // Prefer NAPI build artifacts over the hand-written index.js wrapper,
-    // which is committed source and is not rewritten by `napi build`.
     let native_js = node_dir.join("native.js");
     if native_js.exists() {
         return check_binding_freshness("node", &native_js, core_mtime);
@@ -397,13 +477,16 @@ pub fn check_node_binding(root: &Path, core_mtime: Option<std::time::SystemTime>
         }
     }
 
-    DoctorCheck::fail(
-        "node_binding_fresh",
-        Some("not built"),
-        "built native.js or .node",
-        "cargo dfv build --sdk node",
-        true,
-    )
+    DoctorCheck {
+        name: "node_binding_fresh".to_string(),
+        status: CheckStatus::Fail,
+        found: Some("not built".to_string()),
+        expected: Some("built native.js or .node".to_string()),
+        fix_command: Some("cargo dfv build --sdk node".to_string()),
+        details: None,
+        required: true,
+        auto_fixable: Some(true),
+    }
 }
 
 pub fn check_wasm_binding(root: &Path, core_mtime: Option<std::time::SystemTime>) -> DoctorCheck {
@@ -414,13 +497,16 @@ pub fn check_wasm_binding(root: &Path, core_mtime: Option<std::time::SystemTime>
         return check_binding_freshness("wasm", &wasm_file, core_mtime);
     }
 
-    DoctorCheck::fail(
-        "wasm_binding_fresh",
-        Some("not built"),
-        "built dist/datafog_wasm_bg.wasm",
-        "cargo dfv build --sdk wasm",
-        true,
-    )
+    DoctorCheck {
+        name: "wasm_binding_fresh".to_string(),
+        status: CheckStatus::Fail,
+        found: Some("not built".to_string()),
+        expected: Some("built dist/datafog_wasm_bg.wasm".to_string()),
+        fix_command: Some("cargo dfv build --sdk wasm".to_string()),
+        details: None,
+        required: true,
+        auto_fixable: Some(true),
+    }
 }
 
 pub fn check_model_weights(root: &Path) -> DoctorCheck {
@@ -505,19 +591,25 @@ pub fn check_model_weights(root: &Path) -> DoctorCheck {
         ),
         details: None,
         required: false,
+        auto_fixable: None,
     }
 }
 
-pub fn run_doctor_internal() -> DoctorResult {
-    let mut checks = vec![
-        check_rust_toolchain(),
+fn run_toolchain_checks(config: Option<&ToolchainConfig>) -> Vec<DoctorCheck> {
+    vec![
+        check_rust_toolchain(config),
         check_python(),
         check_maturin(),
-        check_node(),
-        check_wasm_bindgen_cli(),
+        check_node(config),
+        check_wasm_bindgen_cli(config),
         check_wasm_target(),
-        check_playwright_chromium(),
-    ];
+        check_playwright_chromium(config),
+    ]
+}
+
+pub fn run_doctor_internal() -> DoctorResult {
+    let config = get_toolchain_config();
+    let mut checks = run_toolchain_checks(config.as_ref());
 
     let root = workspace_root();
     let core_mtime = get_core_mtime(&root);
@@ -538,19 +630,259 @@ pub fn run_doctor_internal() -> DoctorResult {
         pass,
         checks,
         run_directory: None,
+        fixed: None,
     }
 }
 
+pub fn run_toolchain_check_internal() -> DoctorResult {
+    let config = get_toolchain_config();
+    let checks = run_toolchain_checks(config.as_ref());
+
+    let required_failures: Vec<_> = checks
+        .iter()
+        .filter(|c| c.required && c.status == CheckStatus::Fail)
+        .collect();
+
+    let pass = required_failures.is_empty();
+
+    DoctorResult {
+        pass,
+        checks,
+        run_directory: None,
+        fixed: None,
+    }
+}
+
+fn fix_check(check: &DoctorCheck) -> Result<String, String> {
+    let fix_cmd = check.fix_command.as_ref().ok_or("no fix command")?;
+    let name = &check.name;
+
+    match name.as_str() {
+        "rust_toolchain" => fix_rust_toolchain(fix_cmd),
+        "node" => fix_node(fix_cmd),
+        "wasm_bindgen_cli" => fix_wasm_bindgen(fix_cmd),
+        "wasm_target" => fix_wasm_target(),
+        "maturin" => fix_maturin(),
+        "playwright_chromium" => fix_playwright(fix_cmd),
+        _ => Err(format!("no auto-fix for {name}")),
+    }
+}
+
+fn fix_rust_toolchain(fix_cmd: &str) -> Result<String, String> {
+    if fix_cmd.contains("rustup install") {
+        let version = fix_cmd
+            .split("rustup install ")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .ok_or("cannot parse Rust version")?;
+
+        let install = Command::new("rustup")
+            .args(["install", version])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !install.success() {
+            return Err("rustup install failed".to_string());
+        }
+
+        let default = Command::new("rustup")
+            .args(["default", version])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !default.success() {
+            return Err("rustup default failed".to_string());
+        }
+
+        Ok(format!("installed Rust {version}"))
+    } else {
+        Err("cannot auto-install Rust; run the suggested command manually".to_string())
+    }
+}
+
+fn fix_node(fix_cmd: &str) -> Result<String, String> {
+    if fix_cmd.starts_with("nvm ") {
+        let version = fix_cmd
+            .split("nvm install ")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .ok_or("cannot parse Node version")?;
+
+        let script = format!(
+            r#"source ~/.nvm/nvm.sh && nvm install {version} && nvm alias default {version}"#
+        );
+        let status = Command::new("bash")
+            .args(["-c", &script])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(format!("installed Node {version} via nvm"))
+        } else {
+            Err("nvm install failed".to_string())
+        }
+    } else if fix_cmd.starts_with("fnm ") {
+        let version = fix_cmd
+            .split("fnm install ")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .ok_or("cannot parse Node version")?;
+
+        let install = Command::new("fnm")
+            .args(["install", version])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !install.success() {
+            return Err("fnm install failed".to_string());
+        }
+
+        let default_cmd = Command::new("fnm")
+            .args(["default", version])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if default_cmd.success() {
+            Ok(format!("installed Node {version} via fnm"))
+        } else {
+            Err("fnm default failed".to_string())
+        }
+    } else if fix_cmd.contains("nodesource") {
+        let version = fix_cmd
+            .split("setup_")
+            .nth(1)
+            .and_then(|s| s.split(".x").next())
+            .ok_or("cannot parse Node version from nodesource URL")?;
+
+        let curl_cmd =
+            format!("curl -fsSL https://deb.nodesource.com/setup_{version}.x | sudo -E bash -");
+        let curl = Command::new("bash")
+            .args(["-c", &curl_cmd])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if !curl.success() {
+            return Err("nodesource setup failed".to_string());
+        }
+
+        let apt = Command::new("sudo")
+            .args(["apt-get", "install", "-y", "nodejs"])
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if apt.success() {
+            Ok(format!("installed Node {version} via nodesource"))
+        } else {
+            Err("apt-get install nodejs failed".to_string())
+        }
+    } else {
+        Err(format!("cannot auto-install Node; run manually: {fix_cmd}"))
+    }
+}
+
+fn fix_wasm_bindgen(fix_cmd: &str) -> Result<String, String> {
+    let version = fix_cmd
+        .split("--version ")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .ok_or("cannot parse wasm-bindgen version")?;
+
+    let status = Command::new("cargo")
+        .args([
+            "install",
+            "wasm-bindgen-cli",
+            "--version",
+            version,
+            "--locked",
+        ])
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    if status.success() {
+        Ok(format!("installed wasm-bindgen-cli {version}"))
+    } else {
+        Err("cargo install wasm-bindgen-cli failed".to_string())
+    }
+}
+
+fn fix_wasm_target() -> Result<String, String> {
+    let status = Command::new("rustup")
+        .args(["target", "add", "wasm32-unknown-unknown"])
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    if status.success() {
+        Ok("added wasm32-unknown-unknown target".to_string())
+    } else {
+        Err("rustup target add failed".to_string())
+    }
+}
+
+fn fix_maturin() -> Result<String, String> {
+    let status = Command::new("python3")
+        .args(["-m", "pip", "install", "maturin"])
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    if status.success() {
+        Ok("installed maturin".to_string())
+    } else {
+        Err("pip install maturin failed".to_string())
+    }
+}
+
+fn fix_playwright(fix_cmd: &str) -> Result<String, String> {
+    let version = fix_cmd
+        .split("playwright@")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .unwrap_or("1.62.1");
+
+    let root = workspace_root();
+    let wasm_dir = root.join("bindings").join("wasm");
+
+    let status = Command::new("npx")
+        .args([&format!("playwright@{version}"), "install", "chromium"])
+        .current_dir(&wasm_dir)
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    if status.success() {
+        Ok(format!("installed Playwright Chromium {version}"))
+    } else {
+        Err("npx playwright install failed".to_string())
+    }
+}
+
+fn run_fix(checks: &[DoctorCheck]) -> Vec<String> {
+    let mut fixed = Vec::new();
+
+    for check in checks {
+        if check.status != CheckStatus::Fail {
+            continue;
+        }
+        if check.auto_fixable != Some(true) {
+            continue;
+        }
+
+        match fix_check(check) {
+            Ok(msg) => {
+                println!("  ✓ Fixed {}: {msg}", check.name);
+                fixed.push(check.name.clone());
+            }
+            Err(e) => {
+                println!("  ✗ Failed to fix {}: {e}", check.name);
+            }
+        }
+    }
+
+    fixed
+}
+
 pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
-    let mut checks = vec![
-        check_rust_toolchain(),
-        check_python(),
-        check_maturin(),
-        check_node(),
-        check_wasm_bindgen_cli(),
-        check_wasm_target(),
-        check_playwright_chromium(),
-    ];
+    let do_fix = args.iter().any(|a| a == "--fix");
+    let config = get_toolchain_config();
+    let mut checks = run_toolchain_checks(config.as_ref());
 
     let root = workspace_root();
     let core_mtime = get_core_mtime(&root);
@@ -559,6 +891,24 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
     checks.push(check_node_binding(&root, core_mtime));
     checks.push(check_wasm_binding(&root, core_mtime));
     checks.push(check_model_weights(&root));
+
+    let mut fixed = Vec::new();
+
+    if do_fix {
+        if !json_output {
+            println!("Attempting to fix toolchain issues...");
+            println!();
+        }
+        fixed = run_fix(&checks);
+
+        if !fixed.is_empty() {
+            checks = run_toolchain_checks(config.as_ref());
+            checks.push(check_python_binding(&root, core_mtime));
+            checks.push(check_node_binding(&root, core_mtime));
+            checks.push(check_wasm_binding(&root, core_mtime));
+            checks.push(check_model_weights(&root));
+        }
+    }
 
     let required_failures: Vec<_> = checks
         .iter()
@@ -577,6 +927,7 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
         pass,
         checks: checks.clone(),
         run_directory: run_dir.clone(),
+        fixed: if fixed.is_empty() { None } else { Some(fixed) },
     };
 
     if let Some(ref dir) = run_dir {
@@ -608,14 +959,24 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
                 print!(": {found}");
             }
 
+            if let Some(ref expected) = check.expected {
+                if check.status == CheckStatus::Fail {
+                    print!(" (expected: {expected})");
+                }
+            }
+
             println!();
 
             if check.status == CheckStatus::Fail || check.status == CheckStatus::Warn {
-                if let Some(ref expected) = check.expected {
-                    println!("      expected: {expected}");
-                }
                 if let Some(ref fix) = check.fix_command {
-                    println!("      fix: {fix}");
+                    let auto_tag = if check.auto_fixable == Some(true) {
+                        " [auto-fixable with --fix]"
+                    } else if check.auto_fixable == Some(false) {
+                        " [manual fix required]"
+                    } else {
+                        ""
+                    };
+                    println!("      fix: {fix}{auto_tag}");
                 }
                 if let Some(ref details) = check.details {
                     println!("      {details}");
@@ -628,7 +989,29 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
         if pass {
             println!("All required checks passed.");
         } else {
-            println!("Some required checks failed. Fix them before running `cargo dfv check`.");
+            let manual_fixes: Vec<_> = required_failures
+                .iter()
+                .filter(|c| c.auto_fixable != Some(true))
+                .collect();
+
+            if manual_fixes.is_empty() {
+                println!(
+                    "Some required checks failed. Run `cargo dfv doctor --fix` to fix them automatically."
+                );
+            } else {
+                println!("Some required checks failed.");
+                println!();
+                println!("Manual fixes required:");
+                for check in manual_fixes {
+                    if let Some(ref fix) = check.fix_command {
+                        println!("  {}: {fix}", check.name);
+                    }
+                }
+                println!();
+                println!(
+                    "After manual fixes, run `cargo dfv doctor --fix` for remaining auto-fixable issues."
+                );
+            }
         }
 
         if let Some(ref dir) = run_dir {

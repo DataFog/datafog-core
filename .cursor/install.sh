@@ -2,7 +2,10 @@
 set -euo pipefail
 
 # DataFog Core cloud agent environment install script
-# Provisions model weights for cargo dfv verification.
+# Validates toolchain versions and provisions model weights.
+#
+# Toolchain versions (Node, Rust, wasm-bindgen) are read from .cursor/Dockerfile
+# and enforced by `cargo dfv doctor --fix`.
 #
 # Idempotency is per engine: skip only when that engine's
 # bundle-manifest.json exists. A bundle directory without a manifest is
@@ -13,9 +16,21 @@ echo "=== DataFog Core Environment Install ==="
 
 # Add ~/.local/bin to PATH for hf CLI
 export PATH="$HOME/.local/bin:$PATH"
+# Add ~/.cargo/bin for cargo/rustup
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Verify and fix toolchain versions from .cursor/Dockerfile
+echo "Checking toolchain versions..."
+if cargo dfv doctor --fix; then
+    echo "Toolchain OK"
+else
+    echo "WARNING: cargo dfv doctor --fix could not fully fix toolchain."
+    echo "Some manual intervention may be required."
+fi
 
 # Rust, Node, wasm-bindgen-cli, maturin, huggingface_hub, and Playwright
-# are installed by the Dockerfile. This script only handles:
+# are installed by the Dockerfile. This script ensures correct versions
+# and handles:
 # - npm dependencies for bindings
 # - Model weights provisioning
 # - Combined manifest creation
