@@ -281,6 +281,26 @@ impl WasmWorkspace {
     pub fn restore(&self, text: &str) -> Result<String, JsValue> {
         self.inner.restore(text).map_err(from_error)
     }
+    pub fn restore_report(&self, text: &str) -> Result<String, JsValue> {
+        let report = self.inner.restore_report(text).map_err(from_error)?;
+        let issues: Vec<_> = report
+            .issues
+            .iter()
+            .map(|issue| {
+                json!({
+                    "kind": issue.kind.as_str(),
+                    "byteRange": super::TextRange::from(issue.byte_range),
+                    "utf16Range": super::TextRange::from(issue.utf16_range),
+                })
+            })
+            .collect();
+        Ok(json!({
+            "text": report.text,
+            "restoredMarkers": report.restored_markers,
+            "issues": issues,
+        })
+        .to_string())
+    }
     pub fn close(&mut self) {
         self.plans.clear();
         self.inner.close();

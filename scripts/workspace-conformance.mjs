@@ -60,6 +60,12 @@ export async function verifyWorkspace(api, counters) {
   throws(() => w.activateSaved(change, heads.expectedHead, heads.candidateHead), "inactive_plan");
   check(w.restore(marker) === finding.matchedText, "exact local restoration");
   check(w.restore(marker.toLowerCase()) === finding.matchedText, "restoration ignores marker case");
+  throws(() => w.restore(`Total for ${marker.slice(2, -2)}`), "invalid_marker");
+  const report = w.restoreReport(`👋 ${marker}, [[CLIENT_NAME_ZZZZZZ]], ${marker.slice(0, -3)}]] and ${marker.slice(2, -2)}`);
+  check(report.text === null && report.restoredMarkers === 1 && report.issues.map(issue => issue.kind).join() === "unknown,damaged,unbracketed", "restore report lists every blocking span in order");
+  check(report.issues[0].utf16Range.start === `👋 ${marker}, `.length, "restore report uses UTF-16 offsets for the host");
+  const clean = w.restoreReport(`${marker} (ORDER_ABC123)`);
+  check(clean.text === `${finding.matchedText} (ORDER_ABC123)` && clean.issues.length === 0, "restore report returns text only when complete");
   for (const bad of [marker.replace("CLIENT_NAME", "PERSON"), "[[CLIENT_NAME_ABC]]", "[[CLIENT_NAME_ZZZZZZ]]"]) {
     throws(() => w.restore(`${marker} ${bad}`), "invalid_marker");
   }

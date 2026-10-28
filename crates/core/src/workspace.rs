@@ -140,6 +140,49 @@ impl Drop for Preview {
     }
 }
 
+/// Why a span in model output did not restore.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkerIssueKind {
+    /// Well-formed marker that this workspace never committed: a wrong label, a code
+    /// the model made up, one from another workspace, or one lost since a backup.
+    Unknown,
+    /// `[[...]]` span shaped like a marker that does not parse, e.g. a shortened code.
+    Damaged,
+    /// A committed `LABEL_CODE` whose surrounding brackets were dropped.
+    Unbracketed,
+}
+impl MarkerIssueKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Damaged => "damaged",
+            Self::Unbracketed => "unbracketed",
+        }
+    }
+}
+
+/// A span of the supplied text. It holds only pseudonym text, never a restored value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarkerIssue {
+    pub kind: MarkerIssueKind,
+    pub byte_range: TextRange,
+    pub utf16_range: TextRange,
+}
+
+/// `text` is present only when every marker resolved and no issue was found.
+pub struct RestoreReport {
+    pub text: Option<String>,
+    pub restored_markers: usize,
+    pub issues: Vec<MarkerIssue>,
+}
+impl Drop for RestoreReport {
+    fn drop(&mut self) {
+        if let Some(text) = self.text.as_mut() {
+            text.zeroize();
+        }
+    }
+}
+
 /// Values of one type that differ only in letter case or spacing share an identity,
 /// so `JOHN SMITH` in one paste and `John  Smith` in the next get one marker.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -554,34 +597,87 @@ impl Workspace {
         Ok(())
     }
 
-    /// Restore committed markers; any other marker-like span fails the whole call so
-    /// no partially restored text is exposed. Marker matching ignores case and accepts
-    /// Crockford's `I`/`L` → `1` and `O` → `0` substitutions in the code.
+    /// Restore committed markers; any issue fails the whole call so no partially
+    /// restored text is exposed. Marker matching ignores case and accepts Crockford's
+    /// `I`/`L` → `1` and `O` → `0` substitutions in the code. Use `restore_report`
+    /// to locate the issues.
     ///
     /// Any `[[LABEL_CODE]]`-shaped span that does not resolve to a committed entry
     /// blocks restoration, including accidental patterns such as `[[my_note]]` or
     /// `[[TODO_ABC123]]`. These are considered damaged markers; the caller should
-    /// remove or escape them before retrying.
+    /// remove or escape them before retrying. `restore` maps any issue to `InvalidMarker`.
     pub fn restore(&self, text: &str) -> Result<String> {
+        let mut report = self.restore_report(text)?;
+        report
+            .text
+            .take()
+            .ok_or_else(|| error(ErrorCode::InvalidMarker))
+    }
+
+    /// Restore all-or-nothing and report every span that blocked restoration.
+    /// Marker matching ignores case and accepts Crockford's `I`/`L` → `1` and
+    /// `O` → `0` substitutions in the code.
+    pub fn restore_report(&self, text: &str) -> Result<RestoreReport> {
         let state = self.state()?;
         if text.len() > MAX_BUNDLE_BYTES {
             return Err(error(ErrorCode::ResourceLimit));
         }
         let lookup = marker_lookup(state);
+        let spans = marker_spans(text)?;
+        let mut problems: Vec<(MarkerIssueKind, TextRange)> = Vec::new();
+        let mut push = |kind, range| {
+            problems
+                .try_reserve(1)
+                .map_err(|_| error(ErrorCode::ResourceLimit))?;
+            problems.push((kind, range));
+            Ok::<(), WorkspaceError>(())
+        };
         let mut output = String::new();
         let mut cursor = 0;
-        for span in marker_spans(text)? {
-            let original = span
+        let mut restored_markers = 0usize;
+        for span in &spans {
+            unbracketed_markers(&text[cursor..span.range.start], cursor, &lookup, &mut push)?;
+            match span
                 .canonical
                 .as_ref()
-                .and_then(|canonical| lookup.get(canonical))
-                .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
-            append(&mut output, &text[cursor..span.range.start])?;
-            append(&mut output, original)?;
+                .map(|canonical| lookup.get(canonical))
+            {
+                Some(Some(display)) => {
+                    append(&mut output, &text[cursor..span.range.start])?;
+                    append(&mut output, display)?;
+                    restored_markers += 1;
+                }
+                Some(None) => push(MarkerIssueKind::Unknown, span.range)?,
+                None => push(MarkerIssueKind::Damaged, span.range)?,
+            }
             cursor = span.range.end;
         }
-        append(&mut output, &text[cursor..])?;
-        Ok(output)
+        unbracketed_markers(&text[cursor..], cursor, &lookup, &mut push)?;
+        if problems.is_empty() {
+            append(&mut output, &text[cursor..])?;
+            return Ok(RestoreReport {
+                text: Some(output),
+                restored_markers,
+                issues: Vec::new(),
+            });
+        }
+        output.zeroize();
+        let mut index = TextIndex::new(text);
+        let mut issues = Vec::with_capacity(problems.len());
+        for (kind, byte_range) in problems {
+            issues.push(MarkerIssue {
+                kind,
+                byte_range,
+                utf16_range: index
+                    .utf16_range(byte_range)
+                    .map_err(|_| error(ErrorCode::InvalidMarker))?,
+            });
+        }
+        Ok(RestoreReport {
+            text: None,
+            restored_markers,
+            issues,
+        })
     }
 }
 
@@ -590,6 +686,43 @@ const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// with slack so moderately damaged markers are still recognized and rejected.
 const MAX_MARKER_INTERIOR: usize = 2 * (MAX_LABEL_BYTES + 1 + MARKER_CODE_LENGTH);
 const MAX_CODE_ATTEMPTS: u32 = 32;
+
+/// Committed `LABEL_CODE` words outside any `[[...]]` span. Uncommitted look-alikes,
+/// such as order numbers, are ordinary text.
+fn unbracketed_markers(
+    segment: &str,
+    offset: usize,
+    lookup: &BTreeMap<String, &str>,
+    push: &mut impl FnMut(MarkerIssueKind, TextRange) -> Result<()>,
+) -> Result<()> {
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let bytes = segment.as_bytes();
+    let mut start = 0;
+    while start < bytes.len() {
+        if !word(bytes[start]) {
+            start += 1;
+            continue;
+        }
+        let end = bytes[start..]
+            .iter()
+            .position(|b| !word(*b))
+            .map_or(bytes.len(), |length| start + length);
+        if end - start <= MAX_MARKER_INTERIOR
+            && canonical_marker(&segment[start..end])
+                .is_some_and(|canonical| lookup.contains_key(&canonical))
+        {
+            push(
+                MarkerIssueKind::Unbracketed,
+                TextRange {
+                    start: offset + start,
+                    end: offset + end,
+                },
+            )?;
+        }
+        start = end;
+    }
+    Ok(())
+}
 
 /// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {

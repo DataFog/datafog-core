@@ -230,6 +230,19 @@ export interface PreparedWorkspaceChange {
   exportCandidateBundle(): Uint8Array;
   discard(): void;
 }
+/** A span of model output that blocked restoration. Covers pseudonym text only. */
+export interface WorkspaceMarkerIssue {
+  /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets. */
+  readonly kind: "unknown" | "damaged" | "unbracketed";
+  readonly byteRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceRestoreReport {
+  /** Present only when every marker resolved and `issues` is empty. */
+  readonly text: string | null;
+  readonly restoredMarkers: number;
+  readonly issues: readonly WorkspaceMarkerIssue[];
+}
 export class Workspace {
   private constructor();
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
@@ -243,7 +256,10 @@ export class Workspace {
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** The trusted host must confirm atomic persistence before calling this method. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
+  /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
   restore(text: string): string;
+  /** All-or-nothing restoration that locates every unknown, damaged or unbracketed marker. */
+  restoreReport(text: string): WorkspaceRestoreReport;
   close(): void;
 }
 export function workspaceByteRangeFromUtf16(text: string, start: number, end: number): TextRange & { readonly unit: "utf8_bytes" };
