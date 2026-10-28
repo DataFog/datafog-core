@@ -37,17 +37,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: spike/gliner2-browser/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(../../scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: cargo install wasm-bindgen-cli --version "$(../../scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix ../../bindings/wasm
       - run: npm run build --prefix ../../bindings/wasm
       - run: npm ci

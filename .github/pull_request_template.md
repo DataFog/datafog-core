@@ -5,6 +5,8 @@ keep the description proportional to the change.
 Add a bullet under [Unreleased] in CHANGELOG.md for user-facing changes.
 For an exemption, apply no-changelog and include Changelog exemption: <reason>.
 See CONTRIBUTING.md for the policy, effective October 22, 2026.
+
+New to reviewing this repo? See CONTRIBUTING.md "Dev environment setup" for setup and verification steps.
 -->
 
 ## Local verification

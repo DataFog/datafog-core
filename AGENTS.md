@@ -1,5 +1,7 @@
 # DataFog Core repository rules
 
+For dev environment setup (devcontainer, local install, troubleshooting), see [CONTRIBUTING.md](CONTRIBUTING.md#dev-environment-setup).
+
 ## Verification CLI
 
 Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
@@ -18,6 +20,8 @@ cargo dfv parity --live       # Run scan() through each SDK and diff outputs
 ```
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
+
+**Doctor behavior:** `cargo dfv doctor` reads version pins from repository files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`). A missing pin file is a hard error. On mismatch, it prints the required vs found version and the exact command to fix it. It never installs anything and exits non-zero on failure. Agents run doctor first, install what it says if they can, and report a blocker otherwise.
 
 **Thresholds:**
 - Rule-based: any precision/recall drop fails.

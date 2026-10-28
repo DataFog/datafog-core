@@ -37,9 +37,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
 
       - uses: Swatinem/rust-cache@v2
         with:
