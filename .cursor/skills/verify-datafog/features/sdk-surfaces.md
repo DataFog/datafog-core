@@ -33,7 +33,7 @@ DataFog Core provides consistent APIs across Rust, Python, Node.js, and Browser/
 | `transform_with_provider_results` | Transform with pre-resolved providers | No |
 | `restore` | Reverse tokenization | Yes (sync) |
 
-WASM supports `tokenize` strategy and `restore()`, but not `pseudonymize` strategy (no key provider).
+WASM does not support provider-backed strategies (`pseudonymize`, `tokenize`) or `restore()`. All three throw `unsupported_strategy`. The functions exist in the API for type parity but are not usable.
 
 ### Model APIs (Rust, Python, Node only)
 
@@ -271,9 +271,9 @@ All errors include `code` and optional `reason`, `path`, and `findingIndex`/`fin
 | Rust | Sync | Async | Sync |
 | Python | Sync | Async | Sync |
 | Node.js | Sync | Sync | Async |
-| WASM | Sync | N/A | N/A |
+| WASM | Sync | N/A | Async |
 
-Python `PrivacyManager` methods are async. Node.js `ModelSession.open`, `scan`, and `close` return Promises.
+Python `PrivacyManager` methods are async. Node.js and WASM `ModelSession.open`, `scan`, and `close` return Promises.
 
 ### Platform binaries
 
@@ -294,4 +294,4 @@ Rust model APIs require the `models` feature:
 datafog-core = { version = "0.4", features = ["models"] }
 ```
 
-Models are not available on WASM.
+Browser/WASM model support is in the optional `@datafog/wasm/models` entry point using GLiNER2.5 Small ONNX. See `docs/browser-model.md`.
