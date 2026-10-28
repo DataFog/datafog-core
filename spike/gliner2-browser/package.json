@@ -1,0 +1,21 @@
+{
+  "name": "gliner25-browser-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GLiNER2.5 Small entity extraction through ONNX Runtime Web",
+  "scripts": {
+    "download-model": "node scripts/download-model.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "node --test tests/*.test.mjs",
+    "test:browser": "node scripts/test-browser.mjs"
+  },
+  "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
+    "onnxruntime-web": "1.31.1"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

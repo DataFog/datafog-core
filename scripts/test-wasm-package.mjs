@@ -95,6 +95,19 @@ import {
   type RestoreResult,
 } from "@datafog/wasm";
 
+import {ModelSession, type ModelScanResult} from "@datafog/wasm/models";
+async function modelTypes() {
+  const session = await ModelSession.open({modelBaseUrl: "/models/", labels: {person: "PERSON"}});
+  const result: ModelScanResult = await session.scan("John Smith", {entities: ["PERSON"]});
+  transform("John Smith", result.findings, {default: {strategy: "redact"}});
+  await session.scanModel("John Smith");
+  await session.close();
+}
+// @ts-expect-error Models require an explicit asset URL.
+ModelSession.open();
+// @ts-expect-error Threshold is numeric.
+ModelSession.open({modelBaseUrl: "/models/", threshold: "high"});
+void modelTypes;
 const ready: Promise<void> = init();
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
@@ -241,7 +254,15 @@ try {
   writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
   const page = await browser.newPage();
+  const modelRequests = [];
+  page.on("request", request => {
+    if (/onnxruntime|huggingface|model\.onnx|tokenizer\.json/.test(request.url())) modelRequests.push(request.url());
+  });
   await page.goto(serverInfo.url);
+  await page.evaluate(async () => {
+    const {ModelSession} = await import("/node_modules/@datafog/wasm/models/index.js");
+    if (typeof ModelSession.open !== "function") throw new Error("Model subpath is missing from the installed package");
+  });
 
   await page.evaluate(async () => {
     const { DataFogError, init, restore, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured, restoreStructured } = await import(
@@ -713,6 +734,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
   });
   console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
+  if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));
+
 } finally {
   await browser?.close();
   await new Promise((resolve) => server?.close(resolve) ?? resolve());
