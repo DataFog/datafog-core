@@ -406,6 +406,98 @@ fn snapshots_require_canonical_unique_codes() {
 }
 
 #[test]
+fn spellings_differing_only_in_case_or_spacing_share_one_marker_and_restore_the_first() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let first = commit(&mut workspace, "PERSON", "JOHN SMITH", [3; 16]);
+    let second = commit(&mut workspace, "PERSON", "John  Smith", [4; 16]);
+    let third = commit(&mut workspace, "PERSON", " john\tsmith ", [5; 16]);
+    let account = commit(&mut workspace, "ACCOUNT_NUMBER", "JOHN SMITH", [6; 16]);
+    assert_eq!(first, second);
+    assert_eq!(first, third);
+    assert!(is_marker(&account, "ACCOUNT_NUMBER"));
+    assert_eq!(workspace.restore(&first).unwrap(), "JOHN SMITH");
+    let reopened = Workspace::open_bundle(&workspace.export_bundle().unwrap()).unwrap();
+    let later = [WorkspaceFinding::new(
+        "PERSON",
+        "John Smith",
+        TextRange { start: 0, end: 10 },
+    )];
+    let next = reopened.prepare("John Smith", &later, [7; 16]).unwrap();
+    assert_eq!(next.preview().unwrap().text, first);
+    assert_eq!(
+        next.expected_head().unwrap(),
+        next.candidate_head().unwrap()
+    );
+    let blank = [WorkspaceFinding::new(
+        "PERSON",
+        " \t",
+        TextRange { start: 1, end: 3 },
+    )];
+    assert_eq!(
+        reopened
+            .prepare("x \tx", &blank, [8; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::InvalidFinding
+    );
+}
+
+#[test]
+fn snapshots_reject_entries_that_share_a_normalized_identity() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    commit(&mut workspace, "PERSON", "Jane", [3; 16]);
+    commit(&mut workspace, "PERSON", "Kane", [4; 16]);
+    let mut bundle = workspace.export_bundle().unwrap();
+    let at = bundle.windows(4).position(|w| w == b"Kane").unwrap();
+    bundle[at] = b'j';
+    assert_eq!(
+        Workspace::open_bundle(&bundle).err().unwrap().code,
+        ErrorCode::InvalidSnapshot
+    );
+}
+
+#[test]
+fn identity_key_handles_unicode_case_and_whitespace_edge_cases() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+
+    let eszett = commit(&mut workspace, "PERSON", "Straße", [3; 16]);
+    let upper_eszett = commit(&mut workspace, "PERSON", "STRAßE", [4; 16]);
+    assert_eq!(eszett, upper_eszett, "Straße and STRAßE share identity");
+    assert_eq!(workspace.restore(&eszett).unwrap(), "Straße");
+
+    let strasse = commit(&mut workspace, "PERSON", "STRASSE", [5; 16]);
+    assert_ne!(
+        eszett, strasse,
+        "ß and SS are distinct: to_lowercase(ß) = ß, not ss"
+    );
+
+    let dotted_i = commit(&mut workspace, "PERSON", "İstanbul", [6; 16]);
+    let lower_dotted = commit(&mut workspace, "PERSON", "i̇stanbul", [7; 16]);
+    assert_eq!(
+        dotted_i, lower_dotted,
+        "İ lowercases to i + combining dot above"
+    );
+
+    let nbsp = commit(&mut workspace, "PERSON", "John\u{00A0}Doe", [8; 16]);
+    let space = commit(&mut workspace, "PERSON", "John Doe", [9; 16]);
+    assert_eq!(nbsp, space, "NBSP and space share identity");
+
+    let tabs = commit(&mut workspace, "PERSON", "Jane\t\tSmith", [10; 16]);
+    let spaces = commit(&mut workspace, "PERSON", "Jane Smith", [11; 16]);
+    assert_eq!(tabs, spaces, "tabs collapse to single space");
+
+    let leading = commit(&mut workspace, "PERSON", "  Alice  ", [12; 16]);
+    let trimmed = commit(&mut workspace, "PERSON", "Alice", [13; 16]);
+    assert_eq!(leading, trimmed, "surrounding spaces share identity");
+    assert_eq!(
+        workspace.restore(&leading).unwrap(),
+        "  Alice  ",
+        "first spelling (with spaces) is restored"
+    );
+}
+
+#[test]
 fn hmac_code_derivation_fixture_prevents_silent_algorithm_changes() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../../../fixtures/workspace/hmac-code.json")).unwrap();
