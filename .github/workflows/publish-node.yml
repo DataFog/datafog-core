@@ -42,8 +42,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check-release.py node
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+        shell: bash
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:

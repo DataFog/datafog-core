@@ -40,7 +40,12 @@ jobs:
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
       - if: steps.scope.outputs.code == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.code == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - if: steps.scope.outputs.code == 'true'
         uses: Swatinem/rust-cache@v2
         with:

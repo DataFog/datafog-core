@@ -32,8 +32,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py wasm
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: wasm32-unknown-unknown
       - uses: actions/setup-node@v4
         with:
