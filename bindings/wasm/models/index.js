@@ -56,7 +56,8 @@ export class ModelSession {
     let contract;
     try {
       contract = new BrowserModelContract(labels);
-      const descriptor = contract.describe();
+      // JSON.parse preserves custom labels such as __proto__ as own properties.
+      const descriptor = JSON.parse(contract.describe());
       const nativeLabels = contract.labels();
       // Validate prompts before fetching assets, then load the optional runtime.
       const { validateLabels } = await import("./model.mjs");

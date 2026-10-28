@@ -184,9 +184,9 @@ impl Task for LifecycleTask {
 }
 #[napi]
 impl ModelSessionNative {
-    #[napi(ts_return_type = "ModelDescriptor")]
-    pub fn describe(&self) -> napi::Result<serde_json::Value> {
-        serde_json::to_value(self.session.describe()).map_err(|_| {
+    #[napi]
+    pub fn describe(&self) -> napi::Result<String> {
+        serde_json::to_string(&self.session.describe()).map_err(|_| {
             Error::new(
                 Status::GenericFailure,
                 "model descriptor serialization failed",

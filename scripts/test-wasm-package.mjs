@@ -274,16 +274,18 @@ try {
     expectThrows(() => scan("Email jane@example.com"), "Error");
     await Promise.all([init(), init()]);
     const {BrowserModelContract} = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
-    const contract = new BrowserModelContract({company: "COMPANY"});
+    const contract = new BrowserModelContract(JSON.parse('{"company":"COMPANY","__proto__":"PERSON"}'));
     try {
-      const descriptor = contract.describe();
+      const descriptor = JSON.parse(contract.describe());
       if (descriptor.backend !== "gliner25_onnx_web" ||
           descriptor.labels.company !== "COMPANY" ||
+          !Object.hasOwn(descriptor.labels, "__proto__") ||
+          descriptor.labels.__proto__ !== "PERSON" ||
           descriptor.score_scale !== "gliner25_pair_sigmoid") {
         throw new Error("Browser descriptor does not match configured Core metadata");
       }
       descriptor.labels.company = "CHANGED";
-      if (contract.describe().labels.company !== "COMPANY") throw new Error("Descriptor changed Core labels");
+      if (JSON.parse(contract.describe()).labels.company !== "COMPANY") throw new Error("Descriptor changed Core labels");
     } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");

@@ -250,7 +250,7 @@ export declare class ModelCancellation {
 }
 
 export declare class ModelSessionNative {
-  describe(): ModelDescriptor
+  describe(): string
   scan(text: string, cancellation?: ModelCancellation | undefined | null, config?: any | undefined | null): Promise<ModelScanResult>
   /** Raw model output: every model label, with no rule detectors. */
   scanModel(text: string, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>
