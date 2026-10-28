@@ -1,5 +1,7 @@
 # DataFog Core repository rules
 
+For dev environment setup (devcontainer, local install, troubleshooting), see [CONTRIBUTING.md](CONTRIBUTING.md#dev-environment-setup).
+
 ## Verification CLI
 
 Use `cargo dfv` to verify changes across all SDKs (Rust, Python, Node, WASM):
@@ -19,12 +21,14 @@ cargo dfv parity --live       # Run scan() through each SDK and diff outputs
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
 
+**Doctor behavior:** `cargo dfv doctor` reads version pins from repository files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`). A missing pin file is a hard error. On mismatch, it prints the required vs found version and the exact command to fix it. It never installs anything and exits non-zero on failure. Agents run doctor first, install what it says if they can, and report a blocker otherwise.
+
 **Thresholds:**
 - Rule-based: any precision/recall drop fails.
 - Model-based: depends on engine tier (see below).
 - Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
 - Parity: zero tolerance unless a PR intentionally updates a fixture.
-- Live parity: compares actual scan() output across Python and Node bindings. WASM parity is verified via smoke test in headless Chromium.
+- Live parity: compares actual scan() output across Python, Node, and WASM bindings. WASM runs via headless Chromium.
 
 **Model engine tiers:**
 - **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
@@ -43,7 +47,7 @@ Provisioning scripts produce per-engine bundles with their own manifests. Regist
 Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
 
 **Scripts wrapped by dfv:**
-- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py
+- `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py, scripts/check-gliner2-entity-count.py
 - `smoke`: bindings/python/tests/test_installed.py, scripts/test-node-package.mjs, scripts/test-wasm-package.mjs
 
 ## Correctness
