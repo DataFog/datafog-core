@@ -497,6 +497,13 @@ pub struct BrowserModelContract {
 
 #[wasm_bindgen]
 impl BrowserModelContract {
+    pub fn describe(&self) -> Result<JsValue, JsValue> {
+        self.contract
+            .describe()
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .map_err(|_| JsValue::from_str("model descriptor serialization failed"))
+    }
+
     #[wasm_bindgen(constructor)]
     pub fn new(labels: Option<JsValue>) -> Result<BrowserModelContract, JsValue> {
         let labels = labels.map(config_value).transpose()?;

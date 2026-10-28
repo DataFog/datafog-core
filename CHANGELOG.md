@@ -13,6 +13,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 - Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
 - Persistent workspace pseudonyms in Rust and WASM, with exact local restoration.
   Markers are short typed codes such as `[[PERSON_7KQ4ZM]]`, unique within the

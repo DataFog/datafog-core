@@ -8,6 +8,10 @@ const report=JSON.parse(readFileSync(reportPath));
 const api=await import(pathToFileURL(packagePath).href);
 const session=await api.ModelSession.open(config);
 try {
+  assert.deepEqual(session.describe(), report.descriptor);
+  const copy = session.describe();
+  copy.labels = {};
+  assert.deepEqual(session.describe(), report.descriptor);
   for (const fixture of report.cases) {
     const result=await session.scanModel(fixture.text);
     assert.equal(result.contractVersion,1);
@@ -41,6 +45,7 @@ try {
   await pending;
 } finally { await session.close(); }
 await session.close();
+assert.deepEqual(session.describe(), report.descriptor);
 await assert.rejects(session.scan(''),e=>e.code==='model_session_closed');
 await assert.rejects(api.ModelSession.open({...config,manifest_sha256:'0'.repeat(64)}),e=>e.code==='model_load_failed');
 console.log('Installed Node/Python model results, Unicode, errors and cleanup passed.');

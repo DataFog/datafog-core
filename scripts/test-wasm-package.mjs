@@ -98,6 +98,7 @@ import {
 import {ModelSession, type ModelScanResult} from "@datafog/wasm/models";
 async function modelTypes() {
   const session = await ModelSession.open({modelBaseUrl: "/models/", labels: {person: "PERSON"}});
+  const nativeLabel: string = session.describe().labels.person;
   const result: ModelScanResult = await session.scan("John Smith", {entities: ["PERSON"]});
   transform("John Smith", result.findings, {default: {strategy: "redact"}});
   await session.scanModel("John Smith");
@@ -272,6 +273,18 @@ try {
 
     expectThrows(() => scan("Email jane@example.com"), "Error");
     await Promise.all([init(), init()]);
+    const {BrowserModelContract} = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const contract = new BrowserModelContract({company: "COMPANY"});
+    try {
+      const descriptor = contract.describe();
+      if (descriptor.backend !== "gliner25_onnx_web" ||
+          descriptor.labels.company !== "COMPANY" ||
+          descriptor.score_scale !== "gliner25_pair_sigmoid") {
+        throw new Error("Browser descriptor does not match configured Core metadata");
+      }
+      descriptor.labels.company = "CHANGED";
+      if (contract.describe().labels.company !== "COMPANY") throw new Error("Descriptor changed Core labels");
+    } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
     const {verifyGerman} = await import("/german-conformance.mjs");

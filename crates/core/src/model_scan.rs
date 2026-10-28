@@ -163,6 +163,18 @@ pub struct ModelScanResult {
     pub findings: Vec<Finding>,
     pub evidence: Vec<FindingEvidence>,
 }
+
+/// Configured model identity and label capabilities, independent of worker state.
+/// This snapshot contains no local paths and does not probe runtime readiness.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ModelDescriptor {
+    pub backend: String,
+    pub model: String,
+    pub adapter_version: String,
+    pub labels: BTreeMap<String, String>,
+    pub score_scale: String,
+}
+
 pub struct ModelScanContract {
     pub(crate) backend: String,
     pub(crate) model: String,
@@ -174,6 +186,17 @@ pub struct ModelScanContract {
 }
 
 impl ModelScanContract {
+    /// Snapshot of this contract's configured model, labels and raw-score scale.
+    pub fn describe(&self) -> ModelDescriptor {
+        ModelDescriptor {
+            backend: self.backend.clone(),
+            model: self.model.clone(),
+            adapter_version: self.adapter_version.clone(),
+            labels: self.labels.clone(),
+            score_scale: self.score_scale.clone(),
+        }
+    }
+
     /// Contract for the pinned English GLiNER2.5 Small browser adapter.
     /// Custom maps explicitly associate model prompts with canonical entity types.
     pub fn gliner25_small(labels: Option<&serde_json::Value>) -> Result<Self, ModelError> {
@@ -606,6 +629,24 @@ mod browser_tests {
 
     fn contract() -> ModelScanContract {
         ModelScanContract::gliner25_small(None).unwrap()
+    }
+
+    #[test]
+    fn descriptor_uses_configured_labels_and_returns_an_independent_snapshot() {
+        let contract =
+            ModelScanContract::gliner25_small(Some(&json!({"company": "COMPANY"}))).unwrap();
+        let mut descriptor = contract.describe();
+        assert_eq!(descriptor.backend, "gliner25_onnx_web");
+        assert_eq!(descriptor.model, contract.model);
+        assert_eq!(descriptor.adapter_version, contract.adapter_version);
+        assert_eq!(descriptor.score_scale, "gliner25_pair_sigmoid");
+        assert_eq!(
+            descriptor.labels,
+            BTreeMap::from([("company".into(), "COMPANY".into())])
+        );
+        descriptor.labels.clear();
+        assert_eq!(contract.native_labels(), vec!["company"]);
+        assert_eq!(contract.describe().labels.len(), 1);
     }
 
     fn span(label: &str, start: usize, end: usize) -> NativeSpan {

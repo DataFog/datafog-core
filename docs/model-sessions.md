@@ -90,6 +90,13 @@ option to cancel from another thread/call. `close` is safe to repeat and stops
 active work. A request that fails during inference retires its worker; open a
 new session to continue. Concurrent scans on one session return `model_busy`.
 
+`session.describe()` returns the configured `backend`, `model`, `adapter_version`,
+native-label-to-canonical-entity `labels` map and raw `score_scale`. Rust returns
+the same `ModelDescriptor`; Python returns a dictionary and Node/browser return
+plain objects with these snake_case keys. Each call returns an independent
+snapshot, available after close. It describes this session's configured contract;
+it does not probe runtime readiness or list engines available on other platforms.
+
 Both models return `contract_version`/`contractVersion`, `model`, `findings` and
 `evidence`. Findings retain the existing entity, text and offset fields. Python
 exposes byte/code-point ranges; Node also exposes UTF-16 ranges. Evidence keeps

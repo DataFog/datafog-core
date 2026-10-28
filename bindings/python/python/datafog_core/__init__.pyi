@@ -38,6 +38,13 @@ class _ModelConfig(_ModelConfigRequired, total=False):
     engine: Literal["datafog", "gliner2"]
     gliner2: _Gliner2Config
 
+class _ModelDescriptor(TypedDict):
+    backend: str
+    model: str
+    adapter_version: str
+    labels: dict[str, str]
+    score_scale: str
+
 class DataFogModelError(RuntimeError):
     code: str
     reason: str
@@ -64,6 +71,7 @@ class ModelCancellation:
 class ModelSession:
     @staticmethod
     def open(config: _ModelConfig) -> ModelSession: ...
+    def describe(self) -> _ModelDescriptor: ...
     def scan(self, text: str, config: _ScanConfig | None = None, *, cancellation: ModelCancellation | None = None) -> ModelScanResult: ...
     def scan_model(self, text: str, *, cancellation: ModelCancellation | None = None) -> ModelScanResult: ...
     def close(self) -> None: ...

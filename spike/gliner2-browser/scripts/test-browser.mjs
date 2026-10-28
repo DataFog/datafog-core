@@ -132,12 +132,19 @@ try {
             location: "LOCATION",
           },
         });
+        const descriptor = session.describe();
+        if (descriptor.labels.company !== "COMPANY" || descriptor.backend !== "gliner25_onnx_web") {
+          throw new Error("Browser session descriptor differs from its configured labels");
+        }
         try {
           return await session.scanModel(
             "Apple CEO Tim Cook announced iPhone 15 in Cupertino yesterday.",
           );
         } finally {
           await session.close();
+          if (JSON.stringify(session.describe()) !== JSON.stringify(descriptor)) {
+            throw new Error("Closing a browser session changed its descriptor");
+          }
         }
       });
       for (const [entityType, matchedText] of [

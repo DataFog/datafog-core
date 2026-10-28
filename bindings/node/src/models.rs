@@ -184,6 +184,16 @@ impl Task for LifecycleTask {
 }
 #[napi]
 impl ModelSessionNative {
+    #[napi(ts_return_type = "ModelDescriptor")]
+    pub fn describe(&self) -> napi::Result<serde_json::Value> {
+        serde_json::to_value(self.session.describe()).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "model descriptor serialization failed",
+            )
+        })
+    }
+
     #[napi(ts_return_type = "Promise<ModelScanResult>")]
     pub fn scan<'env>(
         &self,
