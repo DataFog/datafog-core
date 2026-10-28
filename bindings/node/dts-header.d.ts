@@ -2,6 +2,8 @@
 export type EntityType = string;
 
 export interface ModelSessionConfig {
+  /** Omit to retain legacy selection from the presence of gliner2 settings. */
+  engine?: "datafog" | "gliner2";
   bundle: string;
   manifest_sha256: string;
   limits: {

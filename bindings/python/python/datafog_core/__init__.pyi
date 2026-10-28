@@ -35,6 +35,7 @@ class _Gliner2Config(TypedDict):
     chunk_overlap: int
 
 class _ModelConfig(_ModelConfigRequired, total=False):
+    engine: Literal["datafog", "gliner2"]
     gliner2: _Gliner2Config
 
 class DataFogModelError(RuntimeError):

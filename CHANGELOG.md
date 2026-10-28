@@ -13,6 +13,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
 - `.devcontainer/devcontainer.json` for VS Code, Cursor, and GitHub Codespaces dev environments
 - Dev environment setup documentation in CONTRIBUTING.md covering devcontainer and local install paths, verification steps, and troubleshooting
 - `scripts/pin.sh` helper to read pinned tool versions from repository files

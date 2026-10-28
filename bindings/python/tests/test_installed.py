@@ -23,6 +23,7 @@ from datafog_core import (
     DataFogFindingError,
     DataFogKeyProviderError,
     Finding,
+    ModelSession,
     PrivacyManager,
     TextRange,
     scan,
@@ -36,6 +37,28 @@ from datafog_core import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def verify_model_engine_selection() -> None:
+    config = {
+        "bundle": str(ROOT / "target" / "missing-engine-bundle"),
+        "manifest_sha256": "a" * 64,
+        "limits": dict(max_input_bytes=1000, max_response_bytes=10000,
+                       max_findings=10, timeout_ms=1000, cleanup_timeout_ms=1000),
+    }
+    for engine, path, reason in [
+        ("private-engine", "/engine", "invalid_value"),
+        (True, "/engine", "invalid_type"),
+        (None, "/engine", "invalid_type"),
+        ("gliner2", "/gliner2", "missing_field"),
+    ]:
+        try:
+            ModelSession.open(dict(config, engine=engine))
+        except DataFogConfigurationError as error:
+            assert (error.path, error.reason) == (path, reason)
+            assert "private-engine" not in str(error)
+        else:
+            raise AssertionError("invalid engine selection accepted")
 
 
 def expected_entities(record: dict[str, object]) -> list[dict[str, object]]:
@@ -506,4 +529,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    verify_model_engine_selection()
     main()

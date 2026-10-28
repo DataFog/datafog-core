@@ -57,6 +57,22 @@ import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-co
 import * as germanApi from "@datafog/node";
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
+const engineConfig = {
+  bundle: path.join(process.cwd(), "missing-engine-bundle"),
+  manifest_sha256: "a".repeat(64),
+  limits: {max_input_bytes:1000,max_response_bytes:10000,max_findings:10,timeout_ms:1000,cleanup_timeout_ms:1000},
+};
+for (const [engine, errorPath, reason] of [
+  ["private-engine", "/engine", "invalid_value"],
+  [true, "/engine", "invalid_type"],
+  [null, "/engine", "invalid_type"],
+  ["gliner2", "/gliner2", "missing_field"],
+]) {
+  await assert.rejects(germanApi.ModelSession.open({...engineConfig, engine}), error =>
+    error.code === "invalid_configuration" && error.path === errorPath &&
+    error.reason === reason && !error.message.includes("private-engine"));
+}
+
 
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});

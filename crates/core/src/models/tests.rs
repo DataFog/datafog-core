@@ -237,6 +237,89 @@ fn results_keep_scores_and_reindex_duplicate_evidence() {
 }
 
 #[test]
+fn explicit_engine_selection_preserves_legacy_configs_and_rejects_conflicts() {
+    let datafog = serde_json::json!({
+        "bundle": "/missing/bundle", "manifest_sha256": "a".repeat(64),
+        "limits": descriptor().limits,
+    });
+    let mut gliner2 = datafog.clone();
+    gliner2["gliner2"] = serde_json::json!({
+        "python": std::env::temp_dir().join("engine-selection-python"),
+        "labels": [{"label": "person", "threshold": 0.5}],
+        "intra_threads": 1, "chunk_size": 384, "chunk_overlap": 64,
+    });
+    for (legacy, engine, name) in [
+        (&datafog, ModelEngine::Datafog, "datafog"),
+        (&gliner2, ModelEngine::Gliner2, "gliner2"),
+    ] {
+        assert_eq!(
+            parse_config(legacy).unwrap().selected_engine().unwrap(),
+            engine
+        );
+        let mut explicit = legacy.clone();
+        explicit["engine"] = name.into();
+        assert_eq!(
+            parse_config(&explicit).unwrap().selected_engine().unwrap(),
+            engine
+        );
+    }
+    for (mut config, selector, path, reason) in [
+        (
+            datafog.clone(),
+            serde_json::json!("gliner2"),
+            "/gliner2",
+            "missing_field",
+        ),
+        (
+            gliner2.clone(),
+            serde_json::json!("datafog"),
+            "/gliner2",
+            "invalid_value",
+        ),
+        (
+            datafog.clone(),
+            serde_json::json!("private-engine"),
+            "/engine",
+            "invalid_value",
+        ),
+        (
+            datafog.clone(),
+            serde_json::json!(true),
+            "/engine",
+            "invalid_type",
+        ),
+        (
+            datafog.clone(),
+            serde_json::Value::Null,
+            "/engine",
+            "invalid_type",
+        ),
+    ] {
+        config["engine"] = selector;
+        let error = parse_config(&config).err().unwrap();
+        assert_eq!(error.path, path);
+        assert_eq!(error.reason, reason);
+        assert!(!format!("{error:?}").contains("private-engine"));
+    }
+    // Direct Rust callers can construct or deserialize configurations without
+    // parse_config; opening must still reject a contradictory selection first.
+    let mut direct: ModelSessionConfig = serde_json::from_value(datafog).unwrap();
+    direct.engine = Some(ModelEngine::Gliner2);
+    let error = ModelSession::open(direct).err().unwrap();
+    assert_eq!(
+        (error.path.as_str(), error.reason.as_str()),
+        ("/gliner2", "missing_field")
+    );
+    let mut direct: ModelSessionConfig = serde_json::from_value(gliner2).unwrap();
+    direct.engine = Some(ModelEngine::Datafog);
+    let error = ModelSession::open(direct).err().unwrap();
+    assert_eq!(
+        (error.path.as_str(), error.reason.as_str()),
+        ("/gliner2", "invalid_value")
+    );
+}
+
+#[test]
 fn configuration_errors_are_shared_precise_and_value_free() {
     let valid = serde_json::json!({
         "bundle": "/sensitive/local/path", "manifest_sha256": "a".repeat(64),
