@@ -13,6 +13,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Protected follow-up text in Rust and WASM. Committed workspace pseudonyms stay
+  unchanged; unknown or uncommitted markers and overlapping findings block the
+  operation. The synthetic browser workflow requires local preview and approval.
 - Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved
   snapshot; a rejected input blocks the whole batch. The synthetic browser harness
   supports explicit input removal followed by a fresh preview and approval.

@@ -35,7 +35,8 @@ async function perform(task) {
   try { await task(g); } catch (error) {
     if (g === generation) {
       status(safeCode(error));
-      element("batch-error").textContent = Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1} rejected. Remove or correct it, then prepare a new preview.` : "";
+      const guidance = error.code === "invalid_marker" ? " Use the exact pseudonym from this unlocked workspace. Unknown, foreign and unsaved markers are blocked." : "";
+      element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
   finally { operations--; renderBusy(); }
