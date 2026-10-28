@@ -81,8 +81,124 @@ impl DoctorCheck {
     }
 }
 
-pub fn check_rust_toolchain() -> DoctorCheck {
-    let expected = "1.88";
+#[derive(Debug, Clone)]
+pub struct VersionPins {
+    pub rust_channel: String,
+    pub node_major: u32,
+    pub wasm_bindgen: String,
+    pub playwright: String,
+}
+
+fn read_rust_channel(root: &Path) -> Result<String, String> {
+    let path = root.join("rust-toolchain.toml");
+    if !path.exists() {
+        return Err("rust-toolchain.toml not found".to_string());
+    }
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("cannot read rust-toolchain.toml: {e}"))?;
+    let parsed: toml::Value = content
+        .parse()
+        .map_err(|e| format!("invalid rust-toolchain.toml: {e}"))?;
+    parsed
+        .get("toolchain")
+        .and_then(|t| t.get("channel"))
+        .and_then(|c| c.as_str())
+        .map(String::from)
+        .ok_or_else(|| "rust-toolchain.toml missing toolchain.channel".to_string())
+}
+
+fn read_node_major(root: &Path) -> Result<u32, String> {
+    let path = root.join(".nvmrc");
+    if !path.exists() {
+        return Err(".nvmrc not found".to_string());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("cannot read .nvmrc: {e}"))?;
+    content
+        .trim()
+        .parse()
+        .map_err(|_| ".nvmrc does not contain a valid major version number".to_string())
+}
+
+fn read_wasm_bindgen_from_lockfile(root: &Path) -> Result<String, String> {
+    let path = root.join("Cargo.lock");
+    if !path.exists() {
+        return Err("Cargo.lock not found".to_string());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("cannot read Cargo.lock: {e}"))?;
+
+    let mut in_wasm_bindgen = false;
+    for line in content.lines() {
+        if line == r#"name = "wasm-bindgen""# {
+            in_wasm_bindgen = true;
+            continue;
+        }
+        if in_wasm_bindgen && line.starts_with("version = ") {
+            let version = line
+                .strip_prefix("version = \"")
+                .and_then(|s| s.strip_suffix('"'))
+                .map(String::from);
+            if let Some(v) = version {
+                return Ok(v);
+            }
+        }
+        if in_wasm_bindgen && line.starts_with('[') {
+            break;
+        }
+    }
+    Err("wasm-bindgen version not found in Cargo.lock".to_string())
+}
+
+fn read_playwright_version(root: &Path) -> Result<String, String> {
+    let path = root.join("bindings/wasm/package.json");
+    if !path.exists() {
+        return Err("bindings/wasm/package.json not found".to_string());
+    }
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read bindings/wasm/package.json: {e}"))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("invalid package.json: {e}"))?;
+    parsed
+        .get("devDependencies")
+        .and_then(|d| d.get("playwright"))
+        .and_then(|p| p.as_str())
+        .map(String::from)
+        .ok_or_else(|| "devDependencies.playwright not found in package.json".to_string())
+}
+
+pub fn read_version_pins(root: &Path) -> Result<VersionPins, Vec<String>> {
+    let mut errors = Vec::new();
+
+    let rust_channel = read_rust_channel(root).unwrap_or_else(|e| {
+        errors.push(e);
+        String::new()
+    });
+    let node_major = read_node_major(root).unwrap_or_else(|e| {
+        errors.push(e);
+        0
+    });
+    let wasm_bindgen = read_wasm_bindgen_from_lockfile(root).unwrap_or_else(|e| {
+        errors.push(e);
+        String::new()
+    });
+    let playwright = read_playwright_version(root).unwrap_or_else(|e| {
+        errors.push(e);
+        String::new()
+    });
+
+    if errors.is_empty() {
+        Ok(VersionPins {
+            rust_channel,
+            node_major,
+            wasm_bindgen,
+            playwright,
+        })
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn check_rust_toolchain(pins: &VersionPins) -> DoctorCheck {
+    let expected = &pins.rust_channel;
     let output = Command::new("rustc").arg("--version").output();
 
     match output {
@@ -96,7 +212,7 @@ pub fn check_rust_toolchain() -> DoctorCheck {
                     "rust_toolchain",
                     Some(version),
                     &format!("rustc {expected}"),
-                    &format!("rustup install {expected} && rustup default {expected}"),
+                    "rustup show",
                     true,
                 )
             }
@@ -105,7 +221,9 @@ pub fn check_rust_toolchain() -> DoctorCheck {
             "rust_toolchain",
             None,
             &format!("rustc {expected}"),
-            "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && rustup install 1.88",
+            &format!(
+                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && rustup install {expected}"
+            ),
             true,
         ),
     }
@@ -173,8 +291,8 @@ pub fn check_maturin() -> DoctorCheck {
     }
 }
 
-pub fn check_node() -> DoctorCheck {
-    let expected_major = 24;
+pub fn check_node(pins: &VersionPins) -> DoctorCheck {
+    let expected_major = pins.node_major;
     let output = Command::new("node").arg("--version").output();
 
     match output {
@@ -193,9 +311,7 @@ pub fn check_node() -> DoctorCheck {
                     "node",
                     Some(version),
                     &format!("Node.js {expected_major}+"),
-                    &format!(
-                        "nvm install {expected_major} && nvm use {expected_major}  # or: brew install node@{expected_major}"
-                    ),
+                    &format!("nvm install {expected_major}"),
                     true,
                 )
             }
@@ -204,14 +320,14 @@ pub fn check_node() -> DoctorCheck {
             "node",
             None,
             &format!("Node.js {expected_major}+"),
-            "curl -fsSL https://fnm.vercel.app/install | bash && fnm install 24",
+            &format!("nvm install {expected_major}"),
             true,
         ),
     }
 }
 
-pub fn check_wasm_bindgen_cli() -> DoctorCheck {
-    let expected = "0.2.127";
+pub fn check_wasm_bindgen_cli(pins: &VersionPins) -> DoctorCheck {
+    let expected = &pins.wasm_bindgen;
     let output = Command::new("wasm-bindgen").arg("--version").output();
 
     match output {
@@ -270,7 +386,8 @@ pub fn check_wasm_target() -> DoctorCheck {
     }
 }
 
-pub fn check_playwright_chromium() -> DoctorCheck {
+pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
+    let expected = &pins.playwright;
     let root = workspace_root();
     let wasm_dir = root.join("bindings").join("wasm");
 
@@ -288,7 +405,7 @@ pub fn check_playwright_chromium() -> DoctorCheck {
             "playwright_chromium",
             None,
             "Playwright Chromium browser",
-            "npx --prefix bindings/wasm playwright install --with-deps chromium",
+            &format!("npx playwright@{expected} install chromium"),
             true,
         ),
     }
@@ -380,8 +497,6 @@ pub fn check_python_binding(root: &Path, core_mtime: Option<std::time::SystemTim
 
 pub fn check_node_binding(root: &Path, core_mtime: Option<std::time::SystemTime>) -> DoctorCheck {
     let node_dir = root.join("bindings").join("node");
-    // Prefer NAPI build artifacts over the hand-written index.js wrapper,
-    // which is committed source and is not rewritten by `napi build`.
     let native_js = node_dir.join("native.js");
     if native_js.exists() {
         return check_binding_freshness("node", &native_js, core_mtime);
@@ -509,17 +624,33 @@ pub fn check_model_weights(root: &Path) -> DoctorCheck {
 }
 
 pub fn run_doctor_internal() -> DoctorResult {
+    let root = workspace_root();
+
+    let pins = match read_version_pins(&root) {
+        Ok(p) => p,
+        Err(errors) => {
+            let checks: Vec<DoctorCheck> = errors
+                .iter()
+                .map(|e| DoctorCheck::fail("pin_file", None, "pin file present", e, true))
+                .collect();
+            return DoctorResult {
+                pass: false,
+                checks,
+                run_directory: None,
+            };
+        }
+    };
+
     let mut checks = vec![
-        check_rust_toolchain(),
+        check_rust_toolchain(&pins),
         check_python(),
         check_maturin(),
-        check_node(),
-        check_wasm_bindgen_cli(),
+        check_node(&pins),
+        check_wasm_bindgen_cli(&pins),
         check_wasm_target(),
-        check_playwright_chromium(),
+        check_playwright_chromium(&pins),
     ];
 
-    let root = workspace_root();
     let core_mtime = get_core_mtime(&root);
 
     checks.push(check_python_binding(&root, core_mtime));
@@ -542,17 +673,44 @@ pub fn run_doctor_internal() -> DoctorResult {
 }
 
 pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
+    let root = workspace_root();
+
+    let pins = match read_version_pins(&root) {
+        Ok(p) => p,
+        Err(errors) => {
+            if json_output {
+                let checks: Vec<DoctorCheck> = errors
+                    .iter()
+                    .map(|e| DoctorCheck::fail("pin_file", None, "pin file present", e, true))
+                    .collect();
+                let result = DoctorResult {
+                    pass: false,
+                    checks,
+                    run_directory: None,
+                };
+                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            } else {
+                eprintln!("Missing pin files:");
+                for e in &errors {
+                    eprintln!("  {e}");
+                }
+                eprintln!();
+                eprintln!("Pin files must exist. See CONTRIBUTING.md for setup.");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+
     let mut checks = vec![
-        check_rust_toolchain(),
+        check_rust_toolchain(&pins),
         check_python(),
         check_maturin(),
-        check_node(),
-        check_wasm_bindgen_cli(),
+        check_node(&pins),
+        check_wasm_bindgen_cli(&pins),
         check_wasm_target(),
-        check_playwright_chromium(),
+        check_playwright_chromium(&pins),
     ];
 
-    let root = workspace_root();
     let core_mtime = get_core_mtime(&root);
 
     checks.push(check_python_binding(&root, core_mtime));
@@ -641,5 +799,92 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn node_major_too_low_fails() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".nvmrc"), "24\n").unwrap();
+        let major = read_node_major(tmp.path()).unwrap();
+        assert_eq!(major, 24);
+    }
+
+    #[test]
+    fn node_accepts_newer_major() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(".nvmrc"), "25\n").unwrap();
+        let major = read_node_major(tmp.path()).unwrap();
+        assert_eq!(major, 25);
+    }
+
+    #[test]
+    fn missing_nvmrc_errors() {
+        let tmp = TempDir::new().unwrap();
+        let result = read_node_major(tmp.path());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains(".nvmrc not found"));
+    }
+
+    #[test]
+    fn missing_rust_toolchain_errors() {
+        let tmp = TempDir::new().unwrap();
+        let result = read_rust_channel(tmp.path());
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .contains("rust-toolchain.toml not found")
+        );
+    }
+
+    #[test]
+    fn reads_rust_channel_from_toml() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("rust-toolchain.toml"),
+            r#"[toolchain]
+channel = "1.88.0"
+"#,
+        )
+        .unwrap();
+        let channel = read_rust_channel(tmp.path()).unwrap();
+        assert_eq!(channel, "1.88.0");
+    }
+
+    #[test]
+    fn reads_wasm_bindgen_from_lockfile() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("Cargo.lock"),
+            r#"[[package]]
+name = "wasm-bindgen"
+version = "0.2.127"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+"#,
+        )
+        .unwrap();
+        let version = read_wasm_bindgen_from_lockfile(tmp.path()).unwrap();
+        assert_eq!(version, "0.2.127");
+    }
+
+    #[test]
+    fn reads_playwright_from_package_json() {
+        let tmp = TempDir::new().unwrap();
+        let wasm_dir = tmp.path().join("bindings/wasm");
+        fs::create_dir_all(&wasm_dir).unwrap();
+        fs::write(
+            wasm_dir.join("package.json"),
+            r#"{"devDependencies": {"playwright": "1.62.1"}}"#,
+        )
+        .unwrap();
+        let version = read_playwright_version(tmp.path()).unwrap();
+        assert_eq!(version, "1.62.1");
     }
 }

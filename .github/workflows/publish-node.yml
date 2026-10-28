@@ -44,11 +44,11 @@ jobs:
       - run: python3 scripts/check-release.py node
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain-file: rust-toolchain.toml
           targets: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: bindings/node/package-lock.json
       - run: npm ci --prefix bindings/node
@@ -85,7 +85,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
       - run: npm ci --prefix bindings/node

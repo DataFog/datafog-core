@@ -6,7 +6,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Toolchain versions are now pinned in repository root files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`) as the single source of truth; the Dockerfile, devcontainer, and CI read these files instead of hardcoding versions
+- `cargo dfv doctor` reads version requirements from pin files and fails loudly when a pin file is missing; it no longer uses hardcoded version constants
+
 ### Added
+
+- `.devcontainer/devcontainer.json` for VS Code, Cursor, and GitHub Codespaces dev environments
+- Dev environment setup documentation in CONTRIBUTING.md covering devcontainer and local install paths, verification steps, and troubleshooting
 
 - Optional browser Small model sessions return canonical findings for the scan/transform flow, with Core-owned entity routing and score evidence.
 

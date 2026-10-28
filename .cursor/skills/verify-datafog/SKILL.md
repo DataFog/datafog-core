@@ -7,28 +7,43 @@ description: Verify DataFog Core detection and transformation logic across all S
 
 Verify detection semantics and cross-SDK parity using `cargo dfv`. The CLI drives installed packages (Python wheel, Node package, browser WASM bundle, Rust crate) the way a user does.
 
+## Version pins
+
+All versions are read from repository pin files. No hardcoded values in doctor:
+
+| Pin file | Tool | Check |
+| --- | --- | --- |
+| `rust-toolchain.toml` | Rust | exact channel match |
+| `.nvmrc` | Node.js | major >= pinned |
+| `Cargo.lock` | wasm-bindgen-cli | exact version match |
+| `bindings/wasm/package.json` | Playwright | exact version match |
+
+A missing pin file is a hard error. Doctor never silently falls back.
+
 ## Launch
 
-Ensure the environment is ready before verification.
+Run doctor first. If it fails, fix issues before proceeding:
 
 ```bash
 cargo dfv doctor --json
 ```
 
 Doctor checks:
-- rust_toolchain: Rust 1.88
+- rust_toolchain: matches rust-toolchain.toml channel
 - python: Python 3.10+
 - maturin: maturin installed
-- node: Node.js 24+
-- wasm_bindgen_cli: wasm-bindgen 0.2.127
+- node: Node.js major >= .nvmrc
+- wasm_bindgen_cli: matches Cargo.lock wasm-bindgen version
 - wasm_target: wasm32-unknown-unknown rustup target
-- playwright_chromium: Playwright Chromium browser
+- playwright_chromium: Playwright Chromium browser installed
 - python_binding_fresh: built wheel or .so, fresher than crates/core/src
 - node_binding_fresh: built native.js or .node file (not the hand-written index.js wrapper)
 - wasm_binding_fresh: built dist/datafog_wasm_bg.wasm
 - model_weights (optional): files in models/ match manifest.json sha256 hashes
 
 Doctor hashes the files listed in `models/manifest.json` using sha256. It does not verify the model revision. If the manifest is missing, doctor emits a warning but does not fail.
+
+**Doctor never installs anything.** On mismatch it prints the required vs found version and the exact command to fix it, then exits non-zero.
 
 ## Doctor
 

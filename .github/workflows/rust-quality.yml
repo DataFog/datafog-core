@@ -42,8 +42,7 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
-          components: rustfmt, clippy
+          toolchain-file: rust-toolchain.toml
       - if: steps.scope.outputs.code == 'true'
         uses: Swatinem/rust-cache@v2
         with:
