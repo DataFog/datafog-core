@@ -856,23 +856,52 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     fn make_temp_dir() -> std::path::PathBuf {
-        let unique = format!(
-            "dfv-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        );
-        let dir = std::env::temp_dir().join(unique);
-        fs::create_dir_all(&dir).unwrap();
-        dir
+        static NEXT_DIRECTORY_ID: AtomicU64 = AtomicU64::new(0);
+        loop {
+            let unique = format!(
+                "dfv-test-{}-{}",
+                std::process::id(),
+                NEXT_DIRECTORY_ID.fetch_add(1, Ordering::Relaxed)
+            );
+            let dir = std::env::temp_dir().join(unique);
+            match fs::create_dir(&dir) {
+                Ok(()) => return dir,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("failed to create temporary pin fixture: {error}"),
+            }
+        }
     }
 
     fn cleanup(dir: &std::path::Path) {
-        let _ = fs::remove_dir_all(dir);
+        fs::remove_dir_all(dir).expect("remove temporary pin fixture");
+    }
+
+    #[test]
+    fn concurrent_pin_fixtures_have_distinct_directories() {
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let directories = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..16)
+                .map(|_| {
+                    let barrier = barrier.clone();
+                    scope.spawn(move || {
+                        barrier.wait();
+                        (0..32).map(|_| make_temp_dir()).collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .flat_map(|worker| worker.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        let unique: std::collections::BTreeSet<_> = directories.iter().collect();
+        for directory in &unique {
+            cleanup(directory);
+        }
+        assert_eq!(unique.len(), directories.len());
     }
 
     #[test]
