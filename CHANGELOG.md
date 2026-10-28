@@ -13,6 +13,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Atomic workspace batches in Rust and WASM. Inputs share pseudonyms and one saved
+  snapshot; a rejected input blocks the whole batch. The synthetic browser harness
+  supports explicit input removal followed by a fresh preview and approval.
 - Workspace values of one type that differ only in letter case or spacing share
   one marker, so `JOHN SMITH` and `John  Smith` are one person. Restoration
   returns the first spelling seen. Whitespace-only findings are rejected.

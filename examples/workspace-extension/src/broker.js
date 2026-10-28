@@ -110,15 +110,15 @@ serve({
       return { entityType, matchedText: text.slice(start, end), range };
     });
   },
-  prepare(text, findings) {
+  prepare(inputs) {
     return run(async () => {
       const value = active(), g = generation;
       await current(value, g);
       const worker = await loaded(value, g);
       if (pending) { const previous = pending; pending = undefined; await worker.call("discard", [previous.id]); guard(g); }
-      const next = await worker.call("prepare", [text, findings, randomId()]); guard(g);
+      const next = await worker.call("prepareBatch", [inputs, randomId()]); guard(g);
       pending = { ...next, generation: g };
-      return { id: next.id, preview: next.preview };
+      return { id: next.id, previews: next.previews };
     });
   },
   approve(id) {
@@ -147,9 +147,9 @@ serve({
           throw new HostError("save_uncertain");
         }
         await worker.call("activate", [id, change.expectedHead, change.candidateHead]); guard(g);
-        const text = change.preview.text;
+        const texts = change.previews.map(preview => preview.text);
         pending = undefined;
-        return { status: "saved", text };
+        return { status: "saved", texts };
       } catch (error) {
         if (committed) { pending = undefined; stopCore(); }
         throw error;

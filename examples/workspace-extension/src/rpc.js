@@ -1,8 +1,11 @@
 export class HostError extends Error {
-  constructor(code) { super(code); this.name = "HostError"; this.code = code; }
+  constructor(code, location = {}) {
+    super(code); this.name = "HostError"; this.code = code;
+    for (const key of ["inputIndex", "findingIndex"]) if (Number.isSafeInteger(location?.[key]) && location[key] >= 0) this[key] = location[key];
+  }
 }
 const known = new Set([
-  "closed_workspace", "inactive_plan", "workspace_conflict", "invalid_finding", "invalid_marker",
+  "closed_workspace", "inactive_plan", "workspace_conflict", "invalid_batch", "invalid_finding", "invalid_marker",
   "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
   "storage_failure", "save_uncertain", "locked", "stale_approval", "cancelled", "already_exists", "not_found", "internal_error",
 ]);
@@ -16,7 +19,7 @@ export function client(worker) {
     const request = pending.get(data.id);
     if (!request) return;
     pending.delete(data.id);
-    if (data.error) request.reject(new HostError(known.has(data.error) ? data.error : "internal_error"));
+    if (data.error) request.reject(new HostError(known.has(data.error) ? data.error : "internal_error", data.location));
     else request.resolve(data.result);
   });
   const fail = event => {
@@ -48,6 +51,9 @@ export function serve(methods) {
       const result = await methods[method](...args);
       if (result instanceof Uint8Array) self.postMessage({ id, result }, [result.buffer]);
       else self.postMessage({ id, result });
-    } catch (error) { self.postMessage({ id, error: safeCode(error) }); }
+    } catch (error) {
+      const safe = new HostError(safeCode(error), error);
+      self.postMessage({ id, error: safe.code, location: { inputIndex: safe.inputIndex, findingIndex: safe.findingIndex } });
+    }
   });
 }
