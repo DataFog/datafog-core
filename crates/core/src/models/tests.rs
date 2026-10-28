@@ -282,6 +282,9 @@ fn explicit_engine_selection_preserves_legacy_configs_and_rejects_conflicts() {
             engine
         );
     }
+    let mut null_engine = datafog.clone();
+    null_engine["engine"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<ModelSessionConfig>(null_engine).is_err());
     for (mut config, selector, path, reason) in [
         (
             datafog.clone(),
