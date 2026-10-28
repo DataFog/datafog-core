@@ -475,3 +475,100 @@ pub fn restore_structured(data_json: &str, context: JsValue) -> Result<JsValue, 
         datafog_core::PrivacyError::unsupported_strategy("/restore"),
     ))
 }
+
+fn model_error(error: datafog_core::model_scan::ModelError) -> JsValue {
+    JsValue::from_str(
+        &serde_json::json!({
+            "code": error.code,
+            "reason": error.reason,
+            "path": error.path,
+            "findingIndex": error.finding_index,
+            "message": "browser model operation failed",
+        })
+        .to_string(),
+    )
+}
+
+/// Binding for Core's portable routing, span validation, and evidence contract.
+#[wasm_bindgen]
+pub struct BrowserModelContract {
+    contract: datafog_core::model_scan::ModelScanContract,
+}
+
+#[wasm_bindgen]
+impl BrowserModelContract {
+    #[wasm_bindgen(constructor)]
+    pub fn new(labels: Option<JsValue>) -> Result<BrowserModelContract, JsValue> {
+        let labels = labels.map(config_value).transpose()?;
+        let contract = datafog_core::model_scan::ModelScanContract::gliner25_small(labels.as_ref())
+            .map_err(model_error)?;
+        Ok(Self { contract })
+    }
+
+    pub fn labels(&self) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(&self.contract.native_labels())
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+
+    pub fn needs_model(&self, text: &str, config: JsValue) -> Result<bool, JsValue> {
+        self.contract.check_input(text).map_err(model_error)?;
+        let config = config_value(config)?;
+        Ok(self
+            .contract
+            .routed_config(&config)
+            .map_err(model_error)?
+            .needs_model())
+    }
+
+    pub fn complete(
+        &self,
+        text: &str,
+        spans: JsValue,
+        config: Option<JsValue>,
+    ) -> Result<JsValue, JsValue> {
+        let spans: Vec<datafog_core::model_scan::NativeSpan> =
+            serde_wasm_bindgen::from_value(spans).map_err(|_| {
+                model_error(datafog_core::model_scan::ModelError {
+                    code: "model_inference_failed".into(),
+                    reason: "invalid_output".into(),
+                    path: "/backend".into(),
+                    finding_index: None,
+                })
+            })?;
+        let config = config.map(config_value).transpose()?;
+        let routing = config
+            .as_ref()
+            .map(|value| self.contract.routed_config(value))
+            .transpose()
+            .map_err(model_error)?;
+        let result = self
+            .contract
+            .complete(
+                text,
+                datafog_core::model_scan::BackendResult { spans },
+                routing.as_ref(),
+            )
+            .map_err(model_error)?;
+        let mut index = datafog_core::TextIndex::new(text);
+        let findings = result
+            .findings
+            .into_iter()
+            .map(|finding| finding_from_core(&mut index, finding))
+            .collect::<Result<Vec<_>, _>>()?;
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct BrowserResult {
+            contract_version: u32,
+            model: String,
+            findings: Vec<Finding>,
+            evidence: Vec<datafog_core::model_scan::FindingEvidence>,
+        }
+        serde_wasm_bindgen::to_value(&BrowserResult {
+            contract_version: result.contract_version,
+            model: result.model,
+            findings,
+            evidence: result.evidence,
+        })
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+    }
+}

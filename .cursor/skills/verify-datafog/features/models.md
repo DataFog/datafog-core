@@ -1,6 +1,6 @@
 # Models
 
-DataFog Core supports local model inference via ModelSession. Two backends are available: the DataFog native runtime and GLiNER2 via Python. Model sessions run on Rust, Python, and Node.js; WASM is rule-based only.
+DataFog Core supports local model inference via ModelSession. Desktop/server SDKs (Rust, Python, Node.js) use the DataFog native runtime or GLiNER2 via Python. Browser/WASM has optional model support via `@datafog/wasm/models`, which runs GLiNER2.5 Small ONNX locally using ONNX Runtime Web.
 
 ## Engine tiers
 
@@ -238,14 +238,14 @@ Selecting only rule-supported entities (e.g., `{"entities": ["EMAIL"]}`) skips m
 
 ### Platform support
 
-Models run on:
+Desktop/server ModelSession runs on:
 - Linux x86_64 (GNU)
 - Linux ARM64 (GNU)
 - macOS ARM64 (14+)
 - macOS Intel (15+)
 - Windows x86_64 (MSVC)
 
-WASM does not support models.
+Browser/WASM ModelSession (`@datafog/wasm/models`) runs in any browser with WebAssembly support. It uses GLiNER2.5 Small ONNX, not the DataFog native runtime or Python GLiNER2 backend. See `docs/browser-model.md` for asset hosting, entity mapping, and constraints.
 
 ### GLiNER2 entity-count gating
 
@@ -274,7 +274,7 @@ fails if the bundle is missing). The regression prefers
 disables the floor so the pre-fix skip can be reproduced. Never set it in
 production, qualification, or release paths.
 
-Rust, Python, and Node share that worker. WASM has no model path.
+Rust, Python, and Node share that worker. Browser/WASM uses a separate `@datafog/wasm/models` entry point with GLiNER2.5 Small ONNX; it does not use the Python worker or the count-floor fix.
 
 ### GLiNER2 eval baseline
 
