@@ -6,10 +6,18 @@ pub use gliner2::{Gliner2Config, Gliner2Label};
 #[cfg(test)]
 mod tests;
 
-use crate::{Finding, PrivacyError, PrivacyErrorReason, ScanConfig, TextIndex, TextRange};
+pub use crate::model_scan::{
+    BackendResult, CoordinateUnit, FindingEvidence, ModelError, ModelScanResult, NativeSpan,
+    RawScore, ResourceLimits, RoutedScanConfig, SourceEvidence,
+};
+use crate::model_scan::{
+    ModelScanContract as ModelSessionDescriptor, bounded_json, convert, rule_entries,
+};
+#[cfg(test)]
+use crate::{ScanConfig, TextRange};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -30,70 +38,6 @@ const LABELS: [(&str, &str); 7] = [
     ("account_number", "ACCOUNT_NUMBER"),
 ];
 
-/// Stable sanitized error envelope for the new model API.
-#[derive(Debug, Clone, Serialize)]
-pub struct ModelError {
-    pub code: String,
-    pub reason: String,
-    pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub finding_index: Option<usize>,
-}
-impl ModelError {
-    fn new(code: &str, reason: &str, path: &str) -> Self {
-        Self {
-            code: code.into(),
-            reason: reason.into(),
-            path: path.into(),
-            finding_index: None,
-        }
-    }
-    fn config(reason: &str, path: &str) -> Self {
-        Self::new("invalid_configuration", reason, path)
-    }
-    fn invalid_output() -> Self {
-        Self::new("model_inference_failed", "invalid_output", "/backend")
-    }
-    fn timeout() -> Self {
-        Self::new("model_timeout", "deadline_exceeded", "/data")
-    }
-    fn cleanup() -> Self {
-        Self::new("model_cleanup_failed", "process_cleanup_failed", "/backend")
-    }
-    fn closed() -> Self {
-        Self::new("model_session_closed", "closed", "/backend")
-    }
-}
-impl std::fmt::Display for ModelError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "model operation failed ({}/{})", self.code, self.reason)
-    }
-}
-impl std::error::Error for ModelError {}
-impl From<PrivacyError> for ModelError {
-    fn from(error: PrivacyError) -> Self {
-        Self {
-            code: error.code().as_str().into(),
-            reason: error
-                .reason()
-                .map_or("operation_failed", |v| v.as_str())
-                .into(),
-            path: error.path().unwrap_or("").into(),
-            finding_index: error.finding_index(),
-        }
-    }
-}
-
-/// Caller-selected bounds. There are no unmeasured universal resource defaults.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceLimits {
-    pub max_input_bytes: usize,
-    pub max_response_bytes: usize,
-    pub max_findings: usize,
-    pub timeout_ms: u64,
-    pub cleanup_timeout_ms: u64,
-}
 impl ResourceLimits {
     fn validate(&self) -> Result<(), ModelError> {
         if self.max_input_bytes == 0
@@ -184,106 +128,6 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
             cleanup_timeout_ms: number("cleanup_timeout_ms")?,
         },
     })
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CoordinateUnit {
-    Utf8Byte,
-    UnicodeCodepoint,
-}
-
-/// Raw normalized model scores are separate from calibrated confidence.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RawScore {
-    pub value: f64,
-    pub scale_id: String,
-}
-
-/// Shared adapter-to-Core span contract, independent of transport and binding.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct NativeSpan {
-    pub native_label: String,
-    pub start: usize,
-    pub end: usize,
-    pub coordinate_unit: CoordinateUnit,
-    pub raw_score: Option<RawScore>,
-    pub calibrated_confidence: Option<f64>,
-    pub matched_text: Option<String>,
-}
-/// Successful adapters certify complete input coverage; partial execution is an error.
-#[derive(Debug)]
-pub struct BackendResult {
-    pub spans: Vec<NativeSpan>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct SourceEvidence {
-    pub detector_name: String,
-    pub detector_version: Option<String>,
-    pub native_label: Option<String>,
-    pub raw_score: Option<RawScore>,
-    pub calibrated_confidence: Option<f64>,
-}
-#[derive(Clone, Debug, Serialize)]
-pub struct FindingEvidence {
-    pub finding_index: usize,
-    pub sources: Vec<SourceEvidence>,
-}
-
-/// Entity routing for a model session scan. Rule detectors handle every
-/// requested entity type they support; the model runs only for requested
-/// types that it alone provides. Validated against one session's labels.
-#[derive(Clone, Debug)]
-pub struct RoutedScanConfig {
-    rules: Option<ScanConfig>,
-    model_entities: BTreeSet<String>,
-}
-
-impl RoutedScanConfig {
-    /// Whether a scan with this configuration runs model inference.
-    pub fn needs_model(&self) -> bool {
-        !self.model_entities.is_empty()
-    }
-}
-
-fn rule_entry(finding: Finding) -> (Finding, SourceEvidence) {
-    let source = SourceEvidence {
-        detector_name: finding.detector_name.clone(),
-        detector_version: finding.detector_version.clone(),
-        native_label: None,
-        raw_score: None,
-        calibrated_confidence: finding.confidence.map(f64::from),
-    };
-    (finding, source)
-}
-
-fn rule_entries(text: &str, config: &RoutedScanConfig) -> Vec<(Finding, SourceEvidence)> {
-    config.rules.as_ref().map_or_else(Vec::new, |rules| {
-        crate::scan_with_config(text, rules)
-            .into_iter()
-            .map(rule_entry)
-            .collect()
-    })
-}
-
-#[derive(Debug, Serialize)]
-pub struct ModelScanResult {
-    pub contract_version: u32,
-    pub model: String,
-    pub findings: Vec<Finding>,
-    pub evidence: Vec<FindingEvidence>,
-}
-struct ModelSessionDescriptor {
-    backend: String,
-    model: String,
-    adapter_version: String,
-    labels: BTreeMap<String, String>,
-    limits: ResourceLimits,
-    score_scale: String,
-    thresholds: BTreeMap<String, f64>,
 }
 
 /// A cancellation handle can be shared with another thread.
@@ -541,115 +385,14 @@ impl ModelSession {
         self.scan_locked(&mut inner, text, None, deadline, cancellation)
     }
 
-    /// Validate a routed scan configuration. It accepts the rule scan fields
-    /// (`entities`, `locale`, `detect_uuid`, `format`); `entities` may also
-    /// name this session's model labels. Without `entities`, every enabled
-    /// rule detector runs and the model returns the labels rules do not cover.
+    /// Validate entity routing against this session's model labels and rule detectors.
     pub fn routed_config(&self, value: &serde_json::Value) -> Result<RoutedScanConfig, ModelError> {
-        let invalid = |reason, path: &str, message: &str| {
-            ModelError::from(PrivacyError::invalid_configuration(reason, path, message))
-        };
-        let object = value.as_object().ok_or_else(|| {
-            invalid(
-                PrivacyErrorReason::InvalidType,
-                "",
-                "scan configuration must be an object",
-            )
-        })?;
-        let model_labels: BTreeSet<&str> = self
-            .descriptor
-            .labels
-            .values()
-            .map(String::as_str)
-            .collect();
-        let mut rule_object = object.clone();
-        let (rule_entities, model_entities) = match object.get("entities") {
-            None => (None, self.model_only_labels()),
-            Some(entities) => {
-                let entities = entities.as_array().ok_or_else(|| {
-                    invalid(
-                        PrivacyErrorReason::InvalidType,
-                        "/entities",
-                        "entities must be an array",
-                    )
-                })?;
-                if entities.is_empty() {
-                    return Err(invalid(
-                        PrivacyErrorReason::EmptyValue,
-                        "/entities",
-                        "entities must contain at least one entity type",
-                    ));
-                }
-                let mut seen = BTreeSet::new();
-                let mut rules = Vec::new();
-                let mut model = BTreeSet::new();
-                for (index, entity) in entities.iter().enumerate() {
-                    let path = format!("/entities/{index}");
-                    let entity = entity.as_str().ok_or_else(|| {
-                        invalid(
-                            PrivacyErrorReason::InvalidType,
-                            &path,
-                            "entity type must be a string",
-                        )
-                    })?;
-                    if !seen.insert(entity) {
-                        return Err(invalid(
-                            PrivacyErrorReason::DuplicateValue,
-                            &path,
-                            "entity selection contains a duplicate entity type",
-                        ));
-                    }
-                    if crate::capabilities::text_entity_supported(entity) {
-                        rules.push(serde_json::Value::String(entity.to_owned()));
-                    } else if model_labels.contains(entity) {
-                        model.insert(entity.to_owned());
-                    } else {
-                        return Err(invalid(
-                            PrivacyErrorReason::InvalidValue,
-                            &path,
-                            "entity type is not supported by rules or this model",
-                        ));
-                    }
-                }
-                (Some(rules), model)
-            }
-        };
-        // Rule-routed entities were validated above, so remaining errors name
-        // the shared locale, UUID and format fields at their own paths.
-        let run_rules = match rule_entities {
-            None => true,
-            Some(rules) if rules.is_empty() => {
-                rule_object.remove("entities");
-                false
-            }
-            Some(rules) => {
-                rule_object.insert("entities".into(), serde_json::Value::Array(rules));
-                true
-            }
-        };
-        let rules = crate::parse_scan_config(&serde_json::Value::Object(rule_object))?;
-        Ok(RoutedScanConfig {
-            rules: run_rules.then_some(rules),
-            model_entities,
-        })
+        self.descriptor.routed_config(value)
     }
 
-    /// The routing used without a configuration: all enabled rule detectors
-    /// and the model labels that rules do not produce.
+    /// Route all enabled rule detectors and model-only labels.
     pub fn default_routed_config(&self) -> RoutedScanConfig {
-        RoutedScanConfig {
-            rules: Some(ScanConfig::new()),
-            model_entities: self.model_only_labels(),
-        }
-    }
-
-    fn model_only_labels(&self) -> BTreeSet<String> {
-        self.descriptor
-            .labels
-            .values()
-            .filter(|label| !crate::capabilities::text_entity_supported(label))
-            .cloned()
-            .collect()
+        self.descriptor.default_routed_config()
     }
 
     /// Scan with entity routing. A configuration that needs no model labels
@@ -688,7 +431,7 @@ impl ModelSession {
                     "/backend",
                 ));
             }
-            let result = self.compose(rule_entries(text, config))?;
+            let result = self.descriptor.compose(rule_entries(text, config))?;
             bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
             return Ok(result);
         }
@@ -721,67 +464,10 @@ impl ModelSession {
             entries.splice(0..0, rule_entries(text, config));
         }
         self.active_check(inner, text, deadline, cancellation)?;
-        let result = self.compose(entries)?;
+        let result = self.descriptor.compose(entries)?;
         bounded_json(&result, self.descriptor.limits.max_response_bytes, "/data")?;
         self.active_check(inner, text, deadline, cancellation)?;
         Ok(result)
-    }
-
-    fn compose(
-        &self,
-        entries: Vec<(Finding, SourceEvidence)>,
-    ) -> Result<ModelScanResult, ModelError> {
-        if entries.len() > self.descriptor.limits.max_findings {
-            return Err(ModelError::new(
-                "model_resource_exhausted",
-                "limit_exceeded",
-                "/data",
-            ));
-        }
-        let mut groups: BTreeMap<(usize, usize, String), (Finding, Vec<SourceEvidence>)> =
-            BTreeMap::new();
-        for (finding, source) in entries {
-            let key = (
-                finding.byte_range.start,
-                finding.byte_range.end,
-                finding.entity_type.clone(),
-            );
-            match groups.entry(key) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert((finding, vec![source]));
-                }
-                std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    let (existing, sources) = entry.get_mut();
-                    if crate::duplicate_preference(&finding, existing).is_lt() {
-                        *existing = finding;
-                    }
-                    sources.push(source);
-                }
-            }
-        }
-        let mut groups: Vec<_> = groups.into_values().collect();
-        groups.sort_by(|(a, _), (b, _)| {
-            a.byte_range
-                .start
-                .cmp(&b.byte_range.start)
-                .then_with(|| b.byte_range.end.cmp(&a.byte_range.end))
-                .then_with(|| a.entity_type.cmp(&b.entity_type))
-        });
-        let mut findings = Vec::with_capacity(groups.len());
-        let mut evidence = Vec::with_capacity(groups.len());
-        for (finding, sources) in groups {
-            evidence.push(FindingEvidence {
-                finding_index: findings.len(),
-                sources,
-            });
-            findings.push(finding);
-        }
-        Ok(ModelScanResult {
-            contract_version: 1,
-            model: self.descriptor.model.clone(),
-            findings,
-            evidence,
-        })
     }
 
     pub fn request_close(&self) {
@@ -818,26 +504,6 @@ impl ModelSession {
             }
         }
     }
-}
-
-fn bounded_json(value: &impl Serialize, limit: usize, path: &str) -> Result<(), ModelError> {
-    struct Counter {
-        remaining: usize,
-    }
-    impl std::io::Write for Counter {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.remaining = self
-                .remaining
-                .checked_sub(bytes.len())
-                .ok_or_else(|| std::io::Error::other("size limit"))?;
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    serde_json::to_writer(Counter { remaining: limit }, value)
-        .map_err(|_| ModelError::config("limit_exceeded", path))
 }
 
 fn deadline(milliseconds: u64) -> Result<Instant, ModelError> {
@@ -891,129 +557,6 @@ fn decode_datafog(bytes: &[u8], max_findings: usize) -> Result<BackendResult, Mo
         })
         .collect::<Result<_, ModelError>>()?;
     Ok(BackendResult { spans })
-}
-
-fn convert(
-    text: &str,
-    result: BackendResult,
-    descriptor: &ModelSessionDescriptor,
-) -> Result<Vec<(Finding, SourceEvidence)>, ModelError> {
-    let mut offsets = TextIndex::new(text);
-    let mut matched_bytes = 0usize;
-    let converted: Result<Vec<_>, ModelError> = result
-        .spans
-        .into_iter()
-        .enumerate()
-        .map(|(index, span)| {
-            let invalid = || {
-                let mut error = ModelError::invalid_output();
-                error.finding_index = Some(index);
-                error
-            };
-            let entity = descriptor
-                .labels
-                .get(&span.native_label)
-                .ok_or_else(invalid)?;
-            for score in [
-                span.raw_score.as_ref().map(|s| s.value),
-                span.calibrated_confidence,
-            ]
-            .into_iter()
-            .flatten()
-            {
-                if !score.is_finite() || !(0.0..=1.0).contains(&score) {
-                    return Err(invalid());
-                }
-            }
-            if span
-                .raw_score
-                .as_ref()
-                .is_some_and(|s| s.scale_id != descriptor.score_scale)
-            {
-                return Err(invalid());
-            }
-            let (start, end) = match span.coordinate_unit {
-                CoordinateUnit::Utf8Byte => (span.start, span.end),
-                CoordinateUnit::UnicodeCodepoint => (
-                    offsets
-                        .byte_offset_at_codepoint(span.start)
-                        .ok_or_else(invalid)?,
-                    offsets
-                        .byte_offset_at_codepoint(span.end)
-                        .ok_or_else(invalid)?,
-                ),
-            };
-            if start >= end
-                || end > text.len()
-                || !text.is_char_boundary(start)
-                || !text.is_char_boundary(end)
-            {
-                return Err(invalid());
-            }
-            let matched_text = &text[start..end];
-            matched_bytes = matched_bytes
-                .checked_add(matched_text.len())
-                .ok_or_else(invalid)?;
-            if matched_bytes > descriptor.limits.max_response_bytes {
-                return Err(invalid());
-            }
-            if span
-                .matched_text
-                .as_ref()
-                .is_some_and(|value| value != matched_text)
-            {
-                return Err(invalid());
-            }
-            let backend_name = if descriptor.backend == "gliner2_worker" {
-                "gliner2"
-            } else {
-                "datafog"
-            };
-            let detector_name = format!("datafog-core/model/{backend_name}/{}", span.native_label);
-            let detector_version = Some(format!(
-                "{}:{}",
-                descriptor.adapter_version, descriptor.model
-            ));
-            let finding = Finding {
-                entity_type: entity.clone(),
-                matched_text: matched_text.into(),
-                byte_range: TextRange { start, end },
-                codepoint_range: TextRange {
-                    start: offsets.codepoint_offset(start),
-                    end: offsets.codepoint_offset(end),
-                },
-                confidence: span.calibrated_confidence.map(|v| v as f32),
-                detector_name: detector_name.clone(),
-                detector_version: detector_version.clone(),
-            };
-            crate::validate_finding_with_index(text, &finding, &mut offsets)
-                .map_err(|_| invalid())?;
-            Ok((
-                finding,
-                SourceEvidence {
-                    detector_name,
-                    detector_version,
-                    native_label: Some(span.native_label),
-                    raw_score: span.raw_score,
-                    calibrated_confidence: span.calibrated_confidence,
-                },
-            ))
-        })
-        .collect();
-    let mut converted = converted?;
-    converted.retain(|(_, evidence)| {
-        evidence
-            .native_label
-            .as_ref()
-            .and_then(|label| descriptor.thresholds.get(label))
-            .is_none_or(|threshold| {
-                evidence
-                    .raw_score
-                    .as_ref()
-                    .is_some_and(|score| score.value >= *threshold)
-            })
-    });
-    Ok(converted)
 }
 
 #[derive(Deserialize)]

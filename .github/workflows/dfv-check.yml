@@ -35,9 +35,12 @@ jobs:
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
       - if: steps.scope.outputs.code == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.code == 'true'
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: wasm32-unknown-unknown
       - if: steps.scope.outputs.code == 'true'
         uses: Swatinem/rust-cache@v2
@@ -50,11 +53,11 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
       - if: steps.scope.outputs.code == 'true'
         run: python3 -m pip install maturin
       - if: steps.scope.outputs.code == 'true'
-        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+        run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
       - if: steps.scope.outputs.code == 'true'
         run: npm ci --prefix bindings/wasm && npx --prefix bindings/wasm playwright install --with-deps chromium
       - if: steps.scope.outputs.code == 'true'
