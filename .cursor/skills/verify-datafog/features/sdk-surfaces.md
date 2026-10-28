@@ -31,7 +31,7 @@ DataFog Core provides consistent APIs across Rust, Python, Node.js, and Browser/
 | `required_tokenization_items` | Query tokens needed | No |
 | `transform_with_resolved_keys` | Transform with pre-resolved keys | No |
 | `transform_with_provider_results` | Transform with pre-resolved providers | No |
-| `restore` | Reverse tokenization | Yes (sync) |
+| `restore` | Reverse tokenization | No |
 
 WASM does not support provider-backed strategies (`pseudonymize`, `tokenize`) or `restore()`. All three throw `unsupported_strategy`. The functions exist in the API for type parity but are not usable.
 
@@ -195,12 +195,6 @@ const findings = scan("Email jane@example.com");
 const result = scanAndTransform("Email jane@example.com", {
   transform: { default: { strategy: "redact" } }
 });
-
-// Tokenize and restore (WASM supports tokenize but not pseudonymize)
-const tokenized = scanAndTransform("Email jane@example.com", {
-  transform: { default: { strategy: "tokenize", token_ref: "t" } }
-});
-const restored = restore(tokenized.text, { scope: "session" });
 
 // Structured scanning (takes JsonDocument, not JSON string)
 const data = { email: "jane@example.com" };
