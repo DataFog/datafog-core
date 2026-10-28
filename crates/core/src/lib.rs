@@ -19,6 +19,7 @@ mod private_key;
 pub mod structured;
 mod us_routing_number;
 mod uuid;
+pub mod workspace;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 pub use offsets::TextIndex;

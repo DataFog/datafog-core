@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+mod workspace;
 
 #[derive(Default, Deserialize, Serialize)]
 struct TextRange {

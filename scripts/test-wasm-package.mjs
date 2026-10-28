@@ -239,6 +239,8 @@ try {
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
   const page = await browser.newPage();
   const modelRequests = [];
@@ -715,7 +717,12 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     }
   });
 
-  console.log("Installed @datafog/wasm package matches fixtures and the Finding contract.");
+  await page.evaluate(async () => {
+    const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
+    const { verifyWorkspace } = await import("/workspace-conformance.mjs");
+    await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+  });
+  console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
   if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));
 
 } finally {
