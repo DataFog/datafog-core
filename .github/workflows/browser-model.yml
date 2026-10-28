@@ -42,13 +42,11 @@ jobs:
           cache-dependency-path: spike/gliner2-browser/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: |
-          WASM_BINDGEN_VERSION=$(grep -A2 '^name = "wasm-bindgen"$' ../../Cargo.lock | grep '^version' | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+      - run: cargo install wasm-bindgen-cli --version "$(../../scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix ../../bindings/wasm
       - run: npm run build --prefix ../../bindings/wasm
       - run: npm ci

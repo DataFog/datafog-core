@@ -37,7 +37,7 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          targets: wasm32-unknown-unknown
       - if: steps.scope.outputs.code == 'true'
         uses: Swatinem/rust-cache@v2
         with:
@@ -53,9 +53,7 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         run: python3 -m pip install maturin
       - if: steps.scope.outputs.code == 'true'
-        run: |
-          WASM_BINDGEN_VERSION=$(grep -A2 '^name = "wasm-bindgen"$' Cargo.lock | grep '^version' | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+        run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
       - if: steps.scope.outputs.code == 'true'
         run: npm ci --prefix bindings/wasm && npx --prefix bindings/wasm playwright install --with-deps chromium
       - if: steps.scope.outputs.code == 'true'

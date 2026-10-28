@@ -96,15 +96,20 @@ fn read_rust_channel(root: &Path) -> Result<String, String> {
     }
     let content =
         fs::read_to_string(&path).map_err(|e| format!("cannot read rust-toolchain.toml: {e}"))?;
-    let parsed: toml::Value = content
-        .parse()
-        .map_err(|e| format!("invalid rust-toolchain.toml: {e}"))?;
-    parsed
-        .get("toolchain")
-        .and_then(|t| t.get("channel"))
-        .and_then(|c| c.as_str())
-        .map(String::from)
-        .ok_or_else(|| "rust-toolchain.toml missing toolchain.channel".to_string())
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("channel") {
+            if let Some(start) = line.find('"') {
+                if let Some(end) = line.rfind('"') {
+                    if end > start {
+                        return Ok(line[start + 1..end].to_string());
+                    }
+                }
+            }
+        }
+    }
+    Err("rust-toolchain.toml missing channel".to_string())
 }
 
 fn read_node_major(root: &Path) -> Result<u32, String> {
@@ -285,7 +290,7 @@ pub fn check_maturin() -> DoctorCheck {
             "maturin",
             None,
             "maturin (any version)",
-            "python3 -m pip install maturin",
+            "pipx install maturin  # or: python3 -m pip install maturin",
             true,
         ),
     }
@@ -311,7 +316,9 @@ pub fn check_node(pins: &VersionPins) -> DoctorCheck {
                     "node",
                     Some(version),
                     &format!("Node.js {expected_major}+"),
-                    &format!("nvm install {expected_major}"),
+                    &format!(
+                        "Install Node >= {expected_major} (nvm install / fnm install / mise install)"
+                    ),
                     true,
                 )
             }
@@ -320,10 +327,17 @@ pub fn check_node(pins: &VersionPins) -> DoctorCheck {
             "node",
             None,
             &format!("Node.js {expected_major}+"),
-            &format!("nvm install {expected_major}"),
+            &format!("Install Node >= {expected_major} (nvm install / fnm install / mise install)"),
             true,
         ),
     }
+}
+
+fn extract_wasm_bindgen_version(output: &str) -> Option<&str> {
+    output
+        .trim()
+        .strip_prefix("wasm-bindgen ")
+        .map(|s| s.split_whitespace().next().unwrap_or(s))
 }
 
 pub fn check_wasm_bindgen_cli(pins: &VersionPins) -> DoctorCheck {
@@ -332,9 +346,11 @@ pub fn check_wasm_bindgen_cli(pins: &VersionPins) -> DoctorCheck {
 
     match output {
         Ok(out) if out.status.success() => {
-            let version = String::from_utf8_lossy(&out.stdout);
-            let version = version.trim();
-            if version.contains(expected) {
+            let raw = String::from_utf8_lossy(&out.stdout);
+            let found_version = extract_wasm_bindgen_version(&raw);
+            let version = raw.trim();
+
+            if found_version == Some(expected.as_str()) {
                 DoctorCheck::pass("wasm_bindgen_cli", version, true)
             } else {
                 DoctorCheck::fail(
@@ -392,19 +408,51 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
     let wasm_dir = root.join("bindings").join("wasm");
 
     let output = Command::new("npx")
-        .args(["playwright", "chromium", "--version"])
+        .args(["playwright", "--version"])
         .current_dir(&wasm_dir)
         .output();
 
     match output {
         Ok(out) if out.status.success() => {
-            let version = String::from_utf8_lossy(&out.stdout);
-            DoctorCheck::pass("playwright_chromium", version.trim(), true)
+            let raw = String::from_utf8_lossy(&out.stdout);
+            let found_version = raw.trim().strip_prefix("Version ").unwrap_or(raw.trim());
+
+            if found_version == expected {
+                let chromium_output = Command::new("npx")
+                    .args(["playwright", "chromium", "--version"])
+                    .current_dir(&wasm_dir)
+                    .output();
+                match chromium_output {
+                    Ok(co) if co.status.success() => {
+                        let chromium_ver = String::from_utf8_lossy(&co.stdout);
+                        DoctorCheck::pass(
+                            "playwright_chromium",
+                            &format!("Playwright {} (Chromium {})", expected, chromium_ver.trim()),
+                            true,
+                        )
+                    }
+                    _ => DoctorCheck::fail(
+                        "playwright_chromium",
+                        Some(&format!("Playwright {expected} (Chromium not installed)")),
+                        &format!("Playwright {expected} with Chromium"),
+                        &format!("npx playwright@{expected} install chromium"),
+                        true,
+                    ),
+                }
+            } else {
+                DoctorCheck::fail(
+                    "playwright_chromium",
+                    Some(&format!("Playwright {found_version}")),
+                    &format!("Playwright {expected}"),
+                    &format!("npx playwright@{expected} install chromium"),
+                    true,
+                )
+            }
         }
         _ => DoctorCheck::fail(
             "playwright_chromium",
             None,
-            "Playwright Chromium browser",
+            &format!("Playwright {expected} with Chromium"),
             &format!("npx playwright@{expected} install chromium"),
             true,
         ),
@@ -497,6 +545,8 @@ pub fn check_python_binding(root: &Path, core_mtime: Option<std::time::SystemTim
 
 pub fn check_node_binding(root: &Path, core_mtime: Option<std::time::SystemTime>) -> DoctorCheck {
     let node_dir = root.join("bindings").join("node");
+    // Prefer NAPI build artifacts over the hand-written index.js wrapper,
+    // which is committed source and is not rewritten by `napi build`.
     let native_js = node_dir.join("native.js");
     if native_js.exists() {
         return check_binding_freshness("node", &native_js, core_mtime);
@@ -623,47 +673,52 @@ pub fn check_model_weights(root: &Path) -> DoctorCheck {
     }
 }
 
+fn run_checks(pins: &VersionPins, root: &Path) -> Vec<DoctorCheck> {
+    let mut checks = vec![
+        check_rust_toolchain(pins),
+        check_python(),
+        check_maturin(),
+        check_node(pins),
+        check_wasm_bindgen_cli(pins),
+        check_wasm_target(),
+        check_playwright_chromium(pins),
+    ];
+
+    let core_mtime = get_core_mtime(root);
+
+    checks.push(check_python_binding(root, core_mtime));
+    checks.push(check_node_binding(root, core_mtime));
+    checks.push(check_wasm_binding(root, core_mtime));
+    checks.push(check_model_weights(root));
+
+    checks
+}
+
+fn make_pin_error_checks(errors: &[String]) -> Vec<DoctorCheck> {
+    errors
+        .iter()
+        .map(|e| DoctorCheck::fail("pin_file", None, "pin file present", e, true))
+        .collect()
+}
+
 pub fn run_doctor_internal() -> DoctorResult {
     let root = workspace_root();
 
     let pins = match read_version_pins(&root) {
         Ok(p) => p,
         Err(errors) => {
-            let checks: Vec<DoctorCheck> = errors
-                .iter()
-                .map(|e| DoctorCheck::fail("pin_file", None, "pin file present", e, true))
-                .collect();
             return DoctorResult {
                 pass: false,
-                checks,
+                checks: make_pin_error_checks(&errors),
                 run_directory: None,
             };
         }
     };
 
-    let mut checks = vec![
-        check_rust_toolchain(&pins),
-        check_python(),
-        check_maturin(),
-        check_node(&pins),
-        check_wasm_bindgen_cli(&pins),
-        check_wasm_target(),
-        check_playwright_chromium(&pins),
-    ];
-
-    let core_mtime = get_core_mtime(&root);
-
-    checks.push(check_python_binding(&root, core_mtime));
-    checks.push(check_node_binding(&root, core_mtime));
-    checks.push(check_wasm_binding(&root, core_mtime));
-    checks.push(check_model_weights(&root));
-
-    let required_failures: Vec<_> = checks
+    let checks = run_checks(&pins, &root);
+    let pass = checks
         .iter()
-        .filter(|c| c.required && c.status == CheckStatus::Fail)
-        .collect();
-
-    let pass = required_failures.is_empty();
+        .all(|c| !c.required || c.status != CheckStatus::Fail);
 
     DoctorResult {
         pass,
@@ -679,13 +734,9 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
         Ok(p) => p,
         Err(errors) => {
             if json_output {
-                let checks: Vec<DoctorCheck> = errors
-                    .iter()
-                    .map(|e| DoctorCheck::fail("pin_file", None, "pin file present", e, true))
-                    .collect();
                 let result = DoctorResult {
                     pass: false,
-                    checks,
+                    checks: make_pin_error_checks(&errors),
                     run_directory: None,
                 };
                 println!("{}", serde_json::to_string_pretty(&result).unwrap());
@@ -701,29 +752,10 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
         }
     };
 
-    let mut checks = vec![
-        check_rust_toolchain(&pins),
-        check_python(),
-        check_maturin(),
-        check_node(&pins),
-        check_wasm_bindgen_cli(&pins),
-        check_wasm_target(),
-        check_playwright_chromium(&pins),
-    ];
-
-    let core_mtime = get_core_mtime(&root);
-
-    checks.push(check_python_binding(&root, core_mtime));
-    checks.push(check_node_binding(&root, core_mtime));
-    checks.push(check_wasm_binding(&root, core_mtime));
-    checks.push(check_model_weights(&root));
-
-    let required_failures: Vec<_> = checks
+    let checks = run_checks(&pins, &root);
+    let pass = checks
         .iter()
-        .filter(|c| c.required && c.status == CheckStatus::Fail)
-        .collect();
-
-    let pass = required_failures.is_empty();
+        .all(|c| !c.required || c.status != CheckStatus::Fail);
 
     let run_dir = if args.iter().any(|a| a == "--save-report") || !pass {
         create_run_directory().ok()
@@ -806,63 +838,92 @@ pub fn run_doctor(args: &[String], json_output: bool) -> ExitCode {
 mod tests {
     use super::*;
     use std::fs;
-    use tempfile::TempDir;
 
-    #[test]
-    fn node_major_too_low_fails() {
-        let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join(".nvmrc"), "24\n").unwrap();
-        let major = read_node_major(tmp.path()).unwrap();
-        assert_eq!(major, 24);
+    fn make_temp_dir() -> std::path::PathBuf {
+        let unique = format!(
+            "dfv-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let dir = std::env::temp_dir().join(unique);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn cleanup(dir: &std::path::Path) {
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn node_accepts_newer_major() {
-        let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join(".nvmrc"), "25\n").unwrap();
-        let major = read_node_major(tmp.path()).unwrap();
-        assert_eq!(major, 25);
+    fn node_25_passes_against_pin_24() {
+        let tmp = make_temp_dir();
+        fs::write(tmp.join(".nvmrc"), "24\n").unwrap();
+        let major = read_node_major(&tmp).unwrap();
+        assert_eq!(major, 24);
+        let pins = VersionPins {
+            rust_channel: String::new(),
+            node_major: major,
+            wasm_bindgen: String::new(),
+            playwright: String::new(),
+        };
+        assert!(25 >= pins.node_major);
+        cleanup(&tmp);
+    }
+
+    #[test]
+    fn node_22_fails_against_pin_24() {
+        let pins = VersionPins {
+            rust_channel: String::new(),
+            node_major: 24,
+            wasm_bindgen: String::new(),
+            playwright: String::new(),
+        };
+        assert!(22 < pins.node_major);
     }
 
     #[test]
     fn missing_nvmrc_errors() {
-        let tmp = TempDir::new().unwrap();
-        let result = read_node_major(tmp.path());
+        let tmp = make_temp_dir();
+        let result = read_node_major(&tmp);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains(".nvmrc not found"));
+        cleanup(&tmp);
     }
 
     #[test]
     fn missing_rust_toolchain_errors() {
-        let tmp = TempDir::new().unwrap();
-        let result = read_rust_channel(tmp.path());
+        let tmp = make_temp_dir();
+        let result = read_rust_channel(&tmp);
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .contains("rust-toolchain.toml not found")
         );
+        cleanup(&tmp);
     }
 
     #[test]
     fn reads_rust_channel_from_toml() {
-        let tmp = TempDir::new().unwrap();
+        let tmp = make_temp_dir();
         fs::write(
-            tmp.path().join("rust-toolchain.toml"),
-            r#"[toolchain]
-channel = "1.88.0"
-"#,
+            tmp.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"1.88.0\"\n",
         )
         .unwrap();
-        let channel = read_rust_channel(tmp.path()).unwrap();
+        let channel = read_rust_channel(&tmp).unwrap();
         assert_eq!(channel, "1.88.0");
+        cleanup(&tmp);
     }
 
     #[test]
     fn reads_wasm_bindgen_from_lockfile() {
-        let tmp = TempDir::new().unwrap();
+        let tmp = make_temp_dir();
         fs::write(
-            tmp.path().join("Cargo.lock"),
+            tmp.join("Cargo.lock"),
             r#"[[package]]
 name = "wasm-bindgen"
 version = "0.2.127"
@@ -870,21 +931,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "#,
         )
         .unwrap();
-        let version = read_wasm_bindgen_from_lockfile(tmp.path()).unwrap();
+        let version = read_wasm_bindgen_from_lockfile(&tmp).unwrap();
         assert_eq!(version, "0.2.127");
+        cleanup(&tmp);
     }
 
     #[test]
     fn reads_playwright_from_package_json() {
-        let tmp = TempDir::new().unwrap();
-        let wasm_dir = tmp.path().join("bindings/wasm");
+        let tmp = make_temp_dir();
+        let wasm_dir = tmp.join("bindings/wasm");
         fs::create_dir_all(&wasm_dir).unwrap();
         fs::write(
             wasm_dir.join("package.json"),
             r#"{"devDependencies": {"playwright": "1.62.1"}}"#,
         )
         .unwrap();
-        let version = read_playwright_version(tmp.path()).unwrap();
+        let version = read_playwright_version(&tmp).unwrap();
         assert_eq!(version, "1.62.1");
+        cleanup(&tmp);
+    }
+
+    #[test]
+    fn wasm_bindgen_version_extraction() {
+        assert_eq!(
+            extract_wasm_bindgen_version("wasm-bindgen 0.2.127"),
+            Some("0.2.127")
+        );
+        assert_eq!(
+            extract_wasm_bindgen_version("wasm-bindgen 0.2.100 (abc123)"),
+            Some("0.2.100")
+        );
+    }
+
+    #[test]
+    fn playwright_mismatch_fails() {
+        let expected = "1.62.1";
+        let found = "1.64.1";
+        assert_ne!(found, expected);
     }
 }

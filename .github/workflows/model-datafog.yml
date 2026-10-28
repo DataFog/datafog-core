@@ -49,8 +49,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain-file: rust-toolchain.toml
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

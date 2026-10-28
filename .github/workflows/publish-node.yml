@@ -44,7 +44,6 @@ jobs:
       - run: python3 scripts/check-release.py node
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
           targets: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:

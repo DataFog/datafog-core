@@ -29,8 +29,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py rust
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain-file: rust-toolchain.toml
       - run: cargo publish --package datafog-core --locked --dry-run
       - run: cargo publish --package datafog-core --locked
         if: github.event_name == 'push' || !inputs.dry_run

@@ -15,7 +15,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - `.devcontainer/devcontainer.json` for VS Code, Cursor, and GitHub Codespaces dev environments
 - Dev environment setup documentation in CONTRIBUTING.md covering devcontainer and local install paths, verification steps, and troubleshooting
-
+- `scripts/pin.sh` helper to read pinned tool versions from repository files
 - Optional browser Small model sessions return canonical findings for the scan/transform flow, with Core-owned entity routing and score evidence.
 
 - Experimental browser entity extraction using pinned GLiNER2.5 Small ONNX assets, configurable labels, and explicit Unicode ranges (#116)

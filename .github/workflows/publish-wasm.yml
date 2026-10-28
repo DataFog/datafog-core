@@ -34,15 +34,13 @@ jobs:
       - run: python3 scripts/check-release.py wasm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
-      - run: |
-          WASM_BINDGEN_VERSION=$(grep -A2 '^name = "wasm-bindgen"$' Cargo.lock | grep '^version' | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+      - run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix bindings/wasm
       - run: npx --prefix bindings/wasm playwright install --with-deps chromium
       - run: npm run test:package --prefix bindings/wasm

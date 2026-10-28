@@ -1,3 +1,4 @@
+use crate::doctor::{CheckStatus, run_doctor_internal};
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -607,6 +608,54 @@ pub fn run_smoke(args: &[String], json_output: bool) -> ExitCode {
         .position(|a| a == "--sdk")
         .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str());
+
+    if !dry_run {
+        if !json_output {
+            println!("Running environment check...");
+        }
+
+        let doctor_result = run_doctor_internal();
+
+        if !doctor_result.pass {
+            let failures: Vec<String> = doctor_result
+                .checks
+                .iter()
+                .filter(|c| c.required && c.status == CheckStatus::Fail)
+                .map(|c| {
+                    format!(
+                        "{}: {} (fix: {})",
+                        c.name,
+                        c.found.as_deref().unwrap_or("not found"),
+                        c.fix_command.as_deref().unwrap_or("see docs")
+                    )
+                })
+                .collect();
+
+            if json_output {
+                let result = SmokeResult {
+                    pass: false,
+                    tests: HashMap::new(),
+                    duration_seconds: 0.0,
+                    run_directory: PathBuf::new(),
+                    dry_run: None,
+                };
+                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            } else {
+                eprintln!("Environment check failed:");
+                for f in &failures {
+                    eprintln!("  {f}");
+                }
+                eprintln!();
+                eprintln!("Run `cargo dfv doctor` for details.");
+            }
+            return ExitCode::FAILURE;
+        }
+
+        if !json_output {
+            println!("Environment OK. Running smoke tests...");
+            println!();
+        }
+    }
 
     if !json_output && !dry_run {
         println!("Running smoke tests (installed package verification)...");

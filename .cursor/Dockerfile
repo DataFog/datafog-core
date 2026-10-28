@@ -24,6 +24,7 @@ COPY .nvmrc /tmp/.nvmrc
 COPY rust-toolchain.toml /tmp/rust-toolchain.toml
 COPY bindings/wasm/package.json /tmp/wasm-package.json
 COPY Cargo.lock /tmp/Cargo.lock
+COPY scripts/pin.sh /tmp/pin.sh
 
 RUN NODE_VERSION=$(cat /tmp/.nvmrc | tr -d '[:space:]') && \
     curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - && \
