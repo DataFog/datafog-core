@@ -52,4 +52,5 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Development containers build with the pinned tool versions and mount the repository at the configured workspace path.
 - GLiNER2 entity-count gating now floors predictions at 1, preventing valid spans from being skipped when the count classifier selects 0 (#112)
