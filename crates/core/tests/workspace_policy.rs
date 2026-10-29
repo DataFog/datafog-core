@@ -26,6 +26,22 @@ fn choice(label: &str, value: &str, disposition: Option<ChoiceDisposition>) -> P
         }],
     }
 }
+
+#[test]
+fn policy_json_requires_explicit_nullable_actions() {
+    for json in [
+        r#"{"rules":[{"entityType":"PRODUCT_CODE"}],"choices":[]}"#,
+        r#"{"rules":[],"choices":[{"entityType":"PERSON","value":"May"}]}"#,
+    ] {
+        assert!(serde_json::from_str::<PolicyEdits>(json).is_err(), "{json}");
+    }
+    let edits: PolicyEdits = serde_json::from_str(
+        r#"{"rules":[{"entityType":"PRODUCT_CODE","rule":null}],"choices":[{"entityType":"PERSON","value":"May","disposition":null}]}"#,
+    )
+    .unwrap();
+    assert_eq!(edits.rules[0].rule, None);
+    assert_eq!(edits.choices[0].disposition, None);
+}
 fn activate(workspace: &mut Workspace, edits: &PolicyEdits, operation: u8) {
     let mut plan = workspace
         .prepare_policy_changes(edits, [operation; 16])
