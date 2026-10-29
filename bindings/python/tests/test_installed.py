@@ -19,6 +19,7 @@ import us_routing_number_conformance
 import npi_conformance
 import workspace_conformance
 import workspace_streaming_conformance
+import workspace_conversation_conformance
 import workspace_operation_conformance
 
 from datafog_core import (
@@ -649,6 +650,7 @@ if __name__ == "__main__":
     workspace_conformance.verify_workspace()
     workspace_streaming_conformance.verify_streaming()
     workspace_operation_conformance.verify_operations()
+    workspace_conversation_conformance.verify_conversations()
     verify_model_engine_selection()
     verify_ssn_person_priority()
     main()
