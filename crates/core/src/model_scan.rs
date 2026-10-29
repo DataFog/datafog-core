@@ -118,8 +118,8 @@ pub struct FindingEvidence {
 }
 
 /// Entity routing for a model session scan. Rule detectors handle every
-/// requested entity type they support; the model runs only for requested
-/// types that it alone provides. Validated against one session's labels.
+/// requested entity type they support; partial rules also retain configured
+/// model coverage for that type. Validated against one session's labels.
 #[derive(Clone, Debug)]
 pub struct RoutedScanConfig {
     pub(crate) rules: Option<ScanConfig>,
@@ -312,7 +312,7 @@ impl ModelScanContract {
     /// Validate a routed scan configuration. It accepts the rule scan fields
     /// (`entities`, `locale`, `detect_uuid`, `format`); `entities` may also
     /// name this session's model labels. Without `entities`, every enabled
-    /// rule detector runs and the model returns the labels rules do not cover.
+    /// rule detector runs and models retain types without replacement rules.
     pub fn routed_config(&self, value: &serde_json::Value) -> Result<RoutedScanConfig, ModelError> {
         let invalid = |reason, path: &str, message: &str| {
             ModelError::from(PrivacyError::invalid_configuration(reason, path, message))
@@ -362,11 +362,15 @@ impl ModelScanContract {
                             "entity selection contains a duplicate entity type",
                         ));
                     }
-                    if crate::capabilities::text_entity_supported(entity) {
+                    let supported_by_rules = crate::capabilities::text_entity_supported(entity);
+                    if supported_by_rules {
                         rules.push(serde_json::Value::String(entity.to_owned()));
-                    } else if model_labels.contains(entity) {
+                    }
+                    if model_labels.contains(entity)
+                        && !crate::capabilities::rules_replace_model(entity)
+                    {
                         model.insert(entity.to_owned());
-                    } else {
+                    } else if !supported_by_rules {
                         return Err(invalid(
                             PrivacyErrorReason::InvalidValue,
                             &path,
@@ -398,7 +402,7 @@ impl ModelScanContract {
     }
 
     /// The routing used without a configuration: all enabled rule detectors
-    /// and the model labels that rules do not produce.
+    /// and model labels without replacement rules.
     pub fn default_routed_config(&self) -> RoutedScanConfig {
         RoutedScanConfig {
             rules: Some(ScanConfig::new()),
@@ -409,7 +413,7 @@ impl ModelScanContract {
     fn model_only_labels(&self) -> BTreeSet<String> {
         self.labels
             .values()
-            .filter(|label| !crate::capabilities::text_entity_supported(label))
+            .filter(|label| !crate::capabilities::rules_replace_model(label))
             .cloned()
             .collect()
     }
@@ -711,6 +715,152 @@ mod browser_tests {
             )
             .unwrap();
         assert!(raw.findings[0].detector_name.contains("/model/"));
+    }
+
+    #[test]
+    fn partial_account_rule_preserves_custom_model_coverage_and_evidence() {
+        let contract = ModelScanContract::gliner25_small(Some(&json!({
+            "bank account": "ACCOUNT_NUMBER", "email": "EMAIL"
+        })))
+        .unwrap();
+        for config in [json!({}), json!({"entities": ["ACCOUNT_NUMBER"]})] {
+            let routing = contract.routed_config(&config).unwrap();
+            assert!(routing.needs_model());
+            assert!(routing.model_entities.contains("ACCOUNT_NUMBER"));
+            assert!(!routing.model_entities.contains("EMAIL"));
+            assert!(routing.rules.is_some());
+            for (text, model_value, expected_sources) in [
+                ("👋 account number: 12345678", "12345678", 2),
+                ("👋 12345678", "12345678", 1),
+                ("👋 XX-12345678", "XX-12345678", 1),
+                ("👋 account number: XX-12345678", "XX-12345678", 1),
+                ("👋 account number: XXXX1234", "XXXX1234", 2),
+                ("👋 account ending in 1234", "1234", 2),
+                ("👋 XXXX1234", "XXXX1234", 1),
+            ] {
+                let start = text.find(model_value).unwrap();
+                let result = contract
+                    .complete(
+                        text,
+                        BackendResult {
+                            spans: vec![span("bank account", start, text.len())],
+                        },
+                        Some(&routing),
+                    )
+                    .unwrap();
+                assert_eq!(result.findings.len(), 1, "{text}");
+                assert_eq!(result.findings[0].entity_type, "ACCOUNT_NUMBER");
+                assert_eq!(result.findings[0].matched_text, model_value);
+                let sources = &result.evidence[0].sources;
+                assert!(
+                    sources
+                        .iter()
+                        .any(|source| source.native_label.as_deref() == Some("bank account"))
+                );
+                assert_eq!(sources.len(), expected_sources);
+                let transformed = crate::transform(
+                    text,
+                    &result.findings,
+                    &crate::parse_transformation_config(&json!({
+                        "entities":["ACCOUNT_NUMBER"], "default":{"strategy":"redact"}
+                    }))
+                    .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    transformed.text,
+                    format!("{}[ACCOUNT_NUMBER]", &text[..start])
+                );
+            }
+        }
+        let only_email = contract
+            .routed_config(&json!({"entities":["EMAIL"]}))
+            .unwrap();
+        assert!(!only_email.needs_model());
+        assert!(
+            contract
+                .default_routed_config()
+                .model_entities
+                .contains("ACCOUNT_NUMBER")
+        );
+    }
+
+    #[test]
+    fn partial_street_rule_preserves_models_and_full_address_identity() {
+        let contract = ModelScanContract::gliner25_small(Some(&json!({
+            "street line":"STREET_ADDRESS", "address":"ADDRESS", "email":"EMAIL"
+        })))
+        .unwrap();
+        let text = "👋 Street address: 12 Willow Road, Anytown";
+        let start = text.find("12 Willow").unwrap();
+        let street_end = start + "12 Willow Road".len();
+        let routing = contract.routed_config(&json!({})).unwrap();
+        assert!(routing.model_entities.contains("STREET_ADDRESS"));
+        assert!(routing.model_entities.contains("ADDRESS"));
+        assert!(!routing.model_entities.contains("EMAIL"));
+        let result = contract
+            .complete(
+                text,
+                BackendResult {
+                    spans: vec![
+                        span("street line", start, street_end),
+                        span("address", start, text.len()),
+                    ],
+                },
+                Some(&routing),
+            )
+            .unwrap();
+        assert_eq!(result.findings.len(), 2);
+        let index = result
+            .findings
+            .iter()
+            .position(|finding| finding.entity_type == "STREET_ADDRESS")
+            .unwrap();
+        assert_eq!(result.findings[index].matched_text, "12 Willow Road");
+        assert_eq!(result.evidence[index].sources.len(), 2);
+        let address = result
+            .findings
+            .iter()
+            .find(|finding| finding.entity_type == "ADDRESS")
+            .unwrap();
+        assert_eq!(address.matched_text, "12 Willow Road, Anytown");
+        let transformed = crate::transform(
+            text,
+            &result.findings,
+            &crate::parse_transformation_config(&json!({"default":{"strategy":"redact"}})).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(transformed.text, "👋 Street address: [ADDRESS]");
+        let selected = contract
+            .routed_config(&json!({"entities":["STREET_ADDRESS"]}))
+            .unwrap();
+        assert!(selected.needs_model());
+        for text in ["12 Willow Road", "Beispielstraße 12"] {
+            let result = contract
+                .complete(
+                    text,
+                    BackendResult {
+                        spans: vec![span("street line", 0, text.len())],
+                    },
+                    Some(&selected),
+                )
+                .unwrap();
+            assert_eq!(result.findings.len(), 1);
+            assert_eq!(result.findings[0].matched_text, text);
+            assert_eq!(result.evidence[0].sources.len(), 1);
+        }
+        let small = ModelScanContract::gliner25_small(None).unwrap();
+        assert!(
+            small
+                .default_routed_config()
+                .model_entities
+                .contains("ADDRESS")
+        );
+        let only_address = small
+            .routed_config(&json!({"entities":["ADDRESS"]}))
+            .unwrap();
+        assert!(only_address.needs_model());
+        assert!(only_address.rules.is_none());
     }
 
     #[test]

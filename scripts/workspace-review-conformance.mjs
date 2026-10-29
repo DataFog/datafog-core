@@ -50,6 +50,14 @@ export function verifyWorkspaceReview(api) {
     reject(()=>w.prepare("Jane",[invalid],id(4)),"invalid_finding");
     reject(()=>w.review(input("Jane",[invalid])),"invalid_finding");
   }
+  const noCorrections={text:"ordinary",scannerFindings:[],userSelections:[]};
+  for(const valid of [noCorrections,{...noCorrections,corrections:[]}]) {
+    check(w.review(valid).conflicts.length===0,"omitted and empty corrections remain valid");
+    w.prepareReview([valid],id(4)).discard();
+  }
+  reject(()=>w.review({...noCorrections,corrections:null}),"invalid_finding");
+  const nullCorrectionError=reject(()=>w.prepareReview([noCorrections,{...noCorrections,corrections:null}],id(4)),"invalid_finding");
+  check(nullCorrectionError.inputIndex===1,"invalid corrections retain original batch input index");
   let getter=false;
   reject(()=>w.review({text,scannerFindings:[],get userSelections(){getter=true;return [];}}),"invalid_finding");check(!getter,"review transport rejects accessors");
   reject(()=>w.review(input(text,new Array(1))),"invalid_finding");

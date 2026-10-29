@@ -41,6 +41,59 @@ from datafog_core import (
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def verify_account_number() -> None:
+    for line in ((ROOT / "fixtures" / "account-number.jsonl").read_text().splitlines()
+                 + (ROOT / "fixtures" / "masked-account-number.jsonl").read_text().splitlines()):
+        row = json.loads(line)
+        text = row["text"]
+        def project(findings):
+            result = []
+            for finding in findings:
+                if finding.entity_type != "ACCOUNT_NUMBER":
+                    continue
+                assert text.encode()[finding.byte_range.start:finding.byte_range.end].decode() == finding.matched_text
+                assert text[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
+                assert finding.detector_name == "datafog-core/account-number"
+                assert finding.confidence is None
+                result.append(dict(label=finding.entity_type, text=finding.matched_text, start=finding.codepoint_range.start, end=finding.codepoint_range.end))
+            return result
+        assert project(scan(text)) == row["entities"], row["id"]
+        assert project(scan(text, {"entities":["ACCOUNT_NUMBER"]})) == row["entities"], row["id"]
+        assert project([f.finding for f in scan_structured({"note":text}).findings]) == row["entities"]
+        cases = row.get("transforms", [dict(config={"default":{"strategy":"redact"},"entities":["ACCOUNT_NUMBER"]},text=text)])
+        for case in cases:
+            config = {"transform":case["config"]}
+            assert scan_and_transform(text, config).text == case["text"], row["id"]
+            assert scan_and_transform_structured({"note":text}, config).data == {"note":case["text"]}
+    assert not any(f.finding.entity_type == "ACCOUNT_NUMBER" for f in scan_structured({"account number":"12345678"}).findings)
+
+
+def verify_street_address() -> None:
+    for line in (ROOT / "fixtures" / "street-address.jsonl").read_text().splitlines():
+        row = json.loads(line)
+        text = row["text"]
+        def project(findings):
+            result = []
+            for finding in findings:
+                if finding.entity_type != "STREET_ADDRESS":
+                    continue
+                assert text.encode()[finding.byte_range.start:finding.byte_range.end].decode() == finding.matched_text
+                assert text[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
+                assert finding.detector_name == "datafog-core/street-address"
+                assert finding.confidence is None
+                result.append(dict(label=finding.entity_type, text=finding.matched_text, start=finding.codepoint_range.start, end=finding.codepoint_range.end))
+            return result
+        assert project(scan(text)) == row["entities"], row["id"]
+        assert project(scan(text, {"entities":["STREET_ADDRESS"]})) == row["entities"], row["id"]
+        assert project([f.finding for f in scan_structured({"note":text}).findings]) == row["entities"]
+        cases = row.get("transforms") or [dict(config={"default":{"strategy":"redact"},"entities":["STREET_ADDRESS"]},text=text)]
+        for case in cases:
+            config = {"transform":case["config"]}
+            assert scan_and_transform(text, config).text == case["text"], row["id"]
+            assert scan_and_transform_structured({"note":text}, config).data == {"note":case["text"]}
+    assert not any(f.finding.entity_type == "STREET_ADDRESS" for f in scan_structured({"street address":"12 Willow Road"}).findings)
+
+
 def verify_coverage_conflicts() -> None:
     text = "👋 abcdef"
     first = Finding("PERSON", "abcd", TextRange(5, 9), TextRange(2, 6), "synthetic")
@@ -229,6 +282,8 @@ def verify_text_selection() -> None:
 def main() -> None:
     verify_coverage_conflicts()
     verify_text_selection()
+    verify_account_number()
+    verify_street_address()
     capabilities_conformance.verify()
     german_conformance.verify()
     credential_overlap_conformance.verify()

@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
+  combined protected review, scoped detector rules and stronger backup passwords.
+  Old vaults retain v1 bytes until a real approved saved upgrade; beta.1 cannot
+  open upgraded policy-v2 state. Native workspace bindings remain beta.3 work.
+
 - New browser workspace backups require password reauthentication and use
   Argon2id with 256 MiB and three passes, replacing the older password wrapper.
   Legacy backups remain importable; restored new backups retain the stronger
@@ -26,6 +31,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices and recovery with typed errors, explicit saved-state
   activation and bounded pending-plan lifetimes.
+- Detect bounded English street lines after explicit street/shipping/billing
+  address labels across SDKs, retaining broader model address coverage.
+
+
+- Detect explicitly account-labelled four-digit endings and bounded X/asterisk
+  masks without inferring hidden digits or changing workspace literal identity.
+
+- Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
+  Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
 
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
