@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
+  Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
+
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
   coverage/type conflicts block handoff with ranged review errors before a plan is

@@ -1,0 +1,43 @@
+---
+title: 'Labelled account numbers'
+description: 'Bounded lexical account-number coverage with model compatibility.'
+---
+
+`ACCOUNT_NUMBER` detects 6–17 contiguous ASCII digits immediately after
+`account number`, `account no.`, `acct number` or `acct no.` (ASCII case
+insensitive). The value span excludes the label. Supported spacing, delimiters,
+boundaries and exclusions are defined in the [rule contract](../account-number-rule-contract.md).
+This is lexical coverage, not bank validation or universal account detection.
+
+```python
+from datafog_core import scan_and_transform
+result = scan_and_transform("bank account number: 00123456", {
+    "scan": {"entities": ["ACCOUNT_NUMBER"]},
+    "transform": {"default": {"strategy": "redact"}}
+})
+assert result.text == "bank account number: [ACCOUNT_NUMBER]"
+```
+
+```javascript
+const result = scanAndTransform("bank account number: 00123456", {
+  scan: {entities: ["ACCOUNT_NUMBER"]},
+  transform: {default: {strategy: "redact"}}
+});
+console.assert(result.text === "bank account number: [ACCOUNT_NUMBER]");
+```
+
+Rules run by default across locales. Bare numbers, generic `account:` labels,
+intervening prose, split numeric values, masked values and alphanumeric accounts
+are excluded. Structured scanning uses the same text rule within each decoded
+string; field keys do not supply the label.
+
+Rust, Python, Node and browser WASM share Core semantics. Findings have no
+confidence score and use `datafog-core/account-number` provenance, original byte
+and codepoint ranges, and JavaScript UTF-16 ranges. Normal entity selection,
+allowlists and transformation strategies apply. Other detectors may overlap;
+select `ACCOUNT_NUMBER` when a transformation should use only that type.
+
+This partial rule preserves a configured model's broader `ACCOUNT_NUMBER`
+coverage. A model session selected for this type still runs its model, combines
+rule/model findings and retains evidence from both for equal-span duplicates.
+Models can therefore still find unlabelled values that this rule cannot.

@@ -13,6 +13,7 @@ fn selected_scans_match_filtered_defaults_for_every_text_detector() {
         include_str!("../../../fixtures/bearer-token.jsonl"),
         include_str!("../../../fixtures/jwt.jsonl"),
         include_str!("../../../fixtures/npi.jsonl"),
+        include_str!("../../../fixtures/account-number.jsonl"),
         include_str!("../../../fixtures/us-routing-number.jsonl"),
         include_str!("../../../fixtures/private-key.jsonl"),
         include_str!("../../../fixtures/email-context.jsonl"),

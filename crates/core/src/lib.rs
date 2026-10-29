@@ -1,4 +1,5 @@
 //! Core PII scanning API for DataFog.
+mod account_number;
 mod api_key;
 mod bearer_token;
 mod capabilities;
@@ -2051,6 +2052,7 @@ impl std::error::Error for PrivacyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
+    AccountNumber,
     ApiKey,
     CredentialUri,
     Email,
@@ -2079,6 +2081,7 @@ enum Label {
 impl Label {
     fn as_str(self) -> &'static str {
         match self {
+            Label::AccountNumber => "ACCOUNT_NUMBER",
             Label::ApiKey => "API_KEY",
             Label::CredentialUri => "CREDENTIAL_URI",
             Label::Email => "EMAIL",
@@ -2106,6 +2109,7 @@ impl Label {
 
     fn detector_name(self) -> &'static str {
         match self {
+            Label::AccountNumber => "datafog-core/account-number",
             Label::ApiKey => "datafog-core/api-key",
             Label::CredentialUri => "datafog-core/credential-uri",
             Label::Email => "datafog-core/email",
@@ -4781,6 +4785,42 @@ mod tests {
                     .unwrap();
             assert_eq!(result.transformations.len(), 1);
             assert_ne!(result.text, text);
+            if strategy["strategy"] == "tokenize" {
+                assert_eq!(
+                    block_on(manager.restore(&result.text, &context))
+                        .unwrap()
+                        .text,
+                    text
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn labelled_account_numbers_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "account",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("account").unwrap();
+        let text = "👋 account number: 00123456";
+        for strategy in [
+            json!({"strategy":"pseudonymize","key_ref":"account"}),
+            json!({"strategy":"tokenize","token_ref":"account"}),
+        ] {
+            let config = parse_scan_and_transform_config(&json!({
+                "transform":{"default":strategy,"entities":["ACCOUNT_NUMBER"]}
+            }))
+            .unwrap();
+            let result =
+                block_on(manager.scan_and_transform_with_context(text, &config, Some(&context)))
+                    .unwrap();
+            assert_eq!(result.transformations.len(), 1);
+            assert!(!result.text.contains("00123456"));
+            assert!(result.text.starts_with("👋 account number: "));
             if strategy["strategy"] == "tokenize" {
                 assert_eq!(
                     block_on(manager.restore(&result.text, &context))
