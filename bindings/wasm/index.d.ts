@@ -197,6 +197,9 @@ export function scanAndTransformStructured(data: JsonDocument, config: Structure
 /** Always rejects with unsupported_strategy after input validation. */
 export function restoreStructured(data: JsonDocument, context: PrivacyContext): never;
 
+/** Caller-declared review origin, not an authorization or authenticity claim. */
+export type WorkspaceFindingSource = "scanner" | "recall" | "user";
+
 /** Provisional workspace input; exact values and type codes are never normalized. */
 export interface WorkspaceFinding {
   readonly entityType: string;
@@ -205,6 +208,10 @@ export interface WorkspaceFinding {
   readonly confidence?: number;
   readonly detectorName?: string;
   readonly detectorVersion?: string;
+  /** Defaults to scanner for existing callers; not inferred from detectorName. */
+  readonly source?: WorkspaceFindingSource;
+  /** Defaults to true. False does not waive host approval/save/activation. */
+  readonly needsReview?: boolean;
 }
 /** One batch input; finding offsets are relative to this text only. */
 export interface WorkspaceInput {
@@ -215,6 +222,8 @@ export interface WorkspaceHead { readonly revision: string; readonly commitId: r
 export interface WorkspacePreview {
   readonly text: string;
   readonly transformations: readonly {
+    readonly source: WorkspaceFindingSource;
+    readonly needsReview: boolean;
     readonly sourceByteRange: TextRange;
     readonly sourceCodepointRange: TextRange;
     readonly sourceUtf16Range: TextRange;

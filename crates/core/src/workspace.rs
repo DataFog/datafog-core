@@ -87,7 +87,30 @@ fn error(code: ErrorCode) -> WorkspaceError {
 }
 type Result<T> = std::result::Result<T, WorkspaceError>;
 
-/// Exact source span in UTF-8 bytes. Metadata is optional and never persisted.
+/// Caller-declared origin for review display, not authorization or proof of detection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingSource {
+    #[default]
+    Scanner,
+    Recall,
+    User,
+}
+
+impl FindingSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Scanner => "scanner",
+            Self::Recall => "recall",
+            Self::User => "user",
+        }
+    }
+}
+
+/// Omitted review metadata conservatively requests review; approval is always host-owned.
+pub const DEFAULT_NEEDS_REVIEW: bool = true;
+
+/// Exact source span in UTF-8 bytes. Review metadata is never persisted.
 #[derive(Clone)]
 pub struct WorkspaceFinding {
     pub entity_type: String,
@@ -96,6 +119,8 @@ pub struct WorkspaceFinding {
     pub confidence: Option<f32>,
     pub detector_name: Option<String>,
     pub detector_version: Option<String>,
+    pub source: FindingSource,
+    pub needs_review: bool,
 }
 
 impl WorkspaceFinding {
@@ -111,6 +136,8 @@ impl WorkspaceFinding {
             confidence: None,
             detector_name: None,
             detector_version: None,
+            source: FindingSource::default(),
+            needs_review: DEFAULT_NEEDS_REVIEW,
         }
     }
 }
@@ -125,6 +152,8 @@ pub struct WorkspaceInput<'a> {
 /// A transformed span, with explicit zero-based, end-exclusive coordinate systems.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transformation {
+    pub source: FindingSource,
+    pub needs_review: bool,
     pub source_byte_range: TextRange,
     pub source_codepoint_range: TextRange,
     pub source_utf16_range: TextRange,
@@ -539,10 +568,38 @@ impl Workspace {
                 input_index: None,
                 marker_issues: Vec::new(),
             })?;
+        // Selection keeps one finding per type/range. Recover its original metadata
+        // using exact selected fields; equal duplicates retain the first input.
+        let mut input_groups: BTreeMap<(&str, usize, usize), Vec<usize>> = BTreeMap::new();
+        for (input_index, finding) in adapted.iter().enumerate() {
+            input_groups
+                .entry((
+                    finding.entity_type.as_str(),
+                    finding.byte_range.start,
+                    finding.byte_range.end,
+                ))
+                .or_default()
+                .push(input_index);
+        }
         let mut output = String::new();
         let mut transformations = Vec::with_capacity(selected.len());
         let mut cursor = 0;
         for finding in selected {
+            let input_index = input_groups
+                .get(&(
+                    finding.entity_type.as_str(),
+                    finding.byte_range.start,
+                    finding.byte_range.end,
+                ))
+                .and_then(|group| {
+                    group.iter().copied().find(|&input_index| {
+                        adapted[input_index] == finding
+                            && adapted[input_index].confidence.map(f32::to_bits)
+                                == finding.confidence.map(f32::to_bits)
+                    })
+                })
+                .ok_or_else(|| error(ErrorCode::InvalidFinding))?;
+            let metadata = &findings[input_index];
             let identity = Identity {
                 entity_type: finding.entity_type.clone(),
                 key: identity_key(&finding.matched_text),
@@ -584,6 +641,8 @@ impl Workspace {
             let output_start = output.len();
             append(&mut output, &marker(&identity.entity_type, &entry.code))?;
             transformations.push(Transformation {
+                source: metadata.source,
+                needs_review: metadata.needs_review,
                 source_byte_range: finding.byte_range,
                 source_codepoint_range: finding.codepoint_range,
                 source_utf16_range: index
