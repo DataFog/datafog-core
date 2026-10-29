@@ -43,13 +43,22 @@ The CLI never deletes reports. Temporary installed consumers and browser profile
 are cleaned separately. Any process/runtime/parse failure prevents a complete
 comparison and returns nonzero without retaining arbitrary child diagnostics.
 
-The initial matrix has four scenarios and 58 real operation steps, including every
+The current matrix has 17 scenarios and 156 real operation steps, including every
 current workspace error code, Unicode/source metadata, correction conflicts,
 failed activation receipts, protected policy, repeated operation IDs, atomic batch
 failure, strict marker reports, canonical reopen/recovery, v1→v2 upgrade and a
 revision above JavaScript's exact numeric range. Only representation defaults
 normalize: absent nullable finding metadata becomes null and revision integers
 become lossless decimal strings. Matched text, offsets, flags and choices are kept.
+
+The matrix includes all 11 shared review-conflict scenarios: source flags cannot
+spoof a channel or native SSN precedence, duplicate origins retain metadata,
+containing coverage remains safe, crossing ranges stop handoff, exact not-sensitive
+choices remove only the target obligation, and malformed waived findings still
+reject before filtering. Additional committed-recall scenarios check Unicode
+case/whitespace expansion, Ann versus Annette, exclusion of unapproved fuzzy
+matches, no recall before activation, and every overlapping committed identity.
+Crossing recall candidates remain visible and prevent preparation across all SDKs.
 
 The reference adapter validates plan access before explicit `discard`, matching
 the public opaque SDK lifecycle contract. Core's lower-level cleanup remains

@@ -650,6 +650,1254 @@
           "text": "[[PERSON_7KQ4ZM]]"
         }
       ]
+    },
+    {
+      "id": "shared-review-disjoint-person-ssn",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-exact-duplicate-origins",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                },
+                "source": "user",
+                "needsReview": true
+              }
+            ],
+            "userSelections": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                },
+                "source": "scanner",
+                "needsReview": false
+              }
+            ]
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  },
+                  "source": "user",
+                  "needsReview": true
+                }
+              ],
+              "userSelections": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  },
+                  "source": "scanner",
+                  "needsReview": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-native-ssn-equal-person",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 11
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 11
+                },
+                "detectorName": "datafog-core/ssn"
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 11
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 11
+                  },
+                  "detectorName": "datafog-core/ssn"
+                }
+              ],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-spoofed-ssn-type-conflict",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                },
+                "detectorName": "datafog-core/ssn",
+                "source": "user"
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  },
+                  "detectorName": "datafog-core/ssn",
+                  "source": "user"
+                }
+              ],
+              "userSelections": []
+            }
+          ],
+          "expectCode": "review_conflict"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-containing-person-keeps-ssn-covered",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane 123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 16
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane 123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 16
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-crossing-person-ssn",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane 123",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 8
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane 123",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 8
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ],
+          "expectCode": "review_conflict"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-crossing-person-ssn-reversed",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              },
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane 123",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 8
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                },
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane 123",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 8
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ],
+          "expectCode": "review_conflict"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-unicode-crossing",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "👋 ABCDEF",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "ABCD",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 9
+                }
+              }
+            ],
+            "userSelections": [
+              {
+                "entityType": "CUSTOM",
+                "matchedText": "CDEF",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 7,
+                  "end": 11
+                },
+                "needsReview": false
+              }
+            ]
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "👋 ABCDEF",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "ABCD",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 9
+                  }
+                }
+              ],
+              "userSelections": [
+                {
+                  "entityType": "CUSTOM",
+                  "matchedText": "CDEF",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 7,
+                    "end": 11
+                  },
+                  "needsReview": false
+                }
+              ]
+            }
+          ],
+          "expectCode": "review_conflict"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-narrow-waiver-keeps-wider-protected",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "policy",
+          "operationByte": 42,
+          "edits": {
+            "rules": [],
+            "choices": [
+              {
+                "entityType": "SSN",
+                "value": "123-45-6789",
+                "disposition": "not_sensitive"
+              }
+            ]
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "policy"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane 123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 16
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane 123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 16
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-exact-waiver-removes-only-target-obligation",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "policy",
+          "operationByte": 42,
+          "edits": {
+            "rules": [],
+            "choices": [
+              {
+                "entityType": "PERSON",
+                "value": "Jane 123",
+                "disposition": "not_sensitive"
+              }
+            ]
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "policy"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane 123-45-6789",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane 123",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 8
+                }
+              },
+              {
+                "entityType": "SSN",
+                "matchedText": "123-45-6789",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 16
+                }
+              }
+            ],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane 123-45-6789",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane 123",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 8
+                  }
+                },
+                {
+                  "entityType": "SSN",
+                  "matchedText": "123-45-6789",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 16
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "prepared"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "shared-review-invalid-waived-finding",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 40,
+          "operationByte": 41
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "policy",
+          "operationByte": 42,
+          "edits": {
+            "rules": [],
+            "choices": [
+              {
+                "entityType": "PERSON",
+                "value": "Bob",
+                "disposition": "not_sensitive"
+              }
+            ]
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "policy"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "Jane",
+            "scannerFindings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Bob",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 0,
+                  "end": 4
+                }
+              }
+            ],
+            "userSelections": []
+          },
+          "expectCode": "invalid_finding"
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "prepared",
+          "operationByte": 43,
+          "inputs": [
+            {
+              "text": "Jane",
+              "scannerFindings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Bob",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 4
+                  }
+                }
+              ],
+              "userSelections": []
+            }
+          ],
+          "expectCode": "invalid_finding"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "unicode-normalization-boundaries-no-fuzzy-recall",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 50,
+          "operationByte": 51
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "w",
+          "plan": "seed",
+          "operationByte": 52,
+          "inputs": [
+            {
+              "text": "İ Jane",
+              "findings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "İ Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 7
+                  }
+                }
+              ]
+            },
+            {
+              "text": "Ann",
+              "findings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Ann",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 3
+                  }
+                }
+              ]
+            },
+            {
+              "text": "Jane Smith",
+              "findings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane Smith",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 0,
+                    "end": 10
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call": "recall",
+          "workspace": "w",
+          "text": "👋 i̇ \tJANE; Ann Annette; Jane Smyth; J.Smith; JANE\t SMITH"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "seed"
+        },
+        {
+          "call": "recall",
+          "workspace": "w",
+          "text": "👋 i̇ \tJANE; Ann Annette; Jane Smyth; J.Smith; JANE\t SMITH"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "👋 i̇ \tJANE; Ann Annette; Jane Smyth; J.Smith; JANE\t SMITH",
+            "scannerFindings": [],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "recalled",
+          "operationByte": 53,
+          "inputs": [
+            {
+              "text": "👋 i̇ \tJANE; Ann Annette; Jane Smyth; J.Smith; JANE\t SMITH",
+              "scannerFindings": [],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "discard",
+          "plan": "recalled"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "unchanged"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
+    },
+    {
+      "id": "committed-recall-retains-all-crossing-protected-spans",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 60,
+          "operationByte": 61
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "first",
+          "operationByte": 62,
+          "text": "Jane Smith",
+          "findings": [
+            {
+              "entityType": "PERSON",
+              "matchedText": "Jane Smith",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 10
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "first"
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "second",
+          "operationByte": 63,
+          "text": "Smith Khan",
+          "findings": [
+            {
+              "entityType": "CUSTOM",
+              "matchedText": "Smith Khan",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 10
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "second"
+        },
+        {
+          "call": "recall",
+          "workspace": "w",
+          "text": "👋 JANE \tSMITH KHAN"
+        },
+        {
+          "call": "review",
+          "workspace": "w",
+          "review": "reviewed",
+          "input": {
+            "text": "👋 JANE \tSMITH KHAN",
+            "scannerFindings": [],
+            "userSelections": []
+          }
+        },
+        {
+          "call": "prepareReview",
+          "workspace": "w",
+          "plan": "blocked",
+          "operationByte": 64,
+          "expectCode": "review_conflict",
+          "inputs": [
+            {
+              "text": "👋 JANE \tSMITH KHAN",
+              "scannerFindings": [],
+              "userSelections": []
+            }
+          ]
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "unchanged"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        }
+      ]
     }
   ]
 }
