@@ -3,6 +3,7 @@ use super::*;
 use ::datafog_core::workspace as w;
 use pyo3::types::PyBytes;
 use serde_json::{Value, json};
+mod conversation;
 mod operations;
 mod stream;
 
@@ -512,6 +513,11 @@ impl WorkspacePreparedChange {
         let value = self.read(py, w::PreparedChange::snapshot_format)?;
         json_object(py, &value)
     }
+    /// Saved preparation identifiers are not proof of an actual transport send.
+    fn send_intents(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let values = self.read(py, w::PreparedChange::send_intents)?;
+        json_object(py, &values)
+    }
     fn policy_preview(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let value = self.read(py, |p| {
             p.policy_preview().and_then(|v| {
@@ -705,6 +711,154 @@ impl Workspace {
             self.inner
                 .prepare_batch_with_operation(&borrowed, operation)
         })
+    }
+    /// Stage mappings and pending intentions; explicit approval/save/activation precede transport.
+    fn prepare_conversation_send(
+        &self,
+        py: Python<'_>,
+        inputs: &Bound<'_, PyAny>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let operation = operations::context(py, operation)?;
+        let owned = conversation::inputs(py, inputs)?;
+        let borrowed: Vec<_> = owned
+            .iter()
+            .map(|(input, conversation)| w::ConversationInput {
+                input: input.as_input(),
+                conversation: conversation.clone(),
+            })
+            .collect();
+        self.stage(py, || {
+            self.inner.prepare_conversation_send(&borrowed, operation)
+        })
+    }
+    fn conversation(&self, py: Python<'_>, logical_id: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let value = self
+            .inner
+            .conversation(conversation::selector(py, logical_id)?)
+            .map_err(|error| workspace_error(py, error))?;
+        json_object(py, &value)
+    }
+    fn conversation_for_site<'py>(
+        &self,
+        py: Python<'py>,
+        surface: &Bound<'_, PyAny>,
+        site_id: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let surface = conversation::text(py, surface, w::ErrorCode::InvalidConversation)?;
+        let site_id = conversation::text(py, site_id, w::ErrorCode::InvalidConversation)?;
+        material_limit(py, surface.len().saturating_add(site_id.len()))?;
+        let value = self
+            .inner
+            .conversation_for_site(surface, site_id)
+            .map_err(|error| workspace_error(py, error))?;
+        Ok(PyBytes::new(py, &value))
+    }
+    fn send_intent_status(&self, py: Python<'_>, intent: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let value = self
+            .inner
+            .send_intent_status(conversation::intent(py, intent)?)
+            .map_err(|error| workspace_error(py, error))?;
+        json_object(py, &value)
+    }
+    /// Trusted actual successful-send observation; never inferred from model text or a preview.
+    fn prepare_observed_send(
+        &self,
+        py: Python<'_>,
+        intent: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
+        surface: &Bound<'_, PyAny>,
+        site_id: &Bound<'_, PyAny>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let surface = conversation::text(py, surface, w::ErrorCode::InvalidConversation)?;
+        let site_id = conversation::text(py, site_id, w::ErrorCode::InvalidConversation)?;
+        material_limit(py, surface.len().saturating_add(site_id.len()))?;
+        let intent = conversation::intent(py, intent)?;
+        let logical_id = conversation::selector(py, logical_id)?;
+        let operation = operations::context(py, operation)?;
+        self.stage(py, || {
+            self.inner
+                .prepare_observed_send(intent, logical_id, surface, site_id, operation)
+        })
+    }
+    /// Trusted definite non-delivery, not an ambiguous timeout or cancellation.
+    fn prepare_definitely_not_sent(
+        &self,
+        py: Python<'_>,
+        intent: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let intent = conversation::intent(py, intent)?;
+        let logical_id = conversation::selector(py, logical_id)?;
+        let operation = operations::context(py, operation)?;
+        self.stage(py, || {
+            self.inner
+                .prepare_definitely_not_sent(intent, logical_id, operation)
+        })
+    }
+    /// Strict scoped restoration never falls back to current-workspace compatibility mode.
+    fn restore_in_conversation(
+        &self,
+        py: Python<'_>,
+        text: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
+    ) -> PyResult<String> {
+        let text = conversation::text(py, text, w::ErrorCode::InvalidFinding)?;
+        self.inner
+            .restore_in_conversation(text, conversation::selector(py, logical_id)?)
+            .map_err(|error| workspace_error(py, error))
+    }
+    fn restore_report_in_conversation(
+        &self,
+        py: Python<'_>,
+        text: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let text = conversation::text(py, text, w::ErrorCode::InvalidFinding)?;
+        let value = self
+            .inner
+            .restore_report_in_conversation(text, conversation::selector(py, logical_id)?)
+            .map_err(|error| workspace_error(py, error))?;
+        json_object(
+            py,
+            &json!({"text":value.text,"restoredMarkers":value.restored_markers,"issues":value.issues.iter().map(issue_value).collect::<Vec<_>>()}),
+        )
+    }
+    #[pyo3(signature = (logical_id, encoding="utf8"))]
+    fn buffered_restore_in_conversation(
+        &self,
+        py: Python<'_>,
+        logical_id: &Bound<'_, PyAny>,
+        encoding: &str,
+    ) -> PyResult<stream::WorkspaceBufferedRestore> {
+        let logical_id = conversation::selector(py, logical_id)?;
+        let encoding = stream::encoding(py, encoding)?;
+        let result = (|| -> NativeResult<_> {
+            let value = self
+                .inner
+                .buffered_restore_in_conversation(logical_id, encoding)?;
+            lock(&self.streams)?.buffered(value, encoding)
+        })();
+        result.map_err(|error| error.into_python(py))
+    }
+    #[pyo3(signature = (logical_id, encoding="utf8"))]
+    fn progressive_restore_in_conversation(
+        &self,
+        py: Python<'_>,
+        logical_id: &Bound<'_, PyAny>,
+        encoding: &str,
+    ) -> PyResult<stream::WorkspaceProgressiveRestore> {
+        let logical_id = conversation::selector(py, logical_id)?;
+        let encoding = stream::encoding(py, encoding)?;
+        let result = (|| -> NativeResult<_> {
+            let value = self
+                .inner
+                .progressive_restore_in_conversation(logical_id, encoding)?;
+            lock(&self.streams)?.progressive(value, encoding)
+        })();
+        result.map_err(|error| error.into_python(py))
     }
     fn operations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let records = self

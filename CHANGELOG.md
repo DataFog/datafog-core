@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Add native Python conversation send-intent, confirmed issuance and scoped
+  strict/streaming restore methods backed by the shared Core decisions.
+
 - WASM TypeScript workspace errors include `invalid_policy` and nullable absent
   finding/input indices, matching actual Core failures and native Node.
 
@@ -30,6 +33,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - `cargo dfv doctor` reads version requirements from pin files and fails loudly when a pin file is missing; it no longer uses hardcoded version constants
 
 ### Added
+
+- Native Node exposes saved conversation send intents, one-time site binding and
+  scoped strict/buffered/progressive restoration through the shared Core.
 
 - Core and browser WASM support saved conversation send intents, funded confirmation
   capacity, one-time site binding and explicit conversation-scoped restoration.

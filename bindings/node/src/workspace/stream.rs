@@ -58,6 +58,29 @@ impl Registry {
             encoding,
         )
     }
+    pub(super) fn scoped(
+        &mut self,
+        owner: &Workspace,
+        logical_id: workspace::PublicId,
+        encoding: &str,
+        progressive: bool,
+    ) -> Result<NativeRestoreStream, Error> {
+        let encoding = parse_encoding(encoding)?;
+        let implementation = if progressive {
+            Implementation::Progressive(
+                owner
+                    .progressive_restore_in_conversation(logical_id, encoding)
+                    .map_err(from_error)?,
+            )
+        } else {
+            Implementation::Buffered(
+                owner
+                    .buffered_restore_in_conversation(logical_id, encoding)
+                    .map_err(from_error)?,
+            )
+        };
+        self.track(implementation, encoding)
+    }
     pub(super) fn close(&mut self) {
         for stream in self.0.drain(..).filter_map(|stream| stream.upgrade()) {
             stream
