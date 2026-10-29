@@ -251,6 +251,7 @@ export interface WorkspacePolicyEdits {
   readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
 }
 export interface WorkspacePolicy {
+  readonly snapshotVersion: 1 | 2;
   readonly defaultRule: "hide";
   readonly protectedTypes: readonly string[];
   readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
@@ -261,6 +262,8 @@ export interface WorkspacePolicyPreview {
   readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: WorkspaceChoiceDisposition | null; readonly after: WorkspaceChoiceDisposition | null}[];
 }
 export interface PreparedWorkspaceChange {
+  /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
+  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
   /** Requires a single-input plan. */

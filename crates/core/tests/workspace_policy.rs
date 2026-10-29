@@ -579,3 +579,66 @@ fn recovery_preserves_settings_and_permanent_aliases_with_a_fresh_head() {
         .unwrap();
     assert_eq!(restored.policy().unwrap().choices.len(), 1);
 }
+
+#[test]
+fn settings_limits_fail_atomically_without_eviction_or_oversized_decoding() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    for (batch, operation) in [(0, 3), (1, 4)] {
+        let edits = PolicyEdits {
+            rules: vec![],
+            choices: (batch * 10_000..(batch + 1) * 10_000)
+                .map(|index| ValueChoiceEdit {
+                    entity_type: "PRODUCT_CODE".into(),
+                    value: format!("item{index}"),
+                    disposition: Some(ChoiceDisposition::Keep),
+                })
+                .collect(),
+        };
+        activate(&mut workspace, &edits, operation);
+    }
+    assert_eq!(workspace.policy().unwrap().choices.len(), 20_000);
+    let before = workspace.export_bundle().unwrap();
+    assert_eq!(
+        workspace
+            .prepare_policy_changes(
+                &choice("PRODUCT_CODE", "extra", Some(ChoiceDisposition::Keep)),
+                [5; 16]
+            )
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
+    assert_eq!(workspace.export_bundle().unwrap(), before);
+    let excess = PolicyEdits {
+        rules: vec![],
+        choices: (0..10_001)
+            .map(|index| ValueChoiceEdit {
+                entity_type: "PRODUCT_CODE".into(),
+                value: format!("other{index}"),
+                disposition: None,
+            })
+            .collect(),
+    };
+    assert_eq!(
+        workspace
+            .prepare_policy_changes(&excess, [5; 16])
+            .err()
+            .unwrap()
+            .code,
+        ErrorCode::ResourceLimit
+    );
+    let mut allocation_attack = crafted_snapshot("protected_v1", &[], &[]);
+    allocation_attack.pop();
+    allocation_attack.extend([0x99, 0x4e, 0x21]);
+    assert!(Workspace::open_bundle(&allocation_attack).is_err());
+    let oversized = "x".repeat(datafog_core::workspace::MAX_SOURCE_BYTES + 1);
+    assert!(
+        Workspace::open_bundle(&crafted_snapshot(
+            "protected_v1",
+            &[],
+            &[("PERSON", &oversized, 1)]
+        ))
+        .is_err()
+    );
+}

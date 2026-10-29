@@ -121,6 +121,7 @@ impl Drop for ChoiceView {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyView {
+    pub snapshot_version: u8,
     pub default_rule: TypeRule,
     pub protected_types: Vec<String>,
     pub rules: Vec<RuleView>,
@@ -202,6 +203,7 @@ impl State {
     }
     pub(super) fn policy_view(&self) -> PolicyView {
         PolicyView {
+            snapshot_version: self.snapshot_version,
             default_rule: TypeRule::Hide,
             protected_types: PROTECTED_TYPES
                 .iter()
@@ -356,6 +358,7 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews: Vec::new(),

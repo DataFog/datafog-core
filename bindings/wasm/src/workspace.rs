@@ -204,6 +204,10 @@ impl WasmWorkspace {
         self.next_plan = next;
         Ok(handle)
     }
+    pub fn snapshot_format(&self, handle: u32) -> Result<String, JsValue> {
+        serde_json::to_string(&self.plan(handle)?.snapshot_format().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
     pub fn policy_preview(&self, handle: u32) -> Result<String, JsValue> {
         serde_json::to_string(&self.plan(handle)?.policy_preview().map_err(from_error)?)
             .map_err(|_| failure(ErrorCode::InvalidPolicy))

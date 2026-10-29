@@ -289,10 +289,18 @@ struct State {
 struct Pending {
     lifetime: Arc<AtomicBool>,
     parent: Head,
+    parent_snapshot_version: u8,
     candidate: State,
     bundle: Zeroizing<Vec<u8>>,
     previews: Vec<Preview>,
     policy_preview: Option<PolicyPreview>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotFormat {
+    pub current_version: u8,
+    pub candidate_version: u8,
 }
 
 /// An immutable pending change. Preview/export do not consume it; activation or discard do.
@@ -316,6 +324,13 @@ impl PreparedChange {
             [preview] => Ok(preview),
             _ => Err(error(ErrorCode::InvalidBatch)),
         }
+    }
+    pub fn snapshot_format(&self) -> Result<SnapshotFormat> {
+        let pending = self.pending()?;
+        Ok(SnapshotFormat {
+            current_version: pending.parent_snapshot_version,
+            candidate_version: pending.candidate.snapshot_version,
+        })
     }
     pub fn policy_preview(&self) -> Result<Option<&PolicyPreview>> {
         Ok(self.pending()?.policy_preview.as_ref())
@@ -420,6 +435,7 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews: Vec::new(),
@@ -514,6 +530,7 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews,

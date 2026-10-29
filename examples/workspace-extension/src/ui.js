@@ -49,7 +49,7 @@ function showMarkerIssues(error) {
     };
   }
 }
-function clearPreview() { plan = undefined; element("preview").textContent = ""; element("approve").disabled = true; }
+function clearPreview() { element("format-upgrade").hidden=true; plan = undefined; element("preview").textContent = ""; element("approve").disabled = true; }
 function clearCurrent() { element("source").value = ""; findings = []; element("selection-count").textContent = "0 selections"; }
 function clearDraft() { clearMarkerIssues(); clearCurrent(); queued = []; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
 function renderInputs() {
@@ -68,12 +68,12 @@ function renderInputs() {
   });
 }
 function showInputs(texts) { return texts.length === 1 ? texts[0] : texts.map((text, i) => `Input ${i + 1}\n${text}`).join("\n\n"); }
-function clearImportPreview() { importPlan = undefined; element("backup-preview").textContent = ""; element("backup-approve").disabled = true; }
+function clearImportPreview() { element("backup-format-upgrade").hidden=true; importPlan = undefined; element("backup-preview").textContent = ""; element("backup-approve").disabled = true; }
 function hideRecovery() { element("recovery-created").value = ""; element("recovery-notice").hidden = true; }
 function clearViews() {
   clearDraft(); clearImportPreview(); hideRecovery();
   element("sink").textContent = ""; element("restore-input").value = ""; element("restored").textContent = "";
-  for (const id of ["password", "backup-credential", "backup-file"]) element(id).value = "";
+  for (const id of ["password", "backup-credential", "backup-file", "policy-value"]) element(id).value = "";
 }
 async function perform(task) {
   const g = generation;
@@ -90,7 +90,7 @@ async function perform(task) {
 }
 function renderBusy() {
   if (importPlan && importPlan.generation !== generation) clearImportPreview();
-  for (const id of ["password", "unlock-method", "create", "unlock", "mark", "prepare", "restore", "add-input", "backup-export", "backup-file", "backup-method", "backup-credential", "backup-review"]) element(id).disabled = operations > 0;
+  for (const id of ["password", "unlock-method", "create", "unlock", "mark", "prepare", "restore", "add-input", "backup-export", "backup-file", "backup-method", "backup-credential", "backup-review", "policy-kind", "policy-type", "policy-value", "policy-choice", "policy-rule", "policy-prepare"]) element(id).disabled = operations > 0;
   element("approve").disabled = operations > 0 || plan === undefined;
   element("backup-approve").disabled = operations > 0 || importPlan === undefined;
 }
@@ -145,6 +145,7 @@ element("backup-review").addEventListener("click", () => {
       const result = await broker.call("prepareImport", [bytes, credential, method]);
       if (g !== generation) return;
       importPlan = {...result, generation: g};
+      element("backup-format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
       element("backup-preview").textContent = `Saved workspace ${result.workspaceTag}\nExported ${result.exportedAt}\nSaved revision ${result.revision}\nRestore saved mappings/settings into this empty profile.`;
       status("backup_preview_ready");
     } finally { bytes.fill(0); }
@@ -177,7 +178,32 @@ element("prepare").addEventListener("click", () => perform(async g => {
   const inputs = draftInputs();
   const result = await broker.call("prepare", [inputs]);
   if (g !== generation) return;
+  element("format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
   plan = result.id; element("preview").textContent = showInputs(result.previews.map(preview => preview.text)); element("approve").disabled = false; status("preview_ready");
+}));
+for (const id of ["policy-kind","policy-type","policy-value","policy-choice","policy-rule"]) {
+  element(id).addEventListener("input",()=>{
+    generation++;clearPreview();
+    void perform(async g=>{await broker.call("cancel");if(g===generation)status("settings_edited");});
+  });
+}
+element("policy-prepare").addEventListener("click",()=>perform(async g=>{
+  clearPreview();clearMarkerIssues();element("sink").textContent="";
+  const type=element("policy-type").value;
+  const selected=element(element("policy-kind").value === "rule" ? "policy-rule" : "policy-choice").value;
+  const action=selected === "remove" ? null : selected;
+  const edits=element("policy-kind").value === "rule"
+    ? {rules:[{entityType:type,rule:action}],choices:[]}
+    : {rules:[],choices:[{entityType:type,value:element("policy-value").value,disposition:action}]};
+  const result=await broker.call("preparePolicy",[edits]);
+  if(g!==generation)return;
+  const labels={hide:"hide",keep:"keep visible",not_sensitive:"not sensitive",null:"remove override"};
+  element("preview").textContent=[
+    ...result.policyPreview.rules.map(row=>`${row.entityType}: ${labels[String(row.after)]}`),
+    ...result.policyPreview.choices.map(row=>`${row.entityType} ${JSON.stringify(row.value)}: ${labels[String(row.after)]}`),
+  ].join("\n");
+  element("format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
+  plan=result.id;element("approve").disabled=false;status("policy_preview_ready");
 }));
 element("approve").addEventListener("click", () => perform(async g => {
   element("approve").disabled = true;
@@ -206,3 +232,7 @@ await broker.call("status"); status("ready");
 
 /** Fault synchronization for this non-shipping synthetic harness only. */
 export function testCommand(command, value) { return broker.call("test", [command, value]); }
+
+/** Read-only local inspection for the synthetic integration proof. */
+export function workspacePolicy() { return broker.call("policy"); }
+export function workspaceRecall(text) { return broker.call("recall",[text]); }

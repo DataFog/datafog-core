@@ -14,14 +14,21 @@ serve({
   prepareRecovery(operation) {
     const value = active().prepareRecovery(operation);
     const id = next++; plans.set(id, value);
-    return { id, ...value.heads() };
+    return { id, format:value.snapshotFormat(), ...value.heads() };
   },
   head() { return active().head(); },
   byteRange(text, start, end) { return workspaceByteRangeFromUtf16(text, start, end); },
+  policy() { return active().policy(); },
+  recall(text) { return active().recall(text); },
+  preparePolicy(edits, operation) {
+    const value=active().preparePolicyChanges(edits,operation);
+    const id=next++;plans.set(id,value);
+    return {id,previews:[],policyPreview:value.policyPreview(),format:value.snapshotFormat(),...value.heads()};
+  },
   prepareBatch(inputs, operation) {
     const value = active().prepareBatch(inputs, operation);
     const id = next++; plans.set(id, value);
-    return { id, previews: value.previews(), ...value.heads() };
+    return { id, previews: value.previews(), format:value.snapshotFormat(), ...value.heads() };
   },
   exportCandidate(id) { return plan(id).exportCandidateBundle(); },
   activate(id, parent, saved) { active().activateSaved(plan(id), parent, saved); plans.delete(id); },

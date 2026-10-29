@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
+import {verifyPolicyHost} from "./test-workspace-policy.mjs";
 import {verifyBackups} from "./test-workspace-backup.mjs";
 import {waitForBrokerState} from "./workspace-test-wait.mjs";
 
@@ -72,6 +73,7 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 }
 
 try {
+  await verifyPolicyHost({fresh,status,close:async()=>{await context.close();context=undefined;},launch,unlock,restored,control,check,counters:counterFixtures});
   await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
@@ -325,6 +327,8 @@ try {
     const api = await import("./vendor/package/index.js");
     const { verifyWorkspace } = await import("./workspace-conformance.mjs");
     await verifyWorkspace(api, counters);
+    const {verifyWorkspacePolicy} = await import("./workspace-policy-conformance.mjs");
+    await verifyWorkspacePolicy(api, counters);
   }, counterFixtures);
   console.log("PASS A3/A7/A8 installed WASM inputs, lifecycle, canonical CBOR and uint64 parity");
 

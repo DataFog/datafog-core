@@ -298,6 +298,7 @@ function workspacePolicyJson(edits) {
 }
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); Object.freeze(this); }
+  snapshotFormat() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state,"snapshot_format",handle)); }
   policyPreview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "policy_preview", handle)); }
   previews() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "previews", handle)); }
   preview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "preview", handle)); }
