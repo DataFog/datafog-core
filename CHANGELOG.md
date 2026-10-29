@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
+  combined protected review, scoped detector rules and stronger backup passwords.
+  Old vaults retain v1 bytes until a real approved saved upgrade; beta.1 cannot
+  open upgraded policy-v2 state. Native workspace bindings remain beta.3 work.
+
 - New browser workspace backups require password reauthentication and use
   Argon2id with 256 MiB and three passes, replacing the older password wrapper.
   Legacy backups remain importable; restored new backups retain the stronger
