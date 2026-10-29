@@ -972,9 +972,11 @@ fn restore_report_scoped(
     let restored_markers = spans
         .iter()
         .filter(|span| {
-            span.canonical
-                .as_ref()
-                .is_some_and(|canonical| lookup.contains_key(canonical))
+            span.canonical.as_ref().is_some_and(|canonical| {
+                lookup.contains_key(canonical)
+                    && context
+                        .is_none_or(|context| conversation::eligible(state, context, canonical))
+            })
         })
         .count();
     if !issues.is_empty() {
