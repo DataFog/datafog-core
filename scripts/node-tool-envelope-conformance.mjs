@@ -32,10 +32,10 @@ export async function verifyNodeToolEnvelope() {
     }
     return context;
   };
-  async function prepare(owner,requestId,operation) {
-    const original=request(value);let sent,channel,capability;
+  async function prepare(owner,requestId,operation,source=value) {
+    const original=request(source);let sent,channel,capability;
     await runPreparedRequest({store,scope:owner,requestId,operationId:id(operation),
-      input:{text:textOf(original),scannerFindings:[],userSelections:[{entityType:"PERSON",matchedText:value,range:{unit:"utf8_bytes",start:0,end:Buffer.byteLength(value)}}]},
+      input:{text:textOf(original),scannerFindings:[],userSelections:[{entityType:"PERSON",matchedText:source,range:{unit:"utf8_bytes",start:0,end:Buffer.byteLength(source)}}]},
       approve:async()=>true,release:async released=>{
         sent=replace(original,released.text);
         const context={scope:Object.freeze({...owner}),requestId,head:structuredClone(released.head)};
@@ -95,8 +95,12 @@ export async function verifyNodeToolEnvelope() {
     let emitted=0;
     await assert.rejects(()=>progressive(a,envelope,[bytes],async()=>{emitted++;},{capability:b.capability}),error=>error.code==="invalid_response_context");
     assert.equal(emitted,0);
+    // A trusted route is not permission to stream against a different saved head.
+    await prepare(owners[0],"changed_head",14,"Synthetic Later Person");
+    await assert.rejects(()=>progressive(a,envelope,[bytes],async()=>{emitted++;}),error=>error.code==="workspace_conflict" && error.complete===false && error.delivered.bytes===0);
+    assert.equal(emitted,0,"stale-head rejection precedes every progressive delivery");
     return {scope:"synthetic explicitly designated text slots only; Node installed SDK/SQLite, not provider translation or Python acceptance",
       concurrentEqualValues:true,sameWorkspaceRequestIsolation:true,correlationRejects,opaqueToolMetadataUnchanged:true,
-      strictNoPartialEnvelope:true,progressiveComplete:true,progressiveIncomplete:true,cancellation:true};
+      strictNoPartialEnvelope:true,progressiveComplete:true,progressiveIncomplete:true,cancellation:true,progressiveStaleHeadRejected:true};
   } finally {store.close();key.fill(0);await rm(directory,{recursive:true,force:true});}
 }

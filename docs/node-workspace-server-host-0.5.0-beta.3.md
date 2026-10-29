@@ -141,6 +141,12 @@ and never selects a mapping store. This models an already trusted host associati
 it does not prove that a real provider adapter acquired that association correctly,
 or that Core can detect a host initially binding the wrong response.
 
+Only the progressive helper enforces that saved head; a later changed head rejects
+before any delivery. The existing nonstreaming helper uses the current authorized
+workspace and retains its unscoped compatibility contract. Its route capability
+checks do not prove that each restored marker was issued in this request or chat.
+Conversation-aware issuance and pending-send checks remain the separate #148 work.
+
 Nonstreaming restoration publishes a cloned envelope only after strict success.
 Progressive tests retain the opaque envelope while feeding only designated byte
 chunks through the existing native adapter. They prove Unicode completion, a late
