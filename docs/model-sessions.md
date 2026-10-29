@@ -34,6 +34,7 @@ not performance targets or library defaults:
 
 ```json
 {
+  "engine": "datafog",
   "bundle": "/tmp/datafog-bundle",
   "manifest_sha256": "<digest emitted by the provisioner>",
   "limits": {
@@ -47,6 +48,16 @@ not performance targets or library defaults:
 ```
 
 See [GLiNER2 setup](gliner2-model.md) to use that model instead.
+
+Native sessions accept `engine: "datafog"` or `engine: "gliner2"` in the shared
+Rust/Python/Node configuration. GLiNER2 requires the `gliner2` settings object;
+DataFog rejects it. Unknown engine names fail at `/engine` before loading a
+worker. When `engine` is omitted, existing configurations keep selecting GLiNER2
+when its settings are present and DataFog otherwise. Rust callers can use
+`ModelEngine` and `ModelSessionConfig::selected_engine` for the same selection.
+Rust struct literals must include `engine: None` to retain legacy selection.
+The selector does not change routing, inference or the model identified by a
+verified bundle. Browser sessions retain their existing explicit factory.
 
 ## Python and Node
 

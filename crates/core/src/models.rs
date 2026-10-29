@@ -63,6 +63,9 @@ impl ResourceLimits {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSessionConfig {
+    /// Omission retains legacy selection from the presence of `gliner2` settings.
+    #[serde(default, deserialize_with = "deserialize_engine")]
+    pub engine: Option<ModelEngine>,
     #[serde(default)]
     pub gliner2: Option<Gliner2Config>,
     pub bundle: PathBuf,
@@ -70,12 +73,43 @@ pub struct ModelSessionConfig {
     pub limits: ResourceLimits,
 }
 
+/// Native engines compiled into the optional model-session API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelEngine {
+    Datafog,
+    Gliner2,
+}
+
+fn deserialize_engine<'de, D>(deserializer: D) -> Result<Option<ModelEngine>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    ModelEngine::deserialize(deserializer).map(Some)
+}
+
+impl ModelSessionConfig {
+    /// Resolve legacy configuration and reject contradictory adapter settings.
+    pub fn selected_engine(&self) -> Result<ModelEngine, ModelError> {
+        match (self.engine, self.gliner2.is_some()) {
+            (Some(ModelEngine::Datafog), true) => {
+                Err(ModelError::config("invalid_value", "/gliner2"))
+            }
+            (Some(ModelEngine::Gliner2), false) => {
+                Err(ModelError::config("missing_field", "/gliner2"))
+            }
+            (None | Some(ModelEngine::Gliner2), true) => Ok(ModelEngine::Gliner2),
+            (None | Some(ModelEngine::Datafog), false) => Ok(ModelEngine::Datafog),
+        }
+    }
+}
+
 /// Parse binding configuration once in Core, retaining precise value-free paths.
 pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, ModelError> {
     let object = crate::require_object(value, "", "model configuration must be an object")?;
     crate::reject_unknown_fields(
         object,
-        &["bundle", "manifest_sha256", "limits", "gliner2"],
+        &["bundle", "manifest_sha256", "limits", "engine", "gliner2"],
         "",
     )?;
     let required = |key: &str| {
@@ -113,7 +147,17 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
         usize::try_from(number(name)?)
             .map_err(|_| ModelError::config("invalid_value", &format!("/limits/{name}")))
     };
-    Ok(ModelSessionConfig {
+    let engine = object
+        .get("engine")
+        .map(|value| match value.as_str() {
+            Some("datafog") => Ok(ModelEngine::Datafog),
+            Some("gliner2") => Ok(ModelEngine::Gliner2),
+            Some(_) => Err(ModelError::config("invalid_value", "/engine")),
+            None => Err(ModelError::config("invalid_type", "/engine")),
+        })
+        .transpose()?;
+    let config = ModelSessionConfig {
+        engine,
         gliner2: object
             .get("gliner2")
             .map(gliner2::parse_config)
@@ -127,7 +171,9 @@ pub fn parse_config(value: &serde_json::Value) -> Result<ModelSessionConfig, Mod
             timeout_ms: number("timeout_ms")?,
             cleanup_timeout_ms: number("cleanup_timeout_ms")?,
         },
-    })
+    };
+    config.selected_engine()?;
+    Ok(config)
 }
 
 /// A cancellation handle can be shared with another thread.
@@ -179,8 +225,9 @@ impl ModelSession {
         let deadline = started
             .checked_add(Duration::from_millis(config.limits.timeout_ms))
             .ok_or_else(ModelError::timeout)?;
-        if config.gliner2.is_some() {
-            return gliner2::open(config, deadline);
+        match config.selected_engine()? {
+            ModelEngine::Gliner2 => return gliner2::open(config, deadline),
+            ModelEngine::Datafog => {}
         }
         let (bundle, _, _) = validate_bundle(&config, deadline)?;
         let executable = bundle.join(if cfg!(windows) {

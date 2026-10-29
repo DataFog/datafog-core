@@ -30,6 +30,7 @@ Use the provisioned bundle and manifest digest in the normal
 [session configuration](model-sessions.md), adding:
 
 ```json
+"engine": "gliner2",
 "gliner2": {
   "python": "/opt/datafog/gliner2-env/bin/python",
   "labels": [{"label": "street_address", "threshold": 0.5}],

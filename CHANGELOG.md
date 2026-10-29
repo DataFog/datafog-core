@@ -50,6 +50,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Cursor Cloud Agent environment with Dockerfile, install script, and verification skill for `cargo dfv` workflows (#111)
 - Documentation for GLiNER2 model integration in `docs/gliner2-model.md` (#112)
 
+- Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
+
 ### Fixed
 
 - Development containers build with the pinned tool versions and mount the repository at the configured workspace path.
