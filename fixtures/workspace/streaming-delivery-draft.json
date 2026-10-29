@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "Sid approved strict default + opt-in progressive irreversible delivery and incomplete EOF/oversized-prefix failure; runtime/API qualification pending",
+  "status": "Sid approved strict default + opt-in progressive irreversible delivery and incomplete EOF/oversized-prefix failure; Core draft runtime implemented; binding/API qualification pending",
   "seed": {
     "entityType": "PERSON",
     "value": "Jane",
@@ -17,7 +17,7 @@
       ],
       "bufferedFeedOutput": [],
       "bufferedFinal": "Hello world.",
-      "proposedProgressiveFinal": "Hello world."
+      "progressiveFinal": "Hello world."
     },
     {
       "id": "marker-splits",
@@ -26,14 +26,14 @@
       "allUtf16Splits": true,
       "bufferedFeedOutput": [],
       "bufferedFinal": "Hello Jane!",
-      "proposedProgressiveCarry": "hold possible marker until closing delimiters"
+      "progressiveCarry": "hold possible marker until closing delimiters"
     },
     {
       "id": "adjacent-repeated",
       "source": "{marker}{marker}",
       "allByteSplits": true,
       "bufferedFinal": "JaneJane",
-      "proposedProgressiveFinal": "JaneJane"
+      "progressiveFinal": "JaneJane"
     },
     {
       "id": "unicode",
@@ -41,7 +41,7 @@
       "allByteSplits": true,
       "allUtf16Splits": true,
       "bufferedFinal": "👋 é Jane",
-      "proposedProgressiveFinal": "👋 é Jane"
+      "progressiveFinal": "👋 é Jane"
     },
     {
       "id": "late-damaged-marker",
@@ -52,9 +52,9 @@
         "[[PERSON_BAD]]"
       ],
       "bufferedFinalText": null,
-      "proposedProgressiveDelivered": "Hello Jane ",
-      "proposedProgressiveComplete": false,
-      "proposedProgressiveTerminal": "invalid_marker; earlier delivery cannot be retracted"
+      "progressiveDelivered": "Hello Jane ",
+      "progressiveComplete": false,
+      "progressiveTerminal": "invalid_marker; earlier delivery cannot be retracted"
     },
     {
       "id": "unknown-marker",
@@ -63,15 +63,15 @@
         "[[PERSON_ZZZZZZ]]"
       ],
       "bufferedFinalText": null,
-      "proposedProgressiveDelivered": "Hello ",
-      "proposedProgressiveComplete": false
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false
     },
     {
       "id": "bare-committed-word",
       "source": "{bareMarker}",
       "allByteSplits": true,
       "bufferedFinalText": null,
-      "proposedProgressiveCarry": "hold ASCII word until boundary, then fail unbracketed; emit none of the word"
+      "progressiveCarry": "hold ASCII word until boundary, then fail unbracketed; emit none of the word"
     },
     {
       "id": "eof-held-prefix",
@@ -80,8 +80,8 @@
         "[[PERSON_"
       ],
       "bufferedR2Final": "Hello [[PERSON_",
-      "proposedProgressiveDelivered": "Hello ",
-      "proposedProgressiveComplete": false,
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false,
       "decision": "approved stricter streaming EOF failure; nonstreaming R2 unchanged"
     },
     {
@@ -95,7 +95,7 @@
         ]
       ],
       "bufferedFinalError": "invalid_encoding",
-      "proposedProgressiveComplete": false
+      "progressiveComplete": false
     },
     {
       "id": "split-surrogate",
@@ -108,7 +108,7 @@
         ]
       ],
       "bufferedFinal": "👋",
-      "proposedProgressiveFinal": "👋"
+      "progressiveFinal": "👋"
     },
     {
       "id": "eof-high-surrogate",
@@ -118,7 +118,7 @@
         ]
       ],
       "bufferedFinalError": "invalid_encoding",
-      "proposedProgressiveComplete": false
+      "progressiveComplete": false
     },
     {
       "id": "cancel-after-prefix",
@@ -128,8 +128,8 @@
       ],
       "action": "close",
       "bufferedFeedOutput": [],
-      "proposedProgressiveDelivered": "Hello ",
-      "proposedProgressiveComplete": false
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false
     },
     {
       "id": "head-changed",
@@ -138,7 +138,7 @@
       ],
       "action": "activate different saved head before next feed",
       "bufferedError": "workspace_conflict",
-      "proposedProgressiveComplete": false
+      "progressiveComplete": false
     },
     {
       "id": "workspace-closed",
@@ -147,7 +147,7 @@
       ],
       "action": "close workspace before finalize",
       "bufferedError": "closed_workspace",
-      "proposedProgressiveComplete": false
+      "progressiveComplete": false
     }
   ]
 }

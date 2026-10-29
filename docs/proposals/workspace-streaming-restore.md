@@ -34,10 +34,10 @@ that R2 does not recognize is not newly reclassified by this adapter. That
 compatibility is distinct from the progressive EOF decision below. No streaming
 method is currently claimed in a published Python/Node/WASM package.
 
-## Approved separate opt-in progressive delivery (implementation pending)
+## Implemented draft: separate opt-in progressive delivery
 
-Use a separate `progressive_restore` operation with explicit host opt-in, rather
-than weakening R2 or pretending already emitted text can be retracted. The host
+`Workspace::progressive_restore(RestoreEncoding::{Utf8,Utf16})` requires explicit
+host opt-in. The host
 receives completed safe text/marker restorations from feed; it retains a bounded
 carry for UTF encodings, a potential `[[...]]` marker, and an ASCII word that could
 still become a committed unbracketed marker. This can delay a word even when a
@@ -58,8 +58,8 @@ Sid explicitly approved that an unfinished possible pseudonym at EOF or an
 oversized held prefix must stop and mark the response incomplete, rather than
 flush a possible marker as ordinary text. The accepted tradeoff includes code and
 literal false positives. Existing nonstreaming R2 behavior remains unchanged.
-The current buffered adapter's exact-R2 EOF compatibility described above is an
-implementation baseline, not completion of the newly approved streaming guard.
+This guard applies only to the opt-in progressive mode. The strict buffered
+default and existing nonstreaming R2 keep their current literal/EOF handling.
 
 ## Decisions and remaining technical review
 
@@ -73,13 +73,62 @@ implementation baseline, not completion of the newly approved streaming guard.
    UTF-16 input must not silently replace half-surrogates. Progressive declarations
    must not be published before runtime and cross-SDK parity exist.
 
+## Draft Rust API and bounded parser
+
+`ProgressiveRestore::feed(&[u8])` and `feed_utf16(&[u16])` return `RestoreChunk`:
+`text`, cumulative `delivered { bytes, codepoints, utf16, restored_markers }`, and
+`complete: false`. `finalize()` returns the remaining safe text with `complete:
+true`. Failure returns `StreamFailure { error: Box<WorkspaceError>, delivered,
+complete: false }`; the error retains content-free original response ranges.
+No error contains staged output, source text or a restored value.
+
+Each feed stages its own output atomically. A bad marker late within a feed
+releases none of that feed, even if it contained valid earlier text; counts include
+only successful previous calls. Chunk boundaries can therefore affect how much
+text precedes a terminal error. This does not change success output or error source
+ranges. Hosts must deliver each returned chunk once, show incomplete status after
+failure, and never treat reset/retry as retraction or automatically append a retry
+to an already delivered answer. A feed that returns an empty string is valid.
+
+The parser holds ASCII words until a boundary (up to the existing R2 marker
+interior bound), so a committed unbracketed word cannot escape before it is
+classified. Longer ordinary words stream without retaining the whole word;
+committed-marker substrings inside larger words remain ordinary text. `[` or `[[`
+and an ASCII-letter-led `[[...` word remain possible bracketed markers. At EOF
+these and a single closing bracket stop incomplete. A possible interior exceeding
+R2's existing `MAX_MARKER_INTERIOR` (78 ASCII bytes) stops immediately, even if it
+was intended as code/literal text. Broken syntax that can no longer become a
+marker resumes ordinary text after checking for an exact committed bare word.
+Well-formed committed markers retain case/Crockford matching; unknown/damaged
+completed markers and committed bare words stop with the existing classifications.
+
+Cumulative decoded input and returned output each retain R2's 16 MiB bound.
+UTF-8 retains at most four pending bytes; UTF-16 at most one high surrogate.
+The token carry capacity is at most 82 bytes (existing 78-byte interior plus four
+brackets), independent of response length. Each call's output staging is bounded
+by the remaining output allowance. The immutable snapshot and a fallibly built,
+sorted marker lookup are fixed at construction; each lookup is logarithmic in
+committed entries. Private lookup values wipe on close/drop, and both adapters
+share allocation growth that wipes the old backing before it is freed. Reset
+clears carry/counts for a new response at the same valid head; close is permanent.
+No operation mutates workspace state or creates a plan/alias/record.
+
 ## Evidence and remaining work
 
-The shared draft fixture distinguishes buffered and proposed progressive outputs:
-plain text, every delimiter/label/code split, adjacent/repeated markers, Unicode
-encoding splits, a late damaged marker after a valid restored prefix, bare codes,
-EOF prefixes, cancellation and stale/closed heads. Buffered Core tests exercise
-R2 equality at every byte/code-unit split and real lifecycle/bounds. Progressive
-parser/runtime, approved terminal delivery types, native bindings, full X8 parity
-and W6 host failure behavior remain required before R4 can close. No conversation
-scoping is claimed until #148 is integrated and reviewed.
+[The executable Core fixture](../../fixtures/workspace/streaming-contract-v1.json)
+exercises actual feed/finalize/reset/cancel/head lifecycles for both encodings,
+late invalid markers, bare markers, EOF and oversized prefixes. Every byte and
+UTF-16 split of valid responses matches R2 output; original-coordinate errors,
+partial-delivery counts and unchanged saved bytes are checked. A deterministic
+4,000-case grammar corpus checks complete syntax against R2. The strict buffered
+Core tests continue to check exact R2 equality, including literal EOF compatibility.
+Actual allocator hooks prove growth wipes the previous backing before deallocation
+and injected fallible allocation failures clear the response. An 8 MiB debug-build
+case retained an 82-byte carry and completed in about 1.15 seconds on the local
+machine; this is evidence, not a performance threshold or release benchmark.
+
+This is a Core runtime draft. Current published Python/Node/WASM packages do not
+claim streaming exports. Thin binding lifecycle/typing, full X8 streaming parity,
+actual browser cases and W6 host failure behavior remain required before R4 can
+close. Provider framing/SSE and LiteLLM integration belong outside this parser.
+No conversation scoping is claimed until #148 is integrated and reviewed.

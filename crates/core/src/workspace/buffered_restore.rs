@@ -67,26 +67,10 @@ impl BufferedRestore {
         error(code)
     }
     fn append_bytes(&mut self, bytes: &[u8]) -> Result<()> {
-        let needed = self.buffer.len().saturating_add(bytes.len());
-        if needed > MAX_BUNDLE_BYTES {
-            return Err(self.fail(ErrorCode::ResourceLimit));
+        match private_bytes::append(&mut self.buffer, bytes, MAX_BUNDLE_BYTES) {
+            Ok(()) => Ok(()),
+            Err(failure) => Err(self.fail(failure.code)),
         }
-        if needed > self.buffer.capacity() {
-            // Vec reallocation may free a copied plaintext backing without wiping
-            // it. Grow into fresh storage, then let the old zeroizing owner drop.
-            let capacity = needed
-                .max(self.buffer.capacity().saturating_mul(2))
-                .min(MAX_BUNDLE_BYTES);
-            let mut replacement = Zeroizing::new(Vec::new());
-            if replacement.try_reserve_exact(capacity).is_err() {
-                return Err(self.fail(ErrorCode::ResourceLimit));
-            }
-            replacement.extend_from_slice(&self.buffer);
-            let previous = std::mem::replace(&mut self.buffer, replacement);
-            drop(previous);
-        }
-        self.buffer.extend_from_slice(bytes);
-        Ok(())
     }
     /// Accept arbitrary UTF-8 byte boundaries. Invalid/incomplete UTF-8 rejects at finalize.
     pub fn feed(&mut self, bytes: &[u8]) -> Result<()> {

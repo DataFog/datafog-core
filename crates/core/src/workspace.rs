@@ -11,6 +11,9 @@ pub use policy::{
 };
 mod buffered_restore;
 pub use buffered_restore::{BufferedRestore, RestoreEncoding};
+mod private_bytes;
+mod progressive_restore;
+pub use progressive_restore::{ProgressiveRestore, RestoreChunk, RestoreProgress, StreamFailure};
 mod recall;
 mod review;
 pub use review::{
@@ -437,6 +440,21 @@ impl Workspace {
             Arc::clone(&self.read_epoch),
             encoding,
         ))
+    }
+
+    /// Opt in to irreversible chunk delivery. A later error marks the response
+    /// incomplete; text returned by earlier calls cannot be retracted.
+    pub fn progressive_restore(&self, encoding: RestoreEncoding) -> Result<ProgressiveRestore> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ClosedWorkspace))?;
+        ProgressiveRestore::new(
+            Arc::clone(state),
+            Arc::clone(&self.lifetime),
+            Arc::clone(&self.read_epoch),
+            encoding,
+        )
     }
 
     /// Find committed values without allocating aliases or changing the saved head.
