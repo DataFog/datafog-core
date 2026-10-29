@@ -264,6 +264,255 @@
           }
         }
       ]
+    },
+    {
+      "id": "wrong-conversation-observation-cannot-confirm",
+      "steps": [
+        {
+          "op": "save_pending_member",
+          "intent": "prepare_5/member_0",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          }
+        },
+        {
+          "op": "prepare_observed_send_confirmation",
+          "intent": "prepare_5/member_0",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_b"
+          },
+          "expectError": {
+            "codeCandidate": "invalid_send_intent",
+            "stateUnchanged": true,
+            "noTransportCall": true
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "ordinary text",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "other-conversation-remains-usable-while-one-is-pending",
+      "steps": [
+        {
+          "op": "save_pending_member",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_b"
+          },
+          "text": "{member_b}",
+          "expect": {
+            "requiresExistingIssuedMembershipInThreadB": true,
+            "sameConversationMembersRestore": true
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "unknown"
+          },
+          "text": "plain",
+          "expectError": {
+            "codeCandidate": "conversation_unknown",
+            "text": null
+          }
+        }
+      ],
+      "additionalSeedContexts": [
+        {
+          "surface": "synthetic_chat",
+          "conversationId": "thread_b",
+          "issuedMembers": [
+            "member_b"
+          ],
+          "pendingIntents": []
+        }
+      ]
+    },
+    {
+      "id": "same-chat-two-successes-still-pause-until-both-saved",
+      "steps": [
+        {
+          "op": "save_two_pending_members_same_conversation",
+          "expect": {
+            "durablePending": 2
+          }
+        },
+        {
+          "op": "observe_save_success_for_only_member_zero",
+          "expect": {
+            "durablePending": 1
+          }
+        },
+        {
+          "op": "observe_member_one_success_but_discard_confirmation",
+          "expect": {
+            "durablePending": 1,
+            "noInventedSend": true
+          }
+        },
+        {
+          "op": "crash_and_reopen",
+          "expect": {
+            "durablePending": 1
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "plain",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        },
+        {
+          "op": "retry_only_saved_matching_observation_metadata",
+          "expect": {
+            "noTransportCall": true
+          }
+        },
+        {
+          "op": "approve_save_activate_confirmation",
+          "expect": {
+            "durablePending": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "pending-survives-both-backup-credentials",
+      "steps": [
+        {
+          "op": "save_pending_member",
+          "expect": {
+            "durablePending": 1
+          }
+        },
+        {
+          "op": "export_import_password_and_recovery_backups",
+          "expect": {
+            "pendingPreserved": true,
+            "issuedMembershipPreserved": true,
+            "allHistoryPreserved": true,
+            "noInventedSend": true
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "plain",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "scope-error-after-progressive-delivery-stops-incomplete",
+      "steps": [
+        {
+          "op": "progressive_restore_scoped_start",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_b"
+          },
+          "precondition": "known thread_b has no pending intent and member_b only"
+        },
+        {
+          "op": "feed",
+          "text": "safe 👋 ",
+          "expect": {
+            "text": "safe 👋 ",
+            "delivered": {
+              "bytes": 10,
+              "codepoints": 7,
+              "utf16": 8,
+              "restoredMarkers": 0
+            },
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "text": "{member_a}",
+          "expectError": {
+            "issueCandidate": "not_issued_in_conversation",
+            "complete": false,
+            "priorDeliveredCountsPreserved": true,
+            "noOriginalValueReleased": true
+          }
+        },
+        {
+          "op": "feed_after_terminal_failure",
+          "text": "later",
+          "expect": {
+            "noFurtherDelivery": true
+          }
+        }
+      ],
+      "additionalSeedContexts": [
+        {
+          "surface": "synthetic_chat",
+          "conversationId": "thread_b",
+          "issuedMembers": [
+            "member_b"
+          ],
+          "pendingIntents": []
+        }
+      ]
+    },
+    {
+      "id": "malformed-key9-relations-fail-before-state-publication",
+      "steps": [
+        {
+          "op": "decode_mutated_proposed_key9",
+          "mutations": [
+            "unknown or trailing tuple field",
+            "indefinite array or noncanonical integer",
+            "duplicate context identity",
+            "input index outside retained preparation count",
+            "intent both active and terminal",
+            "wrong-kind operation reference",
+            "membership confirmed in different context",
+            "unallocated marker reference",
+            "success count without terminal success",
+            "declared collection larger than remaining encoded bytes"
+          ],
+          "expectError": {
+            "codeCandidate": "invalid_snapshot",
+            "stateUnchanged": true,
+            "noOriginalValueReleased": true
+          }
+        }
+      ]
     }
   ],
   "blockingDecision": {

@@ -114,8 +114,9 @@ behavior qualification remain separate gates.
 
 This packet extends the approved sequence; it does **not** ask whether copying or
 composer fill should count as sending. Neither counts. No conversation runtime is
-implemented by this proposal. Its operations base is committed `22fb7618`; the
-100,000/99,744/256 capacity implementation is still a draft under qualification.
+implemented by this proposal. Its current operations base is committed `d5584e9`;
+the 100,000/99,744/256 capacity implementation is locally qualified in #162 but
+remains unreleased.
 
 ### Why the first save needs a pending intent
 
@@ -221,3 +222,7 @@ commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualifica
 before claiming acceptance or freezing the API.
 
 The separate [ordinary confirmation-capacity decision packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and the proposed reservation alternative. It is not approved or implemented.
+
+The [technical wire/API packet](conversation-wire-api.md) proposes the coordinated
+key9 shape, derived resource bounds, native SDK matrix and encoder-only experiment.
+It does not implement conversation runtime or the pending capacity choice.
