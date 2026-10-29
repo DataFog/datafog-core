@@ -1,0 +1,588 @@
+{
+  "kind": "shipping-adapter-current-measurement",
+  "qualificationComplete": false,
+  "featureDependencies": {
+    "issues": [
+      141,
+      144,
+      145,
+      146
+    ],
+    "status": "merged and exercised"
+  },
+  "pendingReview": [
+    "agreed pilot corpus",
+    "generic unlabelled account coverage",
+    "launch bar and remaining misses"
+  ],
+  "syntheticOnly": true,
+  "sourceCommit": "b9348af90d3783346d07109b2cf97f6f7119f3ed",
+  "sourceDirty": false,
+  "inputs": {
+    "scripts/qualify-browser-detection.mjs": "c6652a2eab7f44d74369701f22830f6bb1d470367e95e655c4c47f7700c151e4",
+    "scripts/browser-detection-workspace-entry.mjs": "bbb2b457198b270c57e11aa0b75c8d2f7a06eb4c27a0a7b0adb74944acf3c612",
+    "scripts/browser-detection-scoring.mjs": "ccaa7367269e2c81e42a8687b61b739ba95fbb253d4c642efdc315cacd7c48e8",
+    "scripts/browser-detection-contract.mjs": "0122da0b7757ea9b3d378624e7916f0625394aea314a365883e160b43d02bb68",
+    "scripts/test-browser-detection-scoring.mjs": "5363f5fdeb01edbabb05311b819a107b1b9ea518da1acbbf3226691ceedcfedd",
+    "fixtures/browser-detection/qualification-v1.json": "9c5353809eaccc85f5927fbd04b919ad976fd96e1826d3fcb97b5acf34a1cadb",
+    "bindings/wasm/models/model.mjs": "ace90f7c73b48cf6346a72bdbcecab57c1fd41d4e04dfe11fa80da38ba5dbf39",
+    "bindings/wasm/package-lock.json": "4a321b514ae0a506b2e0bb81512be7303810803a9201eae5484f8f235d50f49c",
+    "examples/workspace-extension/package-lock.json": "fabba853fb2faa16b13db5d8cf30a33bb64f90a5681715bde23ea16afa2503ce"
+  },
+  "model": {
+    "repository": "nicolasembleton/gliner2.5-small-v1-onnx",
+    "revision": "5e2e3f51adfb0eeb7c1f83464400b4d498d41659",
+    "files": {
+      "onnx/model.onnx": {
+        "bytes": 288521577,
+        "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+      },
+      "tokenizer.json": {
+        "bytes": 8341713,
+        "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+      },
+      "tokenizer_config.json": {
+        "bytes": 646,
+        "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+      }
+    }
+  },
+  "package": {
+    "file": "datafog-wasm-0.5.0-beta.2.tgz",
+    "bytes": 943953,
+    "sha256": "48c1314b65b5224c4a9730cbeaf692249bb5501dec20fd4e9ae4f385e7a1a2f2"
+  },
+  "versions": {
+    "@datafog/wasm": "0.5.0-beta.2",
+    "onnxruntime-web": "1.31.1",
+    "@huggingface/tokenizers": "0.2.0"
+  },
+  "consumerLockSha256": "be12c054613738163d53444dc2e94ecb2e38e55f6d0b6b18fc2f78f63115ca16",
+  "assets": {
+    "models/onnx/model.onnx": {
+      "bytes": 288521577,
+      "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+    },
+    "models/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "models/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+    },
+    "ort/ort-wasm-simd-threaded.mjs": {
+      "bytes": 24738,
+      "sha256": "30ed0b5cd1182ede931fea448afb567d4dc705ec957af09f108a2be5f770dac3"
+    },
+    "ort/ort-wasm-simd-threaded.wasm": {
+      "bytes": 14848852,
+      "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+    },
+    "dist/datafog_wasm_bg.wasm": {
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
+    }
+  },
+  "extensionFiles": {
+    "artifacts.json": {
+      "bytes": 5531,
+      "sha256": "6a2f9a2e6a78c0e4c1fd25f8ac7dd6f8f14419fb551b5d1bc66cbea469c89b42"
+    },
+    "background.js": {
+      "bytes": 109,
+      "sha256": "5c634d4e88bf2b50206d880844ca5a4ccd69a827466cce01a527d9c31e875943"
+    },
+    "backup.js": {
+      "bytes": 5409,
+      "sha256": "7dc3b3a8505c554337709fedf32d9c3aa83b2a3310f0cf8b16e30498db1cf691"
+    },
+    "bad-model/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "bad-model/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "7ade9818f65ad7d4df551155baa0d23685187e21d7a76e37a663849c68d64d6d"
+    },
+    "broker.js": {
+      "bytes": 13054,
+      "sha256": "076396ec035458171ca369ada2fbe2f04875de9bbbb43609ce918f65f5d46e70"
+    },
+    "core-worker.js": {
+      "bytes": 2467,
+      "sha256": "3485655da2ae7f3a15559cddf28e2a66df514b179f9962d14a549c48201f8765"
+    },
+    "dist/datafog_wasm.d.ts": {
+      "bytes": 9652,
+      "sha256": "eab685ce23b0d5a79113a1a6317decfcc793f2ea305845ca9259d732faa0e401"
+    },
+    "dist/datafog_wasm.js": {
+      "bytes": 45246,
+      "sha256": "a93bd0ad884842dab7468b44e38e93a9f3c10f121df0f2b491fe38dc585663e4"
+    },
+    "dist/datafog_wasm_bg.wasm": {
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
+    },
+    "dist/datafog_wasm_bg.wasm.d.ts": {
+      "bytes": 5564,
+      "sha256": "e0eafa8c5fdb983b4c6367a67cd258d1fed40121d9f7c3341278932c2fbbda28"
+    },
+    "index.html": {
+      "bytes": 6275,
+      "sha256": "4b51bd9597bb13ccec134edcc2b27779241df9865f7ba446c58f2bce3dd244af"
+    },
+    "kdf-worker.js": {
+      "bytes": 576948,
+      "sha256": "a80764f526e1bef5a27374a4cce5e9b59b8ee016616347fa8ea08a40c85fbee2"
+    },
+    "manifest.json": {
+      "bytes": 510,
+      "sha256": "d8cbcca7998972bb15e42f541e5f7984b3bb25629dda89db048c49abbf6dfae0"
+    },
+    "model-background.js": {
+      "bytes": 112,
+      "sha256": "b69e65e62fc1f2094ce91be4b75e6f09c5b90b71688e8924f30035c9ffed5e09"
+    },
+    "model-chunk-57TFOREY.js": {
+      "bytes": 1404,
+      "sha256": "b03c722f6a9096524aed8405379ff9fe4d8ac8d6e5f463a1664c6ce5b46bbda9"
+    },
+    "model-chunk-QMEWMJ7L.js": {
+      "bytes": 390,
+      "sha256": "923a7e2b68604a951d771624dfb1ed7b5ef3ae9afd7823a07a5939c7798016d8"
+    },
+    "model-model-2HDKD6YN.js": {
+      "bytes": 185,
+      "sha256": "99f060ab6b77afdb361c6b3385511a9846c29497323a6af6a29cd3b872bfe228"
+    },
+    "model-page.html": {
+      "bytes": 417,
+      "sha256": "15621f9e19d0e04f5b0f8d4769c0bde06b89b2593ff5295edffd61c4249bb50f"
+    },
+    "model-page.js": {
+      "bytes": 83245,
+      "sha256": "88451de010a66e2bc4a1a13c632994ab820547cce332bac513e33047cfd3d7ea"
+    },
+    "model-session-IC4YLALK.js": {
+      "bytes": 212424,
+      "sha256": "72545f30d54595dde79558a4994e7ec5719f787d04bb79edc7b50357c523a4a1"
+    },
+    "models/onnx/model.onnx": {
+      "bytes": 288521577,
+      "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+    },
+    "models/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "models/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+    },
+    "ort/ort-wasm-simd-threaded.mjs": {
+      "bytes": 24738,
+      "sha256": "30ed0b5cd1182ede931fea448afb567d4dc705ec957af09f108a2be5f770dac3"
+    },
+    "ort/ort-wasm-simd-threaded.wasm": {
+      "bytes": 14848852,
+      "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+    },
+    "rpc.js": {
+      "bytes": 4536,
+      "sha256": "57bd72dcc50c8906b59b20e0e4989121d5cd179d23cf52991f92d943870bda7e"
+    },
+    "storage.js": {
+      "bytes": 4303,
+      "sha256": "4b1fc5465fc8e6fe64b97bdf3ba47d735b043128dbd6152f4d2ab3ab9b0c42cf"
+    },
+    "style.css": {
+      "bytes": 540,
+      "sha256": "1f5f6d854fa94a629a623a814a8422f2fdc8eb513c7ef69f6fd71de98a3fc6f0"
+    },
+    "ui.js": {
+      "bytes": 15082,
+      "sha256": "dcdcfad35bfa02b5c2520de2803be542b47a94111a70245820b092dcd35bf74d"
+    },
+    "vault.js": {
+      "bytes": 11628,
+      "sha256": "7a438534a2695a9635b0d5620b62f79091486ef2dc309cc417268ae762f420d4"
+    },
+    "vendor/package/dist/datafog_wasm.d.ts": {
+      "bytes": 9652,
+      "sha256": "eab685ce23b0d5a79113a1a6317decfcc793f2ea305845ca9259d732faa0e401"
+    },
+    "vendor/package/dist/datafog_wasm.js": {
+      "bytes": 45246,
+      "sha256": "a93bd0ad884842dab7468b44e38e93a9f3c10f121df0f2b491fe38dc585663e4"
+    },
+    "vendor/package/dist/datafog_wasm_bg.wasm": {
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
+    },
+    "vendor/package/dist/datafog_wasm_bg.wasm.d.ts": {
+      "bytes": 5564,
+      "sha256": "e0eafa8c5fdb983b4c6367a67cd258d1fed40121d9f7c3341278932c2fbbda28"
+    },
+    "vendor/package/index.d.ts": {
+      "bytes": 17233,
+      "sha256": "3a8835e2ff731511906117ffe518e0d4a3767a2f99c5d50830913ec741e1d71a"
+    },
+    "vendor/package/index.js": {
+      "bytes": 26203,
+      "sha256": "42b786b403a56062d204ee06f0e881034e8d9dcb4732ca4a4a6fd008969264da"
+    },
+    "vendor/package/models/THIRD_PARTY_NOTICES.md": {
+      "bytes": 1763,
+      "sha256": "74903c2f1f06e5fd5c29bd67b072517dbbd1b4c957c167a9879aa2b72ce03a65"
+    },
+    "vendor/package/models/decode.mjs": {
+      "bytes": 4087,
+      "sha256": "2f0457ce1d18583e70a5eca6495951d11d53afdaa635946e0d73c3d0261001da"
+    },
+    "vendor/package/models/index.d.ts": {
+      "bytes": 2157,
+      "sha256": "62760b834a2be241708e7723fa188dab8c85d1d5920bd62229591e1fc3412789"
+    },
+    "vendor/package/models/index.js": {
+      "bytes": 5175,
+      "sha256": "a8d42f1e567c7a20e3ae500636cb0d383e0a37d5d29110c168e2ede4bcd3d1ce"
+    },
+    "vendor/package/models/model.mjs": {
+      "bytes": 1364,
+      "sha256": "ace90f7c73b48cf6346a72bdbcecab57c1fd41d4e04dfe11fa80da38ba5dbf39"
+    },
+    "vendor/package/models/preprocessor.mjs": {
+      "bytes": 1818,
+      "sha256": "1c7860ccbc4f4d8e10859595506d8a322837b80df2e07921e4081b03ed5fba7b"
+    },
+    "vendor/package/models/session.mjs": {
+      "bytes": 4996,
+      "sha256": "1b7b08d979a9d4f6f4569baa560f4a2a2cbc084720d14f2dffea735406d61607"
+    },
+    "vendor/package/package.json": {
+      "bytes": 1249,
+      "sha256": "f03d9de461899709a262f22de7b7a46c11133bcfede9cdd7cbd67db4ecff6a7a"
+    },
+    "workspace-conformance.mjs": {
+      "bytes": 22768,
+      "sha256": "a47c4080b99392f386354e34d52e429c0e2466ccf0bb87acc82dce164a8de200"
+    },
+    "workspace-policy-conformance.mjs": {
+      "bytes": 6238,
+      "sha256": "874e8b66b9a06d526fc400b78e2e369c83ba637d9fa6d1b705ba4fd7968c0113"
+    },
+    "workspace-review-conformance.mjs": {
+      "bytes": 6978,
+      "sha256": "1582a13d3a0e6468c085adbb1a60fe8a29652447ade846e2b172ea7932ff7c58"
+    },
+    "workspace-streaming-conformance.mjs": {
+      "bytes": 7588,
+      "sha256": "19b057833c1af31dd11542a29f229fc92dae3ac08ffdbd75f223aba768be18ff"
+    },
+    "workspace-streaming.json": {
+      "bytes": 11199,
+      "sha256": "c1f7f1ad56e7521b4611d60220929631d02cb71953744c2b67e9547a3a317f29"
+    }
+  },
+  "qualificationEntrySha256": "6a5786ccbd08df118329a21b61db0a9c4230d0f8b1dba67fb694ec1f7020efbd",
+  "qualificationFiles": {
+    "qualification-entry.js": "6a5786ccbd08df118329a21b61db0a9c4230d0f8b1dba67fb694ec1f7020efbd",
+    "qualification-workspace.js": "533850e545d0a4d6cb5e11105c95c8b56f8b3dacb2f88b3505e200b505e2df06",
+    "qualification.html": "0e399a5e35a26f99e7f4e8519c685384996a9970a236119ee66c4d5ae78c4a7e"
+  },
+  "options": {
+    "threshold": 0.5,
+    "numThreads": 1,
+    "labels": {
+      "person": "PERSON",
+      "address": "ADDRESS",
+      "email": "EMAIL",
+      "phone number": "PHONE",
+      "identification number": "IDENTIFICATION_NUMBER",
+      "url": "URL",
+      "username": "USERNAME"
+    }
+  },
+  "config": {},
+  "matching": {
+    "exact": "same type and both byte boundaries",
+    "overlap": "same type and positive byte overlap; maximum one-to-one matching; diagnostic, not full-span coverage"
+  },
+  "addressContract": "ADDRESS is full-span shipping gold. STREET_ADDRESS is a separate street-line diagnostic using untrimmed ADDRESS predictions; it does not change adapter labels.",
+  "excludedFromScoring": "Predictions outside corpus.scoredTypes are retained in observations but have no complete gold annotation in this scoped set.",
+  "hardware": {
+    "cpu": "Apple M5 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "totalMemoryBytes": 51539607552
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "passedContracts": true,
+  "browser": {
+    "version": "151.0.7922.34",
+    "channel": "Playwright Chromium",
+    "extension": true,
+    "manifest": {
+      "action": {
+        "default_title": "Open synthetic workspace"
+      },
+      "background": {
+        "service_worker": "model-background.js",
+        "type": "module"
+      },
+      "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"
+      },
+      "description": "Local synthetic-only workspace integration harness; not the production extension.",
+      "manifest_version": 3,
+      "name": "DataFog synthetic MV3 model proof",
+      "version": "0.0.1"
+    }
+  },
+  "descriptor": {
+    "backend": "gliner25_onnx_web",
+    "model": "nicolasembleton/gliner2.5-small-v1-onnx@5e2e3f51adfb0eeb7c1f83464400b4d498d41659",
+    "adapter_version": "gliner25-onnx-web-v1",
+    "labels": {
+      "address": "ADDRESS",
+      "email": "EMAIL",
+      "identification number": "IDENTIFICATION_NUMBER",
+      "person": "PERSON",
+      "phone number": "PHONE",
+      "url": "URL",
+      "username": "USERNAME"
+    },
+    "score_scale": "gliner25_pair_sigmoid"
+  },
+  "workspaceWorkflow": {
+    "scope": "synthetic explicit approvals; detector accuracy remains the independent raw 64-record measurement",
+    "checks": [
+      "actual scanner findings require approval, aborted IndexedDB save releases nothing, explicit retry saves before activation",
+      "case/whitespace recall and no substring expansion",
+      "stronger password-reauthenticated export, both import credentials, fresh keys/nonces/head and reopened permanent aliases"
+    ],
+    "recall": [
+      {
+        "name": "after explicit saved approvals",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      },
+      {
+        "name": "browser process restart without model",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      },
+      {
+        "name": "password backup import, fresh encryption and head",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      },
+      {
+        "name": "password recovered browser restart",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      },
+      {
+        "name": "recovery backup import, fresh encryption and head",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      },
+      {
+        "name": "recovery recovered browser restart",
+        "checked": 52,
+        "misses": [],
+        "restoredRecords": 47,
+        "readOnly": true
+      }
+    ],
+    "passed": true
+  },
+  "observationsSha256": "544713aca6a01f719939605a680c29abf670531158d40ce9526f13fd18d1ba98",
+  "scores": {
+    "shipping": {
+      "exact": {
+        "PERSON": {
+          "tp": 26,
+          "fp": 7,
+          "fn": 2,
+          "precision": 0.7878787878787878,
+          "recall": 0.9285714285714286,
+          "f1": 0.8524590163934426
+        },
+        "ADDRESS": {
+          "tp": 8,
+          "fp": 15,
+          "fn": 5,
+          "precision": 0.34782608695652173,
+          "recall": 0.6153846153846154,
+          "f1": 0.4444444444444444
+        },
+        "EMAIL": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "PHONE": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "CREDIT_CARD": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "SSN": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "DE_IBAN": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        },
+        "US_ROUTING_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "ACCOUNT_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      },
+      "overlap": {
+        "PERSON": {
+          "tp": 28,
+          "fp": 5,
+          "fn": 0,
+          "precision": 0.8484848484848485,
+          "recall": 1,
+          "f1": 0.9180327868852459
+        },
+        "ADDRESS": {
+          "tp": 9,
+          "fp": 14,
+          "fn": 4,
+          "precision": 0.391304347826087,
+          "recall": 0.6923076923076923,
+          "f1": 0.5
+        },
+        "EMAIL": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "PHONE": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "CREDIT_CARD": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "SSN": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "DE_IBAN": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        },
+        "US_ROUTING_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "ACCOUNT_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      }
+    },
+    "streetLineDiagnostic": {
+      "exact": {
+        "STREET_ADDRESS": {
+          "tp": 0,
+          "fp": 9,
+          "fn": 13,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        }
+      },
+      "overlap": {
+        "STREET_ADDRESS": {
+          "tp": 9,
+          "fp": 0,
+          "fn": 4,
+          "precision": 1,
+          "recall": 0.6923076923076923,
+          "f1": 0.8181818181818182
+        }
+      }
+    }
+  }
+}
