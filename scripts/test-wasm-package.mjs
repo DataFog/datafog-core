@@ -80,6 +80,9 @@ function writeConsumerFiles() {
     `
 import {
   init,
+  type WorkspaceOperation,
+  type WorkspaceCounts,
+  type WorkspaceOperationRecord,
   scan,
   scanAndTransform,
   restore,
@@ -109,6 +112,22 @@ ModelSession.open();
 // @ts-expect-error Threshold is numeric.
 ModelSession.open({modelBaseUrl: "/models/", threshold: "high"});
 void modelTypes;
+function operationTypes() {
+  const context: WorkspaceOperation = {id: new Uint8Array(16), occurredAtMs: 0};
+  const workspace = Workspace.createWithOperation(new Uint8Array(16), context);
+  const counts: WorkspaceCounts = workspace.counts();
+  const records: readonly WorkspaceOperationRecord[] = workspace.operations();
+  workspace.prepareWithOperation("", [], context).discard();
+  workspace.prepareBatchWithOperation([{text: "", findings: []}], context).discard();
+  workspace.prepareRecoveryWithOperation(context).discard();
+  workspace.prepareOutcome({kind: "blocked_input", issueCount: 1}, context).discard();
+  // @ts-expect-error Raw content is forbidden in an outcome.
+  workspace.prepareOutcome({kind: "blocked_input", issueCount: 1, text: "secret"}, context);
+  // @ts-expect-error A host timestamp is required on the explicit operation call.
+  workspace.prepareWithOperation("", [], {id: new Uint8Array(16)});
+  return {counts, records};
+}
+void operationTypes;
 const ready: Promise<void> = init();
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});

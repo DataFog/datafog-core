@@ -60,6 +60,33 @@ fn parse_head(json: &str) -> Result<Head, JsValue> {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct OperationInput {
+    id: Vec<u8>,
+    occurred_at_ms: u64,
+}
+fn operation(json: &str) -> Result<workspace::OperationContext, JsValue> {
+    if json.len() > 256 {
+        return Err(failure(ErrorCode::InvalidOperation));
+    }
+    let input: OperationInput =
+        serde_json::from_str(json).map_err(|_| failure(ErrorCode::InvalidOperation))?;
+    if input.occurred_at_ms > workspace::MAX_OPERATION_TIME_MS {
+        return Err(failure(ErrorCode::InvalidOperation));
+    }
+    Ok(workspace::OperationContext {
+        id: id(&input.id)?,
+        occurred_at_ms: input.occurred_at_ms,
+    })
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct OutcomeInput {
+    kind: String,
+    issue_count: usize,
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RangeInput {
     unit: String,
@@ -148,6 +175,60 @@ impl WasmWorkspace {
             next_plan: 1,
         })
     }
+    pub fn create_with_operation(namespace: &[u8], json: &str) -> Result<WasmWorkspace, JsValue> {
+        let inner = Workspace::create_with_operation(id(namespace)?, operation(json)?)
+            .map_err(from_error)?;
+        Ok(Self {
+            inner,
+            plans: BTreeMap::new(),
+            next_plan: 1,
+        })
+    }
+    pub fn operations(&self) -> Result<String, JsValue> {
+        let values: Vec<_> = self.inner.operations().map_err(from_error)?.iter().map(|record| json!({
+            "id": record.id, "kind": record.kind.as_str(), "occurredAtMs": record.occurred_at_ms,
+            "preparedInputs": record.prepared_inputs, "transformedSpans": record.transformed_spans,
+        })).collect();
+        Ok(json!(values).to_string())
+    }
+    pub fn counts(&self) -> Result<String, JsValue> {
+        let counts = self.inner.counts().map_err(from_error)?;
+        Ok(json!({"operations": counts.operations, "preparedInputs": counts.prepared_inputs,
+            "transformedSpans": counts.transformed_spans, "confirmedHandoffs": counts.confirmed_handoffs,
+            "reportedBlockedAttempts": counts.reported_blocked_attempts}).to_string())
+    }
+    pub fn prepare_outcome(
+        &mut self,
+        outcome_json: &str,
+        operation_json: &str,
+    ) -> Result<u32, JsValue> {
+        if self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        if outcome_json.len() > 128 {
+            return Err(failure(ErrorCode::InvalidOperation));
+        }
+        let input: OutcomeInput =
+            serde_json::from_str(outcome_json).map_err(|_| failure(ErrorCode::InvalidOperation))?;
+        let kind = match input.kind.as_str() {
+            "copy_confirmed" => workspace::OutcomeKind::CopyConfirmed,
+            "user_cancelled" => workspace::OutcomeKind::UserCancelled,
+            "blocked_input" => workspace::OutcomeKind::BlockedInput,
+            "restore_blocked" => workspace::OutcomeKind::RestoreBlocked,
+            _ => return Err(failure(ErrorCode::InvalidOperation)),
+        };
+        let plan = self
+            .inner
+            .prepare_outcome(
+                workspace::OperationOutcome {
+                    kind,
+                    issue_count: input.issue_count,
+                },
+                operation(operation_json)?,
+            )
+            .map_err(from_error)?;
+        self.retain_plan(plan)
+    }
     pub fn open_bundle(bytes: &[u8]) -> Result<WasmWorkspace, JsValue> {
         let inner = Workspace::open_bundle(bytes).map_err(from_error)?;
         Ok(Self {
@@ -165,7 +246,11 @@ impl WasmWorkspace {
     pub fn export_bundle(&self) -> Result<Vec<u8>, JsValue> {
         self.inner.export_bundle().map_err(from_error)
     }
-    pub fn prepare_recovery(&mut self, operation: &[u8]) -> Result<u32, JsValue> {
+    pub fn prepare_recovery(
+        &mut self,
+        operation_id: &[u8],
+        context: Option<String>,
+    ) -> Result<u32, JsValue> {
         if self.plans.len() >= 32 {
             return Err(failure(ErrorCode::ResourceLimit));
         }
@@ -173,10 +258,16 @@ impl WasmWorkspace {
             .next_plan
             .checked_add(1)
             .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
-        let plan = self
-            .inner
-            .prepare_recovery(id(operation)?)
-            .map_err(from_error)?;
+        let plan = if let Some(context) = context {
+            let parsed = operation(&context)?;
+            if parsed.id != id(operation_id)? {
+                return Err(failure(ErrorCode::InvalidOperation));
+            }
+            self.inner.prepare_recovery_with_operation(parsed)
+        } else {
+            self.inner.prepare_recovery(id(operation_id)?)
+        }
+        .map_err(from_error)?;
         let handle = self.next_plan;
         self.plans.insert(handle, plan);
         self.next_plan = next;
@@ -213,7 +304,12 @@ impl WasmWorkspace {
         self.next_plan = next;
         Ok(handle)
     }
-    pub fn prepare_batch(&mut self, inputs_json: &str, operation: &[u8]) -> Result<u32, JsValue> {
+    pub fn prepare_batch(
+        &mut self,
+        inputs_json: &str,
+        operation_id: &[u8],
+        context: Option<String>,
+    ) -> Result<u32, JsValue> {
         if inputs_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
             return Err(failure(ErrorCode::ResourceLimit));
         }
@@ -248,10 +344,16 @@ impl WasmWorkspace {
             .next_plan
             .checked_add(1)
             .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
-        let plan = self
-            .inner
-            .prepare_batch(&borrowed, id(operation)?)
-            .map_err(from_error)?;
+        let plan = if let Some(context) = context {
+            let parsed = operation(&context)?;
+            if parsed.id != id(operation_id)? {
+                return Err(failure(ErrorCode::InvalidOperation));
+            }
+            self.inner.prepare_batch_with_operation(&borrowed, parsed)
+        } else {
+            self.inner.prepare_batch(&borrowed, id(operation_id)?)
+        }
+        .map_err(from_error)?;
         let handle = self.next_plan;
         self.plans.insert(handle, plan);
         self.next_plan = next;
@@ -335,6 +437,19 @@ impl WasmWorkspace {
     }
 }
 impl WasmWorkspace {
+    fn retain_plan(&mut self, plan: PreparedChange) -> Result<u32, JsValue> {
+        if self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
     fn plan(&self, handle: u32) -> Result<&PreparedChange, JsValue> {
         self.plans
             .get(&handle)

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
+import {verifyOperationPersistence} from "./test-workspace-operations.mjs";
 import {verifyBackups} from "./test-workspace-backup.mjs";
 import {waitForBrokerState} from "./workspace-test-wait.mjs";
 
@@ -72,6 +73,7 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 }
 
 try {
+  await verifyOperationPersistence({launch, close: async () => {await context.close(); context = undefined;}, status, check});
   await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
@@ -367,7 +369,7 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
+    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4", "C1/C3"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));

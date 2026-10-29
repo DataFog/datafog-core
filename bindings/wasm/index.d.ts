@@ -246,15 +246,37 @@ export interface WorkspaceRestoreReport {
   readonly restoredMarkers: number;
   readonly issues: readonly WorkspaceMarkerIssue[];
 }
+/** Draft operation API: host time is untrusted UTC Unix milliseconds, never authorization. */
+export interface WorkspaceOperation { readonly id: Uint8Array; readonly occurredAtMs: number; }
+export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
+export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
+export interface WorkspaceOperationRecord {
+  readonly id: readonly number[];
+  readonly kind: "create" | "prepare" | "recovery" | WorkspaceOutcomeKind;
+  readonly occurredAtMs: number | null;
+  readonly preparedInputs: number;
+  readonly transformedSpans: number;
+}
+export interface WorkspaceCounts {
+  readonly operations: number; readonly preparedInputs: number; readonly transformedSpans: number;
+  readonly confirmedHandoffs: number; readonly reportedBlockedAttempts: number;
+}
 export class Workspace {
   private constructor();
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
+  static createWithOperation(namespace: Uint8Array, operation: WorkspaceOperation): Workspace;
   static openBundle(bytes: Uint8Array): Workspace;
   head(): WorkspaceHead;
   namespace(): Uint8Array;
+  operations(): readonly WorkspaceOperationRecord[];
+  counts(): WorkspaceCounts;
   exportBundle(): Uint8Array;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
+  prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareWithOperation(text: string, findings: readonly WorkspaceFinding[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareBatchWithOperation(inputs: readonly WorkspaceInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareOutcome(outcome: WorkspaceOutcome, operation: WorkspaceOperation): PreparedWorkspaceChange;
   /** Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */

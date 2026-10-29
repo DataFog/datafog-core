@@ -3,6 +3,11 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod operations;
+pub use operations::{
+    MAX_OPERATION_TIME_MS, MAX_OPERATIONS, OperationContext, OperationCounts, OperationKind,
+    OperationOutcome, OperationRecord, OutcomeKind,
+};
 
 use crate::{Finding, TextIndex, TextRange, TransformationConfig, TransformationStrategy};
 use hmac::{Hmac, Mac};
@@ -42,6 +47,8 @@ pub enum ErrorCode {
     InvalidMarker,
     InvalidSnapshot,
     InvalidId,
+    InvalidOperation,
+    OperationReused,
     ResourceLimit,
 }
 
@@ -56,6 +63,8 @@ impl ErrorCode {
             Self::InvalidMarker => "invalid_marker",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidId => "invalid_operation_id",
+            Self::InvalidOperation => "invalid_operation",
+            Self::OperationReused => "operation_reused",
             Self::ResourceLimit => "resource_limit",
         }
     }
@@ -237,6 +246,9 @@ fn identity_key(value: &str) -> String {
 }
 #[derive(Clone)]
 struct State {
+    snapshot_version: u8,
+    operations: Vec<OperationRecord>,
+    operation_counts: OperationCounts,
     namespace: PublicId,
     head: Head,
     entries: BTreeMap<Identity, Entry>,
@@ -315,7 +327,17 @@ impl Workspace {
     }
     /// IDs must come from the host OS CSPRNG. Shape checks cannot prove entropy.
     pub fn create(namespace: PublicId, operation_id: PublicId) -> Result<Self> {
+        let operations = vec![OperationRecord {
+            id: operation_id,
+            kind: OperationKind::Create,
+            occurred_at_ms: None,
+            prepared_inputs: 0,
+            transformed_spans: 0,
+        }];
         Self::from_state(State {
+            snapshot_version: 2,
+            operation_counts: operations::summarize(&operations)?,
+            operations,
             namespace,
             head: Head {
                 revision: 0,
@@ -347,15 +369,16 @@ impl Workspace {
     /// The host must reject destination conflicts and durably save before activation.
     /// Recovery has no text previews and grants no permission to release content.
     pub fn prepare_recovery(&self, operation_id: PublicId) -> Result<PreparedChange> {
+        self.prepare_recovery_internal(operation_id, None, true)
+    }
+    fn prepare_recovery_internal(
+        &self,
+        operation_id: PublicId,
+        occurred_at_ms: Option<u64>,
+        legacy: bool,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
-        if state.head.commit_id == operation_id
-            || state
-                .entries
-                .values()
-                .any(|entry| entry.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        state.validate_operation_id(operation_id, legacy)?;
         let mut candidate = state.clone();
         candidate.head = Head {
             revision: state
@@ -365,6 +388,13 @@ impl Workspace {
                 .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
             commit_id: operation_id,
         };
+        candidate.record_operation(OperationRecord {
+            id: operation_id,
+            kind: OperationKind::Recovery,
+            occurred_at_ms,
+            prepared_inputs: 0,
+            transformed_spans: 0,
+        })?;
         let bundle = Zeroizing::new(codec::encode(&candidate)?);
         Ok(PreparedChange {
             pending: Some(Pending {
@@ -395,6 +425,15 @@ impl Workspace {
         inputs: &[WorkspaceInput<'_>],
         operation_id: PublicId,
     ) -> Result<PreparedChange> {
+        self.prepare_batch_internal(inputs, operation_id, None, false)
+    }
+    fn prepare_batch_internal(
+        &self,
+        inputs: &[WorkspaceInput<'_>],
+        operation_id: PublicId,
+        occurred_at_ms: Option<u64>,
+        explicit: bool,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
         if inputs.is_empty() {
             return Err(error(ErrorCode::InvalidBatch));
@@ -416,11 +455,7 @@ impl Workspace {
                 });
             }
         }
-        if state.head.commit_id == operation_id
-            || state.entries.values().any(|e| e.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        state.validate_operation_id(operation_id, !explicit)?;
         let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
@@ -451,7 +486,7 @@ impl Workspace {
             }
             previews.push(preview);
         }
-        if candidate.entries.len() != state.entries.len() {
+        if explicit || candidate.entries.len() != state.entries.len() {
             candidate.head = Head {
                 revision: state
                     .head
@@ -460,6 +495,16 @@ impl Workspace {
                     .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
                 commit_id: operation_id,
             };
+            candidate.record_operation(OperationRecord {
+                id: operation_id,
+                kind: OperationKind::Prepare,
+                occurred_at_ms,
+                prepared_inputs: inputs.len() as u64,
+                transformed_spans: previews
+                    .iter()
+                    .map(|preview| preview.transformations.len() as u64)
+                    .sum(),
+            })?;
         }
         let bundle = Zeroizing::new(codec::encode(&candidate)?);
         Ok(PreparedChange {

@@ -45,7 +45,7 @@ const versions = {};
 for (const name of ["playwright", "esbuild", "libsodium-wrappers-sumo", "libsodium-sumo"]) {
   versions[name] = JSON.parse(await readFile(path.join(here, "node_modules", name, "package.json"), "utf8")).version;
 }
-const inputPaths = ["Cargo.lock", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json", "scripts/test-workspace-extension.mjs", "scripts/test-workspace-followups.mjs", "scripts/test-workspace-backup.mjs", "scripts/workspace-conformance.mjs", "fixtures/workspace/monthly.json", "fixtures/workspace/counters.json", "fixtures/workspace/argon2id.json"];
+const inputPaths = ["Cargo.lock", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json", "scripts/test-workspace-extension.mjs", "scripts/test-workspace-followups.mjs", "scripts/test-workspace-backup.mjs", "scripts/test-workspace-operations.mjs", "scripts/workspace-conformance.mjs", "fixtures/workspace/monthly.json", "fixtures/workspace/counters.json", "fixtures/workspace/argon2id.json"];
 const inputHashes = Object.fromEntries(await Promise.all(inputPaths.map(async file => [file, createHash("sha256").update(await readFile(path.join(root, file))).digest("hex")])));
 await writeFile(path.join(dist, "artifacts.json"), JSON.stringify({
   coreBaseline: "0.4.4", sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {cwd: root, encoding: "utf8"}).trim(),

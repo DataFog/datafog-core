@@ -18,6 +18,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Draft Rust/WASM workspace operation records and content-free counts, staged
+  through explicit saved transactions with bounded history and strict snapshot
+  validation. Timed calls record host-supplied metadata; legacy snapshot reads
+  preserve their original bytes until a saved upgrade.
+
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
   reject occupied destinations, and preserve aliases under fresh workspace keys
