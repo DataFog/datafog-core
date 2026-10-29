@@ -564,6 +564,69 @@ fn routed_rule_entities_never_touch_the_model_worker() {
 }
 
 #[test]
+fn partial_account_rules_do_not_bypass_native_model_admission() {
+    let session = idle_session();
+    let config = session
+        .routed_config(&serde_json::json!({"entities":["ACCOUNT_NUMBER"]}))
+        .unwrap();
+    assert_eq!(
+        config.rules.as_ref().and_then(ScanConfig::entities),
+        Some(&BTreeSet::from(["ACCOUNT_NUMBER".to_owned()]))
+    );
+    assert_eq!(
+        config.model_entities,
+        BTreeSet::from(["ACCOUNT_NUMBER".to_owned()])
+    );
+    let request = session.prepare_request().unwrap();
+    for text in [
+        "account number: 12345678",
+        "12345678",
+        "account ending in 1234",
+        "account number: XXXX1234",
+    ] {
+        assert_eq!(
+            session
+                .scan_routed(text, &config, &Cancellation::default())
+                .unwrap_err()
+                .code,
+            "model_busy"
+        );
+    }
+    drop(request);
+}
+
+#[test]
+fn partial_street_rules_preserve_native_model_admission() {
+    let session = idle_session();
+    let config = session
+        .routed_config(&serde_json::json!({"entities":["STREET_ADDRESS"]}))
+        .unwrap();
+    assert_eq!(
+        config.rules.as_ref().and_then(ScanConfig::entities),
+        Some(&BTreeSet::from(["STREET_ADDRESS".to_owned()]))
+    );
+    assert_eq!(
+        config.model_entities,
+        BTreeSet::from(["STREET_ADDRESS".to_owned()])
+    );
+    let request = session.prepare_request().unwrap();
+    for text in [
+        "Street address: 12 Willow Road",
+        "12 Willow Road",
+        "Beispielstraße 12",
+    ] {
+        assert_eq!(
+            session
+                .scan_routed(text, &config, &Cancellation::default())
+                .unwrap_err()
+                .code,
+            "model_busy"
+        );
+    }
+    drop(request);
+}
+
+#[test]
 fn routed_scans_keep_the_session_lifecycle_and_limits() {
     let session = idle_session();
     let config = session
@@ -657,7 +720,7 @@ fn routed_configuration_splits_entities_between_rules_and_model() {
     assert_eq!(default.model_entities, everything.model_entities);
     assert_eq!(default.rules, everything.rules);
     let model_only = session
-        .routed_config(&serde_json::json!({"entities": ["STREET_ADDRESS"], "locale": "de"}))
+        .routed_config(&serde_json::json!({"entities": ["FIRST_NAME"], "locale": "de"}))
         .unwrap();
     assert!(model_only.rules.is_none());
     for (config, reason, path) in [

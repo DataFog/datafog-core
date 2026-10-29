@@ -27,6 +27,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
   counts, staged through saved transactions in a distinct v3 snapshot while
   preserving policy-v2 and legacy-v1 reads and no-ops. Capacity, replay-error and
   accounting choices remain under review for `0.5.0-beta.3`.
+- Detect bounded English street lines after explicit street/shipping/billing
+  address labels across SDKs, retaining broader model address coverage.
+
+
+- Detect explicitly account-labelled four-digit endings and bounded X/asterisk
+  masks without inferring hidden digits or changing workspace literal identity.
+
+- Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
+  Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
 
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
