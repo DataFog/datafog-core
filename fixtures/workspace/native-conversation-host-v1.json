@@ -507,7 +507,8 @@
       "exportBundle",
       "counts",
       "operations",
-      "historyCoverage"
+      "historyCoverage",
+      "restoreInConversation"
     ],
     "cases": [
       {
@@ -1139,9 +1140,85 @@
             "call": "export",
             "workspace": "cancelledFollowup",
             "bundle": "cancelledFollowup"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "followup",
+            "logicalIdByte": 10,
+            "text": "old plain",
+            "expectCode": "conversation_pending"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "followup",
+            "logicalIdByte": 10,
+            "textFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            },
+            "expectCode": "conversation_pending"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "recoveredFollowup",
+            "logicalIdByte": 10,
+            "text": "old plain",
+            "expectCode": "conversation_pending"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "recoveredFollowup",
+            "logicalIdByte": 10,
+            "textFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            },
+            "expectCode": "conversation_pending"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "cancelledFollowup",
+            "logicalIdByte": 10,
+            "textFrom": {
+              "plan": "otherSend",
+              "inputIndex": 0
+            },
+            "prefix": "👋 ",
+            "expectCode": "invalid_marker"
+          },
+          {
+            "call": "restoreInConversation",
+            "workspace": "pendingA",
+            "logicalIdByte": 99,
+            "text": "plain",
+            "expectCode": "conversation_unknown"
+          },
+          {
+            "call": "prepareObservedSend",
+            "workspace": "confirmedA",
+            "plan": "forbiddenReplay",
+            "operationByte": 15,
+            "occurredAtMs": 15,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            },
+            "surface": "synthetic_chat",
+            "siteId": "thread_a",
+            "expectCode": "invalid_send_intent"
           }
         ]
       }
     ]
+  },
+  "oracleErrors": {
+    "pausedPlain": 82,
+    "pausedOld": 83,
+    "pausedAfterRecoveryPlain": 84,
+    "pausedAfterRecoveryOld": 85,
+    "unissuedOther": 86,
+    "unknownConversation": 87,
+    "replayedIntent": 88
   }
 }

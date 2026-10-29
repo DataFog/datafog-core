@@ -12,6 +12,18 @@ for(const [sdk,actual] of [["python",python],["node",node]]){
  test(`${sdk}: complete actual profile is accepted`,()=>validateConversationHostOutput(actual,fixture,oracle,sdk));
  const reject=(name,change)=>test(`${sdk}: ${name}`,()=>{const changed=structuredClone(actual);change(changed);assert.throws(()=>validateConversationHostOutput(changed,fixture,oracle,sdk));});
  reject("an unclean worker exit cannot be ignored",v=>{step(v,"process-pending-race","race")[0].processExit.code=1;});
+ reject("changed original marker bounds fail",v=>{step(v,"existing-chat-pause","reopen-resumed").otherNotIssued.markerIssues[0].byteRange.end=999;});
+ reject("missing UTF16 range fails",v=>{delete step(v,"existing-chat-pause","reopen-resumed").otherNotIssued.markerIssues[0].utf16Range;});
+ reject("injected finding index fails",v=>{step(v,"confirmation-lost-ack","replay-rejected").findingIndex=100;});
+ reject("injected review conflicts fail",v=>{step(v,"existing-chat-pause","still-paused").plain.reviewConflicts=[{unexpected:true}];});
+ reject("missing null input index fails",v=>{delete step(v,"existing-chat-pause","still-paused").plain.inputIndex;});
+ reject("fabricated strict completion fails",v=>{step(v,"existing-chat-pause","still-paused").plain.complete=false;});
+ reject("typed callback checks are mandatory",v=>{delete v.associationChecks;});
+ reject("all callback type regressions must execute",v=>{v.associationChecks.rejected=10;});
+ reject("callback booleans cannot impersonate an integer index",v=>{step(v,"observed-success","transport-observed").received.inputIndex=false;});
+ reject("callback hashes cannot become numbers",v=>{step(v,"observed-success","transport-observed").received.payloadSha256=0;});
+ reject("callback surfaces cannot become booleans",v=>{step(v,"observed-success","transport-observed").received.surface=false;});
+ reject("site witnesses cannot become booleans",v=>{step(v,"observed-success","transport-observed").siteVerification.siteId=false;});
  reject("a missing native scenario fails",v=>{v.cases.pop();});
  reject("unscoped applicability cannot replace native SDK identity",v=>{v.sdk="wasm";});
  reject("missing actual callback cannot confer confirmation",v=>{delete step(v,"observed-success","transport-observed").received;});

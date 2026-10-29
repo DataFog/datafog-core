@@ -15,10 +15,12 @@ function fixtureCheck(fixture){
 }
 export function conversationHostOracle(fixture,result){
  fixtureCheck(fixture);if(result?.schemaVersion!==1||result.profile!==fixture.oracle.profile||result.cases?.length!==1||result.cases[0].id!==fixture.oracle.cases[0].id)bad();
- const states={},plans={};const commands=fixture.oracle.cases[0].commands,steps=result.cases?.[0]?.steps;
+ const states={},plans={},errors={};const commands=fixture.oracle.cases[0].commands,steps=result.cases?.[0]?.steps;
  if(fixture.oracle.profile!=="workspace-conversations-v1"||!fixture.oracle.requiredMethods.includes("plan.sendIntents")||commands.length!==steps?.length)bad();
  commands.forEach((command,index)=>{
-  const entry=steps[index];if(entry.ok!==true||entry.call!==command.call)bad();
+  const entry=steps[index];if(entry.call!==command.call)bad();
+  if(command.expectCode){if(entry.ok!==false||entry.error?.code!==command.expectCode)bad();return;}
+  if(entry.ok!==true)bad();
   if(["createWithOperation","openBundle","activateSaved"].includes(command.call))states[command.workspace]={...entry.value};
   else if(["counts","operations","historyCoverage"].includes(command.call))states[command.workspace][command.call]=entry.value;
   else if(["prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","prepareRecoveryWithOperation"].includes(command.call))plans[command.plan]=entry.value;
@@ -26,14 +28,22 @@ export function conversationHostOracle(fixture,result){
  same(Object.keys(states),stateNames);
  if(!stateNames.every(name=>states[name]?.bundleHex&&states[name].head&&states[name].counts&&states[name].operations&&states[name].historyCoverage))bad();
  if(!["sendA","sendB","otherSend","followup"].every(name=>plans[name]?.sendIntents?.length===1&&typeof plans[name]?.previews?.[0]?.text==="string"))bad();
- return {states,plans};
+ for(const [name,index] of Object.entries(fixture.oracleErrors??{})){
+  if(!Number.isSafeInteger(index)||index<0||index>=commands.length||steps[index].ok!==false||steps[index].error?.code!==commands[index].expectCode)bad();
+  errors[name]=steps[index].error;
+ }
+ same(Object.keys(errors),["pausedPlain","pausedOld","pausedAfterRecoveryPlain","pausedAfterRecoveryOld","unissuedOther","unknownConversation","replayedIntent"]);
+ return {states,plans,errors};
 }
-function coreError(value,code){
- if(value?.type!=="core"||value.code!==code||value.message!==code||!Array.isArray(value.markerIssues)||!Array.isArray(value.reviewConflicts)||!Object.hasOwn(value,"inputIndex")||!Object.hasOwn(value,"findingIndex"))bad();
+function coreError(value,expected){
+ if(!expected||typeof expected.code!=="string")bad();
+ same(Object.keys(expected).sort(),["code","findingIndex","inputIndex","markerIssues","reviewConflicts","delivered","complete"].sort());
+ same(value,{type:"core",message:expected.code,...expected});
 }
-function acceptedError(value,fixture,sdk,category){if(value?.type!=="host"||value.message!==value.code||!fixture.hostErrors[category][sdk].includes(value.code))bad();}
+function acceptedError(value,fixture,sdk,category){if(value?.type!=="host"||value.message!==value.code||!fixture.hostErrors[category][sdk].includes(value.code))bad();same(Object.keys(value).sort(),["code","message","type"]);}
 export function validateConversationHostOutput(value,fixture,oracle,sdk){
  fixtureCheck(fixture);if(!fixture.sdks.includes(sdk)||value?.schemaVersion!==1||value.profile!==fixture.profile||value.sdk!==sdk||value.cases?.length!==fixture.cases.length)bad();
+ same(value.associationChecks,{passed:true,rejected:11,cases:["boolean_index","float_index","nonstring_hash","nonstring_surface","nonstring_witness_site","extra_callback","extra_witness","boolean_nested_id","float_nested_id","boolean_witness_scope","float_witness_scope"]});
  const state=name=>oracle.states[name],plan=name=>oracle.plans[name];
  const saved=(receipt,parent,candidate,{error,expected=state(parent).head}={})=>{
   same(receipt?.expectedHead,expected);same(receipt.candidateHead,state(candidate).head);same(receipt.candidateBundleHex,state(candidate).bundleHex);
@@ -62,7 +72,7 @@ export function validateConversationHostOutput(value,fixture,oracle,sdk){
    case "pending-save-rollback":saved(get("save-failed"),"seed","pendingA",{error:"rollback"});same(get("no-dispatch"),{transportEvents:[],resolutionCalls:0});same(get("reopen-original"),state("seed"));after="seed";expectedTrace=trace(0,0);break;
    case "callback-mismatch":{
     saved(get("pending-saved"),"seed","pendingA");const entry=get("callbacks-received"),original=observation(entry,{mismatched:true});
-    same(entry.callbacks,[{...original,preparationId:Array(16).fill(99)},{...original,logicalId:Array(16).fill(11)},{...original,siteId:"wrong_site"}]);
+    same(entry.callbacks,[{...original,preparationId:Array(16).fill(99)},{...original,logicalId:Array(16).fill(11)},{...original,siteId:"wrong_site"},{...original,inputIndex:false},{...original,payloadSha256:0},{...original,surface:false}]);
     if(entry.transportCalls!==1||entry.resolutionCalls!==0)bad();same(get("no-confirmation"),{resolutionCalls:0});same(get("reopen-pending"),state("pendingA"));break;
    }
    case "definitely-not-sent":saved(get("pending-saved"),"seed","pendingA");observation(get("transport-not-sent"),{kind:"definitely_not_sent"});saved(get("resolution-saved"),"pendingA","notSentA");same(get("reopen-not-sent"),state("notSentA"));after="notSentA";expectedTrace=trace(1,1);break;
@@ -71,14 +81,14 @@ export function validateConversationHostOutput(value,fixture,oracle,sdk){
     saved(get("pending-saved"),"seed","pendingA");const observed=observation(get("transport-observed"));saved(get("confirmation-failed"),"pendingA","confirmedA",{error:"rollback"});same(get("reopen-pending"),state("pendingA"));
     const retry=get("retry-metadata-only");saved(retry?.save,"pendingA","confirmedA");if(retry.transportCalls!==1)bad();same(retry.received,observed);same(get("reopen-confirmed"),state("confirmedA"));after="confirmedA";expectedTrace=trace(1,2);break;
    }
-   case "confirmation-lost-ack":saved(get("pending-saved"),"seed","pendingA");observation(get("transport-observed"));saved(get("confirmation-uncertain"),"pendingA","confirmedA",{error:"lostAck"});same(get("reopen-confirmed"),state("confirmedA"));coreError(get("replay-rejected"),"invalid_send_intent");after="confirmedA";expectedTrace=trace(1,1);break;
+   case "confirmation-lost-ack":saved(get("pending-saved"),"seed","pendingA");observation(get("transport-observed"));saved(get("confirmation-uncertain"),"pendingA","confirmedA",{error:"lostAck"});same(get("reopen-confirmed"),state("confirmedA"));coreError(get("replay-rejected"),oracle.errors.replayedIntent);after="confirmedA";expectedTrace=trace(1,1);break;
    case "existing-chat-pause":{
     same(get("two-confirmed"),state("twoConfirmed"));saved(get("followup-saved"),"twoConfirmed","followup");
     for(const [name,expected] of [["reopen-paused","followup"],["still-paused","recoveredFollowup"]]){
-     const entry=get(name);same(entry?.snapshot,state(expected));coreError(entry.plain,"conversation_pending");coreError(entry.old,"conversation_pending");same(entry.other,fixture.inputs.b.input.text);
+     const entry=get(name);same(entry?.snapshot,state(expected));coreError(entry.plain,oracle.errors[name==="reopen-paused"?"pausedPlain":"pausedAfterRecoveryPlain"]);coreError(entry.old,oracle.errors[name==="reopen-paused"?"pausedOld":"pausedAfterRecoveryOld"]);same(entry.other,fixture.inputs.b.input.text);
     }
     saved(get("recovery-saved"),"followup","recoveredFollowup");const stopped=get("not-sent-saved");observation(stopped?.observation,{which:"followup",pending:"recoveredFollowup",kind:"definitely_not_sent"});saved(stopped.save,"recoveredFollowup","cancelledFollowup");
-    const resumed=get("reopen-resumed");same(resumed?.snapshot,state("cancelledFollowup"));same(resumed.old,fixture.inputs.a.input.text);coreError(resumed.otherNotIssued,"invalid_marker");if(resumed.otherNotIssued.markerIssues[0]?.kind!=="not_issued_in_conversation")bad();after="cancelledFollowup";expectedTrace=trace(1,1);break;
+    const resumed=get("reopen-resumed");same(resumed?.snapshot,state("cancelledFollowup"));same(resumed.old,fixture.inputs.a.input.text);coreError(resumed.otherNotIssued,oracle.errors.unissuedOther);after="cancelledFollowup";expectedTrace=trace(1,1);break;
    }
    case "full-parent-conflict":{
     saved(get("pending-saved"),"seed","pendingA");observation(get("transport-observed"));const parent=state("pendingA").head;
@@ -118,7 +128,7 @@ export function validateConversationHostOutput(value,fixture,oracle,sdk){
     const tenant=sdk==="node"?{...scope,tenantId:"synthetic_foreign"}:{...scope,tenant:Array(16).fill(99)};
     const workspace=sdk==="node"?{...scope,workspaceId:"synthetic_foreign"}:{...scope,workspace:Array(16).fill(99)};
     same(entry.callbacks,[{...original,scope:tenant},{...original,scope:workspace}]);if(entry.transportCalls!==1||entry.resolutionCalls!==0)bad();
-    const foreign=get("foreign-store-unchanged");if(!/^[a-f0-9]{64}$/.test(foreign?.before??"")||foreign.before!==foreign.after)bad();same(foreign.snapshot,state("seed"));coreError(get("scoped-unknown"),"conversation_unknown");same(get("unchanged-pending"),state("pendingA"));break;
+    const foreign=get("foreign-store-unchanged");if(!/^[a-f0-9]{64}$/.test(foreign?.before??"")||foreign.before!==foreign.after)bad();same(foreign.snapshot,state("seed"));coreError(get("scoped-unknown"),oracle.errors.unknownConversation);same(get("unchanged-pending"),state("pendingA"));break;
    }
    default:bad();
   }
