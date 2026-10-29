@@ -8,7 +8,7 @@ contract freeze [#154](https://github.com/DataFog/datafog-core/issues/154) remai
 
 ## First product decision: what counts as a handoff?
 
-**Recommendation:** record markers as issued into a conversation only after the
+**Approved October 29:** record markers as issued into a conversation only after the
 trusted host reports an observed successful handoff to that exact conversation.
 Preparing, approving, saving mappings, copying text or filling a draft composer
 alone must not be represented as a successful send. A copy-only workflow needs a
@@ -22,10 +22,11 @@ until the required issuance record is durably available. The ordinary compatibil
 restore mode remains available under its existing documented contract.
 
 Core cannot observe a browser or provider. The host's observation is an assertion,
-not proof that a remote person/model received the text. The exact acceptable
-observation (for example, the sent message in the selected conversation) requires
-product review. An attempted click, an unacknowledged write and successful copying
-are not equivalent observations. This recommendation remains unapproved.
+not proof that a remote person/model received the text. The exact host event acquisition (for example, the sent message in the selected
+conversation) still needs site-specific technical and shipping-host verification. An attempted click, an unacknowledged write and successful copying
+are not equivalent observations. The confirmed-send/second-save sequence is
+approved; manual confirmation, storage bounds and final wire/API details remain
+separate review work.
 
 ## Recommended two-transaction flow
 
