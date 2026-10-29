@@ -145,10 +145,11 @@ The proof report records exact source/tarball/model identities and samples under
 
 The [retained observation fixture](../fixtures/workspace/recall-browser-benchmark.json)
 records three calls per case on Apple M5 Pro / 48 GiB with bundled Chromium
-151.0.7922.34. Median observations were 3.5 ms for 1,000 values/130,500-byte no-hit
-input, 2.1 ms for 500 matches, 12.7 ms for a 1 MiB no-hit source, and 129.7 ms to
-reject the repetitive-prefix work case. The last call blocks its calling page
-while running; this is a reason to review the work ceiling and host execution
-context. The fixture honestly identifies the uncommitted measurement base plus
-exact production-file and tarball hashes, rather than inventing a source commit.
-Subsequent committed-candidate reports retain their own exact source identity.
+151.0.7922.34 after stable zeroizing index storage was added. Median observations
+were 3.6 ms for 1,000 values/130,500-byte no-hit input,
+2.1 ms for 500 matches, 13.2 ms for a 1 MiB no-hit source,
+131.7 ms to reject the repetitive-prefix work case, and
+7.6 ms to reject the index-node case. Calls block their calling
+page while running; these observations are not a latency or low-memory guarantee.
+The fixture pins the clean measured commit plus exact production-file and tarball
+hashes. Subsequent candidate reports retain their own exact source identity.
