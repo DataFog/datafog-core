@@ -11,6 +11,7 @@ import {canonicalWorkspaceValue} from "./workspace-parity-runner.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const fixturePath=path.join(root,"fixtures/workspace/sdk-contract-v1.json");
+const streamingFixturePath=path.join(root,"fixtures/workspace/streaming-contract-v1.json");
 const arguments_=process.argv.slice(2);
 const outputIndex=arguments_.indexOf("--output");
 const output=path.resolve(outputIndex>=0?arguments_[outputIndex+1]:path.join(root,"target/workspace-parity",new Date().toISOString().replaceAll(/[:.]/g,"-")));
@@ -40,6 +41,46 @@ export function validateWorkspaceOutput(value,fixture) {
   return canonicalWorkspaceValue(value);
 }
 
+function validCounts(value) {
+  return value && ["bytes","codepoints","utf16","restoredMarkers"].every(key=>Number.isSafeInteger(value[key]) && value[key]>=0);
+}
+function validMarkerIssues(issues) {
+  return Array.isArray(issues) && issues.every(issue=>["unknown","damaged","unbracketed"].includes(issue?.kind) && ["byteRange","codepointRange","utf16Range"].every(key=>Number.isSafeInteger(issue[key]?.start) && Number.isSafeInteger(issue[key]?.end) && issue[key].start>=0 && issue[key].end>=issue[key].start));
+}
+export function validateStreamingOutput(value,fixture) {
+  const invalid=()=>{throw new Error("workspace streaming parity output schema mismatch");};
+  if(fixture?.schemaVersion!==1 || fixture.profile!=="workspace-streaming-v1" || !Array.isArray(fixture.cases) || !fixture.cases.length) invalid();
+  if(value?.schemaVersion!==1 || value.profile!==fixture.profile || !Array.isArray(value.cases) || value.cases.length!==fixture.cases.length) invalid();
+  for(let i=0;i<fixture.cases.length;i++) {
+    const expected=fixture.cases[i],actual=value.cases[i];
+    if(actual?.id!==expected.id || !actual.modes || Object.keys(actual.modes).sort().join(",")!=="buffered,progressive") invalid();
+    for(const mode of ["buffered","progressive"]) {
+      const steps=actual.modes[mode]?.steps;
+      if(!Array.isArray(steps) || steps.length!==expected.steps.length) invalid();
+      for(let j=0;j<steps.length;j++) {
+        const wanted=expected.steps[j],step=steps[j];
+        if(step?.op!==wanted.op || typeof step.ok!=="boolean") invalid();
+        if(mode==="progressive" && wanted.expectError && (step.ok || step.error?.code!==wanted.expectError.code)) invalid();
+        if(mode==="progressive" && !wanted.expectError && !step.ok) invalid();
+        if(step.ok) {
+          if(!Object.hasOwn(step,"value")) invalid();
+          if(mode==="progressive" && ["feed","feedUtf16","finalize"].includes(step.op)) {
+            if(typeof step.value?.text!=="string" || !validCounts(step.value.delivered) || step.value.complete!==(step.op==="finalize")) invalid();
+          } else if(mode==="buffered" && step.op==="finalize") {
+            const report=step.value;
+            if(!report || !(report.text===null || typeof report.text==="string") || !Number.isSafeInteger(report.restoredMarkers) || report.restoredMarkers<0 || !validMarkerIssues(report.issues) || (report.issues.length>0)!==(report.text===null)) invalid();
+          } else if(step.value!==null) invalid();
+        } else {
+          const error=step.error;
+          if(!error || typeof error.code!=="string" || Object.hasOwn(error,"text") || !["findingIndex","inputIndex","delivered","complete"].every(key=>Object.hasOwn(error,key)) || !validMarkerIssues(error.markerIssues) || !Array.isArray(error.reviewConflicts)) invalid();
+          if(mode==="progressive" ? error.complete!==false || !validCounts(error.delivered) : error.complete!==null || error.delivered!==null) invalid();
+        }
+      }
+    }
+  }
+  return canonicalWorkspaceValue(value);
+}
+
 // Retained wheels from earlier releases are valid artifacts, not current inputs.
 // Require the exact repository pin rather than deleting them or guessing newest.
 export function selectWorkspaceWheel(names,projectToml) {
@@ -59,10 +100,12 @@ const report={schemaVersion:1,pass:false,sdks:sdkNames,profile:null,errors:[],pa
 try {
   await mkdir(output,{recursive:true});
   const fixtureBytes=await readFile(fixturePath),fixture=parsed(fixtureBytes.toString("utf8"));
-  report.profile=fixture.profile;report.fixtureSha256=sha(fixtureBytes);
+  const streamingBytes=await readFile(streamingFixturePath),streamingFixture=parsed(streamingBytes.toString("utf8"));
+  report.profile=fixture.profile;report.fixtureSha256=sha(fixtureBytes);report.streamingFixtureSha256=sha(streamingBytes);
   report.sourceCommit=command("git",["rev-parse","HEAD"]).trim();report.sourceDirty=command("git",["status","--porcelain"]).length>0;
   report.runtime={node:process.version,rust:command("rustc",["--version"]).trim()};
   await copyFile(fixturePath,path.join(output,"fixture.json"));
+  await copyFile(streamingFixturePath,path.join(output,"streaming-fixture.json"));
   temporary=await mkdtemp(path.join(os.tmpdir(),"datafog-workspace-parity-"));
   const packages=path.join(output,"packages");await mkdir(packages,{recursive:true});
   await writeFile(path.join(temporary,"package.json"),JSON.stringify({private:true,type:"module"}));
@@ -82,13 +125,19 @@ try {
   command(python,["-m","pip","install","--no-deps","--disable-pip-version-check",wheel]);
   report.runtime.python=command(python,["--version"]).trim();
   if(command(python,["-c","from importlib.metadata import version; print(version('datafog-core'))"]).trim()!==selected.version) throw new Error("workspace parity installed Python package version differs from its pin");
-  const results={};
+  const results={},streaming={};
   results.rust=validateWorkspaceOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",fixturePath])),fixture);
+  streaming.rust=validateStreamingOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_streaming_contract","--",streamingFixturePath])),streamingFixture);
   results.python=validateWorkspaceOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-python.py"),fixturePath])),fixture);
+  streaming.python=validateStreamingOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-streaming-python.py"),streamingFixturePath])),streamingFixture);
   await copyFile(path.join(root,"scripts/workspace-parity-runner.mjs"),path.join(temporary,"runner.mjs"));
+  await copyFile(path.join(root,"scripts/workspace-streaming-conformance.mjs"),path.join(temporary,"streaming-runner.mjs"));
+  await copyFile(streamingFixturePath,path.join(temporary,"streaming-fixture.json"));
   await copyFile(fixturePath,path.join(temporary,"fixture.json"));
   await writeFile(path.join(temporary,"node.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceContract} from "./runner.mjs";process.stdout.write(JSON.stringify(runWorkspaceContract(api,JSON.parse(fs.readFileSync("fixture.json","utf8")))));');
   results.node=validateWorkspaceOutput(parsed(command(process.execPath,["node.mjs"],temporary)),fixture);
+  await writeFile(path.join(temporary,"node-streaming.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceStreamingContract} from "./streaming-runner.mjs";process.stdout.write(JSON.stringify(await runWorkspaceStreamingContract(api,JSON.parse(fs.readFileSync("streaming-fixture.json","utf8")))));');
+  streaming.node=validateStreamingOutput(parsed(command(process.execPath,["node-streaming.mjs"],temporary)),streamingFixture);
   await writeFile(path.join(temporary,"index.html"),"<!doctype html><title>Workspace SDK parity</title>");
   server=createServer(async(request,response)=>{
     try {
@@ -109,8 +158,13 @@ try {
   const wasm=await page.evaluate(async()=>{const api=await import("/node_modules/@datafog/wasm/index.js");await api.init();const {runWorkspaceContract}=await import("/runner.mjs");return runWorkspaceContract(api,await fetch("/fixture.json").then(response=>response.json()));});
   if(browserErrors || externalRequests)throw new Error("workspace parity browser runtime failed");
   report.runtime.chromium=browser.version();results.wasm=validateWorkspaceOutput(wasm,fixture);
+  const wasmStreaming=await page.evaluate(async()=>{const api=await import("/node_modules/@datafog/wasm/index.js");const {runWorkspaceStreamingContract}=await import("/streaming-runner.mjs");return runWorkspaceStreamingContract(api,await fetch("/streaming-fixture.json").then(response=>response.json()));});
+  if(browserErrors || externalRequests)throw new Error("workspace streaming parity browser runtime failed");
+  streaming.wasm=validateStreamingOutput(wasmStreaming,streamingFixture);
   for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}.json`),JSON.stringify(results[sdk],null,2));if(!isDeepStrictEqual(results.rust,results[sdk]))report.errors.push({sdk,category:"workspace contract mismatch"});}
-  report.cases=fixture.cases.length;report.steps=fixture.cases.reduce((sum,item)=>sum+item.commands.length,0);report.pass=report.errors.length===0;
+  for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}-streaming.json`),JSON.stringify(streaming[sdk],null,2));if(!isDeepStrictEqual(streaming.rust,streaming[sdk]))report.errors.push({sdk,category:"workspace streaming contract mismatch"});}
+  report.profiles={foundation:{profile:fixture.profile,cases:fixture.cases.length,steps:fixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},streaming:{profile:streamingFixture.profile,cases:streamingFixture.cases.length,modes:["buffered","progressive"],steps:2*streamingFixture.cases.reduce((sum,item)=>sum+item.steps.length,0)}};
+  report.cases=report.profiles.foundation.cases+report.profiles.streaming.cases;report.steps=report.profiles.foundation.steps+report.profiles.streaming.steps;report.pass=report.errors.length===0;
 } catch {
   report.errors.push({category:"workspace parity failed before complete four-SDK comparison"});
 } finally {

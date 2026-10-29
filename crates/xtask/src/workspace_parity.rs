@@ -75,6 +75,12 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
     let pass = status.status.success()
         && report["pass"] == true
         && report["sdks"] == json!(["rust", "python", "node", "wasm"])
+        && report["profiles"]["foundation"]["profile"] == "launch-workspace-current"
+        && report["profiles"]["streaming"]["profile"] == "workspace-streaming-v1"
+        && report["profiles"]["streaming"]["modes"] == json!(["buffered", "progressive"])
+        && report["profiles"]["streaming"]["steps"]
+            .as_u64()
+            .is_some_and(|value| value > 0)
         && report["cases"].as_u64().is_some_and(|value| value > 0)
         && report["steps"].as_u64().is_some_and(|value| value > 0)
         && report["errors"].as_array().is_some_and(Vec::is_empty);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateWorkspaceOutput,selectWorkspaceWheel} from "./test-workspace-parity.mjs";
+import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput} from "./test-workspace-parity.mjs";
 import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
@@ -29,4 +29,22 @@ test("retained historical wheels do not replace or ambiguate the authoritative c
   for(const names of [[],[old],[current,'datafog_core-0.5.0b2-cp310-abi3-manylinux_2_17_x86_64.whl']]) assert.throws(()=>selectWorkspaceWheel(names,project));
   for(const invalid of ["",'[tool.maturin]\nversion = "0.5.0b2"',project.replace('version = "0.5.0b2"','version = "0.5.0b2"\nversion = "0.5.0b1"')]) assert.throws(()=>selectWorkspaceWheel([current],invalid));
   assert.deepEqual(selectWorkspaceWheel([current],"[project]\nname='datafog-core'\nversion='0.5.0b2'\n"),{filename:current,version:"0.5.0b2"});
+});
+
+test("streaming qualification requires both modes, every command and complete delivery/range metadata",()=>{
+  const source={schemaVersion:1,profile:"workspace-streaming-v1",cases:[{id:"feed",steps:[{op:"feed",expect:{text:""}}]}]};
+  const value={schemaVersion:1,profile:source.profile,cases:[{id:"feed",modes:{buffered:{steps:[{op:"feed",ok:true,value:null}]},progressive:{steps:[{op:"feed",ok:true,value:{text:"",complete:false,delivered:{bytes:0,codepoints:0,utf16:0,restoredMarkers:0}}}]}}}]};
+  assert.doesNotThrow(()=>validateStreamingOutput(value,source));
+  const missingMode=structuredClone(value);delete missingMode.cases[0].modes.buffered;
+  const missingStep=structuredClone(value);missingStep.cases[0].modes.progressive.steps=[];
+  const partial=structuredClone(value);partial.cases[0].modes.progressive.steps[0].value.complete=true;
+  const missingCounts=structuredClone(value);delete missingCounts.cases[0].modes.progressive.steps[0].value.delivered;
+  for(const invalid of [missingMode,missingStep,partial,missingCounts]) assert.throws(()=>validateStreamingOutput(invalid,source));
+  const bad={schemaVersion:1,profile:source.profile,cases:[{id:"feed",steps:[{op:"feed",expectError:{code:"invalid_marker"}}]}]};
+  const error={code:"invalid_marker",findingIndex:null,inputIndex:null,markerIssues:[{kind:"damaged",byteRange:{start:0,end:8},codepointRange:{start:0,end:8},utf16Range:{start:0,end:8}}],reviewConflicts:[],delivered:{bytes:0,codepoints:0,utf16:0,restoredMarkers:0},complete:false};
+  const failed=structuredClone(value);failed.cases[0].modes.progressive.steps[0]={op:"feed",ok:false,error};
+  assert.doesNotThrow(()=>validateStreamingOutput(failed,bad));
+  for(const mutate of [v=>delete v.delivered,v=>delete v.markerIssues[0].utf16Range,v=>{v.text="partial private text";}]) {
+    const invalid=structuredClone(failed);mutate(invalid.cases[0].modes.progressive.steps[0].error);assert.throws(()=>validateStreamingOutput(invalid,bad));
+  }
 });
