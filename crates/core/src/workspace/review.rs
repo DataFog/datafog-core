@@ -45,6 +45,7 @@ pub struct ReviewCandidate {
     pub eligible: bool,
     /// Selection for preparation; never permission to send or skip review.
     pub selected: bool,
+    original_index: usize,
 }
 
 pub struct ReviewResult {
@@ -86,11 +87,18 @@ pub(super) fn select(
     findings: &[Finding],
     state: &State,
     obligations: &[(usize, Finding)],
+    original_indices: &[usize],
 ) -> Result<(Vec<Finding>, Vec<ReviewConflict>)> {
     let eligible: Vec<_> = findings
         .iter()
         .enumerate()
         .filter(|(_, finding)| hides(state, finding))
+        .map(|(index, finding)| {
+            (
+                original_indices.get(index).copied().unwrap_or(index),
+                finding,
+            )
+        })
         .collect();
     let mut native = Vec::new();
     crate::detect_ssn(text, &mut native);
@@ -285,7 +293,7 @@ pub(super) fn build(state: &State, input: ReviewInput<'_>) -> Result<ReviewResul
     let source_digest = Sha256::digest(input.text.as_bytes());
     let mut grouped: BTreeMap<(usize, usize, String), ReviewCandidate> = BTreeMap::new();
     let mut index = TextIndex::new(input.text);
-    for finding in supplied {
+    for (original_index, finding) in supplied.into_iter().enumerate() {
         let id = (
             finding.byte_range.start,
             finding.byte_range.end,
@@ -314,6 +322,7 @@ pub(super) fn build(state: &State, input: ReviewInput<'_>) -> Result<ReviewResul
                     utf16_range,
                     eligible: false,
                     selected: false,
+                    original_index,
                 },
             );
         }
@@ -359,6 +368,7 @@ pub(super) fn build(state: &State, input: ReviewInput<'_>) -> Result<ReviewResul
         );
         if let Some(existing) = merged.get_mut(&id) {
             merge_metadata(&mut existing.finding, &candidate.finding);
+            existing.original_index = existing.original_index.min(candidate.original_index);
             for source in candidate.sources {
                 if !existing.sources.contains(&source) {
                     existing.sources.push(source);
@@ -381,7 +391,12 @@ pub(super) fn build(state: &State, input: ReviewInput<'_>) -> Result<ReviewResul
     }
     let findings: Vec<_> = candidates.iter().map(|c| c.finding.clone()).collect();
     let (adapted, _) = adapt_findings(input.text, &findings, &committed)?;
-    let (selected, conflicts) = select(input.text, &adapted, state, &obligations)?;
+    let original_indices: Vec<_> = candidates
+        .iter()
+        .map(|candidate| candidate.original_index)
+        .collect();
+    let (selected, conflicts) =
+        select(input.text, &adapted, state, &obligations, &original_indices)?;
     let selected_ids: BTreeSet<_> = selected
         .iter()
         .map(|finding| {

@@ -110,7 +110,12 @@ fn shared_positive_negative_and_unicode_corpus() {
                     "{}",
                     case["id"]
                 );
+                let originals: Vec<_> = scanner.iter().chain(&user).collect();
                 for c in &result.conflicts {
+                    assert_eq!(
+                        originals[c.finding_index].byte_range, c.byte_range,
+                        "conflict index must identify original source order, including reversed inputs"
+                    );
                     assert_eq!(
                         c.codepoint_range.start,
                         text[..c.byte_range.start].chars().count()

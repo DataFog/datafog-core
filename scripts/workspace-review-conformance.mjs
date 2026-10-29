@@ -13,6 +13,8 @@ export function verifyWorkspaceReview(api) {
   check(result.conflicts.length>0 && !Object.hasOwn(result,"text"),"review returns ranged conflicts without handoff");
   const span=result.conflicts.find(c=>c.kind==="protected_coverage");
   check(span.byteRange.start===7 && span.codepointRange.start===4 && span.utf16Range.start===5,"original Unicode conflict ranges");
+  const reversed=w.review(input(text,[...user,...scanner]));
+  check(reversed.conflicts.find(c=>c.kind==="protected_coverage").findingIndex===0,"grouping preserves original reversed finding index");
   const candidate=result.candidates.find(c=>c.finding.entityType==="CUSTOM");
   check(candidate.sources.join()==="user","input channel overrides spoofed display flags");
   for(let n=0;n<40;n++){

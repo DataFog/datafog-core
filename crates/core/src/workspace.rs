@@ -637,7 +637,7 @@ impl Workspace {
         candidate: &mut State,
     ) -> Result<Preview> {
         let (adapted, mut index) = adapt_findings(text, findings, committed)?;
-        let (selected, conflicts) = review::select(text, &adapted, candidate, &[])?;
+        let (selected, conflicts) = review::select(text, &adapted, candidate, &[], &[])?;
         if !conflicts.is_empty() {
             let mut failure = error(ErrorCode::ReviewConflict);
             failure.finding_index = conflicts.first().map(|conflict| conflict.finding_index);
