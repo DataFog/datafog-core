@@ -19,7 +19,9 @@ context supplies the response scope; provider output never chooses a workspace.
 The reference store keeps canonical revisions as decimal TEXT and full commit
 IDs, so SQLite's signed integer range cannot truncate Core's unsigned heads. A
 real `BEGIN IMMEDIATE` transaction compares both expected revision and commit ID
-and saves the candidate together. Busy waits are bounded; busy or stale failure
+and saves a state-changing candidate together. No-op candidates keep their head,
+so independent no-op saves can both succeed. Delivery deduplication/admission is
+a separate host duty and is not inferred from snapshot CAS. Busy waits are bounded; busy or stale failure
 releases no text and does not activate a losing plan. Core preview and approval
 are not persistence or delivery.
 
@@ -34,7 +36,11 @@ After definite failed save, discard/close without release. After lost acknowledg
 reopen durable state, obtain fresh review/approval and use a fresh operation ID.
 A process can die after commit but before activation/delivery: durable mappings
 survive while the absent delivery must not be invented. Cancellation or a changed
-head blocks a stale approved handoff. There is no atomic transaction spanning
+head blocks handoff before the release callback starts. Once release starts, the
+host callback receives the `AbortSignal` and must cooperate by checking it before
+its actual write; cancellation cannot retract an already performed write. A late
+callback failure may follow delivery, so never infer "nothing sent" or retry
+automatically from that failure. There is no atomic transaction spanning
 SQLite and a remote provider; exactly-once remote delivery is not claimed.
 
 ## Stateless worker constraint
@@ -54,8 +60,9 @@ motivates regression cases.
 
 ## Required evidence
 
-- Two actual workers prepare from the same head; exactly one saves/activates and
-  releases, while the loser keeps its old head and releases nothing.
+- Two actual workers prepare state-changing candidates from the same head; exactly
+  one saves/activates/releases, while the loser keeps its old head and releases
+  nothing. Separate no-op workers both retain that head; CAS is not a delivery lock.
 - Equal revision with a different commit ID fails; busy storage fails within the
   configured bound. Reopen/review/retry uses current mappings and fresh approval.
 - Process death before commit rolls back; death after commit preserves mappings
@@ -63,9 +70,11 @@ motivates regression cases.
   nothing until reopened and reviewed.
 - Tenant/workspace authorization precedes decrypt, AAD tampering rejects, two
   request contexts never swap outputs, and missing/history-only state fails.
-- Cancellation before/after save, failed writes and worker restart preserve the
+- Cancellation before release and cooperative cancellation during a paused final
+  write, failed writes and worker restart preserve the
   prepare/approve/save/activate/release boundary. Stored DB/WAL data contains no
-  synthetic plaintext or key bytes.
+  synthetic plaintext or key bytes. Failed-authentication tests also verify that
+  transient decrypted update buffers are wiped when final tag validation fails.
 
 The adapter uses pinned Node 24's built-in
 [`node:sqlite`](https://nodejs.org/docs/latest-v24.x/api/sqlite.html), adding no

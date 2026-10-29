@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import {mkdtemp,readFile,readdir,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
-import {randomBytes} from "node:crypto";
+import crypto,{randomBytes} from "node:crypto";
+import {syncBuiltinESMExports} from "node:module";
 import {setTimeout} from "node:timers/promises";
 import {Worker} from "node:worker_threads";
 import {fork} from "node:child_process";
@@ -51,6 +52,21 @@ export async function verifyNodeWorkspaceHost() {
     assert.deepEqual(losers[0].head,initial);
     const winner=open(scope);
     try {assert.equal(winner.restore(winners[0].text),value);}finally{winner.close();}
+
+    // No-op candidates intentionally keep their head; CAS is not a delivery lock.
+    const noOpScope={...scope,workspaceId:"noop_race"},noOpHead=initialize(noOpScope,23);
+    const noOpWorkers=[];
+    for(const operation of [25,26]) {
+      const worker=new Worker(new URL("./node-workspace-host-worker.mjs",import.meta.url),{workerData:{database,key:new Uint8Array(key),scope:noOpScope,input:{text:"ordinary",scannerFindings:[],userSelections:[]},operationId:id(operation)}});
+      const ready=new Promise((resolve,reject)=>{worker.once("message",resolve);worker.once("error",reject);});
+      const item={worker,ready};workers.push(item);noOpWorkers.push(item);
+    }
+    for(const item of noOpWorkers)assert.deepEqual((await item.ready).head,noOpHead);
+    const noOpOutcomes=await Promise.all(noOpWorkers.map(({worker})=>new Promise((resolve,reject)=>{
+      worker.once("message",resolve);worker.once("error",reject);worker.postMessage("save");
+    })));
+    assert(noOpOutcomes.every(result=>result.saved && result.activated && result.released));
+    assert(noOpOutcomes.every(result=>JSON.stringify(result.head)===JSON.stringify(noOpHead)));
 
     // Equal revisions with different commit IDs must not pass a revision-only CAS.
     const sameRevisionScope={...scope,workspaceId:"same_revision"};initialize(sameRevisionScope,31);
@@ -114,6 +130,20 @@ export async function verifyNodeWorkspaceHost() {
     await rejected(()=>run(cancelScope,"cancel_after","Synthetic Cancel Name",84,{signal:after.signal,fault:phase=>{if(phase==="after_commit")after.abort();}}),"cancelled");
     assert.equal(released.length,count);assert.notDeepEqual(head(cancelScope),cancelHead);
 
+    // Once release starts, the host callback must cooperate before its final write.
+    const pausedScope={...scope,workspaceId:"paused_release"};initialize(pausedScope,85);
+    const pausedSignal=new AbortController();let reachedRelease,resumeRelease;
+    const enteredRelease=new Promise(resolve=>{reachedRelease=resolve;});
+    const pausedWrite=new Promise(resolve=>{resumeRelease=resolve;});
+    const pendingRelease=run(pausedScope,"paused_request","Synthetic Paused Name",87,{signal:pausedSignal.signal,release:async result=>{
+      reachedRelease();await pausedWrite;
+      if(result.signal?.aborted)throw new HostFailure("cancelled");
+      released.push({owner:pausedScope,...result});
+    }});
+    await enteredRelease;pausedSignal.abort();resumeRelease();
+    await rejected(()=>pendingRelease,"cancelled");assert.equal(released.length,count);
+    assert.equal(head(pausedScope).revision,"1","cooperative cancellation does not roll back committed mappings");
+
     // Approval of an older generation cannot survive a competing commit.
     const staleScope={...scope,workspaceId:"stale_approval"};initialize(staleScope,91);
     await rejected(()=>run(staleScope,"stale_request","Synthetic Old Name",93,{approve:async()=>{
@@ -153,13 +183,34 @@ export async function verifyNodeWorkspaceHost() {
     assert.throws(()=>store.load(scope),error=>error.code==="workspace_unavailable","authorization precedes decrypt even for corrupted ciphertext");
     authorized.set(scopeKey(scope),key);overwrite(row);raw.close();
 
+    // Track update output before final authenticates, so a failed tag wipes it too.
+    const corruptedTag=Buffer.from(row.tag);corruptedTag[0]^=1;
+    const tamper=new DatabaseSync(database);
+    tamper.prepare("UPDATE workspaces SET tag=? WHERE tenant=? AND workspace=?").run(corruptedTag,scope.tenantId,scope.workspaceId);
+    const originalDecipher=crypto.createDecipheriv,capturedPlaintext=[];
+    try {
+      crypto.createDecipheriv=(...args)=>{
+        const decipher=originalDecipher(...args),update=decipher.update.bind(decipher);
+        decipher.update=(...input)=>{const value=update(...input);capturedPlaintext.push(value);return value;};
+        return decipher;
+      };
+      syncBuiltinESMExports();
+      assert.throws(()=>store.load(scope),error=>error.code==="invalid_snapshot");
+      assert(capturedPlaintext.some(value=>value.length>0));
+      assert(capturedPlaintext.every(value=>value.every(byte=>byte===0)),"authentication failure must wipe transient decrypted bytes");
+    } finally {
+      crypto.createDecipheriv=originalDecipher;syncBuiltinESMExports();
+      for(const value of capturedPlaintext)value.fill(0);
+      tamper.prepare("UPDATE workspaces SET tag=? WHERE tenant=? AND workspace=?").run(row.tag,scope.tenantId,scope.workspaceId);tamper.close();
+    }
+
     for(const file of await readdir(directory)) {
       if(!file.startsWith("workspaces.sqlite"))continue;
       const bytes=await readFile(path.join(directory,file));
       for(const text of [value,"Synthetic Crash Name","Synthetic Alpha Name","Synthetic Beta Name"])assert(!bytes.includes(Buffer.from(text)),"database/WAL must contain encrypted state only");
       assert(!bytes.includes(key) && !bytes.includes(otherKey),"host keys must not be persisted in database/WAL");
     }
-    return {raceWinners:1,raceLosers:1,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
+    return {stateChangingRaceWinners:1,stateChangingRaceLosers:1,noOpReleases:2,failedAuthenticationWiped:true,cooperativeReleaseCancellation:true,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
   } finally {
     for(const {worker}of workers)await worker.terminate();
     store.close();key.fill(0);otherKey.fill(0);await rm(directory,{recursive:true,force:true});

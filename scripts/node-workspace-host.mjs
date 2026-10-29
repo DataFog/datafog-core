@@ -99,7 +99,8 @@ export class EncryptedWorkspaceStore {
       decipher.setAAD(aad(scope,head,row.namespace));decipher.setAuthTag(row.tag);
       const pieces=[];let plaintext;
       try {
-        pieces.push(decipher.update(row.ciphertext),decipher.final());
+        pieces.push(decipher.update(row.ciphertext));
+        pieces.push(decipher.final());
         plaintext=Buffer.concat(pieces);bundle=new Uint8Array(plaintext);
       } finally {for(const piece of pieces)piece.fill(0);plaintext?.fill(0);}
       workspace=Workspace.openBundle(bundle);
@@ -153,7 +154,7 @@ export async function runPreparedRequest({store,scope,requestId,input,operationI
     const confirmed=store.saveIfHeadMatches(owner,heads.expectedHead,heads.candidateHead,bytes,fault);
     cancelled();workspace.activateSaved(plan,heads.expectedHead,confirmed);
     cancelled();
-    await release({requestId,text:previews[0].text,head:confirmed});
+    await release({requestId,text:previews[0].text,head:confirmed,signal});
     return {head:confirmed};
   } finally {bytes?.fill(0);workspace?.close();}
 }
