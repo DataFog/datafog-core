@@ -28,6 +28,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- `cargo dfv parity --workspace` compares deterministic workspace workflows across
+  Rust, installed native Python/Node and browser WASM, retaining exact inner
+  snapshots, source/package hashes and failures without skipping missing runtimes.
+  Strict and progressive response restoration are mandatory additional profiles.
+
 - The synthetic Node server host qualifies opt-in progressive response delivery,
   late-failure incomplete status and cooperative cancellation against durable mappings.
 
@@ -35,6 +40,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
   recall, combined review, strict buffered and opt-in progressive restoration
   without loading browser WASM. Streaming preserves Core error counts, encoding
   validation and parent/head lifecycle cleanup.
+
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and
