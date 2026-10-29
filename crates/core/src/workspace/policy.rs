@@ -80,6 +80,7 @@ impl ChoiceDisposition {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct TypeRuleEdit {
     pub entity_type: String,
+    #[serde(deserialize_with = "required_nullable")]
     pub rule: Option<TypeRule>,
 }
 
@@ -88,7 +89,17 @@ pub struct TypeRuleEdit {
 pub struct ValueChoiceEdit {
     pub entity_type: String,
     pub value: String,
+    #[serde(deserialize_with = "required_nullable")]
     pub disposition: Option<ChoiceDisposition>,
+}
+
+// An explicit null resets a setting; an omitted action is a malformed edit.
+fn required_nullable<'de, D, T>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
 }
 impl Drop for ValueChoiceEdit {
     fn drop(&mut self) {
