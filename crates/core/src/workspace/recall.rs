@@ -4,6 +4,7 @@ use super::{
     marker_lookup,
 };
 use regex::Regex;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -27,9 +28,34 @@ pub struct RecallResult {
     pub findings: Vec<RecallFinding>,
 }
 
+// BTreeMap may move its keys. Keep the private scalar in stable storage so Drop
+// clears that storage, rather than only clearing a copy moved out of a map slot.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct IndexCharacter(Box<char>);
+impl IndexCharacter {
+    fn new(value: char) -> Self {
+        let key = Self(Box::new(value));
+        #[cfg(test)]
+        cleanup_tests::allocated(key.0.as_ref());
+        key
+    }
+}
+impl Borrow<char> for IndexCharacter {
+    fn borrow(&self) -> &char {
+        self.0.as_ref()
+    }
+}
+impl Drop for IndexCharacter {
+    fn drop(&mut self) {
+        self.0.as_mut().zeroize();
+        #[cfg(test)]
+        cleanup_tests::cleared(self.0.as_ref());
+    }
+}
+
 #[derive(Default)]
 struct Node {
-    children: BTreeMap<char, usize>,
+    children: BTreeMap<IndexCharacter, usize>,
     identities: Vec<usize>,
 }
 
@@ -160,7 +186,9 @@ pub(super) fn find(state: &State, text: &str) -> Result<RecallResult> {
                     .map_err(|_| error(ErrorCode::ResourceLimit))?;
                 let child = nodes.len();
                 nodes.push(Node::default());
-                nodes[node].children.insert(value, child);
+                nodes[node]
+                    .children
+                    .insert(IndexCharacter::new(value), child);
                 child
             };
         }
@@ -267,4 +295,118 @@ pub(super) fn find(state: &State, text: &str) -> Result<RecallResult> {
         head: state.head,
         findings,
     })
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    use crate::workspace::Workspace;
+    use std::cell::RefCell;
+    use std::collections::BTreeSet;
+
+    #[derive(Default)]
+    struct Trace {
+        allocated: BTreeSet<usize>,
+        cleared: BTreeSet<usize>,
+        uncleared: usize,
+    }
+    thread_local! {
+        static TRACE: RefCell<Option<Trace>> = const { RefCell::new(None) };
+    }
+    // Observe while the allocation is still alive; never read freed map/key memory.
+    pub(super) fn allocated(value: &char) {
+        TRACE.with_borrow_mut(|trace| {
+            if let Some(trace) = trace {
+                assert!(trace.allocated.insert(std::ptr::from_ref(value) as usize));
+            }
+        });
+    }
+    pub(super) fn cleared(value: &char) {
+        TRACE.with_borrow_mut(|trace| {
+            if let Some(trace) = trace {
+                trace.uncleared += usize::from(*value != '\0');
+                assert!(trace.cleared.insert(std::ptr::from_ref(value) as usize));
+            }
+        });
+    }
+    fn observe<T>(query: impl FnOnce() -> T) -> T {
+        TRACE.with_borrow_mut(|trace| *trace = Some(Trace::default()));
+        let result = query();
+        let trace = TRACE.with_borrow_mut(Option::take).unwrap();
+        assert!(!trace.allocated.is_empty());
+        assert_eq!(
+            trace.allocated, trace.cleared,
+            "all original character allocations are cleared before deallocation"
+        );
+        assert_eq!(trace.uncleared, 0);
+        result
+    }
+    fn committed(value: &str) -> Workspace {
+        let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+        let finding = WorkspaceFinding::new(
+            "CUSTOM",
+            value,
+            TextRange {
+                start: 0,
+                end: value.len(),
+            },
+        );
+        let mut change = workspace.prepare(value, &[finding], [3; 16]).unwrap();
+        let parent = change.expected_head().unwrap();
+        let head = change.candidate_head().unwrap();
+        workspace.activate_saved(&mut change, parent, head).unwrap();
+        workspace
+    }
+    #[test]
+    fn ordered_borrowed_keys_clear_their_stable_allocations_after_map_rebalancing() {
+        observe(|| {
+            let mut children = BTreeMap::new();
+            for offset in 0..80 {
+                let character = char::from_u32(0x400 + offset).unwrap();
+                children.insert(IndexCharacter::new(character), offset);
+            }
+            assert_eq!(children.get(&'\u{405}'), Some(&5));
+            assert_eq!(
+                children
+                    .keys()
+                    .map(|key| *key.borrow())
+                    .collect::<Vec<char>>(),
+                (0..80)
+                    .map(|offset| char::from_u32(0x400 + offset).unwrap())
+                    .collect::<Vec<_>>()
+            );
+        });
+    }
+    #[test]
+    fn success_and_result_index_work_limit_exits_clear_every_index_character() {
+        let workspace = committed("İ Jane");
+        assert_eq!(
+            observe(|| workspace.recall("👋 i\u{307} JANE"))
+                .unwrap()
+                .findings
+                .len(),
+            1
+        );
+        let workspace = committed("Ann");
+        assert_eq!(
+            observe(|| workspace.recall(&"Ann ".repeat(10_001)))
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
+        let workspace = committed(&"z".repeat(MAX_INDEX_NODES));
+        assert_eq!(
+            observe(|| workspace.recall("plain")).err().unwrap().code,
+            ErrorCode::ResourceLimit
+        );
+        let workspace = committed(&format!("{}!", "*".repeat(4096)));
+        assert_eq!(
+            observe(|| workspace.recall(&"*".repeat(20_000)))
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
+    }
 }
