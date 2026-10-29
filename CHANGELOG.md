@@ -6,6 +6,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [0.5.0-beta.3] - 2026-10-29
+
 ### Added
 
 - Native Python and Node workspace APIs expose staged review/preparation, saved-head
@@ -28,7 +30,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
-- Prepare coordinated `0.5.0-beta.3` packages (Python `0.5.0b3`). Legacy v1/v2
+- Publish coordinated `0.5.0-beta.3` packages (Python `0.5.0b3`). Legacy v1/v2
   reads and no-ops preserve bytes; an approved real save/recovery can upgrade to the
   coordinated v3 layout, which beta.1 and beta.2 cannot open. Snapshot/API permanence
   remains deferred beyond this functional prerelease.
