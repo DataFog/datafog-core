@@ -289,6 +289,10 @@ export class Workspace {
   head() { return JSON.parse(workspaceCall(this.#state, "head")); }
   namespace() { return workspaceCall(this.#state, "namespace"); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }
+  prepareRecovery(operationId) {
+    workspaceBytes(operationId, 16, true);
+    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operationId));
+  }
   prepare(text, findings, operationId) {
     workspaceText(text, 1024 * 1024); workspaceBytes(operationId, 16, true);
     if (!Array.isArray(findings)) throw workspaceFailure("invalid_finding");

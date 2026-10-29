@@ -250,6 +250,8 @@ export class Workspace {
   head(): WorkspaceHead;
   namespace(): Uint8Array;
   exportBundle(): Uint8Array;
+  /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
+  prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
   /** Exact committed full markers pass through; findings must not overlap them. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */

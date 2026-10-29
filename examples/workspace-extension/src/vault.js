@@ -22,19 +22,27 @@ function revisionBytes(head) {
   const array = new Uint8Array(8); new DataView(array.buffer).setBigUint64(0, revision, false);
   return array;
 }
-function passwordAAD(vault) { return concat(encoder.encode("DFG1:PW:"), vault.vaultId, vault.vaultKeyId, new Uint8Array([vault.profile]), vault.salt); }
+function passwordAAD(vault) { return concat(encoder.encode(`DFG${vault.version}:PW:`), vault.vaultId, vault.vaultKeyId, new Uint8Array([vault.profile]), vault.salt); }
+function recoveryAAD(vault) { return concat(encoder.encode("DFG2:RC:"), vault.vaultId, vault.vaultKeyId, new Uint8Array([vault.recovery.version]), vault.recovery.salt); }
 function keyAAD(record) { return concat(encoder.encode("DFG1:WK:"), record.vaultId, record.workspaceId, record.keyId); }
 function snapshotAAD(record) { return concat(encoder.encode("DFG1:SN:"), record.vaultId, record.workspaceId, record.keyId, revisionBytes(record.head), new Uint8Array(record.head.commitId)); }
 async function importKey(raw) { return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]); }
 async function encrypt(key, iv, aad, plaintext) { return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, plaintext)); }
 async function decrypt(key, iv, aad, ciphertext) { return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad, tagLength: 128 }, key, ciphertext)); }
 export function validateVault(vault) {
-  fields(vault, ["version", "vaultId", "vaultKeyId", "workspaceId", "profile", "salt", "rootNonce", "wrappedRoot", "accessGeneration"]);
-  if (vault.version !== 1 || vault.profile !== 1) throw new HostError("invalid_envelope");
+  const names = ["version", "vaultId", "vaultKeyId", "workspaceId", "profile", "salt", "rootNonce", "wrappedRoot", "accessGeneration"];
+  if (vault?.version === 2) names.push("recovery");
+  fields(vault, names);
+  if (![1, 2].includes(vault.version) || vault.profile !== 1) throw new HostError("invalid_envelope");
   for (const name of ["vaultId", "vaultKeyId", "workspaceId", "accessGeneration", "salt"]) bytes(vault[name], 16);
   bytes(vault.rootNonce, 12); bytes(vault.wrappedRoot, 48);
+  if (vault.version === 2) {
+    fields(vault.recovery, ["version", "salt", "nonce", "wrappedRoot"]);
+    if (vault.recovery.version !== 1) throw new HostError("invalid_envelope");
+    bytes(vault.recovery.salt, 16); bytes(vault.recovery.nonce, 12); bytes(vault.recovery.wrappedRoot, 48);
+  }
 }
-function validateRecord(record, vault) {
+export function validateRecord(record, vault) {
   fields(record, ["version", "vaultId", "workspaceId", "keyId", "head", "keyNonce", "wrappedKey", "nonce", "ciphertext"]);
   if (record.version !== 1) throw new HostError("invalid_envelope");
   for (const name of ["vaultId", "workspaceId", "keyId"]) bytes(record[name], 16);
@@ -42,6 +50,31 @@ function validateRecord(record, vault) {
   bytes(record.keyNonce, 12); bytes(record.wrappedKey, 48); bytes(record.nonce, 12);
   if (!(record.ciphertext instanceof Uint8Array) || record.ciphertext.length < 16 || record.ciphertext.length > MAX_BUNDLE + 16) throw new HostError("invalid_envelope");
   revisionBytes(record.head);
+}
+
+export function toBase64url(value) {
+  const chunks = [];
+  for (let start = 0; start < value.length; start += 8192) chunks.push(String.fromCharCode(...value.subarray(start, start + 8192)));
+  return btoa(chunks.join("")).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+export function fromBase64url(value, maximum) {
+  if (typeof value !== "string" || value.length > Math.ceil(maximum * 4 / 3) || !/^[A-Za-z0-9_-]*$/.test(value)) throw new HostError("invalid_envelope");
+  let raw;
+  try { raw = Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), char => char.charCodeAt(0)); }
+  catch { throw new HostError("invalid_envelope"); }
+  if (raw.length > maximum || toBase64url(raw) !== value) { raw.fill(0); throw new HostError("invalid_envelope"); }
+  return raw;
+}
+async function recoveryKey(secret, vault) {
+  const key = await crypto.subtle.importKey("raw", secret, "HKDF", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name: "HKDF", hash: "SHA-256", salt: vault.recovery.salt,
+    info: concat(encoder.encode("DFG2:RECOVERY:HKDF:"), vault.vaultId, vault.vaultKeyId)}, key,
+    {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]);
+}
+function recoverySecret(code) {
+  if (typeof code !== "string" || !/^DFR1\.[A-Za-z0-9_-]{43}$/.test(code)) throw new HostError("invalid_credentials");
+  try { const secret = fromBase64url(code.slice(5), 32); bytes(secret, 32); return secret; }
+  catch { throw new HostError("invalid_credentials"); }
 }
 
 function derive(password, salt, signal) {
@@ -60,35 +93,52 @@ function derive(password, salt, signal) {
 }
 
 export async function createVault(password, workspaceId, bundle, head, signal) {
-  const vault = { version: 1, vaultId: randomId(), vaultKeyId: randomId(), workspaceId, profile: 1, salt: random(16), rootNonce: random(12), accessGeneration: randomId() };
-  const root = random(32), data = random(32);
+  const vault = { version: 2, vaultId: randomId(), vaultKeyId: randomId(), workspaceId, profile: 1, salt: random(16), rootNonce: random(12), accessGeneration: randomId(),
+    recovery: {version: 1, salt: random(16), nonce: random(12)} };
+  const root = random(32), secret = random(32);
   let derived;
   try {
     derived = await derive(password, vault.salt, signal);
     vault.wrappedRoot = await encrypt(await importKey(derived), vault.rootNonce, passwordAAD(vault), root);
+    vault.recovery.wrappedRoot = await encrypt(await recoveryKey(secret, vault), vault.recovery.nonce, recoveryAAD(vault), root);
     const rootKey = await importKey(root);
+    const created = await createWorkspaceRecord(rootKey, vault, bundle, head);
+    return { vault, ...created, recoveryCode: `DFR1.${toBase64url(secret)}` };
+  } finally { root.fill(0); secret.fill(0); derived?.fill(0); bundle.fill(0); }
+}
+/** Fresh workspace encryption material, including when recovering an older snapshot. */
+export async function createWorkspaceRecord(rootKey, vault, bundle, head) {
+  const data = random(32);
+  try {
+    if (!(bundle instanceof Uint8Array) || bundle.length > MAX_BUNDLE) throw new HostError("resource_limit");
     const dataKey = await importKey(data);
-    const record = { version: 1, vaultId: vault.vaultId, workspaceId, keyId: randomId(), head, keyNonce: random(12), nonce: random(12) };
+    const record = {version: 1, vaultId: vault.vaultId, workspaceId: vault.workspaceId, keyId: randomId(), head, keyNonce: random(12), nonce: random(12)};
     record.wrappedKey = await encrypt(rootKey, record.keyNonce, keyAAD(record), data);
     record.ciphertext = await encrypt(dataKey, record.nonce, snapshotAAD(record), bundle);
-    return { vault, record, dataKey };
-  } finally { root.fill(0); data.fill(0); derived?.fill(0); bundle.fill(0); }
+    return {record, dataKey};
+  } finally { data.fill(0); if (bundle instanceof Uint8Array) bundle.fill(0); }
 }
-export async function openVault(password, vault, record, signal) {
+export async function openVault(credential, vault, record, signal, method = "password") {
   validateVault(vault); validateRecord(record, vault);
-  let derived, root, data, bundle;
+  let derived, secret, root, data, bundle;
   try {
-    derived = await derive(password, vault.salt, signal);
-    root = await decrypt(await importKey(derived), vault.rootNonce, passwordAAD(vault), vault.wrappedRoot);
-    data = await decrypt(await importKey(root), record.keyNonce, keyAAD(record), record.wrappedKey);
+    if (method === "password") {
+      derived = await derive(credential, vault.salt, signal);
+      root = await decrypt(await importKey(derived), vault.rootNonce, passwordAAD(vault), vault.wrappedRoot);
+    } else if (method === "recovery" && vault.version === 2) {
+      secret = recoverySecret(credential);
+      root = await decrypt(await recoveryKey(secret, vault), vault.recovery.nonce, recoveryAAD(vault), vault.recovery.wrappedRoot);
+    } else throw new HostError("invalid_credentials");
+    const rootKey = await importKey(root);
+    data = await decrypt(rootKey, record.keyNonce, keyAAD(record), record.wrappedKey);
     const dataKey = await importKey(data);
     bundle = await decrypt(dataKey, record.nonce, snapshotAAD(record), record.ciphertext);
-    return { dataKey, bundle };
+    return { dataKey, rootKey, bundle };
   } catch (error) {
     bundle?.fill(0);
     if (error instanceof HostError) throw error;
     throw new HostError("invalid_credentials");
-  } finally { derived?.fill(0); root?.fill(0); data?.fill(0); }
+  } finally { derived?.fill(0); secret?.fill(0); root?.fill(0); data?.fill(0); }
 }
 export async function encryptCandidate(dataKey, record, head, bundle) {
   if (bundle.length > MAX_BUNDLE) throw new HostError("resource_limit");

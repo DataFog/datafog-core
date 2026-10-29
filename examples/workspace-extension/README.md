@@ -28,7 +28,7 @@ npm run test:workspace-integration --prefix examples/workspace-extension
 
 The command builds and packs the actual WASM package, builds local extension assets and runs the real browser/storage/crypto suite. Add `DATAFOG_HEADED=1` to inspect the browser while it runs. Every scenario uses an isolated temporary profile; the restart test reuses that profile, and cleanup removes it afterward. The termination scenario verifies the isolated browser's user-data directory and process identity before killing that test process.
 
-To inspect the UI separately, run `npm run build --prefix examples/workspace-extension`, load `examples/workspace-extension/dist` as an unpacked extension in Chrome's extension developer settings, and click its toolbar action. Use a disposable browser profile. Closing the owning extension page drops its runtime-only unlock; restart requires the password. A password lost in this synthetic slice cannot be recovered—backup/recovery remains later work.
+To inspect the UI separately, run `npm run build --prefix examples/workspace-extension`, load `examples/workspace-extension/dist` as an unpacked extension in Chrome's extension developer settings, and click its toolbar action. Use a disposable browser profile. Closing the owning extension page drops its runtime-only unlock; restart requires an explicit password or recovery-code unlock. Save the one-time recovery code offline when creating a vault.
 
 ## Ownership and contract
 
@@ -55,6 +55,8 @@ CBOR schema and previously issued marker bytes are unchanged.
 The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/workspace keys, and explicit libsodium Argon2id13: 16-byte salt, 32-byte result, 64 MiB and opslimit 3. Only the bounded development KDF profile is accepted; there is no weaker fallback. Password and workspace key wrappers have separate authenticated contexts. The snapshot AAD binds its vault, workspace, key ID and complete commit head.
 
 Passwords and raw key buffers are cleared where possible, and runtime Web Crypto keys are nonextractable. JavaScript/native memory erasure is best effort; this does not provide hardware-bound key storage or protection from malicious extension code. IndexedDB transaction completion and requested strict durability do not establish a guarantee against every OS/power failure. Authenticated snapshots do not prove that no newer history exists.
+
+**Backup export security:** Exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB memory, 3 iterations). This profile is tuned for browser KDF latency and is not designed to resist sustained offline attacks. Whether exports should use a stronger (slower) KDF profile is an open question for the planned encryption review.
 
 Initial limits are **development guardrails**, not production capacity claims: 1 MiB source, 10,000 findings, 20,000 entries and 16 MiB bundle/output. Finding transport is also bounded before JSON serialization, including repeated object references. Exceeding limits rejects the whole operation. Full-year capacity, final marker preservation/overhead and production security review remain later qualification.
 
@@ -99,6 +101,88 @@ browser uses its existing approval, encrypted-save and activation sequence for
 both changed and unchanged follow-ups. Detection remains supplied findings in
 this synthetic workflow.
 
+## Encrypted backup and recovery
+
+New synthetic vaults have a version-2 envelope with independent password and
+recovery wrappers for the same random vault root key. The password slot retains
+the bounded Argon2id profile above. The recovery code is `DFR1.` followed by the
+canonical unpadded Base64url encoding of 32 random bytes. Native Web Crypto
+HKDF-SHA-256 derives its AES-256-GCM wrapping key using a separate 16-byte salt and
+the versioned `DFG2:RECOVERY:HKDF:` context bound to the vault/key IDs. The recovery
+wrapper authenticates its version, salt and vault/key identity. No slow KDF or
+password fallback is used for the uniformly random recovery secret.
+
+Creation shows the code once in extension-owned UI. Save it offline, then choose
+**I saved the code; hide it**. Lock, cancel and credential operations clear the
+display. The code is never persisted or retained in the broker's unlocked session.
+Either credential can explicitly unlock a new vault. Losing both makes its
+ciphertext unrecoverable. Credential rotation/reset is separate later work.
+Version-1 synthetic vaults retain their password-unlock path but have no recovery
+slot; backup export rejects them with `recovery_unavailable`. This slice does not
+upgrade those explicitly disposable development vaults. From the first real-use
+pilot, format upgrades must preserve mappings, markers and privacy settings through
+supported migrations.
+
+**Export encrypted backup** requires a current unlocked workspace and downloads a
+`.dfbackup` file containing only the committed encrypted bundle and export-time
+credential/key wrappers. A pending preview is not included. Export needs no
+plaintext password or recovery code. Files exclude source documents, extracted
+text, drafts, handoff/restoration output, runtime keys and local access generations.
+The Core bundle carries the supported synthetic privacy configuration together
+with mappings; merges and remembered correction rules remain later slices.
+
+Backup version 1 uses bounded, canonical UTF-8 JSON with unpadded Base64url binary
+fields. Versions, random identifiers, the saved head and export timestamp are
+public; mappings and privacy settings remain encrypted. An additional AES-GCM tag
+over the `DFGB1:AUTH:` context and complete canonical payload authenticates the
+metadata and both credential slots, including whichever slot was not used to
+unlock. It uses the workspace key and a fresh 96-bit nonce. Parsing is capped at
+24 MiB, with the existing 16 MiB plaintext bundle limit and fixed accepted KDF
+profile checked before derivation. Unknown versions/fields, duplicate or
+noncanonical JSON/Base64url encodings, invalid lengths and failed authentication
+block the whole import with content-free errors.
+
+Choose a backup and its export-time credential, then **Review backup locally**.
+Core validates the decrypted CBOR and its companion configuration; the broker
+checks its namespace and complete head against the authenticated envelope.
+The local preview shows the workspace tag, export time and saved revision. Time
+describes this copy and does not prove freshness: later mappings/settings may be
+absent. Only **Approve restore into this empty profile** permits persistence.
+Any existing vault is a conflict, even for another copy of the same workspace;
+there is no automatic merge, overwrite or exact-retry exception. A conflict
+preserves the stored ciphertext, keys, active session and existing privacy plan.
+This single-workspace harness does not yet import missing IDs into an occupied
+multi-workspace vault.
+
+Rust `prepare_recovery` and WASM `prepareRecovery` stage a fresh operation ID and
+checked revision under the existing immutable-plan contract. Recovery has no text
+previews or handoff permission. Issued markers, exact originals, counters and
+supported privacy settings retain their saved meanings. The Core CBOR schema and
+marker format are unchanged. Missing post-backup markers remain invalid: codes
+are drawn from the fresh operation ID, so a code issued after recovery repeats a
+lost post-backup code only by chance (about one in a billion per pair).
+
+For an empty destination, retain the backup's vault identity and export-time
+credential slots, generate a fresh local access generation, and encrypt the
+candidate under a new random workspace key, key ID and nonces. No existing vault
+keys are replaced. One real IndexedDB absence-check/write transaction commits the
+vault, wrapped workspace key and candidate together. Wait for transaction
+completion before consuming the Core plan. Import then closes the runtime and
+requires explicit fresh unlock; it restores no session/remember capability,
+privacy approval or delivery queue. Edits, cancellation and lock discard staged
+imports. Before-commit failures write nothing. After-commit interruption or a
+lost acknowledgment leaves the durable workspace locked and sends nothing;
+reopen it explicitly instead of automatically importing again. Temporary decoded
+buffers are cleared best effort and staged workers are terminated.
+
+Backups retain export-time credentials even if credential-management support
+later changes the live vault. The native-crypto test independently verifies the
+HKDF/AES-GCM backup authentication and different recovered workspace key. The
+browser tests use actual downloads and fresh persistent profiles, with no
+plaintext backup or credential artifacts uploaded to CI. This remains a synthetic
+workflow proof; production security and real-use format qualification are later
+work.
+
 ## Acceptance coverage
 
 | Check | Evidence |
@@ -118,6 +202,10 @@ this synthetic workflow.
 | B3 | Completing or cancelling a batch clears its temporary source inputs and findings. |
 | F1 | Approved input → browser restart/unlock → reviewed Unicode follow-up with old aliases and a new name → exact approved output → restart and restoration. Alias-only questions still require approval without advancing mappings. |
 | F2 | Unknown, foreign and cancelled-preview markers block the complete question. Selecting an existing marker is rejected; edits/cancellation invalidate approval and preserve committed aliases. Native/installed tests also cover partial/crossing overlaps and rejection of a marker allocated earlier in the same pending batch. |
+| G1 | Actual backup download, independent password/recovery-code imports into fresh profiles, locked restart, exact alias reuse/restoration, one-time code cleanup and absence of plaintext secrets/drafts in persistent records or exported files. |
+| G2 | Occupied destinations preserve storage, active plans and sessions; malformed/oversized files, tampered metadata or either credential slot, wrong credentials and authenticated invalid Core snapshots reject without writes or partial previews. |
+| G3 | Recovery stages a new complete head and fresh workspace encryption material. Old known aliases stay identical, missing later aliases fail, and reused counters cannot redirect old markers. Native Node HKDF/AES-GCM independently confirms backup authentication and a different destination data key. |
+| G4 | Import edits, lock/cancel during decrypted staging and before/after commit, actual IndexedDB rollback/lost acknowledgment and two competing imports preserve atomicity and require fresh unlock without releasing content. |
 
 `scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
 
@@ -129,4 +217,4 @@ The harness exports narrow test fault controls for explicit transaction barriers
 
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
-File intake, real ChatGPT handoff, merges/separation, backup/recovery, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+File intake, real ChatGPT handoff, merges/separation, credential rotation, multi-workspace import, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.

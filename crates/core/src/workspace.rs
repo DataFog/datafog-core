@@ -338,6 +338,41 @@ impl Workspace {
         self.state = None;
     }
 
+    /// Stage recovery of this validated bundle under a fresh commit head.
+    /// Issued markers, counters and privacy configuration retain their saved meaning.
+    /// The host must reject destination conflicts and durably save before activation.
+    /// Recovery has no text previews and grants no permission to release content.
+    pub fn prepare_recovery(&self, operation_id: PublicId) -> Result<PreparedChange> {
+        let state = self.state()?;
+        if state.head.commit_id == operation_id
+            || state
+                .entries
+                .values()
+                .any(|entry| entry.issuance == operation_id)
+        {
+            return Err(error(ErrorCode::InvalidId));
+        }
+        let mut candidate = state.clone();
+        candidate.head = Head {
+            revision: state
+                .head
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
+            commit_id: operation_id,
+        };
+        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        Ok(PreparedChange {
+            pending: Some(Pending {
+                lifetime: Arc::clone(&self.lifetime),
+                parent: state.head,
+                candidate,
+                bundle,
+                previews: Vec::new(),
+            }),
+        })
+    }
+
     /// Preserve exact committed markers and transform supplied findings outside them.
     pub fn prepare(
         &self,

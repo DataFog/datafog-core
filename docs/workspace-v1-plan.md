@@ -155,7 +155,7 @@ Real text goes into a workspace only when all of these hold:
 - The model marker tests pass and the snapshot and WASM contract are frozen.
 - D4 meets the ADR 004 bar.
 - The backup round-trip covers every snapshot key.
-- The vault encryption review is done.
+- The vault encryption review is done. **Open question for the review:** exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB, t=3). Whether exports should use a stronger (slower) KDF profile is an open item.
 
 Before that, real-data testing uses a throwaway browser profile or a build that
 saves no mappings. The critical path is the review screen (Core PRs 1–4) and
