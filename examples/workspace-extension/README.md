@@ -50,13 +50,28 @@ returns no partial plan and leaves committed mappings intact. Errors may carry
 `inputIndex` and an input-local `findingIndex`, without matched text. The existing
 CBOR schema and previously issued marker bytes are unchanged.
 
+## Combined review
+
+The reference host now prepares manual selections through `prepareReview`, with
+`userSelections` kept separate from model `scannerFindings`. Core adds committed
+recall, validates every supplied claim before policy, merges duplicate display
+origins, and blocks unresolved protected overlaps with original ranged
+`review_conflict` errors. The source view highlights conflicts; edit and prepare a
+fresh review before approval. Failed save cannot hand off or activate a mapping.
+Read-only review never returns sanitized handoff text or creates a plan.
+
+Legacy SDK `prepare`/`prepareBatch` still use explicitly supplied findings and now
+reject unsafe supplied overlaps. Omitted findings are never a clean-text verdict.
+The new reviewed path must also be integrated in the shipping extension (#132);
+this synthetic harness is not that integration.
+
 ## Crypto and persistence
 
-The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/workspace keys, and explicit libsodium Argon2id13: 16-byte salt, 32-byte result, 64 MiB and opslimit 3. Only the bounded development KDF profile is accepted; there is no weaker fallback. Password and workspace key wrappers have separate authenticated contexts. The snapshot AAD binds its vault, workspace, key ID and complete commit head.
+The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/workspace keys, and fixed libsodium Argon2id v1.3 profiles: 16-byte salt, 32-byte result, three passes and one lane. Profile 1 uses 64 MiB for new live vaults and legacy backups; profile 2 uses 256 MiB for new backups and the vaults restored from them. Unknown profiles are rejected; allocation failure never retries a cheaper profile. Password and workspace key wrappers have separate authenticated contexts. The snapshot AAD binds its vault, workspace, key ID and complete commit head.
 
 Passwords and raw key buffers are cleared where possible, and runtime Web Crypto keys are nonextractable. JavaScript/native memory erasure is best effort; this does not provide hardware-bound key storage or protection from malicious extension code. IndexedDB transaction completion and requested strict durability do not establish a guarantee against every OS/power failure. Authenticated snapshots do not prove that no newer history exists.
 
-**Backup export security:** Exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB memory, 3 iterations). This profile is tuned for browser KDF latency and is not designed to resist sustained offline attacks. Whether exports should use a stronger (slower) KDF profile is an open question for the planned encryption review.
+**Backup export security:** New exports use profile 2 and omit the original profile-1 password wrapper. This raises the cost of guessing a password against that file; strong passwords remain necessary. Existing backups and live profile-1 copies remain usable offline password oracles and are not strengthened retroactively. See [ADR 005](../../docs/adr/005-backup-export-kdf.md) for the decision, measured Chrome cost and compatibility limits. The independent shipping-host encryption review remains separate.
 
 Initial limits are **development guardrails**, not production capacity claims: 1 MiB source, 10,000 findings, 20,000 entries and 16 MiB bundle/output. Finding transport is also bounded before JSON serialization, including repeated object references. Exceeding limits rejects the whole operation. Full-year capacity, final marker preservation/overhead and production security review remain later qualification.
 
@@ -126,21 +141,29 @@ supported migrations.
 
 **Export encrypted backup** requires a current unlocked workspace and downloads a
 `.dfbackup` file containing only the committed encrypted bundle and export-time
-credential/key wrappers. A pending preview is not included. Export needs no
-plaintext password or recovery code. Files exclude source documents, extracted
-text, drafts, handoff/restoration output, runtime keys and local access generations.
+credential/key wrappers. A pending preview is not included. Reenter the current
+vault password for each export, including after recovery-code unlock. The broker
+transiently decrypts the root and rewraps it under profile 2 with a fresh salt and
+nonce; it does not persist credentials or retain raw root bytes. A recovery-only
+user who does not know the vault password can import an existing backup but
+cannot export a new one in this slice. Password reset is not implemented.
+Files exclude source documents, extracted text, drafts, handoff/restoration output, runtime keys and local access generations.
 The Core bundle carries the supported synthetic privacy configuration together
 with mappings; merges and remembered correction rules remain later slices.
 
-Backup version 1 uses bounded, canonical UTF-8 JSON with unpadded Base64url binary
-fields. Versions, random identifiers, the saved head and export timestamp are
+New exports use backup version 2 and require password profile 2. Legacy version-1
+imports require profile 1; no new version-1 exports are produced. Both use
+bounded, canonical UTF-8 JSON with unpadded Base64url binary fields. Versions, random identifiers, the saved head and export timestamp are
 public; mappings and privacy settings remain encrypted. An additional AES-GCM tag
-over the `DFGB1:AUTH:` context and complete canonical payload authenticates the
-metadata and both credential slots, including whichever slot was not used to
+over the versioned `DFGB1:AUTH:` or `DFGB2:AUTH:` context and complete canonical
+payload authenticates the metadata and both credential slots, including whichever slot was not used to
 unlock. It uses the workspace key and a fresh 96-bit nonce. Parsing is capped at
 24 MiB, with the existing 16 MiB plaintext bundle limit and fixed accepted KDF
-profile checked before derivation. Unknown versions/fields, duplicate or
-noncanonical JSON/Base64url encodings, invalid lengths and failed authentication
+profile checked before derivation. A restored version-2 backup keeps profile 2
+for subsequent password unlocks and exports; it is never downgraded to profile 1.
+KDF operations run serially in disposable workers; cancel terminates the active
+worker. Unsupported resources produce `kdf_unavailable`, with no weaker retry.
+Unknown versions/fields, duplicate or noncanonical JSON/Base64url encodings, invalid lengths and failed authentication
 block the whole import with content-free errors.
 
 Choose a backup and its export-time credential, then **Review backup locally**.
@@ -203,12 +226,12 @@ work.
 | B3 | Completing or cancelling a batch clears its temporary source inputs and findings. |
 | F1 | Approved input → browser restart/unlock → reviewed Unicode follow-up with old aliases and a new name → exact approved output → restart and restoration. Alias-only questions still require approval without advancing mappings. |
 | F2 | Unknown, foreign and cancelled-preview markers block the complete question. Selecting an existing marker is rejected; edits/cancellation invalidate approval and preserve committed aliases. Native/installed tests also cover partial/crossing overlaps and rejection of a marker allocated earlier in the same pending batch. |
-| G1 | Actual backup download, independent password/recovery-code imports into fresh profiles, locked restart, exact alias reuse/restoration, one-time code cleanup and absence of plaintext secrets/drafts in persistent records or exported files. |
+| G1 | Reauthenticated version-2 backup download with no original password wrapper; legacy version-1 compatibility; fixed-profile known-answer and cancellation checks; independent password/recovery-code imports into fresh profiles, locked restart, exact alias reuse/restoration, one-time code cleanup and absence of plaintext secrets/drafts in persistent records or exported files. |
 | G2 | Occupied destinations preserve storage, active plans and sessions; malformed/oversized files, tampered metadata or either credential slot, wrong credentials and authenticated invalid Core snapshots reject without writes or partial previews. |
 | G3 | Recovery stages a new complete head and fresh workspace encryption material. Old known aliases stay identical, missing later aliases fail, and reused counters cannot redirect old markers. Native Node HKDF/AES-GCM independently confirms backup authentication and a different destination data key. |
 | G4 | Import edits, lock/cancel during decrypted staging and before/after commit, actual IndexedDB rollback/lost acknowledgment and two competing imports preserve atomicity and require fresh unlock without releasing content. |
 
-`scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. The Argon2id fixture records its native reference provenance; Python/native libsodium is not a test runtime dependency.
+`scripts/workspace-conformance.mjs` is reused by the installed-package and extension tests. `fixtures/workspace/counters.json` is also consumed by native Rust tests. These test fixtures contain only public synthetic values. Both Argon2id profile fixtures record their native reference provenance; Python/native libsodium is not a test runtime dependency.
 
 The harness exports narrow test fault controls for explicit transaction barriers/aborts. They do not replace the normal encryption or storage path and must not be copied into a shipping extension. No traces, screenshots, source statements, credentials or workspace dumps are uploaded. CI artifacts contain code hashes and environment metadata only.
 

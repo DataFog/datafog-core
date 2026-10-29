@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- New browser workspace backups require password reauthentication and use
+  Argon2id with 256 MiB and three passes, replacing the older password wrapper.
+  Legacy backups remain importable; restored new backups retain the stronger
+  profile for password unlock.
+
 - Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults
@@ -23,6 +28,28 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
   Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
+
+- Workspace combined review merges scanner findings, committed-value recall and
+  manual selections, preserving source metadata and original coordinates. Unresolved
+  coverage/type conflicts block handoff with ranged review errors before a plan is
+  created; legacy supplied-finding preparation receives the same protection.
+
+- Core-owned workspace rules and exact remembered choices, including explicit
+  protected-type false-positive corrections, with staged approval/save, recall
+  enforcement and a warned, byte-preserving legacy-to-policy-v2 upgrade.
+
+- Rust and WASM workspaces can recall committed values in new text, with source
+  metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
+  or an explicit limit failure and never change saved mappings or bypass approval.
+
+- Workspace findings and preview transformations carry scanner/recall/user source
+  and review metadata in Rust and WASM. Existing callers default to scanner and
+  review required; these display flags never bypass approval or persistence.
+
+- Transformations stop with `review_conflict` when overlap selection would expose
+  part of another eligible finding. Resolve the conflict before retrying;
+  providers are not called and no partial transformed result is returned.
 
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
@@ -65,6 +92,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
+
+- Native SSN findings retain their type when a semantic PERSON finding covers
+  exactly the same span, after entity selection and allowlists are applied.
 
 - Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 

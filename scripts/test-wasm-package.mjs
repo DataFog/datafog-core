@@ -160,11 +160,37 @@ void discovered;
 void protectedDocument;
 void protectedTogether;
 
-import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
+import { Workspace, DataFogError, type WorkspaceFinding, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
+const nullableWorkspaceFinding: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, confidence: null, detectorName: null, detectorVersion: null};
+const reviewedNullable = workspace.review({text: "Jane", scannerFindings: [nullableWorkspaceFinding], userSelections: []});
+workspace.prepare("Jane", reviewedNullable.candidates.map(candidate => candidate.finding), new Uint8Array(16));
+
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
+const findingSource: "scanner" | "recall" | "user" = previews[0].transformations[0].source;
+const needsReview: boolean = previews[0].transformations[0].needsReview;
+const recalled = workspace.recall("Jane");
+const completeRecall: true = recalled.complete;
+const recallSource: "recall" = recalled.findings[0].finding.source;
+workspace.prepare("Jane", recalled.findings.map(span => span.finding), new Uint8Array(16));
+void completeRecall; void recallSource;
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsReview: false}], new Uint8Array(16));
+// @ts-expect-error Review source is a closed set.
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
+void findingSource; void needsReview;
+const currentPolicy = workspace.policy();
+const snapshotVersion: 1 | 2 = currentPolicy.snapshotVersion;
+const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
+const settingPreview = policyChange.policyPreview();
+const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
+const currentFormat: 1 | 2 = policyChange.snapshotFormat().currentVersion;
+// @ts-expect-error Choices use a closed disposition set.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
+// @ts-expect-error Review flags cannot grant an exception through a settings edit.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive", needsReview: false}]}, new Uint8Array(16));
+void snapshotVersion; void previousChoice; void currentFormat;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
@@ -248,6 +274,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
@@ -261,7 +288,9 @@ try {
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
   const page = await browser.newPage();
@@ -310,6 +339,8 @@ try {
     } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
+    const {verifyCoverageConflicts} = await import("/coverage-conformance.mjs");
+    verifyCoverageConflicts(germanApi);
     const {verifyGerman} = await import("/german-conformance.mjs");
     const {verifyCredentialOverlaps} = await import("/credential-overlap-conformance.mjs");
     const {verifyJwt} = await import("/jwt-conformance.mjs");
@@ -499,6 +530,21 @@ for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tok
 let restoreRejected = false;
 try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
 if (!restoreRejected) throw new Error("structured restore accepted in WASM");
+
+    const overlapText = "👋 José: 123-45-6789";
+    const nativeSsn = scan(overlapText).find(finding => finding.entityType === "SSN");
+    if (!nativeSsn) throw new Error("SSN overlap fixture was not detected");
+    const semanticPerson = {...nativeSsn, entityType: "PERSON", detectorName: "semantic-person", confidence: 1};
+    for (const findings of [[nativeSsn, semanticPerson], [semanticPerson, nativeSsn]]) {
+      const protectedCopy = transform(overlapText, findings, {default: {strategy: "redact"}});
+      if (protectedCopy.text !== "👋 José: [SSN]" || protectedCopy.transformations[0].entityType !== "SSN") {
+        throw new Error("Native SSN lost equal-span PERSON precedence");
+      }
+      const allowedCopy = transform(overlapText, findings, {
+        default: {strategy: "redact"}, allow: {exact: {SSN: [nativeSsn.matchedText]}}
+      });
+      if (allowedCopy.text !== "👋 José: [PERSON]") throw new Error("SSN allowlist suppressed PERSON protection");
+    }
 
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
@@ -777,6 +823,23 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
     const { verifyWorkspace } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
+    await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
+    try {
+      const before = native.export_bundle();
+      for (const edits of [
+        {rules: [{entityType: "PRODUCT_CODE"}], choices: []},
+        {rules: [], choices: [{entityType: "PERSON", value: "May"}]},
+      ]) {
+        let code;
+        try { native.prepare_policy_changes(JSON.stringify(edits), new Uint8Array(16).fill(3)); }
+        catch (error) { code = JSON.parse(String(error)).code; }
+        if (code !== "invalid_policy") throw new Error("Raw policy input requires an explicit action");
+      }
+      if (JSON.stringify(native.export_bundle()) !== JSON.stringify(before)) throw new Error("Malformed policy input changed workspace");
+    } finally { native.close(); native.free(); }
   });
   console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
   if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));

@@ -1,3 +1,4 @@
+import {verifyWorkspaceReview} from "./workspace-review-conformance.mjs";
 /** Shared installed-package workspace checks; all values are synthetic. */
 export async function verifyWorkspace(api, counters) {
   const check = (condition, label) => { if (!condition) throw new Error(label); };
@@ -9,6 +10,59 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+  const reviewMeasurements=verifyWorkspaceReview(api);
+  const recallWorkspace = api.Workspace.create(id(21), id(22));
+  const approvedValue = "İ Jane";
+  const seed = recallWorkspace.prepare(approvedValue, [{entityType: "PERSON", matchedText: approvedValue, range: {unit: "utf8_bytes", start: 0, end: new TextEncoder().encode(approvedValue).length}}], id(23));
+  check(recallWorkspace.recall(approvedValue).findings.length === 0, "recall never sees a pending candidate");
+  const seedHeads = seed.heads();
+  recallWorkspace.activateSaved(seed, seedHeads.expectedHead, seedHeads.candidateHead);
+  const recallBundle = recallWorkspace.exportBundle(), recallHead = recallWorkspace.head();
+  const recalledText = "👋 i\u0307\u00a0\tJANE";
+  const recall = recallWorkspace.recall(recalledText);
+  check(recall.complete === true && JSON.stringify(recall.head) === JSON.stringify(recallHead), "recall returns the unchanged committed head");
+  check(recall.findings.length === 1 && recall.findings[0].finding.source === "recall" && recall.findings[0].finding.needsReview === true, "committed recall is labeled and requests review");
+  const located = recall.findings[0];
+  check(new TextDecoder().decode(new TextEncoder().encode(recalledText).slice(located.byteRange.start, located.byteRange.end)) === located.finding.matchedText && [...recalledText].slice(located.codepointRange.start, located.codepointRange.end).join("") === located.finding.matchedText && recalledText.slice(located.utf16Range.start, located.utf16Range.end) === located.finding.matchedText, "recalled Unicode ranges identify the original source in every unit");
+  check(located.byteRange.start === 5 && located.codepointRange.start === 2 && located.utf16Range.start === 3, "recalled ranges include the original astral prefix");
+  const followupPlan = recallWorkspace.prepare(recalledText, recall.findings.map(span => span.finding), id(24));
+  check(recallWorkspace.restore(followupPlan.preview().text) === "👋 İ Jane", "recalled variants reuse the committed marker and first spelling");
+  check(recallWorkspace.recall(followupPlan.preview().text).findings.length === 0, "committed markers are excluded from recall");
+  const recallBatch = recallWorkspace.prepareBatch([{text: recalledText, findings: recall.findings.map(span => span.finding)}, {text: approvedValue, findings: recallWorkspace.recall(approvedValue).findings.map(span => span.finding)}], id(20));
+  check(recallBatch.previews()[0].transformations[0].sourceByteRange.start === 5 && recallBatch.previews()[1].transformations[0].sourceByteRange.start === 0, "separate recall queries retain input-local ranges in batch preparation");
+  throws(() => recallWorkspace.recall("👋 [[PERSON_BAD]]"), "invalid_marker");
+  throws(() => recallWorkspace.recall("x".repeat(1024 * 1024 + 1)), "resource_limit");
+  throws(() => recallWorkspace.recall("\ud800"), "invalid_finding");
+  check(new Uint8Array(recallWorkspace.exportBundle()).every((value, index) => value === recallBundle[index]), "recall and unactivated follow-up preserve candidate bytes");
+  const recalledReopen = api.Workspace.openBundle(recallBundle);
+  check(recalledReopen.recall(recalledText).findings.length === 1, "recall survives bundle reopen");
+  followupPlan.discard(); recallBatch.discard(); recalledReopen.close(); recallWorkspace.close();
+  throws(() => recallWorkspace.recall(recalledText), "closed_workspace");
+  const sources = api.Workspace.create(id(25), id(26));
+  const sourceText = "👋 é Jane";
+  const legacy = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 9, end: 13}};
+  const legacyPlan = sources.prepare(sourceText, [legacy], id(27));
+  const legacySpan = legacyPlan.preview().transformations[0];
+  check(legacySpan.source === "scanner" && legacySpan.needsReview === true, "omitted source metadata preserves conservative legacy defaults");
+  const sourcePlan = sources.prepareBatch([
+    {text: sourceText, findings: [{...legacy, source: "user", needsReview: false}]},
+    {text: sourceText, findings: [{...legacy, source: "recall", needsReview: true}]},
+  ], id(28));
+  const sourcePreviews = sourcePlan.previews();
+  check(sourcePreviews.map(p => p.transformations[0].source).join() === "user,recall", "batch previews retain input-local source metadata");
+  check(sourcePreviews[0].transformations[0].needsReview === false && sourcePreviews[1].transformations[0].needsReview === true, "explicit review flags survive the Core binding");
+  const sourceSpan = sourcePreviews[0].transformations[0];
+  check(sourceSpan.sourceByteRange.start === 9 && sourceSpan.sourceCodepointRange.start === 5 && sourceSpan.sourceUtf16Range.start === 6, "review metadata preserves all Unicode range units");
+  for (const metadata of [{source: "private-source"}, {source: null}, {source: 1}, {needsReview: null}, {needsReview: "false"}]) {
+    throws(() => sources.prepare(sourceText, [{...legacy, ...metadata}], id(29)), "invalid_finding");
+  }
+  let sourceGetterRead = false;
+  throws(() => sources.prepare(sourceText, [{...legacy, get source() { sourceGetterRead = true; return "user"; }}], id(29)), "invalid_finding");
+  check(!sourceGetterRead, "source accessors are rejected without reading them");
+  const preferred = sources.prepare(sourceText, [{...legacy, source: "scanner", confidence: 0.1}, {...legacy, source: "user", needsReview: false, confidence: 0.9}], id(29));
+  check(preferred.preview().transformations[0].source === "user" && preferred.preview().transformations[0].needsReview === false, "metadata follows the selected duplicate rather than the first matching range");
+  throws(() => sources.restore(sourcePreviews[0].text), "invalid_marker");
+  sourcePlan.discard(); preferred.discard(); legacyPlan.discard(); sources.close();
   const blocked = api.Workspace.create(id(30), id(31));
   const blockedSaved = blocked.exportBundle();
   let sourceFailure;
@@ -195,5 +249,5 @@ export async function verifyWorkspace(api, counters) {
   change = w.prepare("", [], id(7)); w.close();
   throws(() => change.preview(), "closed_workspace");
   reopened.close();
-  return true;
+  return {reviewMeasurements};
 }
