@@ -18,6 +18,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Transformations stop with `review_conflict` when overlap selection would expose
+  part of another eligible finding. Resolve the conflict before retrying;
+  providers are not called and no partial transformed result is returned.
+
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
   reject occupied destinations, and preserve aliases under fresh workspace keys

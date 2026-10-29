@@ -15,7 +15,7 @@ partially transformed result.
 | `reason` | Optional machine-readable detail |
 | `message` | Sanitized human-readable explanation |
 | `path` | Optional RFC 6901 request path |
-| `finding_index` / `findingIndex` | Optional index of an invalid supplied finding |
+| `finding_index` / `findingIndex` | Optional index of an invalid or conflicting supplied finding |
 | `input_index` / `inputIndex` | Optional batch member index; finding indexes are local to that member |
 | `markerIssues` | Browser workspace preflight issues with kind and byte/codepoint/UTF-16 ranges |
 
@@ -28,6 +28,13 @@ credentials, token payloads, or restored plaintext.
 
 - `invalid_configuration`
 - `invalid_finding`
+- `review_conflict`
+
+`review_conflict` means overlap selection would leave part of another eligible
+finding untransformed. Resolve/correct the claims and obtain fresh review before
+retrying. No partial result or provider call occurs. Exact duplicates, complete
+containing coverage and explicit entity selection/allowlists retain their
+documented behavior; all supplied findings validate before filtering.
 
 ### Key providers
 

@@ -52,9 +52,12 @@ import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-rout
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
+import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import * as germanApi from "@datafog/node";
+verifyCoverageConflicts(germanApi);
+await verifyCoverageProviderCalls(germanApi);
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
 const engineConfig = {
@@ -718,6 +721,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
