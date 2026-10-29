@@ -70,3 +70,9 @@ notice acknowledgment: tell the person before approval that `0.5.0-beta.1` canno
 open the upgraded vault. The fixture's `approved` and `acknowledge_upgrade` flags
 represent that separate user review; they are not automatic approvals supplied by
 Core. The host rejects a missing acknowledgment before any durable change.
+
+Assign a fresh server-generated request ID for each outbound attempt and bind its
+expected context to that request's trusted transport callback. Provider text and
+client-supplied IDs do not establish authorization. The synthetic retry fixtures
+use fresh request contexts and Core operation IDs; deployment registries must also
+expire/revoke cancelled request contexts before dispatching late responses.

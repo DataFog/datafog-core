@@ -79,6 +79,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(caught.exception.code,code)
         self.assertEqual(str(caught.exception),code)
     def run_request(self,text="Ada Example",**kwargs):
+        self.context=RequestContext(self.scope,os.urandom(16))
         return prepare_and_handoff(self.store,self.context,text,[finding(text)],approved=True,**kwargs)
     def process(self,request=6,text="Ada Example",scope=None,key=None,**kwargs):
         ctx=multiprocessing.get_context("spawn");parent,child=ctx.Pipe()
