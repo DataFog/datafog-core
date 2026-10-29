@@ -65,8 +65,8 @@ byte limit before all recovery slots are usable. No data is trimmed to make room
 #148's future key9 conversation payload must remain unchanged by recovery, or its
 extra recovery growth must extend this calculation. The conversation owner plans
 that invariant, but the joint final v3 wire still requires coordinated tests before
-G3 freeze. Count, byte-boundary and coverage tests pass; actual capacity-browser
-and allocation qualification are still being refreshed.
+G3 freeze. Count, byte-boundary, coverage and actual encrypted browser capacity tests pass;
+committed-head receipts are refreshed below.
 
 Why this recommendation: 10,000 rows are inexpensive but can be exhausted after
 5,000 round trips if an application records preparation and copy confirmation.
@@ -122,7 +122,7 @@ runtime cannot reconstruct them or promise to detect unknowable replays.
 
 Existing proposed Rust calls are `create_with_operation`, `prepare_with_operation`,
 `prepare_batch_with_operation`, `prepare_recovery_with_operation`, `prepare_outcome`,
-`operations` and `counts`. WASM exposes matching camelCase calls. Native Python,
+`operations`, `operations_page`, `history_coverage` and `counts`. WASM exposes matching camelCase calls. Native Python,
 Node and X8 must extend the complete actual-call/error matrix after this contract
 is approved; declarations or placeholders do not count as implementation.
 
@@ -165,13 +165,72 @@ shared workspace foundation remains mandatory for their installed tests; the new
 operation profile is separately mandatory in WASM and MV3. Native operation
 bindings and the all-SDK operation profile are follow-on work before C1/G3 is done.
 
-## Measured capacity experiments
+## Approved-capacity proof and bounded read windows
+
+The current implementation uses the approved 100,000 ceiling directly. The
+`workspace_operation_capacity` example creates canonical synthetic fixtures at
+99,744, 99,999 and 100,000 rows, reopens and re-exports them through Core and
+measures actual requested allocations with an example-only counting allocator.
+Thirty-two retained plans at 99,743 records require about 267 MB with compact
+numeric deltas or 355 MB with maximum numeric deltas; temporary requested peaks
+are about 268 MB/358 MB. Both return to zero additional requested bytes after
+plans are dropped. Requested-byte accounting excludes allocator overhead, while
+RSS includes runtime, caching and process state. This demonstrates a substantial
+per-workspace pending-plan cost; it does not impose a global host memory budget.
+
+The packed MV3 harness opens the 99,744-row boundary, rejects an ordinary write
+without changing saved bytes, and exports a stronger backup. Password and
+recovery-code imports each retain every old row in order and append exactly one
+recovery row, including after browser restart. At 99,999 the last recovery reaches
+100,000; at 100,000 read/restore/export and legacy no-ops still work, while another
+recovery fails without creating a destination vault. Full-prefix hashes prove
+retention beyond merely checking the first and last IDs.
+
+`operations_page(offset, limit)` / `operationsPage(offset, limit)` is an additive
+read-only window over the same rows. It returns `records`, `total`, `offset` and
+`next_offset` / `nextOffset`; the cursor is null at the end. A limit must be
+1–100,000 and the offset must be at most the total. An offset exactly at the end
+returns an empty page. Invalid bounds return `resource_limit`. **The original
+full `operations()` call is unchanged:** no rejection, truncation or deletion is
+introduced. Rust borrows a slice, while JavaScript returns owned result objects.
+
+Controlled browser measurements clone the same encrypted 99,744-row profile only
+after browser shutdown, then open each clone in a fresh process with the same KDF,
+identical seven-process topology and explicit JavaScript GC. Two repetitions show:
+
+| Read mode | Retained JS heap | WASM linear memory |
+| --- | ---: | ---: |
+| No record view | 1.58 MB | 24.18 MB |
+| Full 99,744-row view | 15.14 MB | 229.51 MB |
+| Complete traversal in 1,000-row windows | 1.69 MB | 24.18 MB |
+
+Both full and paged traversals visit every row in order with identical checksums
+and numeric totals, leaving the snapshot byte-identical. Releasing the full JS
+view returns its JS heap to about 1.58 MB; WASM retains its larger linear-memory
+high-water mark. Summed process RSS was already about 1.07 GB before reading
+history. Its incremental rise was about 219 MB for a full read versus 15 MB for
+pages, and shared pages can be counted more than once. The earlier roughly
+1.45 GB multi-workflow observation cannot all be attributed to history reads.
+These are single-machine instrumented observations, not minimum-device claims,
+unique physical memory measurements, peak browser memory or latency guarantees.
+
+Reproduce with `cargo run -p datafog-core --release --example
+workspace_operation_capacity -- target/operation-capacity`, build the packed MV3
+harness, then run `node scripts/measure-workspace-operation-memory.mjs` and
+`node scripts/test-workspace-extension.mjs`. The latter rebuilds the harness and
+runs the full encrypted capacity and existing workflow regressions. Controlled
+measurement receipts include before/after/released JS, linear-memory, per-process
+RSS and process counts. Current working proof receipts remain explicitly marked
+dirty until the final committed-head rerun; they do not claim a release gate passed.
+
+## Historical capacity experiments
 
 Synthetic optimized native Rust runs on this Apple arm64 machine, with no model
 or provider call. These are single-run observations, not stable-runner benchmark
 gates, lower-hardware guarantees, Chrome timings or selected capacity defaults.
-The 100k/300k limits were temporary measurement builds and were restored to the
-original unapproved 10k candidate afterward.
+These historical 100k/300k builds temporarily changed the old 10k candidate and
+restored it afterward. They predate the approved fixed-cap implementation and do
+not describe its current admission behavior.
 
 | Experimental ceiling | Rows tested below full | Wire bytes | Core open | Timed preparation | Record backing after append |
 | --- | ---: | ---: | ---: | ---: | ---: |

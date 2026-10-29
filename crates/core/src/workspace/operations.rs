@@ -74,6 +74,14 @@ pub struct OperationRecord {
     pub prepared_inputs: u64,
     pub transformed_spans: u64,
 }
+/// A borrowed window over committed rows; an absent cursor means the end was reached.
+#[derive(Debug, PartialEq, Eq)]
+pub struct OperationPage<'a> {
+    pub records: &'a [OperationRecord],
+    pub total: usize,
+    pub offset: usize,
+    pub next_offset: Option<usize>,
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OperationCounts {
     pub operations: u64,
@@ -209,6 +217,21 @@ impl Workspace {
     }
     pub fn operations(&self) -> Result<&[OperationRecord]> {
         Ok(&self.state()?.operations)
+    }
+    /// Read an explicit window without materializing every row. Full `operations()` remains available.
+    /// A zero/oversized limit or an offset beyond the end returns `ResourceLimit`.
+    pub fn operations_page(&self, offset: usize, limit: usize) -> Result<OperationPage<'_>> {
+        let records = self.operations()?;
+        if offset > records.len() || limit == 0 || limit > MAX_OPERATIONS {
+            return Err(error(ErrorCode::ResourceLimit));
+        }
+        let end = offset.saturating_add(limit).min(records.len());
+        Ok(OperationPage {
+            records: &records[offset..end],
+            total: records.len(),
+            offset,
+            next_offset: (end < records.len()).then_some(end),
+        })
     }
     /// Counts always describe recorded rows; old unrecorded activity is not a lifetime total.
     pub fn history_coverage(&self) -> Result<OperationHistoryCoverage> {

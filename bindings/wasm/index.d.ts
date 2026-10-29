@@ -338,6 +338,12 @@ export interface WorkspaceOperationRecord {
   readonly preparedInputs: number;
   readonly transformedSpans: number;
 }
+export interface WorkspaceOperationPage {
+  readonly records: readonly WorkspaceOperationRecord[];
+  readonly total: number;
+  readonly offset: number;
+  readonly nextOffset: number | null;
+}
 export interface WorkspaceHistoryCoverage {
   readonly recordedHistoryOnly: true;
   readonly preUpgradeHistory: "unknown" | "not_applicable";
@@ -392,6 +398,8 @@ export class Workspace {
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   operations(): readonly WorkspaceOperationRecord[];
+  /** Explicit read-only window. Offset may equal total; limit must be 1..100000. Full operations() is unchanged. */
+  operationsPage(offset: number, limit: number): WorkspaceOperationPage;
   counts(): WorkspaceCounts;
   historyCoverage(): WorkspaceHistoryCoverage;
   prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;

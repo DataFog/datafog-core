@@ -436,6 +436,10 @@ export class Workspace {
     return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_review",`[${parts.join(",")}]`,operationId));
   }
   operations() { return JSON.parse(workspaceCall(this.#state, "operations")); }
+  operationsPage(offset, limit) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100000) throw workspaceFailure("resource_limit");
+    return JSON.parse(workspaceCall(this.#state, "operations_page", offset, limit));
+  }
   counts() { return JSON.parse(workspaceCall(this.#state, "counts")); }
   historyCoverage() { return JSON.parse(workspaceCall(this.#state, "history_coverage")); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }

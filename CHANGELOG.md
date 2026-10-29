@@ -34,6 +34,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Proposed content-free workspace records and recorded-history counts use staged
   v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
+  Read-only pages expose every retained row without requiring a full JSON view.
   Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
   remaining event/replay accounting stays under review for `0.5.0-beta.3`.
 - The synthetic Node server host qualifies opt-in progressive response delivery,
