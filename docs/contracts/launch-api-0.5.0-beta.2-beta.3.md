@@ -16,7 +16,7 @@ release or proof that the shipping extension/server has passed qualification.
 | Core/WASM ledger, counts, coverage and paging | #162 merged into main at `699887e6d13164c9549494dd4ba8b0ec32ce8f6f`; awaiting beta.3 publication | Approved history implementation, not completion of all C1/C2 or a joint snapshot freeze |
 | Native Python operation adapter | [#186](https://github.com/DataFog/datafog-core/pull/186) merged at `aee4a415`; awaiting beta.3 publication | Same Core contract with native snake_case calls and exact Python values |
 | Native Node operation adapter | [#187](https://github.com/DataFog/datafog-core/pull/187) merged at `507b92b0`; awaiting beta.3 publication | Main now contains the combined Core/Python/Node operation surface; compile success still does not freeze/release it |
-| Conversation/send-intent scoped restoration | Approved product obligations plus proposal work in #148/#182/#185 | No conversation runtime methods or final key9 layout in this SDK seam; confirmation reservation remains pending |
+| Conversation/send-intent scoped restoration | Approved product obligations plus proposal work in #148/#182/#185 | No conversation runtime methods or final key9 layout in this SDK seam; reservation approved, first-chat binding pending |
 | CSV and provider qualification | #149 / #150 remain separate decisions/execution gates | No CSV/provider API or provider calls are introduced by this inventory |
 
 The adjacent [type inventory](launch-api-proposal.d.ts) imports actual WASM and
@@ -405,12 +405,17 @@ October29 approvals, replacing the older insertion-based sketch:
   confirmation saves preserve the pause. Reconcile the exact confirmation without
   inventing success or automatically resending.
 
+- Before sending, reserve the confirmation row and encoded-byte space. Other
+  activity, including recovery, cannot spend those credits. The approved 100,000
+  retained-row ceiling and 256 recovery-only slots remain unchanged. This is the
+  approved reservation requirement, not an implemented API or final wire allocation.
+
 The explicit unscoped compatibility API remains unchanged; the host must never
 silently fall back to it to bypass the pause. Identity acquisition/validation,
 confirmed membership, safe wrong-context ranges, joint key9 layout and actual host
-send observations still require implementation and review. Confirmation ordinary-slot
-and encoded-byte reservation is specifically pending; recovery slots are not
-allocated to it and a second write is not promised always to succeed. This
+send observations still require implementation and review. First-chat logical context/binding is still a separate pending decision. The
+reservation requirement needs coordinated implementation/proof; it does not make
+failed/uncertain durable saves successful or allocate recovery-only slots to sending. This
 inventory declares no conversation/reservation method signatures or manual-confirmation
 escape hatch. The current SDK seam has none of those runtime calls.
 
@@ -427,7 +432,7 @@ compiling this document.
 | --- | --- |
 | Released sources/recall/policy/combined review/rules/stronger backup | beta.2 release; #140/#141/#144/#145/#146/#142 |
 | C1/C3 recorded operations | #147/#162; actual native adapters #186 and Node operation stack; shared operation parity remains |
-| C2/R3 conversation/send intent/restore | #148/#182/#185; approved sequencing/pause, reservation/final format pending |
+| C2/R3 conversation/send intent/restore | #148/#182/#185; approved sequencing/pause/reservation; first-chat binding and final format pending |
 | X6 / X7 native bindings | #167/#168; installed wheel/package and typed errors, plus future conversation integration |
 | R4 strict/progressive | #169/#176/#174/#175 implemented; native/host/provenance acceptance still joint work |
 | X8 workspace parity | #171/#179 foundation+streaming actual four-SDK matrix; operation profile #188 under review, conversation profile still needed |
