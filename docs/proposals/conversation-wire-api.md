@@ -177,7 +177,23 @@ MAX/MAX-1/MAX-256 rejection and the exact MAX-258 two-save/recovery sequence.
 The installed WASM/Chromium suite executes the new public methods and TypeScript
 consumers. The exact 16 MiB edge test rejects one extra byte before sending, then
 completes all 256 recoveries and the funded maximum-site-ID confirmation.
-Worst-case heap/CPU and encrypted-host qualification are still in progress.
+The [clean runtime receipt](evidence/conversation-runtime-qualification.json) records
+actual installed WASM in a persistent MV3 extension: pending-save abort/restart,
+both strong-backup credentials, metadata-only retry, lost acknowledgment,
+72 shared conversation checks, and the complete B2 field corpus (four histories,
+eight credential paths, 15 authenticated inner-snapshot rejections). The source
+commit is clean; this controlled synthetic transport does not qualify a real
+site's successful-send observation or site-ID acquisition contract.
+
+The measured graph has 49,870 distinct surface/site contexts and 99,742 retained
+rows, with all 32 live plans, plus a 100,000-row hard-cap import with 49,871 contexts.
+One optimized native process retains about 815 MB of additional requested plan
+allocations and returns that additional allocation count to zero after discard.
+WASM linear memory grows to about 803 MB and remains reserved after discard.
+The receipt includes timings and hashes; these are measured shapes, not a claim
+about every 16 MiB graph, allocator overhead, browser RSS or a low-hardware SLA.
+Final combined Python/Node integration, four-SDK qualification and shipping-host
+verification remain separate required gates.
 
 The earlier [encoder-only receipt](evidence/conversation-wire-growth.json) at
 `ffa59ba` remains historical evidence for unchanged-field growth only. It did not
