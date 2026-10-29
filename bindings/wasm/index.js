@@ -292,6 +292,7 @@ export class Workspace {
   head() { return JSON.parse(workspaceCall(this.#state, "head")); }
   namespace() { return workspaceCall(this.#state, "namespace"); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }
+  recall(text) { workspaceText(text, 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "recall", text)); }
   prepareRecovery(operationId) {
     workspaceBytes(operationId, 16, true);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operationId));
