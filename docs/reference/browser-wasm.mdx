@@ -14,6 +14,16 @@ import { init, scan, scanAndTransform, transform } from "@datafog/wasm";
 await init();
 ```
 
+## Beta A developer integration
+
+The `0.5.0-beta.1` candidate adds a separate `Workspace` flow for persistent
+pseudonyms and strict restoration, plus optional English GLiNER2.5 Small sessions
+from `@datafog/wasm/models`. Model assets and host-owned encrypted storage require
+explicit setup; synchronous `scan()` remains rule-based. Follow the
+[Beta A integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/beta-a-extension-integration.md)
+and [release checklist](https://github.com/DataFog/datafog-core/issues/132) for
+availability, exact APIs and provisional development-vault compatibility.
+
 ## Operations
 
 ```typescript
@@ -37,9 +47,10 @@ ranges work directly with `String.prototype.slice`.
 
 ## Unsupported provider operations
 
-Browser/WASM does not accept key or token providers. It returns
+The stateless browser operations do not accept key or token providers. They return
 `unsupported_strategy` when pseudonymization or tokenization is selected and
-for every restoration call.
+for provider-backed restoration. The separate `Workspace` API described above
+owns its mappings and supports strict local restoration.
 
 This is an intentional security boundary, not a missing fallback. Provider
 credentials and key custody require a separately designed host integration.
