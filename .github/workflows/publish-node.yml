@@ -26,18 +26,23 @@ jobs:
         include:
           - os: macos-14
             target: aarch64-apple-darwin
+            binary: datafog.darwin-arm64.node
             build_args: ""
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            binary: datafog.darwin-x64.node
             build_args: ""
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            binary: datafog.linux-x64-gnu.node
             build_args: "--use-napi-cross"
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            binary: datafog.linux-arm64-gnu.node
             build_args: "--use-napi-cross"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            binary: datafog.win32-x64-msvc.node
             build_args: ""
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +65,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.target }}
-          path: bindings/node/datafog.*.node
+          path: bindings/node/${{ matrix.binary }}
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: matrix.target == 'x86_64-unknown-linux-gnu'

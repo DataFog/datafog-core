@@ -6,13 +6,43 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Native Python and Node workspace APIs expose staged review/preparation, saved-head
+  activation, recall, protected choices, recovery and typed lifecycle errors through
+  the shared Rust Core.
+- Strict buffered and explicit opt-in progressive restoration accept UTF-8/UTF-16
+  chunks across all four SDKs. Progressive failures retain prior delivery counts and
+  stop incomplete; strict restoration keeps whole-response atomicity.
+- Content-free operation history, exact recorded-history counts and explicit pages
+  use staged v3 saves. All rows remain retained within the provisional 100,000-row
+  ceiling, with 256 recovery-only slots and explicit capacity failures.
+- Saved conversation intents reserve confirmation capacity before handoff. Trusted
+  observed-send transactions establish scoped issuance and one-time site binding;
+  unresolved intents pause that conversation's scoped restore, including streams.
+- Python/Node encrypted reference hosts demonstrate authorized key lookup, complete-head
+  CAS, crash/lost-acknowledgment recovery and cooperative streaming cancellation.
+- `cargo dfv parity --workspace` enforces actual Rust/Python/Node/browser-WASM
+  foundation, streaming, operation and conversation profiles, plus separately counted
+  encrypted-host and plan-pressure proofs, with source/package/output receipts.
+
 ### Changed
 
-- Add native Python conversation send-intent, confirmed issuance and scoped
-  strict/streaming restore methods backed by the shared Core decisions.
+- Prepare coordinated `0.5.0-beta.3` packages (Python `0.5.0b3`). Legacy v1/v2
+  reads and no-ops preserve bytes; an approved real save/recovery can upgrade to the
+  coordinated v3 layout, which beta.1 and beta.2 cannot open. Snapshot/API permanence
+  remains deferred beyond this functional prerelease.
+- WASM TypeScript errors include `invalid_policy` and nullable absent finding/input
+  indices, matching actual Core failures and native Node.
 
-- WASM TypeScript workspace errors include `invalid_policy` and nullable absent
-  finding/input indices, matching actual Core failures and native Node.
+### Fixed
+
+- Private snapshot encoding wipes replaced native buffers and failed serialized
+  prefixes. Successful exports retain their existing caller-owned bytes.
+
+## Previously recorded changes through 0.5.0-beta.2
+
+### Changed
 
 - Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
   combined protected review, scoped detector rules and stronger backup passwords.
@@ -34,61 +64,6 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- Native encrypted-host qualification verifies saved conversation intents, trusted
-  callback association and confirmation across crashes, CAS races and lost acknowledgments.
-
-- Workspace parity exercises saved conversation state and scoped restoration
-  through all four SDKs, with separately qualified native conversation hosts.
-
-- Native Node exposes saved conversation send intents, one-time site binding and
-  scoped strict/buffered/progressive restoration through the shared Core.
-
-- Core and browser WASM support saved conversation send intents, funded confirmation
-  capacity, one-time site binding and explicit conversation-scoped restoration.
-
-- Native workspace qualification now exercises 32-plan admission and cleanup
-  across independently opened handles/workers, retaining allocator and RSS/heap
-  evidence without introducing a global host admission limit.
-- Workspace parity now also requires actual Python/Node encrypted-store CAS,
-  process-crash and isolation qualification, counted separately from four-SDK
-  scenarios and retaining real winner IDs and host errors.
-- Workspace parity now requires a real four-SDK operation/history/count/page
-  profile, preserving exact bundles, legacy unknown times, replay errors and
-  explicit-save lifecycle checks alongside foundation and streaming profiles.
-- Native Node exposes Core operation records, explicit timed preparation/outcomes,
-  covered-history counts and bounded owned history pages.
-- Native Python exposes the draft Core operation records, recorded-history counts
-  and coverage, timed preparation/recovery and explicit content-free outcomes
-  through the existing staged save/activation lifecycle, with explicit read-only
-  pages that preserve the full-history API.
-
-- Proposed content-free workspace records and recorded-history counts use staged
-  v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
-  Read-only pages expose every retained row without requiring a full JSON view.
-  Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
-  coordinated native/conversation qualification continues for `0.5.0-beta.3`.
-- `cargo dfv parity --workspace` compares deterministic workspace workflows across
-  Rust, installed native Python/Node and browser WASM, retaining exact inner
-  snapshots, source/package hashes and failures without skipping missing runtimes.
-  Strict and progressive response restoration are mandatory additional profiles.
-
-- The synthetic Node server host qualifies opt-in progressive response delivery,
-  late-failure incomplete status and cooperative cancellation against durable mappings.
-
-- Native Node exposes the shared workspace lifecycle, staged changes, policy,
-  recall, combined review, strict buffered and opt-in progressive restoration
-  without loading browser WASM. Streaming preserves Core error counts, encoding
-  validation and parent/head lifecycle cleanup.
-
-- Native Python workspace handles expose Core preparation, combined review,
-  recall, protected choices, recovery and strict/opt-in progressive restoration
-  with typed errors, exact delivery counts, explicit saved-state activation and
-  bounded pending-plan lifetimes.
-- Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
-  head, with strict buffered finalization by default and a separate opt-in
-  progressive adapter. Late marker/encoding errors stop progressive output with
-  original ranges and delivered counts; unfinished or oversized possible markers
-  stop incomplete, while the strict default retains existing R2 behavior.
 - Detect bounded English street lines after explicit street/shipping/billing
   address labels across SDKs, retaining broader model address coverage.
 
@@ -162,9 +137,6 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
-
-- Private snapshot encoding wipes replaced native buffers and failed serialized
-  prefixes. Successful bundle exports retain their existing caller-owned bytes.
 
 - Native SSN findings retain their type when a semantic PERSON finding covers
   exactly the same span, after entity selection and allowlists are applied.

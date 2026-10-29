@@ -1,6 +1,6 @@
 {
   "name": "@datafog/node",
-  "version": "0.5.0-beta.2",
+  "version": "0.5.0-beta.3",
   "description": "Fast structured PII detection for Node.js, powered by Rust",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,8 @@
     "dtsHeaderFile": "dts-header.d.ts"
   },
   "scripts": {
-    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts && node finalize-types.mjs",
+    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts",
+    "postbuild": "node finalize-types.mjs",
     "test:package": "node ../../scripts/test-node-package.mjs",
     "prepublishOnly": "napi prepublish -t npm --no-gh-release"
   },
