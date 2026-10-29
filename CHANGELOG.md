@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- `cargo dfv parity --workspace` compares deterministic workspace workflows across
+  Rust, installed native Python/Node and browser WASM, retaining exact inner
+  snapshots, source/package hashes and failures without skipping missing runtimes.
+
 - Native Node exposes the shared workspace lifecycle, staged changes, policy,
   recall, combined review and strict restoration without loading browser WASM.
 
