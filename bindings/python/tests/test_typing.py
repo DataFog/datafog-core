@@ -165,6 +165,23 @@ assert_type(workspace_error.review_conflicts[0]["findingIndex"], int)
 assert_type(workspace_error.marker_issues[0]["byteRange"]["start"], int)
 """
 
+VALID += """
+from datafog_core import WorkspaceBufferedRestore, WorkspaceProgressiveRestore, DataFogWorkspaceStreamError
+with workspace.buffered_restore() as buffered:
+    assert_type(buffered, WorkspaceBufferedRestore)
+    assert_type(buffered.feed(b"text"), None)
+    assert_type(buffered.finalize()["text"], str | None)
+    assert_type(buffered.reset(), None)
+with workspace.progressive_restore("utf16") as progressive:
+    assert_type(progressive, WorkspaceProgressiveRestore)
+    assert_type(progressive.feed_utf16([65])["text"], str)
+    assert_type(progressive.finalize()["delivered"]["restoredMarkers"], int)
+    assert_type(progressive.finalize()["complete"], bool)
+stream_error = DataFogWorkspaceStreamError()
+assert_type(stream_error.delivered["bytes"], int)
+assert_type(stream_error.marker_issues[0]["byteRange"]["start"], int)
+"""
+
 # Each line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
@@ -202,6 +219,16 @@ Workspace.create(bytes(16), bytes(16)).prepare("Jane", ["bad"], bytes(16))  # er
 Workspace.create(bytes(16), bytes(16)).prepare_policy_changes({"rules": [{"entityType": "CUSTOM"}], "choices": []}, bytes(16))  # error
 Workspace.create(bytes(16), bytes(16)).prepare_policy_changes({"rules": [], "choices": [{"entityType": "PERSON", "value": "May", "disposition": "notSensitive"}]}, bytes(16))  # error
 Workspace.create(bytes(16), bytes(16)).head().revision = 3  # error
+"""
+
+INVALID += """
+from datafog_core import WorkspaceBufferedRestore, WorkspaceProgressiveRestore
+WorkspaceBufferedRestore()  # error
+WorkspaceProgressiveRestore()  # error
+Workspace.create(bytes(16), bytes(16)).buffered_restore("bytes")  # error
+Workspace.create(bytes(16), bytes(16)).progressive_restore().feed("text")  # error
+Workspace.create(bytes(16), bytes(16)).buffered_restore().feed_utf16([1.5])  # error
+Workspace.create(bytes(16), bytes(16)).buffered_restore().feed_utf16(b"text")  # error
 """
 
 
