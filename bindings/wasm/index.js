@@ -257,7 +257,7 @@ function workspaceFindingsJson(findings) {
     for (const field of ["detectorName", "detectorVersion"]) if (f[field] !== undefined && f[field] !== null) string(f[field]);
     if (f.source !== undefined) string(f.source);
     if (f.needsReview !== undefined && typeof f.needsReview !== "boolean") throw workspaceFailure("invalid_finding");
-    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && typeof f.confidence !== "number")) throw workspaceFailure("invalid_finding");
+    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && (typeof f.confidence !== "number" || !Number.isFinite(f.confidence)))) throw workspaceFailure("invalid_finding");
     if (budget > maximum) throw workspaceFailure("resource_limit");
   }
   try { return structuredJson(findings, true); }
