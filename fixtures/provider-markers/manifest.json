@@ -3,7 +3,7 @@
   "distinctMarkers": 50,
   "draftRequiredReferenceSlotsPerProviderRepetition": 170,
   "files": {
-    "gold/workspace.json": "49daf295d1c4ff28cbc14e4398e9c01427daa550caaa167fc73fbcbeaeb920be",
+    "gold/workspace.json": "1daccfa7e1d59188ed2fd0e4adf15e34d41c1ae450de45ed9faa2ed0ca9044f5",
     "markers.json": "fb83d656441a55dc14e75e5f5ac39085c0cd3ed382ae113cae062bb2e67b3456",
     "prompts/followup.txt": "d99bf3326c09e5923be9259f8cb56a6ed8462cdfc3d72fe63ac499c5846f30e7",
     "prompts/reply.txt": "b4a3b668196ab3a6dfaa824202758a49eb8d89f07987dc33b488d005b042a106",
@@ -28,18 +28,18 @@
   "schemaVersion": 1,
   "source": {
     "cargoLockSha256": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
-    "coreTree": "d8b235890fe48cc217210bac056a6bd20438fc60",
+    "coreTree": "715ce44907f6dec0252b9870cc26181eaadf18f7",
     "distributionVersion": "0.5.0b2",
     "generatorSha256": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b",
     "nativeBinaryFilename": "datafog_core.abi3.so",
-    "nativeBinarySha256": "c982c53722fc4f4c6d9ffcc9745abe254f1051c17b65aac8c167477a52ca9e06",
+    "nativeBinarySha256": "7cb450289223a0d0cbc28276ee6a3f751a9e3460c86a14991330acefb9c425bb",
     "python": "3.14.6",
-    "pythonTree": "a2176925ad3cdbe07a62170378adbb3759715a64",
+    "pythonTree": "11d4e332d3e1e86ed43019cdf98831da315c5e31",
     "repository": "DataFog/datafog-core",
     "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
-    "sourceCommit": "2102322176ae20ce6ff23f28b3c09138411ff752",
+    "sourceCommit": "c07aef11ef44fcbde1b612df1d10047ecdca0b67",
     "wheelFilename": "datafog_core-0.5.0b2-cp310-abi3-macosx_11_0_arm64.whl",
-    "wheelSha256": "cbb35e2dfba38d323d4ab8622120da3f04b47f5ebd096f63f06b2ebb5e6e51c6"
+    "wheelSha256": "2a34fbb06a792ee8bd716eaaba23b10eee8712ec110414475599e5d78ab2414f"
   },
   "state": "prepared_only",
   "tasks": [

@@ -31,6 +31,25 @@ history is required. Keep any subsequent provider trial in a fresh synthetic-onl
 conversation and record the actual model/surface shown; this draft has not chosen
 models or authorized execution.
 
+## Candidate map11 regeneration
+
+The [offline generation comparison](evidence/provider-marker-v3-preparation.json)
+records the freshly built and installed native wheel used for the current gold.
+The private bundle changes from policy-v2/map8 (3,430 bytes) to candidate-v3/map11
+(4,571 bytes). Fields 1–7, all private fixture IDs and all 50 original/marker
+mappings remain exact; the version changes and fields 8/9/10 are added. The new
+history records creation plus 50 legacy prepares with unknown times. Key9 contains
+four empty arrays and `confirmedHandoffs` remains zero: generating this transport
+corpus does not assert an observed external send or qualify conversation binding.
+
+`markers.json`, all five prompt files, the task/reference expectations and the
+preparation report are byte-for-byte unchanged. The manifest updates only the
+gold hash and actual generation source/wheel/native witnesses. The proposed
+170-reference denominator remains unapproved. Seven actual installed-wheel tests
+pass against this packet; provider runs remain zero, preservation rate remains
+null and G1 pass remains false. Final candidate integration and actual provider
+execution/review are separate gates.
+
 ## Proposed reference and omission denominator
 
 Each task has a fixed reference set, recorded as marker IDs in the manifest.
