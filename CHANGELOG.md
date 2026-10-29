@@ -31,6 +31,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices and recovery with typed errors, explicit saved-state
   activation and bounded pending-plan lifetimes.
+- Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
+  head, with strict buffered finalization by default and a separate opt-in
+  progressive adapter. Late marker/encoding errors stop progressive output with
+  original ranges and delivered counts; unfinished or oversized possible markers
+  stop incomplete, while the strict default retains existing R2 behavior.
 - Detect bounded English street lines after explicit street/shipping/billing
   address labels across SDKs, retaining broader model address coverage.
 
