@@ -370,7 +370,9 @@ impl Conversations {
                 site_id_byte_budget: budget as usize,
             });
         }
-        let count = decode_count(d, bytes, MAX_OPERATIONS, 22)?;
+        // A 16-byte CBOR byte string occupies17 bytes, not18. Minimum
+        // tuple sizes must never reject dense valid collections.
+        let count = decode_count(d, bytes, MAX_OPERATIONS, 21)?;
         for _ in 0..count {
             codec::array(d, 4)?;
             let id = SendIntentId {
@@ -392,7 +394,7 @@ impl Conversations {
                     .is_none(),
             )?;
         }
-        let count = decode_count(d, bytes, MAX_OPERATIONS, 41)?;
+        let count = decode_count(d, bytes, MAX_OPERATIONS, 39)?;
         result
             .resolutions
             .try_reserve_exact(count)
@@ -418,7 +420,7 @@ impl Conversations {
                 sent: outcome == 0,
             });
         }
-        let count = decode_count(d, bytes, MAX_BUNDLE_BYTES, 29)?;
+        let count = decode_count(d, bytes, MAX_BUNDLE_BYTES, 28)?;
         for _ in 0..count {
             codec::array(d, 4)?;
             let context = d.u32()? as usize;
@@ -454,10 +456,15 @@ impl Conversations {
             .enumerate()
             .map(|(index, row)| (row.id, (index, row)))
             .collect();
-        let aliases: BTreeSet<_> = state
+        let aliases: BTreeMap<_, _> = state
             .entries
             .iter()
-            .map(|(identity, entry)| (identity.entity_type.as_str(), entry.code.as_str()))
+            .map(|(identity, entry)| {
+                (
+                    (identity.entity_type.as_str(), entry.code.as_str()),
+                    entry.issuance,
+                )
+            })
             .collect();
         let mut logical = BTreeSet::new();
         let mut bound = BTreeSet::new();
@@ -517,9 +524,14 @@ impl Conversations {
                 creating[intent.context] = Some(origin);
             }
             for reference in &intent.references {
-                codec::require(
-                    aliases.contains(&(reference.label.as_str(), reference.code.as_str())),
-                )?;
+                let issuance = aliases
+                    .get(&(reference.label.as_str(), reference.code.as_str()))
+                    .ok_or_else(bad)?;
+                if let Some((issued_index, _)) = by_id.get(issuance) {
+                    codec::require(issued_index <= index)?;
+                }
+                // Unknown pre-upgrade issuance remains valid under the existing
+                // incomplete-history contract; a known future issuance does not.
             }
             if let Some(resolution) = resolution {
                 let (end, _) = by_id.get(&resolution.operation).ok_or_else(bad)?;
@@ -1338,5 +1350,143 @@ mod tests {
         assert!(bytes.len() <= MAX_BUNDLE_BYTES);
         assert_eq!(workspace.counts().unwrap().confirmed_handoffs, 1);
         assert!(Workspace::open_bundle(&bytes).is_ok());
+    }
+    #[test]
+    fn a_later_alias_cannot_backfill_an_earlier_confirmed_intent() {
+        let mut workspace = Workspace::create_with_operation([1; 16], operation(1)).unwrap();
+        let mut seed = workspace
+            .prepare_with_operation(
+                "Before Name",
+                &[WorkspaceFinding::new(
+                    "PERSON",
+                    "Before Name",
+                    TextRange { start: 0, end: 11 },
+                )],
+                operation(2),
+            )
+            .unwrap();
+        let before_marker = seed.preview().unwrap().text.clone();
+        save(&mut workspace, &mut seed);
+        let mut first = workspace
+            .prepare_conversation_send(
+                &[ConversationInput {
+                    input: ReviewInput {
+                        text: &before_marker,
+                        scanner_findings: &[],
+                        user_selections: &[],
+                        corrections: &[],
+                    },
+                    conversation: context(),
+                }],
+                operation(3),
+            )
+            .unwrap();
+        let intent = first.send_intents().unwrap()[0];
+        save(&mut workspace, &mut first);
+        let mut confirmed = workspace
+            .prepare_observed_send(intent, [10; 16], "synthetic_chat", "thread_a", operation(4))
+            .unwrap();
+        save(&mut workspace, &mut confirmed);
+        let mut later = workspace
+            .prepare_with_operation(
+                "Later Name",
+                &[WorkspaceFinding::new(
+                    "PERSON",
+                    "Later Name",
+                    TextRange { start: 0, end: 10 },
+                )],
+                operation(5),
+            )
+            .unwrap();
+        let marker = later.preview().unwrap().text.clone();
+        save(&mut workspace, &mut later);
+        assert_eq!(
+            workspace
+                .restore_in_conversation(&before_marker, [10; 16])
+                .unwrap(),
+            "Before Name"
+        );
+        let mut forged = workspace.state().unwrap().clone();
+        let (identity, entry) = forged
+            .entries
+            .iter()
+            .find(|(_, entry)| entry.issuance == operation(5).id)
+            .unwrap();
+        let reference = Arc::new(Reference {
+            label: identity.entity_type.clone(),
+            code: entry.code.clone(),
+        });
+        forged.conversations.resolutions[0].original.references = vec![Arc::clone(&reference)];
+        forged.conversations.memberships.clear();
+        forged
+            .conversations
+            .memberships
+            .insert((0, reference), operation(4).id);
+        assert_eq!(
+            Workspace::open_bundle(&codec::encode(&forged).unwrap())
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::InvalidSnapshot
+        );
+        assert_eq!(
+            workspace
+                .restore_in_conversation(&marker, [10; 16])
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::InvalidMarker
+        );
+    }
+    #[test]
+    fn unknown_preupgrade_alias_issuance_remains_eligible_for_new_intents() {
+        let mut workspace = Workspace::create_with_operation([1; 16], operation(1)).unwrap();
+        let mut seed = workspace
+            .prepare_with_operation(
+                "Legacy Name",
+                &[WorkspaceFinding::new(
+                    "PERSON",
+                    "Legacy Name",
+                    TextRange { start: 0, end: 11 },
+                )],
+                operation(2),
+            )
+            .unwrap();
+        let marker = seed.preview().unwrap().text.clone();
+        save(&mut workspace, &mut seed);
+        let mut old = workspace.state().unwrap().clone();
+        old.snapshot_version = 2;
+        old.operations.clear();
+        old.operation_counts = OperationCounts::default();
+        workspace = Workspace::open_bundle(&codec::encode(&old).unwrap()).unwrap();
+        let mut first = workspace
+            .prepare_conversation_send(
+                &[ConversationInput {
+                    input: ReviewInput {
+                        text: &marker,
+                        scanner_findings: &[],
+                        user_selections: &[],
+                        corrections: &[],
+                    },
+                    conversation: context(),
+                }],
+                operation(3),
+            )
+            .unwrap();
+        let intent = first.send_intents().unwrap()[0];
+        save(&mut workspace, &mut first);
+        let mut confirmed = workspace
+            .prepare_observed_send(intent, [10; 16], "synthetic_chat", "thread_a", operation(4))
+            .unwrap();
+        save(&mut workspace, &mut confirmed);
+        let reopened = Workspace::open_bundle(&workspace.export_bundle().unwrap()).unwrap();
+        assert_eq!(
+            reopened.restore_in_conversation(&marker, [10; 16]).unwrap(),
+            "Legacy Name"
+        );
+        assert_eq!(
+            reopened.history_coverage().unwrap().pre_upgrade_history,
+            PreUpgradeHistory::Unknown
+        );
     }
 }
