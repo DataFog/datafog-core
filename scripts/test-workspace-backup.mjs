@@ -142,7 +142,81 @@ async function verifyCurrentFieldBackups({launch,close,unlock,status,check,fixtu
   await close();
 }
 
-export async function verifyBackups({fresh, prepare, status, close, launch, unlock, restored, control, paused, check, backupFields}) {
+async function verifyOperationFieldBackups({launch,close,unlock,status,check,fixture}) {
+  for(const name of ["current","legacyUpgraded","conversationPending","conversationResolved"]) {
+    const gold=fixture[name];let page=await launch(`backup-operation-source-${name}`);
+    const source=await page.evaluate(async({gold,password})=>{
+      const {init,Workspace}=await import("./vendor/package/index.js");await init();
+      const {createVault}=await import("./vault.js");const {exportBackup}=await import("./backup.js");
+      const original=Uint8Array.from(gold.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+      const workspace=Workspace.openBundle(original);
+      try {
+        const created=await createVault(password,workspace.namespace(),original,workspace.head());
+        const backup=await exportBackup(created.vault,created.record,created.dataKey,password);
+        try{return {bytes:Array.from(backup),recoveryCode:created.recoveryCode};}
+        finally{backup.fill(0);}
+      } finally{workspace.close();original.fill(0);}
+    },{gold,password});
+    const backup=Buffer.from(source.bytes),outer=JSON.parse(backup);
+    check(outer.payload.version===2&&outer.payload.vault.profile===2,"B2 operation snapshot uses approved authenticated backup profile");
+    check(![password,source.recoveryCode,...gold.aliases.map(alias=>alias.value)].some(value=>backup.includes(Buffer.from(value))),"B2 operation backup excludes plaintext credentials/values");
+    await close();
+    for(const [method,credential]of [["password",password],["recovery",source.recoveryCode]]) {
+      const profile=`backup-operation-${name}-${method}`;page=await launch(profile);
+      await review(page,backup,credential,method);await status(page,"backup_preview_ready");
+      await page.locator("#backup-approve").click();await status(page,"backup_restored_locked");
+      await close();page=await launch(profile);await unlock(page);
+      const proof=await page.evaluate(async({gold,password})=>{
+        const {init,Workspace}=await import("./vendor/package/index.js");await init();
+        const {readRecords}=await import("./storage.js");const {openVault,toBase64url}=await import("./vault.js");
+        const {fixtureFieldBytes}=await import("./workspace-backup-field-bytes.mjs");
+        const {vault,workspace:record}=await readRecords();const opened=await openVault(password,vault,record);
+        const original=Uint8Array.from(gold.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));let workspace,recovered;
+        const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+        const equal=(left,right)=>JSON.stringify(canonical(left))===JSON.stringify(canonical(right));
+        try {
+          workspace=Workspace.openBundle(opened.bundle);recovered=workspace.exportBundle();
+          const before=fixtureFieldBytes(original),after=fixtureFieldBytes(recovered);
+          const retained=[0,1,3,4,5,6,7,9].every(key=>equal([...before.get(key)],[...after.get(key)]));
+          const rows=workspace.operations(),last=rows.at(-1),counts=workspace.counts(),head=workspace.head();
+          const prefix=rows.length===gold.operations.length+1&&equal(rows.slice(0,-1),gold.operations);
+          const recovery=last.kind==="recovery"&&last.occurredAtMs===null&&last.preparedInputs===0&&last.transformedSpans===0&&equal(last.id,head.commitId);
+          const freshHead=BigInt(head.revision)===BigInt(gold.head.revision)+1n&&!equal(head.commitId,gold.head.commitId);
+          const totals=equal(counts,{...gold.counts,operations:gold.counts.operations+1});
+          const coverage=equal(workspace.historyCoverage(),gold.historyCoverage);
+          const aliases=gold.aliases.every(alias=>workspace.restore(alias.marker)===alias.value);
+          const first=gold.operations.find(row=>row.kind==="user_cancelled");let replay;
+          try{workspace.prepareWithOperation("ordinary",[],{id:Uint8Array.from(first.id),occurredAtMs:0});}catch(error){replay=error.code;}
+          const envelope=Object.fromEntries(["vaultId","workspaceId","keyId","keyNonce","wrappedKey","nonce"].map(key=>[key,toBase64url(record[key])]));
+          return {retained,prefix,recovery,freshHead,totals,coverage,aliases,replay,envelope};
+        } finally{workspace?.close();recovered?.fill(0);original.fill(0);opened.bundle.fill(0);}
+      },{gold,password});
+      check(proof.retained&&proof.prefix&&proof.recovery&&proof.freshHead&&proof.totals&&proof.coverage&&proof.aliases&&proof.replay==="operation_reused","B2 every operation row/delta, original fields and coverage survive authenticated recovery/restart");
+      check(freshWorkspaceKey(backup,source.recoveryCode,proof.envelope),"B2 operation recovery installs a fresh destination workspace key");
+      await close();
+    }
+    backup.fill(0);
+  }
+  const page=await launch("backup-operation-invalid"),baseline=await fingerprint(page);
+  for(const vector of fixture.rejections.filter(vector=>vector.encryptedImport)) {
+    const backup=await page.evaluate(async({gold,vector,password})=>{
+      const {init,Workspace}=await import("./vendor/package/index.js");await init();
+      const {createVault}=await import("./vault.js");const {exportBackup}=await import("./backup.js");
+      const original=Uint8Array.from(gold.bundleHex.match(/../g),pair=>Number.parseInt(pair,16)),invalid=Uint8Array.from(vector.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+      const workspace=Workspace.openBundle(original);
+      try {
+        const created=await createVault(password,workspace.namespace(),invalid,workspace.head());
+        const file=await exportBackup(created.vault,created.record,created.dataKey,password);
+        try{return Array.from(file);}finally{file.fill(0);}
+      } finally{workspace.close();original.fill(0);invalid.fill(0);}
+    },{gold:fixture.current,vector,password});
+    await review(page,Buffer.from(backup));await status(page,vector.code);
+    check(await fingerprint(page)===baseline&&await page.locator("#backup-approve").isDisabled()&&await page.locator("#backup-preview").textContent()==="","B2 authenticated malformed ledger/count data imports nothing and grants no approval");
+  }
+  await close();
+}
+
+export async function verifyBackups({fresh, prepare, status, close, launch, unlock, restored, control, paused, check, backupFields, operationBackupFields}) {
   let page = await fresh("backup-source");
   check(await page.locator("#recovery-created").count() === 1, "G1 vault creation supplies an offline recovery code");
   const recoveryCode = await page.locator("#recovery-created").inputValue();
@@ -496,6 +570,8 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   await unlock(page); await restored(page, output, "restored"); await close();
   console.log("PASS G4 restore approval, cancellation, atomic abort/lost acknowledgment and competing imports");
   await verifyCurrentFieldBackups({launch,close,unlock,status,check,fixture:backupFields});
+  await verifyOperationFieldBackups({launch,close,unlock,status,check,fixture:operationBackupFields});
   console.log("PASS B2 current snapshot fields, both credentials, fresh keys/head, reserved merge slot and authenticated missing-field rejection");
+  return {profile:"workspace-operation-backup-fields-v1",histories:2,credentialPaths:4,authenticatedOperationRejections:operationBackupFields.rejections.filter(vector=>vector.encryptedImport).length,source:operationBackupFields.source};
 
 }

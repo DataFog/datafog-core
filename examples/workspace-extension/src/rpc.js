@@ -4,7 +4,7 @@ export class HostError extends Error {
     for (const key of ["inputIndex", "findingIndex"]) if (Number.isSafeInteger(location?.[key]) && location[key] >= 0) this[key] = location[key];
     if (location?.markerIssues !== undefined) {
       const ranges = ["byteRange", "codepointRange", "utf16Range"];
-      const valid = issue => ["unknown", "damaged", "unbracketed"].includes(issue?.kind) && ranges.every(key => {
+      const valid = issue => ["unknown", "damaged", "unbracketed", "not_issued_in_conversation"].includes(issue?.kind) && ranges.every(key => {
         const range = issue[key];
         return Number.isSafeInteger(range?.start) && Number.isSafeInteger(range?.end) && range.start >= 0 && range.end > range.start && range.end <= 16 * 1024 * 1024;
       });
