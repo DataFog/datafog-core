@@ -1,0 +1,131 @@
+{
+  "bundleComparison": {
+    "addedFields": [
+      8,
+      9,
+      10
+    ],
+    "conversationState": "four empty arrays; no send intentions, confirmations, contexts or memberships",
+    "goldChangedProperties": [
+      "bundleHex"
+    ],
+    "itemsAndPrivateIdsUnchanged": true,
+    "newBytes": 4571,
+    "newKeys": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "newSha256": "e12046b1e9be8b295de442af5d674b007a0f37aa6b1de4dfb5477b7a6f1f9d12",
+    "oldBytes": 3430,
+    "oldKeys": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "oldSha256": "3249a384e391d4a0d3aab6443435e607fb85873b5d125ff97d9e5679a966fd09",
+    "preservedFields": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "g1Pass": false,
+  "generationWitness": {
+    "cargoLockSha256": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
+    "coreTree": "715ce44907f6dec0252b9870cc26181eaadf18f7",
+    "distributionVersion": "0.5.0b2",
+    "generatorSha256": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b",
+    "nativeBinaryFilename": "datafog_core.abi3.so",
+    "nativeBinarySha256": "7cb450289223a0d0cbc28276ee6a3f751a9e3460c86a14991330acefb9c425bb",
+    "python": "3.14.6",
+    "pythonTree": "11d4e332d3e1e86ed43019cdf98831da315c5e31",
+    "repository": "DataFog/datafog-core",
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "sourceCommit": "c07aef11ef44fcbde1b612df1d10047ecdca0b67",
+    "wheelFilename": "datafog_core-0.5.0b2-cp310-abi3-macosx_11_0_arm64.whl",
+    "wheelSha256": "2a34fbb06a792ee8bd716eaaba23b10eee8712ec110414475599e5d78ab2414f"
+  },
+  "preservationRate": null,
+  "previousGenerationSource": {
+    "cargoLockSha256": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
+    "coreTree": "d8b235890fe48cc217210bac056a6bd20438fc60",
+    "distributionVersion": "0.5.0b2",
+    "generatorSha256": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b",
+    "nativeBinaryFilename": "datafog_core.abi3.so",
+    "nativeBinarySha256": "c982c53722fc4f4c6d9ffcc9745abe254f1051c17b65aac8c167477a52ca9e06",
+    "python": "3.14.6",
+    "pythonTree": "a2176925ad3cdbe07a62170378adbb3759715a64",
+    "repository": "DataFog/datafog-core",
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "sourceCommit": "2102322176ae20ce6ff23f28b3c09138411ff752",
+    "wheelFilename": "datafog_core-0.5.0b2-cp310-abi3-macosx_11_0_arm64.whl",
+    "wheelSha256": "cbb35e2dfba38d323d4ab8622120da3f04b47f5ebd096f63f06b2ebb5e6e51c6"
+  },
+  "providerCosts": null,
+  "providerRunsExecuted": 0,
+  "providerTokenCounts": null,
+  "publicPacket": {
+    "denominatorStatus": "draft_requires_review",
+    "distinctMarkers": 50,
+    "draftRequiredReferenceSlotsPerProviderRepetition": 170,
+    "tasksAndExpectationsUnchanged": true,
+    "unchangedFileSha256": {
+      "markers.json": "fb83d656441a55dc14e75e5f5ac39085c0cd3ed382ae113cae062bb2e67b3456",
+      "preparation-report.json": "6e262ed5ec75307a55fd61b68fb0f1c207143427bfb2f6dce96899dc53ad9ed2",
+      "prompts/followup.txt": "d99bf3326c09e5923be9259f8cb56a6ed8462cdfc3d72fe63ac499c5846f30e7",
+      "prompts/reply.txt": "b4a3b668196ab3a6dfaa824202758a49eb8d89f07987dc33b488d005b042a106",
+      "prompts/rewrite.txt": "d85e2d9ca2f2f792add898ddef38405fbbac87360ad69fd84079c0204943e7d4",
+      "prompts/summarize.txt": "10b091ae710dce8c818004fb8e3be9bb91efc5bff2134926b88a0f99f7f3965c",
+      "prompts/table.txt": "0424ffce84f9e99586986bc3c7666445a7de66dd9003fee0206362715102d535"
+    }
+  },
+  "scope": "Offline synthetic fixture regeneration and actual installed native strict-restore/protocol tests only; no provider calls or model/sampling/denominator approval.",
+  "verification": {
+    "actualInstalledNativeProtocolTests": 7,
+    "generationAndVerificationWheelMatch": true,
+    "result": "passed"
+  },
+  "views": {
+    "counts": {
+      "confirmedHandoffs": 0,
+      "operations": 51,
+      "preparedInputs": 50,
+      "reportedBlockedAttempts": 0,
+      "transformedSpans": 50
+    },
+    "currentCoverage": {
+      "preUpgradeHistory": "not_applicable",
+      "recordedHistoryOnly": true
+    },
+    "currentSnapshotVersion": 3,
+    "headUnchanged": true,
+    "legacyCoverage": {
+      "preUpgradeHistory": "unknown",
+      "recordedHistoryOnly": true
+    },
+    "legacySnapshotVersion": 2,
+    "operationKinds": {
+      "create": 1,
+      "prepare": 50
+    },
+    "unknownOperationTimes": 51
+  }
+}

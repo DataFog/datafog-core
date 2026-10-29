@@ -1,0 +1,79 @@
+{
+  "coreWitness": {
+    "cargoLockSha256": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
+    "coreTree": "c688387c42c9253a63ba7878c37cb71c20008092",
+    "distributionVersion": "0.5.0b2",
+    "generatorSha256": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b",
+    "nativeBinaryFilename": "datafog_core.abi3.so",
+    "nativeBinarySha256": "7cb450289223a0d0cbc28276ee6a3f751a9e3460c86a14991330acefb9c425bb",
+    "python": "3.14.6",
+    "pythonTree": "8fc6b860c65e20536c7b2faf25f51df250d15aee",
+    "repository": "DataFog/datafog-core",
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "sourceCommit": "2ad99792b4ad584731c10c6a4037aa81ba689e3f",
+    "wheelFilename": "datafog_core-0.5.0b2-cp310-abi3-macosx_11_0_arm64.whl",
+    "wheelSha256": "2a34fbb06a792ee8bd716eaaba23b10eee8712ec110414475599e5d78ab2414f"
+  },
+  "g1Pass": false,
+  "originalPacketUnchanged": true,
+  "preservationRate": null,
+  "providerRunsExecuted": 0,
+  "requiredReferenceSlots": 170,
+  "retainedLogHashes": {
+    "doctor.log": "1aae81844496a8a4a533e5c2f915834b72d3ae5b755fe047b045502459cfb464",
+    "tests.log": "7aa45a584f75cf5de7036ac2261d4fd88c8f2b4027db2fb49f7352c73164996d"
+  },
+  "reviewUrl": "https://github.com/DataFog/datafog-core/blob/bb4e2eeec349590f50d8d7c017123c2aadf31905/docs/verification/provider-marker-preservation.md#proposed-reference-and-omission-denominator",
+  "schemaVersion": 1,
+  "scope": "Actual installed native Core; offline synthetic per-task initial scorecard only. No provider execution or aggregation.",
+  "sourceCommit": "2ad99792b4ad584731c10c6a4037aa81ba689e3f",
+  "sourceDirty": false,
+  "sourceHashes": {
+    "bindings/python/tests/provider_marker_conformance.py": "ba82a3cda7dca3cb5bb0aacc050e0202db58a23a3e257a2d15a220346b079301",
+    "docs/verification/provider-marker-preservation.md": "bfb7cde730bb6b4fea92c2e916175aa89d2dfdbec5193ef075ab7a81b34ba6fc",
+    "fixtures/provider-markers/scorecard-review.json": "87a0cce9a3535a0539cffb21275c850bb052b9e5484a3bab0910e80dc6791392",
+    "scripts/provider_markers/scoring.py": "dd28456d08b145607126e9ebf4522a62f1f7dd15e0920f52d3dcd75454f06d85"
+  },
+  "taskDiagnostics": [
+    {
+      "observedRequiredReferences": 50,
+      "requiredReferences": 50,
+      "sha256": "d1ca4aca079de650ae7eb28440d75ccabac1ca26eae35be37feef9f575691eb6",
+      "successfulRequiredReferences": 50,
+      "taskId": "summarize"
+    },
+    {
+      "observedRequiredReferences": 30,
+      "requiredReferences": 30,
+      "sha256": "d606edae8ba178f21a15007c51f8dae91114ac47ab5b9283d45416507c580ef6",
+      "successfulRequiredReferences": 30,
+      "taskId": "reply"
+    },
+    {
+      "observedRequiredReferences": 50,
+      "requiredReferences": 50,
+      "sha256": "7c6f41f9cc13705e40689ea25291de49dc0802cdcd984091a8e632aed8c306a6",
+      "successfulRequiredReferences": 50,
+      "taskId": "table"
+    },
+    {
+      "observedRequiredReferences": 20,
+      "requiredReferences": 20,
+      "sha256": "ea2498d48f199f4b5d9ae2d5e714db285854821454a66f4369c9eb12bfa1b274",
+      "successfulRequiredReferences": 20,
+      "taskId": "rewrite"
+    },
+    {
+      "observedRequiredReferences": 20,
+      "requiredReferences": 20,
+      "sha256": "3253bc020d4ad80fb58a786b16e856a56d0cf58ffd2074a486854594dc6a9ce3",
+      "successfulRequiredReferences": 20,
+      "taskId": "followup"
+    }
+  ],
+  "tests": {
+    "allPassed": true,
+    "existingPacketTests": 7,
+    "offlineScorecardTests": 8
+  }
+}
