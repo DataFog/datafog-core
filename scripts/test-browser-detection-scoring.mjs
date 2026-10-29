@@ -3,7 +3,17 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {createHash} from "node:crypto";
 import {matchSpans, validateSpan, scoreCorpus} from "./browser-detection-scoring.mjs";
+import {validateSdkSpan} from "./browser-detection-contract.mjs";
 const span = (start, end, entityType = "PERSON") => ({entityType, byteRange: {start, end}});
+test("SDK ranges require exact integer positions in every unit, even for repeated text", () => {
+  const value = {...span(5, 9), matchedText: "Jane", utf16Range: {start: 3, end: 7}, codepointRange: {start: 2, end: 6}};
+  validateSdkSpan("👋 Jane Jane", value);
+  for (const name of ["utf16Range", "codepointRange"]) {
+    assert.throws(() => validateSdkSpan("👋 Jane Jane", {...value, [name]: undefined}));
+    assert.throws(() => validateSdkSpan("👋 Jane Jane", {...value, [name]: {start: value[name].start + 0.1, end: value[name].end + 0.9}}));
+    assert.throws(() => validateSdkSpan("👋 Jane Jane", {...value, [name]: {start: value[name].start + 5, end: value[name].end + 5}}));
+  }
+});
 test("overlap is maximum one-to-one, including an augmenting path", () => {
   assert.equal(matchSpans([span(0, 4), span(6, 10)], [span(0, 10), span(0, 4)], "overlap").tp, 2);
   const result = matchSpans([span(0, 4), span(6, 10)], [span(0, 10)], "overlap");

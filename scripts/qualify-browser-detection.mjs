@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {scoreCorpus, validateSpan} from "./browser-detection-scoring.mjs";
+import {validateSdkSpan} from "./browser-detection-contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harness = path.join(root, "examples/workspace-extension");
@@ -43,7 +44,7 @@ await build({entryPoints:[path.join(root,"scripts/browser-detection-workspace-en
   target:"chrome120",nodePaths:[modules],legalComments:"eof"});
 await writeFile(path.join(artifacts.dist,"qualification.html"), '<!doctype html><meta charset="utf-8"><title>Synthetic browser qualification</title><output id="workflow-sink"></output><script type="module" src="qualification-entry.js"></script><script type="module" src="qualification-workspace.js"></script>');
 const digest = async file => createHash("sha256").update(await readFile(file)).digest("hex");
-const inputs = ["scripts/qualify-browser-detection.mjs", "scripts/browser-detection-workspace-entry.mjs", "scripts/browser-detection-scoring.mjs", "scripts/test-browser-detection-scoring.mjs", "fixtures/browser-detection/qualification-v1.json", "bindings/wasm/models/model.mjs", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json"];
+const inputs = ["scripts/qualify-browser-detection.mjs", "scripts/browser-detection-workspace-entry.mjs", "scripts/browser-detection-scoring.mjs", "scripts/browser-detection-contract.mjs", "scripts/test-browser-detection-scoring.mjs", "fixtures/browser-detection/qualification-v1.json", "bindings/wasm/models/model.mjs", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json"];
 const receipt = {
   kind: "shipping-adapter-current-measurement", qualificationComplete: false,
   featureDependencies: {issues:[141,144,145,146],status:"merged and exercised"},
@@ -94,7 +95,7 @@ try {
   for (const record of corpus.records) {
     const start = performance.now();
     const result = await page.evaluate(text => window.browserQualification.scan(text), record.text);
-    for (const finding of result.findings) validateSpan(record.text, finding);
+    for (const finding of result.findings) validateSdkSpan(record.text, finding);
     receipt.observations.push({id: record.id, durationMs: performance.now() - start, ...result});
     console.log(`Scanned ${record.id}: ${result.findings.length} findings`);
   }
@@ -145,7 +146,7 @@ try {
       const result=await call("query",text),start=Buffer.byteLength(prefix),end=start+Buffer.byteLength(gold.matchedText);
       for(const found of result.findings) {
         assert.equal(found.finding.source,"recall");assert.equal(found.finding.needsReview,true);
-        validateSpan(text,{...found.finding,byteRange:found.byteRange,codepointRange:found.codepointRange,utf16Range:found.utf16Range});
+        validateSdkSpan(text,{...found.finding,byteRange:found.byteRange,codepointRange:found.codepointRange,utf16Range:found.utf16Range});
       }
       if(!result.findings.some(found=>found.finding.entityType===gold.entityType&&found.byteRange.start===start&&found.byteRange.end===end))misses.push({id:record.id,entityType:gold.entityType});
       checked++;
