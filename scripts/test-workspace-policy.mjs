@@ -19,6 +19,7 @@ async function mark(page,status,text) {
 }
 export async function verifyPolicyHost({fresh,status,close,launch,unlock,restored,control,check,counters}) {
   let page=await fresh("policy-upgrade");
+  const legacyRecoveryCode=await page.locator("#recovery-created").inputValue();
   await page.evaluate(async ({fixture,password})=>{
     const {readRecords,saveRecord}=await import("./storage.js");
     const {openVault,encryptCandidate}=await import("./vault.js");
@@ -52,14 +53,18 @@ export async function verifyPolicyHost({fresh,status,close,launch,unlock,restore
   await close();page=await launch("policy-upgrade");await unlock(page);
   check((await policy(page)).snapshotVersion === 2,"D7 upgraded encrypted vault reopens");
   await restored(page,counters.high.marker,"restored");check(await page.locator("#restored").textContent() === "Jane","D7 upgrade keeps legacy aliases");
-  await close();page=await launch("policy-legacy-backup");
+  await close();
+  for(const [method,credential] of [["password",password],["recovery",legacyRecoveryCode]]) {
+    page=await launch(`policy-legacy-backup-${method}`);
   await page.locator("#backup-file").setInputFiles({name:"legacy.dfbackup",mimeType:"application/octet-stream",buffer:legacyBackup});
-  await page.locator("#backup-credential").fill(password);await page.locator("#backup-review").click();await status(page,"backup_preview_ready");
+  await page.locator("#backup-method").selectOption(method);
+  await page.locator("#backup-credential").fill(credential);await page.locator("#backup-review").click();await status(page,"backup_preview_ready");
   check(await page.locator("#backup-format-upgrade").isVisible() && (await page.locator("#backup-format-upgrade").textContent()).includes("0.5.0-beta.1"),"D7 legacy recovery warns before its saved upgrade");
   await page.locator("#backup-approve").click();await status(page,"backup_restored_locked");
   await unlock(page);check((await policy(page)).snapshotVersion === 2,"D7 legacy recovery stages and saves v2");
   await restored(page,counters.high.marker,"restored");check(await page.locator("#restored").textContent() === "Jane","D7 legacy backup upgrade preserves alias");
   await close();
+  }
   page=await fresh("policy-source");
   const recoveryCode=await page.locator("#recovery-created").inputValue();
   const marker=await mark(page,status,"Jane Smith");
