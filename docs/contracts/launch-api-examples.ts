@@ -39,7 +39,7 @@ async function approveAndSave(workspace: CandidateWorkspace, plan: CandidatePlan
   let consumed = false;
   try {
     const previews = plan.previews();
-    if (!(await approve(previews, upgradeWarning(plan)))) return {kind: "cancelled" as const};
+    if ((await approve(previews, upgradeWarning(plan))) !== true) return {kind: "cancelled" as const};
     const {expectedHead, candidateHead} = plan.heads();
     const bytes = plan.exportCandidateBundle();
     try {

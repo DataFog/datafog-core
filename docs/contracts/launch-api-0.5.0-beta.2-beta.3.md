@@ -36,7 +36,8 @@ clock, source flag or candidate preview grants none of that authority.
 Every mutation follows prepare → review/approve → candidate export → encrypt and
 atomically compare-and-save with the **complete expected head** → confirm the
 saved head → activate. Only then may approved text leave the review surface.
-A head includes exact revision plus a 16-byte commit ID; matching revision alone
+Approval must be literal `true` / Python `True`; truthy strings or numbers are not
+approval. A head includes exact revision plus a 16-byte commit ID; matching revision alone
 is insufficient. Operation IDs are fresh host-random 16-byte values, not hashes of
 source text. Creation is an unsaved bootstrap until the host persists its bundle.
 
@@ -267,9 +268,12 @@ presented as known lifetime totals.
 ### Retention, explicit pages and finite recovery
 
 Sid approved a provisional 100,000 retained-row ceiling with the final 256 slots
-reserved for recovery. New ordinary records stop at 99,744 rows. At 100,000,
-further recovery also fails explicitly; reads/export remain available. No row,
-old ID or covered total is evicted, sampled or truncated. Postlaunch lossless
+reserved for recovery. For new **unfunded** ordinary activity, retained rows `T`
+plus pending resolution credits `P` must fit the 99,744 ordinary ceiling. A
+previously funded resolution consumes its credit instead of requiring a new
+ordinary slot: it can still complete after all 256 recoveries, up to the hard
+100,000-row limit. At that hard limit further recovery also fails explicitly;
+reads/export remain available. No row, old ID or covered total is evicted, sampled or truncated. Postlaunch lossless
 compression remains #165. This bound is not unlimited history or a low-memory
 platform guarantee.
 
@@ -281,14 +285,20 @@ Concatenating pages over an unchanged head equals the full view. Result mutation
 cannot change saved state. The host may use pages to avoid a full JSON allocation;
 there is no hidden pagination or changed full-history default.
 
-The v3 encoder reserves 7,699 bytes for 256 maximum supported recovery rows plus
-conservative head/array/count header growth. Ordinary records use the reduced
-budget; recovery may use the full 16 MiB cap. Valid old vaults already near that
+The v3 encoder initially reserves 7,699 bytes for 256 maximum supported recovery
+rows plus conservative head/array/count header growth. Ordinary records preserve
+the remaining recovery budget. Recovery can consume its own allotment within the
+16 MiB cap, while still protecting any outstanding confirmation credits. Valid old vaults already near that
 cap remain readable/exportable and can hit the byte ceiling earlier. No data is
 trimmed to make room. The conversation candidate separately reserves one later
 resolution row and conservatively encoded bytes per pending intent, including
-its immutable site-ID bound. Other activity, including recovery, cannot spend
-those credits. The 256 recovery-only slots are not reassigned to sending. See [operation evidence and limits](../proposals/workspace-operation-records.md).
+its immutable site-ID bound. All other writes, including recovery, preserve
+outstanding confirmation bytes and revision increments, plus remaining recovery
+byte/revision credits. Checked u64 admission verifies room for those increments
+before sending; row slots alone cannot guarantee an available revision. The 256
+recovery-only slots are not reassigned to sending. See the
+[confirmation-capacity proof](../proposals/conversation-confirmation-capacity.md)
+and [operation evidence and limits](../proposals/workspace-operation-records.md).
 
 ## Native names, exact values and typed failures
 
@@ -443,7 +453,10 @@ Prepared changes expose `sendIntents()` / Python/Rust `send_intents()`. Capture
 these exact `{preparationId, inputIndex}` identifiers before activation consumes
 the plan. A `WorkspaceConversationInput` combines the existing review input with
 `{id, surface, siteId, siteIdByteBudget}`. `id` is a permanent private 16-byte
-logical ID; `siteId` is required and initially null for a new chat. The immutable
+logical ID; the `siteId` field is required. Use null until the host knows the
+exact site ID; an already-known existing chat may supply its exact binding when
+the context is registered. An unknown first-chat ID binds once only after trusted
+observed sending. The immutable
 positive UTF-8 `siteIdByteBudget` must cover the later observed ID. Contexts and
 intent input indices do not carry source/prompt content or transport authority.
 

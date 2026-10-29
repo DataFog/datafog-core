@@ -42,7 +42,7 @@ async def current_review(
             warning = "Saving v3 prevents 0.5.0-beta.1 and 0.5.0-beta.2 from opening this vault."
         elif version["currentVersion"] == 1 and version["candidateVersion"] == 2:
             warning = "Saving v2 prevents 0.5.0-beta.1 from opening this vault."
-        if not await approve(previews, warning):
+        if (await approve(previews, warning)) is not True:
             return None
         # Python returns immutable caller-owned bytes; reference release is not erasure.
         candidate = plan.export_candidate_bundle()
@@ -140,7 +140,7 @@ async def save_conversation_preparation(
         warning = None
         if version["currentVersion"] < 3:
             warning = "Saving v3 prevents 0.5.0-beta.1 and 0.5.0-beta.2 from opening this vault."
-        if not await approve(previews, warning):
+        if (await approve(previews, warning)) is not True:
             return None
         saved = await save(plan.export_candidate_bundle(), plan.expected_head(), plan.candidate_head())
         workspace.activate_saved(plan, plan.expected_head(), saved)
@@ -156,7 +156,7 @@ async def save_observed_conversation_send(
     # Trusted observation of the exact saved send attempt is a precondition.
     # This example performs no send; approval alone is not an observation.
     with workspace.prepare_observed_send(intent, logical_id, surface, site_id, operation) as plan:
-        if not await approve(plan.previews(), None):
+        if (await approve(plan.previews(), None)) is not True:
             return False
         saved = await save(plan.export_candidate_bundle(), plan.expected_head(), plan.candidate_head())
         workspace.activate_saved(plan, plan.expected_head(), saved)
