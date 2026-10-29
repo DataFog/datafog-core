@@ -545,6 +545,11 @@
           "plan": "abandoned"
         },
         {
+          "call": "discard",
+          "plan": "abandoned",
+          "expectCode": "inactive_plan"
+        },
+        {
           "call": "inspectPlan",
           "plan": "abandoned",
           "expectCode": "inactive_plan"
@@ -553,6 +558,33 @@
           "call": "recall",
           "workspace": "w",
           "text": "Bob"
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "closed-live",
+          "operationByte": 14,
+          "text": "Bob",
+          "findings": [
+            {
+              "entityType": "PERSON",
+              "matchedText": "Bob",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 3
+              }
+            }
+          ]
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "discard",
+          "plan": "closed-live",
+          "expectCode": "closed_workspace"
         }
       ]
     },

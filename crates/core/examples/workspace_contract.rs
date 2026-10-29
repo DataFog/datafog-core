@@ -294,12 +294,17 @@ impl Runtime {
                     .ok_or(Failure::Fixture)?,
             ),
             "discard" => {
-                self.plans
+                let plan = self
+                    .plans
                     .get_mut(name(command, "plan")?)
-                    .ok_or(Failure::Fixture)?
-                    .discard();
+                    .ok_or(Failure::Fixture)?;
+                // The public opaque SDK operation requires live access before
+                // Core's intentionally idempotent low-level cleanup.
+                plan.expected_head()?;
+                plan.discard();
                 Ok(Value::Null)
             }
+
             "activateSaved" => {
                 let workspace = self
                     .workspaces
