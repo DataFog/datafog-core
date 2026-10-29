@@ -287,7 +287,7 @@ try {
   for(const profile of Object.values(report.profiles))profile.sdks=[...sdkNames];
   const {runNativeServerProfile}=await import("./native-server-parity.mjs");
   report.profiles.nativeServer=await runNativeServerProfile({root,temporary,python,output,command,validateWorkspaceOutput,planMemoryDiagnostic:arguments_.includes("--plan-memory-diagnostic")});
-  report.countsScope="cases/steps cover four-SDK profiles only; nativeServer counts apply separately to Python/Node hosts";
+  report.countsScope="cases/steps cover four-SDK foundation/streaming/operations/conversations only; nativeServer CAS, conversationHost and planPressure observations apply separately to Python/Node encrypted hosts";
   report.cases=report.profiles.foundation.cases+report.profiles.streaming.cases+report.profiles.operations.cases+report.profiles.conversations.cases;report.steps=report.profiles.foundation.steps+report.profiles.streaming.steps+report.profiles.operations.steps+report.profiles.conversations.steps;report.pass=report.errors.length===0;
 } catch {
   report.errors.push({category:"workspace parity failed before complete four-SDK comparison"});
@@ -295,7 +295,7 @@ try {
   await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));if(temporary)await rm(temporary,{recursive:true,force:true});
   await mkdir(output,{recursive:true});await writeFile(path.join(output,"workspace-parity.json"),JSON.stringify(report,null,2));
 }
-if(!report.pass){console.error("Workspace SDK parity failed; see the retained content-safe report.");process.exitCode=1;}else{console.log(`Four-SDK workspace parity passed: ${report.cases} cases, ${report.steps} steps. Native server profile passed separately: ${report.profiles.nativeServer.cases} cases, ${report.profiles.nativeServer.steps} checkpoints, Python/Node encrypted hosts only.`);}
+if(!report.pass){console.error("Workspace SDK parity failed; see the retained content-safe report.");process.exitCode=1;}else{console.log(`Four-SDK workspace parity passed: ${report.cases} cases, ${report.steps} steps. Native server profile passed separately: ${report.profiles.nativeServer.cases} cases, ${report.profiles.nativeServer.steps} checkpoints; conversation host: ${report.profiles.nativeServer.conversationHost.cases} cases, ${report.profiles.nativeServer.conversationHost.steps} checkpoints. Native host counts apply to Python/Node only.`);}
 
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)await main();

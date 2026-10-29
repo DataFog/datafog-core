@@ -16,8 +16,8 @@ or harness failure. Result keys normalize only representation (Python's exact
 revision integer to its decimal wire string, copied bytes to lowercase hex),
 without discarding offsets, choices, flags or errors.
 
-Conversation provenance remains an addition before X8 can close. Operation/history
-access runs as its own mandatory profile. Existing Python/Node encrypted server
+Conversation provenance and operation/history access run as separate mandatory
+four-SDK profiles. Existing Python/Node encrypted server
 CAS/process qualification is now separately mandatory, with explicit two-host
 applicability; it does not certify four SQL hosts or shipping-host security. Strict and opt-in progressive restoration
 now run as a second mandatory four-SDK profile, alongside the launch foundation. This foundation profile must never be
@@ -78,9 +78,8 @@ in the same fixture across all SDKs.
 The same invocation also executes `fixtures/workspace/streaming-contract-v1.json`
 against actual Core, installed Python/Node and Chromium WASM. Its 13 cases retain
 40 shared commands; each is replayed in both buffered and progressive modes,
-producing 80 recorded stream steps. The complete current run therefore compares
-30 cases and 236 recorded steps across all four SDKs, plus the shared installed
-JS conformance assertions. The fixture is not sampled and neither mode is optional.
+producing 80 recorded stream steps. This streaming profile contributes 13 cases and 80 recorded steps to the
+complete four-SDK run, plus the shared installed JS conformance assertions. The fixture is not sampled and neither mode is optional.
 
 Each SDK retains `rust-streaming.json`, `python-streaming.json`,
 `node-streaming.json` or `wasm-streaming.json` with full chunk text, exact delivered
@@ -93,15 +92,15 @@ progressive can intentionally differ; each mode must match the same Core referen
 The report retains both fixture hashes and per-profile counts. Missing runtime
 methods, missing modes/steps/counts/ranges, partial output attached to failures,
 a falsely complete progressive feed or a strict report with text alongside issues
-cannot qualify. CLI success additionally requires both named profiles and modes.
-This is streaming parity for the committed surface, not operation/conversation,
-real server delivery, distributed admission or overall beta.3 freeze certification.
+cannot qualify. CLI success requires every named profile and both streaming modes.
+This is deterministic streaming parity; it does not certify real server delivery,
+distributed admission or overall beta.3 freeze.
 
 ## Mandatory operation/history profile
 
 `fixtures/workspace/operation-contract-v1.json` adds seven scenarios and 185 real
-steps. The complete gate now executes 37 scenarios / 421 steps across Rust,
-installed native Python/Node and Chromium WASM. Foundation remains 17/156 and
+steps. Together with foundation and streaming, this profile contributes 37 scenarios /
+421 steps across Rust, installed native Python/Node and Chromium WASM. Foundation remains 17/156 and
 streaming 13/80; their eight canonical runtime outputs remain byte-identical to
 the qualified `d5584e9` baseline. No runtime can omit the new profile or substitute
 a declaration, mock or skipped method. `cargo dfv parity --workspace` also rejects
@@ -133,9 +132,9 @@ activation changes the head; preserve them on same-head/no-op or failed activati
 It does not add that handle-registry policy to the lower-level Core runtime or
 replace Core state with expected fixture values.
 
-This qualifies deterministic operation semantics and saved-head receipts, not
-real durable server CAS, send confirmation, a conversation format/reservation,
-all-device capacity or overall C1/G3 completion. Actual encrypted capacity and
+This profile qualifies deterministic operation semantics and saved-head receipts.
+Send confirmation and conversation reservation have their own profile below;
+all-device capacity and overall C1/G3 completion remain outside this proof. Actual encrypted capacity and
 32-pending-plan memory measurements remain in #162's separate qualification.
 
 [Committed operation-profile receipt](verification/evidence/workspace-operation-parity.json)
@@ -150,5 +149,51 @@ single-SDK bypass.
 encrypted-store/process scenarios and 28 checkpoints for Python/Node only. It
 retains raw host errors and actual winning candidate IDs against deterministic
 Core bundles, plus both existing high-level handoff/stream suites. Its profile
-SDKs/counts stay separate from the unchanged four-SDK 37/421 totals. Conversation
-and shipping-host security approval remain outside that proof.
+SDKs/counts stay separate from the four-SDK totals. The independently counted
+conversation-host profile below supplements these existing CAS scenarios;
+shipping-host security approval remains outside both proofs.
+
+
+## Mandatory conversation profile
+
+`fixtures/workspace/conversation-contract-v1.json` adds eight cases and 179
+commands. The complete four-SDK gate compares **45 cases / 600 steps** across
+actual Core, installed native Python/Node and Chromium WASM. Every conversation
+method and the prepared-change `sendIntents` accessor is mandatory. The reference
+calls the same public Core methods as the bindings; it never supplies expected
+snapshot bytes or substitutes a compatibility restore for a scoped call.
+
+The cases cover atomic multi-input send preparation, pending intents pausing
+whole-context restoration, partial saved confirmations, permanent logical IDs,
+one-time site binding, definite non-delivery, reopen/recovery, legacy exact-byte
+no-ops and explicit upgrades. Scoped strict, buffered and progressive restoration
+retain original Unicode issue ranges and exact delivered counts. Changed heads
+invalidate streams; same-head no-op activation preserves them. A failed strict
+report can count eligible markers while returning no text: an unissued marker
+must not contribute to `restoredMarkers`, and a mixed eligible/unissued response
+must not erase the eligible count.
+
+Raw per-SDK `*-conversations.raw.json` and validated `*-conversations.json`
+retain exact full heads, canonical inner bundles, actual send-intent IDs, numeric
+operation totals, nullable unknown times/history and original errors. Progressive
+failures preserve the actual public `complete` flag and prior delivered counts;
+validation never replaces those fields with expected constants. Mutation tests
+reject altered counts, malformed heads, invented ranges, omitted methods and
+partial text on failed strict calls.
+
+## Separately counted conversation-host profile
+
+[Conversation-host qualification](native-conversation-host-qualification-0.5.0-beta.3.md)
+executes 16 synthetic encrypted SQLite scenarios and 66 checkpoints in actual
+installed Python and Node. Its Core oracle uses the same committed conversation
+command protocol. The report retains `nativeServer.conversationHost` separately
+from the four-SDK 45/600 totals, the existing native CAS 9/28 totals and the
+mandatory 16-cycle plan-pressure proof. Existing Python (27 cases) and Node
+(17 checks) host suites remain mandatory too.
+
+These are reference-host/process proofs of saved-head, request and confirmation
+boundaries. They do not demonstrate a provider send acknowledgement, authorize
+retry after ambiguous delivery, or approve a production host's authentication,
+key storage, site binding or deployment. Final qualification requires the complete
+current profile and raw oracle comparisons; a prior structural-validator pass
+cannot substitute for them.
