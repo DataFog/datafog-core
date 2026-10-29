@@ -14,7 +14,7 @@ import tempfile
 import unittest
 import cryptography
 from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, TextRange, DataFogWorkspaceError
-from host import EncryptedStore, Scope, RequestContext, HostError, prepare_and_handoff, restore_response
+from host import EncryptedStore, Scope, RequestContext, HostError, prepare_and_handoff, restore_response, restore_text_chunks, HostStreamFailure
 
 
 def public_id(value): return bytes([value]) * 16
@@ -239,6 +239,93 @@ class HostTests(unittest.TestCase):
         context=RequestContext(missing.scope,public_id(31))
         self.error("state_unavailable",lambda:restore_response(missing,context,context,{"text":response["text"],"history":"Ada Example"}))
 
+    def test_streaming_default_withholds_every_chunk_until_atomic_finalization(self):
+        response=self.run_request();marker=response["text"]
+        observed=[];chunks=[b"prefix ",marker.encode(),b" suffix."]
+        def source():
+            for chunk in chunks:
+                self.assertEqual(observed,[])
+                yield chunk
+        result=restore_text_chunks(self.store,self.context,self.context,source(),observed.append)
+        self.assertTrue(result["complete"]);self.assertEqual(len(observed),1)
+        self.assertEqual(observed[0]["text"],"prefix Ada Example suffix.");self.assertTrue(observed[0]["complete"])
+        failed=[]
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,self.context,[marker.encode(),b" [[PERSON_BAD]]"],failed.append)
+        self.assertEqual(caught.exception.code,"invalid_marker");self.assertFalse(caught.exception.complete)
+        self.assertEqual(caught.exception.accepted["bytes"],0);self.assertEqual(failed,[])
+
+    def test_progressive_late_failure_reports_incomplete_without_retracting_prior_acceptance(self):
+        marker=self.run_request()["text"];observed=[]
+        with self.store.open() as before:raw=before.export_bundle()
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,self.context,
+                [marker.encode(),b" ",b"discarded [[PERSON_BAD]]"],observed.append,progressive=True)
+        error=caught.exception
+        self.assertEqual(error.code,"invalid_marker");self.assertFalse(error.complete)
+        self.assertEqual("".join(e["text"] for e in observed),"Ada Example ")
+        self.assertTrue(all(e["complete"] is False for e in observed))
+        self.assertEqual(error.accepted,observed[-1]["delivered"])
+        self.assertEqual(error.core_delivered,error.accepted);self.assertTrue(error.marker_issues)
+        self.assertNotIn("Ada",str(error));self.assertFalse(error.transport_uncertain)
+        with self.store.open() as after:self.assertEqual(after.export_bundle(),raw)
+
+    def test_progressive_success_requires_acknowledged_finalization_and_trusted_context(self):
+        marker=self.run_request()["text"];observed=[]
+        result=restore_text_chunks(self.store,self.context,self.context,[marker.encode(),b"."],observed.append,progressive=True)
+        self.assertTrue(result["complete"]);self.assertTrue(observed[-1]["complete"])
+        self.assertEqual("".join(e["text"] for e in observed),"Ada Example.")
+        self.assertEqual(result["accepted"],observed[-1]["delivered"])
+        consumed=[]
+        def never_consume():
+            consumed.append(True);yield marker.encode()
+        wrong=RequestContext(self.scope,public_id(99))
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,wrong,never_consume(),observed.append,progressive=True)
+        self.assertEqual(caught.exception.code,"invalid_context");self.assertEqual(consumed,[])
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,self.context,[],observed.append,progressive="false")
+        self.assertEqual(caught.exception.code,"invalid_response")
+
+    def test_stream_cancellation_distinguishes_core_output_from_transport_acceptance(self):
+        marker=self.run_request()["text"]
+        for phase in ["before_chunk","after_restore","after_accept","after_finalize"]:
+            with self.subTest(phase=phase):
+                observed=[];cancelled=False
+                def checkpoint(current):
+                    nonlocal cancelled
+                    if current==phase:cancelled=True
+                with self.assertRaises(HostStreamFailure) as caught:
+                    restore_text_chunks(self.store,self.context,self.context,[marker.encode()],observed.append,
+                        progressive=True,cancelled=lambda:cancelled,checkpoint=checkpoint)
+                error=caught.exception;self.assertEqual(error.code,"cancelled");self.assertFalse(error.complete)
+                self.assertTrue(all(e["complete"] is False for e in observed))
+                self.assertEqual(error.accepted["bytes"],len("".join(e["text"] for e in observed).encode()))
+                if phase=="after_restore":
+                    self.assertEqual(observed,[]);self.assertEqual(error.accepted["bytes"],0)
+                    self.assertEqual(error.core_delivered["bytes"],len("Ada Example"))
+
+    def test_failed_input_transport_does_not_report_completion_or_raw_errors(self):
+        marker=self.run_request()["text"];observed=[]
+        def interrupted():
+            yield marker.encode()
+            raise RuntimeError("synthetic private producer diagnostic")
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,self.context,interrupted(),observed.append,progressive=True)
+        error=caught.exception;self.assertEqual(error.code,"response_incomplete");self.assertFalse(error.complete)
+        self.assertEqual(error.accepted,observed[-1]["delivered"]);self.assertEqual(len(observed),1)
+        self.assertNotIn("private",str(error));self.assertFalse(observed[0]["complete"])
+
+    def test_failed_transport_acknowledgment_is_uncertain_and_never_retried(self):
+        marker=self.run_request()["text"];attempted=[]
+        def uncertain(event):
+            attempted.append(event);raise RuntimeError("synthetic transport failed after write")
+        with self.assertRaises(HostStreamFailure) as caught:
+            restore_text_chunks(self.store,self.context,self.context,[marker.encode(),b"never"],uncertain,progressive=True)
+        error=caught.exception;self.assertEqual(error.code,"delivery_uncertain");self.assertTrue(error.transport_uncertain)
+        self.assertFalse(error.complete);self.assertEqual(error.accepted["bytes"],0)
+        self.assertEqual(error.core_delivered["bytes"],len("Ada Example"));self.assertEqual(len(attempted),1)
+
 
 def main():
     result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(HostTests))
@@ -248,7 +335,8 @@ def main():
     receipt={"result":"passed","tests":result.testsRun,"python":platform.python_version(),
         "cryptography":cryptography.__version__,"sqlite":sqlite3.sqlite_version,
         "workerStart":"spawn","workers":2,"maxLivePlansPerHandle":32,
-        "scope":"synthetic native Python encrypted SQLite/process host; nonstreaming only"}
+        "scope":"synthetic native Python encrypted SQLite/process host; strict and opt-in progressive text-channel transport",
+        "streaming":{"strictDefault":True,"progressiveExplicit":True,"acceptance":"local transport callback acknowledgment only","providerFraming":False}}
     root=Path(__file__).resolve().parents[2]
     receipt["sourceCommit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip()
     receipt["sourceDirty"]=bool(subprocess.check_output(["git","status","--porcelain"],cwd=root))

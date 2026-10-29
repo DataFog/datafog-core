@@ -3,7 +3,8 @@
 Work in progress; not a reviewed production server or a LiteLLM adapter.
 This example qualifies the actual installed native Python SDK against encrypted
 SQLite snapshots and competing independent worker processes. It never infers a
-mapping store from chat history and does not implement streaming restoration.
+mapping store from chat history. The response proof includes strict buffered
+restoration and a separately selected progressive text-channel transport seam.
 
 The application must authenticate and authorize a principal before selecting a
 16-byte tenant/workspace identity or resolving a host key. The synthetic harness
@@ -40,7 +41,7 @@ fails rather than guessing unknown markers from resent chat history.
 
 Nonstreaming response restoration uses the server-owned request/tenant/workspace
 correlation and only the explicit text field. Synthetic tool envelopes stay
-unchanged. Provider translation, streaming R4, cross-runtime X8 and G4 security
+unchanged. Provider translation, full R4 integration, cross-runtime X8 and G4 security
 review remain separate gates. All fixtures are invented and the proof makes no
 real-data-pilot or production approval claim.
 
@@ -76,3 +77,29 @@ expected context to that request's trusted transport callback. Provider text and
 client-supplied IDs do not establish authorization. The synthetic retry fixtures
 use fresh request contexts and Core operation IDs; deployment registries must also
 expire/revoke cancelled request contexts before dispatching late responses.
+
+## Streaming text-channel proof
+
+`restore_text_chunks` defaults to strict buffering and acknowledges one atomic
+restored event only after EOF. `progressive=True` must be an actual boolean to
+opt into irreversible output. It receives already-separated UTF-8 text bytes;
+provider framing, tool channels, SSE parsing and a LiteLLM middleware are outside
+this synthetic seam. Trusted server-owned request contexts are checked before
+any input iterator is consumed.
+
+The host tracks `accepted` counts only after its transport callback returns.
+These are callback acknowledgments, not proof that a remote user received text.
+Core's `delivered` counts describe output returned to the native caller. They may
+exceed host acceptance if cancellation happens after restoration but before the
+transport callback; failures report both separately with `complete=False`.
+A failed callback may have written externally before losing its acknowledgment,
+so `delivery_uncertain` never retries or silently resumes. Prior acknowledged
+chunks cannot be retracted. Only an acknowledged final event reports completion.
+A cancellation after that final acknowledgment cannot retract observed completion.
+
+Installed tests cover late invalid markers, atomic strict output, progressive
+success, cancellation before restoration/between restoration and acceptance/after
+partial acceptance/before final acknowledgment, request isolation and uncertain
+transport writes. Response restoration never changes the encrypted snapshot.
+These observations qualify this host seam only; they do not approve a production
+transport, deployment rollback policy or provider integration.

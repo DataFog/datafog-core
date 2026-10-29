@@ -183,3 +183,93 @@ def restore_response(store: EncryptedStore, expected: RequestContext, transport:
     with store.open() as workspace:
         text = workspace.restore(body["text"])
     return {**body, "text": text}
+
+class HostStreamFailure(HostError):
+    """Content-free transport status; callback acknowledgments are not global delivery proof."""
+    def __init__(self, code: str, accepted: dict, *, core_delivered=None,
+                 transport_uncertain: bool = False, marker_issues=()):
+        super().__init__(code)
+        self.accepted = dict(accepted)
+        self.core_delivered = None if core_delivered is None else dict(core_delivered)
+        self.transport_uncertain = transport_uncertain
+        self.marker_issues = list(marker_issues)
+        self.complete = False
+
+
+def restore_text_chunks(store: EncryptedStore, expected: RequestContext, transport: RequestContext,
+                        chunks, accept: Callable[[dict], None], *, progressive: bool = False,
+                        cancelled: Callable[[], bool] = lambda: False,
+                        checkpoint: Callable[[str], None] = lambda phase: None):
+    """Restore one server-correlated text channel; provider framing stays outside this seam.
+
+    `accept` returns only after the host transport acknowledges the event. A raised
+    callback has uncertain external delivery and must never trigger automatic retry.
+    Strict mode withholds all text until finalization; progressive mode is explicit.
+    """
+    from datafog_core import DataFogWorkspaceError
+    accepted = {"bytes": 0, "codepoints": 0, "utf16": 0, "restoredMarkers": 0}
+    core_delivered = None
+    if expected != transport or expected.scope != store.scope:
+        raise HostStreamFailure("invalid_context", accepted)
+    if type(progressive) is not bool:
+        raise HostStreamFailure("invalid_response", accepted)
+
+    def check_cancel():
+        if cancelled():
+            raise HostStreamFailure("cancelled", accepted, core_delivered=core_delivered)
+
+    def release(event):
+        nonlocal accepted
+        check_cancel()
+        try:
+            accept(event)
+        except Exception:
+            # The transport may have sent the event before failing its acknowledgment.
+            raise HostStreamFailure("delivery_uncertain", accepted,
+                core_delivered=core_delivered, transport_uncertain=True) from None
+        accepted = dict(event["delivered"])
+        checkpoint("after_accept")
+
+    check_cancel()
+    try:
+        with store.open() as workspace:
+            response = workspace.progressive_restore() if progressive else workspace.buffered_restore()
+            with response:
+                for chunk in chunks:
+                    check_cancel()
+                    checkpoint("before_chunk")
+                    check_cancel()
+                    result = response.feed(chunk)
+                    if progressive: core_delivered = result["delivered"]
+                    checkpoint("after_restore")
+                    check_cancel()
+                    if progressive:
+                        release({"text": result["text"], "delivered": result["delivered"], "complete": False})
+                check_cancel()
+                result = response.finalize()
+                if progressive:
+                    core_delivered = result["delivered"]
+                    event = result
+                else:
+                    if result["text"] is None:
+                        raise HostStreamFailure("invalid_marker", accepted, marker_issues=result["issues"])
+                    text = result["text"]
+                    event = {"text": text, "complete": True, "delivered": {
+                        "bytes":len(text.encode("utf-8")), "codepoints":len(text),
+                        "utf16":len(text.encode("utf-16-le"))//2,
+                        "restoredMarkers":result["restoredMarkers"]}}
+                checkpoint("after_finalize")
+                release(event)
+                # Once the final event is acknowledged, completion is already observable.
+                return {"accepted": accepted, "complete": True}
+    except DataFogWorkspaceError as error:
+        raise HostStreamFailure(error.code, accepted,
+            core_delivered=getattr(error,"delivered",None),
+            marker_issues=error.marker_issues) from None
+    except HostStreamFailure:
+        raise
+    except HostError as error:
+        raise HostStreamFailure(error.code, accepted, core_delivered=core_delivered) from None
+    except Exception:
+        # A failed source iterator cannot turn an unfinished response into EOF.
+        raise HostStreamFailure("response_incomplete", accepted, core_delivered=core_delivered) from None
