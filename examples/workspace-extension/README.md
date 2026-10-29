@@ -225,3 +225,8 @@ text would fail an unchanged round trip. The harness highlights source issue ran
 correct the input and prepare a fresh preview. Remove and re-add a queued input to
 correct it. Ordinary text such as `[[my note]]` remains ordinary text; full committed
 markers pass through, while bare committed codes require their brackets.
+
+Successful WASM activation releases retained plans based on an older workspace
+head. Those handles subsequently return `inactive_plan`. No-op activation preserves
+other current-head plans, and failed activation changes neither mappings nor plan
+capacity. Hosts must still explicitly discard unused current-head plans.

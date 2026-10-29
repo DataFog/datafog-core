@@ -20,6 +20,28 @@ export async function verifyWorkspace(api, counters) {
   check(firstIssue.byteRange.start === 9 && firstIssue.codepointRange.start === 5 && firstIssue.utf16Range.start === 6, "source diagnostics preserve independent Unicode coordinate systems");
   check(!JSON.stringify(sourceFailure).includes("my_note") && equal(blocked.exportBundle(), blockedSaved), "source errors contain no input values and rejected preparation changes no mappings");
   blocked.close();
+  const retained = api.Workspace.create(id(40), id(41));
+  const pending = retained.prepare("Jane", [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}], id(42));
+  const noOp = retained.prepare("ordinary text", [], id(43));
+  const noOpHeads = noOp.heads();
+  retained.activateSaved(noOp, noOpHeads.expectedHead, noOpHeads.candidateHead);
+  check(pending.preview().text.startsWith("[[PERSON_"), "no-op activation preserves valid current-head plans");
+  const pendingHeads = pending.heads();
+  throws(() => retained.activateSaved(pending, pendingHeads.expectedHead, {...pendingHeads.candidateHead, revision: "999"}), "workspace_conflict");
+  check(pending.preview().text.startsWith("[[PERSON_"), "failed activation preserves valid plans");
+  const live = [pending];
+  for (let n = 0; n < 31; n++) live.push(retained.prepare("ordinary text", [], id(44 + n)));
+  throws(() => retained.prepare("ordinary text", [], id(80)), "resource_limit");
+  retained.activateSaved(pending, pendingHeads.expectedHead, pendingHeads.candidateHead);
+  for (const stale of live) throws(() => stale.preview(), "inactive_plan");
+  for (let n = 0; n < 40; n++) {
+    const abandoned = retained.prepareBatch([{text: "ordinary text", findings: []}], id(81 + n * 2));
+    const recovery = retained.prepareRecovery(id(82 + n * 2));
+    const heads = recovery.heads();
+    retained.activateSaved(recovery, heads.expectedHead, heads.candidateHead);
+    throws(() => abandoned.previews(), "inactive_plan");
+  }
+  retained.close();
   const batch = api.Workspace.create(id(21), id(22));
   const name = { entityType: "PERSON", matchedText: "Jane", range: { unit: "utf8_bytes", start: 0, end: 4 } };
   const inputs = [{ text: "Jane | -10 USD", findings: [name] }, { text: "Jane | -20 USD", findings: [name] }];
