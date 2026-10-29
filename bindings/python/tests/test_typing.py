@@ -204,7 +204,22 @@ assert_type(recorded.prepare_recovery_with_operation({"id": bytes(16), "occurred
 assert_type(recorded.prepare_outcome({"kind": "blocked_input", "issueCount": 1}, {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
 """
 
-# Each line must produce a diagnostic; a missing stub or Any cannot satisfy this.
+VALID += """
+conversation_plan = recorded.prepare_conversation_send([{"input": review_input, "conversation": {"id": bytes(16), "surface": "synthetic_chat", "siteId": None, "siteIdByteBudget": 128}}], {"id": bytes(16), "occurredAtMs": 0})
+intent = conversation_plan.send_intents()[0]
+assert_type(intent["inputIndex"], int)
+assert_type(recorded.conversation(bytes(16))["pendingIntents"], int)
+assert_type(recorded.conversation_for_site("synthetic_chat", "thread"), bytes)
+assert_type(recorded.send_intent_status(intent), Literal["pending", "observed_sent", "definitely_not_sent"])
+assert_type(recorded.prepare_observed_send(intent, bytes(16), "synthetic_chat", "thread", {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+assert_type(recorded.prepare_definitely_not_sent(intent, bytes(16), {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+assert_type(recorded.restore_in_conversation("text", bytes(16)), str)
+assert_type(recorded.restore_report_in_conversation("text", bytes(16))["text"], str | None)
+assert_type(recorded.buffered_restore_in_conversation(bytes(16)), WorkspaceBufferedRestore)
+assert_type(recorded.progressive_restore_in_conversation(bytes(16), "utf16"), WorkspaceProgressiveRestore)
+"""
+
+# Each marked line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
 capabilities(1)  # error
@@ -230,7 +245,7 @@ TransformResult()  # error
 """
 
 INVALID += """
-from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, WorkspacePreparedChange, TextRange
+from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, WorkspacePreparedChange, WorkspaceReviewInput, TextRange
 Workspace()  # error
 WorkspacePreparedChange()  # error
 Workspace.create("namespace", bytes(16))  # error
@@ -265,6 +280,13 @@ Workspace.create(bytes(16), bytes(16)).prepare_with_operation("", [], bytes(16))
 Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "sent", "issueCount": 0}, {"id": bytes(16), "occurredAtMs": 1})  # error
 Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "user_cancelled", "issueCount": "0"}, {"id": bytes(16), "occurredAtMs": 1})  # error
 Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "copy_confirmed", "issueCount": 0, "text": "forbidden"}, {"id": bytes(16), "occurredAtMs": 1})  # error
+"""
+
+
+INVALID += """
+Workspace.create(bytes(16), bytes(16)).prepare_conversation_send([{"input": WorkspaceReviewInput("text"), "conversation": {"id": bytes(16), "surface": "synthetic_chat", "siteId": None, "siteIdByteBudget": "128"}}], {"id": bytes(16), "occurredAtMs": 0})  # error
+Workspace.create(bytes(16), bytes(16)).send_intent_status({"preparationId": bytes(16), "inputIndex": "0"})  # error
+Workspace.create(bytes(16), bytes(16)).buffered_restore_in_conversation(bytes(16), "bytes")  # error
 """
 
 

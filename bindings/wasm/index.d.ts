@@ -56,6 +56,7 @@ export type DataFogErrorCode =
   | "invalid_finding"
   | "review_conflict"
   | "invalid_operation" | "operation_reused" | "invalid_policy"
+  | "invalid_conversation" | "conversation_unknown" | "conversation_pending" | "invalid_send_intent"
   | "closed_workspace"
   | "inactive_plan"
   | "inactive_stream"
@@ -274,6 +275,8 @@ export interface PreparedWorkspaceChange {
   snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
+  /** Saved intention only; neither preview nor this ID proves a send. */
+  sendIntents(): readonly WorkspaceSendIntent[];
   /** Requires a single-input plan. */
   preview(): WorkspacePreview;
   previews(): readonly WorkspacePreview[];
@@ -285,7 +288,7 @@ export interface PreparedWorkspaceChange {
 /** Content-free source or output issue ranges; never contains a source or restored value. */
 export interface WorkspaceMarkerIssue {
   /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets. */
-  readonly kind: "unknown" | "damaged" | "unbracketed";
+  readonly kind: "unknown" | "damaged" | "unbracketed" | "not_issued_in_conversation";
   readonly byteRange: TextRange;
   readonly codepointRange: TextRange;
   readonly utf16Range: TextRange;
@@ -329,11 +332,24 @@ export interface WorkspaceReviewResult {
   readonly conflicts: readonly WorkspaceReviewConflict[];
 }
 export interface WorkspaceOperation { readonly id: Uint8Array; readonly occurredAtMs: number; }
+export interface WorkspaceConversation {
+  /** Private immutable host-generated ID, independent of the site's ID. */
+  readonly id: Uint8Array | readonly number[];
+  readonly surface: string;
+  /** Required null for an initially unbound first chat. Bind once after observed send. */
+  readonly siteId: string | null;
+  /** Immutable pre-send maximum UTF-8 bytes; the host must substantiate this bound. */
+  readonly siteIdByteBudget: number;
+}
+export interface WorkspaceConversationInput { readonly input: WorkspaceReviewInput; readonly conversation: WorkspaceConversation; }
+export interface WorkspaceSendIntent { readonly preparationId: Uint8Array | readonly number[]; readonly inputIndex: number; }
+export interface WorkspaceConversationState { readonly conversation: WorkspaceConversation; readonly pendingIntents: number; readonly issuedMarkers: number; }
+export type WorkspaceSendStatus = "pending" | "observed_sent" | "definitely_not_sent";
 export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
 export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
 export interface WorkspaceOperationRecord {
   readonly id: readonly number[];
-  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | WorkspaceOutcomeKind;
+  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | "conversation_prepare" | "send_confirmed" | "send_not_sent" | WorkspaceOutcomeKind;
   readonly occurredAtMs: number | null;
   readonly preparedInputs: number;
   readonly transformedSpans: number;
@@ -393,6 +409,19 @@ export class Workspace {
   review(input: WorkspaceReviewInput): WorkspaceReviewResult;
   /** Recompute review for every input. Any unresolved overlap rejects the whole batch before a plan exists. Approval and durable save remain required. */
   prepareReview(inputs: readonly WorkspaceReviewInput[], operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Funds the later resolution before any external handoff; save/activate explicitly. */
+  prepareConversationSend(inputs: readonly WorkspaceConversationInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  conversation(logicalId: Uint8Array): WorkspaceConversationState;
+  conversationForSite(surface: string, siteId: string): Uint8Array;
+  sendIntentStatus(intent: WorkspaceSendIntent): WorkspaceSendStatus;
+  /** Trusted actual-send observation only; binding and issuance save atomically. */
+  prepareObservedSend(intent: WorkspaceSendIntent, logicalId: Uint8Array, surface: string, siteId: string, operation: WorkspaceOperation): PreparedWorkspaceChange;
+  /** Trusted definite non-delivery, never a generic timeout or manual send assertion. */
+  prepareDefinitelyNotSent(intent: WorkspaceSendIntent, logicalId: Uint8Array, operation: WorkspaceOperation): PreparedWorkspaceChange;
+  restoreInConversation(text: string, logicalId: Uint8Array): string;
+  restoreReportInConversation(text: string, logicalId: Uint8Array): WorkspaceRestoreReport;
+  bufferedRestoreInConversation(logicalId: Uint8Array, encoding?: WorkspaceRestoreEncoding): WorkspaceBufferedRestore;
+  progressiveRestoreInConversation(logicalId: Uint8Array, encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
   policy(): WorkspacePolicy;
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;

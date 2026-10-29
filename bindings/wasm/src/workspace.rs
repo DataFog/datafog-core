@@ -1,3 +1,4 @@
+mod conversation;
 mod stream;
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,

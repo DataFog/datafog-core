@@ -24,6 +24,9 @@ pub enum OperationKind {
     BlockedInput,
     RestoreBlocked,
     PolicyChange,
+    SendConfirmed,
+    SendNotSent,
+    ConversationPrepare,
 }
 impl OperationKind {
     pub fn as_str(self) -> &'static str {
@@ -36,6 +39,9 @@ impl OperationKind {
             Self::BlockedInput => "blocked_input",
             Self::RestoreBlocked => "restore_blocked",
             Self::PolicyChange => "policy_change",
+            Self::SendConfirmed => "send_confirmed",
+            Self::SendNotSent => "send_not_sent",
+            Self::ConversationPrepare => "conversation_prepare",
         }
     }
     pub(super) fn code(self) -> u8 {
@@ -48,6 +54,9 @@ impl OperationKind {
             Self::BlockedInput => 5,
             Self::RestoreBlocked => 6,
             Self::PolicyChange => 7,
+            Self::SendConfirmed => 8,
+            Self::SendNotSent => 9,
+            Self::ConversationPrepare => 10,
         }
     }
     pub(super) fn from_code(code: u8) -> Result<Self> {
@@ -60,8 +69,14 @@ impl OperationKind {
             5 => Ok(Self::BlockedInput),
             6 => Ok(Self::RestoreBlocked),
             7 => Ok(Self::PolicyChange),
+            8 => Ok(Self::SendConfirmed),
+            9 => Ok(Self::SendNotSent),
+            10 => Ok(Self::ConversationPrepare),
             _ => Err(error(ErrorCode::InvalidSnapshot)),
         }
+    }
+    pub(super) fn is_send_resolution(self) -> bool {
+        matches!(self, Self::SendConfirmed | Self::SendNotSent)
     }
 }
 
@@ -87,7 +102,7 @@ pub struct OperationCounts {
     pub operations: u64,
     pub prepared_inputs: u64,
     pub transformed_spans: u64,
-    /// Reserved at zero until an explicit observed-handoff transaction is implemented.
+    /// Only durably saved observed-send transactions count; copying is distinct.
     pub confirmed_handoffs: u64,
     pub reported_blocked_attempts: u64,
 }
@@ -137,11 +152,18 @@ pub(super) fn summarize(records: &[OperationRecord]) -> Result<OperationCounts> 
                     | OperationKind::UserCancelled
                     | OperationKind::BlockedInput
                     | OperationKind::RestoreBlocked
+                    | OperationKind::SendConfirmed
+                    | OperationKind::SendNotSent
+                    | OperationKind::ConversationPrepare
             ) && record.occurred_at_ms.is_none())
-            || (record.kind == OperationKind::Prepare
-                && !(1..=MAX_INPUTS as u64).contains(&record.prepared_inputs))
-            || (record.kind != OperationKind::Prepare
-                && (record.prepared_inputs != 0 || record.transformed_spans != 0))
+            || (matches!(
+                record.kind,
+                OperationKind::Prepare | OperationKind::ConversationPrepare
+            ) && !(1..=MAX_INPUTS as u64).contains(&record.prepared_inputs))
+            || (!matches!(
+                record.kind,
+                OperationKind::Prepare | OperationKind::ConversationPrepare
+            ) && (record.prepared_inputs != 0 || record.transformed_spans != 0))
             || record.transformed_spans > MAX_FINDINGS as u64
         {
             return Err(error(ErrorCode::InvalidSnapshot));
@@ -150,6 +172,9 @@ pub(super) fn summarize(records: &[OperationRecord]) -> Result<OperationCounts> 
         counts.operations += 1;
         counts.prepared_inputs += record.prepared_inputs;
         counts.transformed_spans += record.transformed_spans;
+        if record.kind == OperationKind::SendConfirmed {
+            counts.confirmed_handoffs += 1;
+        }
         if matches!(
             record.kind,
             OperationKind::BlockedInput | OperationKind::RestoreBlocked
@@ -181,13 +206,20 @@ impl State {
         } else {
             MAX_ORDINARY_OPERATIONS
         };
-        if self.operations.len() >= limit {
+        if self
+            .operations
+            .len()
+            .checked_add(self.conversations.pending_count())
+            .is_none_or(|count| count >= limit)
+        {
             return Err(error(ErrorCode::ResourceLimit));
         }
         Ok(())
     }
     pub(super) fn record_operation(&mut self, operation: OperationRecord) -> Result<()> {
-        self.admit_record(operation.kind == OperationKind::Recovery)?;
+        self.admit_record(
+            operation.kind == OperationKind::Recovery || operation.kind.is_send_resolution(),
+        )?;
         self.operations
             .try_reserve_exact(1)
             .map_err(|_| error(ErrorCode::ResourceLimit))?;

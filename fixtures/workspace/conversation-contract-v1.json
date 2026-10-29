@@ -1,0 +1,3420 @@
+{
+  "schemaVersion": 1,
+  "profile": "workspace-conversations-v1",
+  "requiredMethods": [
+    "create",
+    "createWithOperation",
+    "openBundle",
+    "head",
+    "namespace",
+    "exportBundle",
+    "prepare",
+    "prepareRecoveryWithOperation",
+    "counts",
+    "operations",
+    "historyCoverage",
+    "activateSaved",
+    "close",
+    "restoreReport",
+    "prepareConversationSend",
+    "prepareObservedSend",
+    "prepareDefinitelyNotSent",
+    "conversation",
+    "conversationForSite",
+    "sendIntentStatus",
+    "restoreInConversation",
+    "restoreReportInConversation",
+    "bufferedRestoreInConversation",
+    "progressiveRestoreInConversation",
+    "plan.heads",
+    "plan.previews",
+    "plan.exportCandidateBundle",
+    "plan.discard",
+    "plan.snapshotFormat",
+    "plan.policyPreview",
+    "plan.sendIntents"
+  ],
+  "scope": "Mandatory actual four-SDK saved conversation/intent/identity, exact canonical state and scoped strict/streaming qualification. Synthetic trusted observations only; no provider or shipping-host authorization claim. Eligible restoredMarkers counts are explicit, including zero and mixed strict failures.",
+  "cases": [
+    {
+      "id": "partial-batch-first-chat-reopen-recovery",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic 👋 Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 21
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic 👋 Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic 👋 Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 21
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic 👋 Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "sendIntents",
+          "plan": "send",
+          "expectValue": [
+            {
+              "preparationId": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "inputIndex": 0
+            },
+            {
+              "preparationId": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "inputIndex": 1
+            }
+          ]
+        },
+        {
+          "call": "conversation",
+          "expectCode": "conversation_unknown",
+          "workspace": "w",
+          "logicalIdByte": 10
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "seed"
+        },
+        {
+          "call": "activateSaved",
+          "expectCode": "workspace_conflict",
+          "workspace": "w",
+          "plan": "send",
+          "savedHeadMode": "parent"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "unchanged",
+          "sameBundleAs": "seed"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 2,
+            "preparedInputs": 2,
+            "transformedSpans": 2,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "conversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "expectValue": {
+            "conversation": {
+              "id": [
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10,
+                10
+              ],
+              "surface": "synthetic_chat",
+              "siteId": null,
+              "siteIdByteBudget": 128
+            },
+            "pendingIntents": 2,
+            "issuedMarkers": 0
+          }
+        },
+        {
+          "call": "restoreInConversation",
+          "expectCode": "conversation_pending",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "ordinary reply"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectCode": "conversation_pending"
+        },
+        {
+          "call": "bufferedRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "blocked",
+          "encoding": "utf8",
+          "expectCode": "conversation_pending"
+        },
+        {
+          "call": "restoreReportPlanText",
+          "workspace": "w",
+          "plan": "send",
+          "inputIndex": 0,
+          "expectValue": {
+            "text": "Synthetic 👋 Person",
+            "restoredMarkers": 1,
+            "issues": []
+          }
+        },
+        {
+          "call": "progressiveRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "blockedP",
+          "encoding": "utf8",
+          "expectCode": "conversation_pending"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "discarded",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "discard",
+          "plan": "discarded"
+        },
+        {
+          "call": "sendIntentStatus",
+          "workspace": "w",
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": "pending"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before_bad"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "wrong",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 11,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectCode": "invalid_send_intent"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after_bad",
+          "sameBundleAs": "before_bad"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 3,
+            "preparedInputs": 2,
+            "transformedSpans": 2,
+            "confirmedHandoffs": 1,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectCode": "conversation_pending"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "partial"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "bundle": "partial"
+        },
+        {
+          "call": "sendIntentStatus",
+          "workspace": "w",
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": "observed_sent"
+        },
+        {
+          "call": "sendIntentStatus",
+          "workspace": "w",
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 1
+          },
+          "expectValue": "pending"
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "w",
+          "plan": "recovery",
+          "operationByte": 6,
+          "occurredAtMs": 6
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "recovery"
+        },
+        {
+          "call": "restoreInConversation",
+          "expectCode": "conversation_pending",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "old ordinary reply"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "second",
+          "operationByte": 7,
+          "occurredAtMs": 7,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 1
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "second"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 5,
+            "preparedInputs": 2,
+            "transformedSpans": 2,
+            "confirmedHandoffs": 2,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "conversationForSite",
+          "workspace": "w",
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectValue": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ]
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": "Synthetic 👋 Person",
+            "restoredMarkers": 1,
+            "issues": []
+          }
+        },
+        {
+          "call": "restoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": "Synthetic 👋 Person"
+        },
+        {
+          "call": "operations",
+          "workspace": "w"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "not_applicable"
+          }
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "replay",
+          "operationByte": 8,
+          "occurredAtMs": 8,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 1
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectCode": "invalid_send_intent"
+        }
+      ]
+    },
+    {
+      "id": "isolated-contexts-and-eligible-counts-on-strict-failure",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "other",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Other Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 12
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Other Person"
+              },
+              "conversation": {
+                "id": [
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "other"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": "Synthetic Person",
+            "restoredMarkers": 1,
+            "issues": []
+          }
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "duplicate",
+          "operationByte": 6,
+          "occurredAtMs": 6,
+          "logicalIdByte": 11,
+          "intentFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectCode": "invalid_conversation"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "otherConfirmed",
+          "operationByte": 6,
+          "occurredAtMs": 6,
+          "logicalIdByte": 11,
+          "intentFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_b"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "otherConfirmed"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "prefix": "👋 ",
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 0,
+            "issues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 5,
+                  "end": 22
+                },
+                "codepointRange": {
+                  "start": 2,
+                  "end": 19
+                },
+                "utf16Range": {
+                  "start": 3,
+                  "end": 20
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "restoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "prefix": "👋 ",
+          "expectCode": "invalid_marker",
+          "expectError": {
+            "markerIssues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 5,
+                  "end": 22
+                },
+                "codepointRange": {
+                  "start": 2,
+                  "end": 19
+                },
+                "utf16Range": {
+                  "start": 3,
+                  "end": 20
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "mixed",
+          "operationByte": 7,
+          "occurredAtMs": 7,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  },
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Other Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 19,
+                      "end": 31
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person / Other Person"
+              },
+              "conversation": {
+                "id": [
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_b",
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "mixed"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "mixed",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 1,
+            "issues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 20,
+                  "end": 37
+                },
+                "codepointRange": {
+                  "start": 20,
+                  "end": 37
+                },
+                "utf16Range": {
+                  "start": 20,
+                  "end": 37
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "prepareDefinitelyNotSent",
+          "workspace": "w",
+          "plan": "notSent",
+          "intentFrom": {
+            "plan": "mixed",
+            "inputIndex": 0
+          },
+          "logicalIdByte": 11,
+          "operationByte": 8,
+          "occurredAtMs": 8
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "notSent"
+        },
+        {
+          "call": "sendIntentStatus",
+          "workspace": "w",
+          "intentFrom": {
+            "plan": "mixed",
+            "inputIndex": 0
+          },
+          "expectValue": "definitely_not_sent"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 7,
+            "preparedInputs": 3,
+            "transformedSpans": 4,
+            "confirmedHandoffs": 2,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "complete"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "bundle": "complete"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "mixed",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 1,
+            "issues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 20,
+                  "end": 37
+                },
+                "codepointRange": {
+                  "start": 20,
+                  "end": 37
+                },
+                "utf16Range": {
+                  "start": 20,
+                  "end": 37
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scoped-utf8-utf16-and-repeated-marker-counts",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  },
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 19,
+                      "end": 35
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person + Synthetic Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": "Synthetic Person + Synthetic Person",
+            "restoredMarkers": 2,
+            "issues": []
+          }
+        },
+        {
+          "call": "bufferedRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "buffered",
+          "encoding": "utf8"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "buffered",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "byteSlice": [
+            0,
+            5
+          ],
+          "expectValue": null
+        },
+        {
+          "call": "streamFeed",
+          "stream": "buffered",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "byteSlice": [
+            5,
+            37
+          ],
+          "expectValue": null
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "buffered",
+          "expectValue": {
+            "text": "Synthetic Person + Synthetic Person",
+            "restoredMarkers": 2,
+            "issues": []
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "buffered"
+        },
+        {
+          "call": "progressiveRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "live",
+          "encoding": "utf8"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "live",
+          "text": "safe 👋 ",
+          "expectValue": {
+            "text": "safe 👋 ",
+            "complete": false,
+            "delivered": {
+              "bytes": 10,
+              "codepoints": 7,
+              "utf16": 8,
+              "restoredMarkers": 0
+            }
+          }
+        },
+        {
+          "call": "streamFeed",
+          "stream": "live",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": {
+            "text": "Synthetic Person + Synthetic Person",
+            "complete": false,
+            "delivered": {
+              "bytes": 45,
+              "codepoints": 42,
+              "utf16": 43,
+              "restoredMarkers": 2
+            }
+          }
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "live",
+          "expectValue": {
+            "text": "",
+            "complete": true,
+            "delivered": {
+              "bytes": 45,
+              "codepoints": 42,
+              "utf16": 43,
+              "restoredMarkers": 2
+            }
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "live"
+        },
+        {
+          "call": "bufferedRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "utf16",
+          "encoding": "utf16"
+        },
+        {
+          "call": "streamFeedUtf16",
+          "stream": "utf16",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "prefix": "👋 ",
+          "unitSlice": [
+            0,
+            1
+          ],
+          "expectValue": null
+        },
+        {
+          "call": "streamFeedUtf16",
+          "stream": "utf16",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "prefix": "👋 ",
+          "unitSlice": [
+            1,
+            40
+          ],
+          "expectValue": null
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "utf16",
+          "expectValue": {
+            "text": "👋 Synthetic Person + Synthetic Person",
+            "restoredMarkers": 2,
+            "issues": []
+          }
+        },
+        {
+          "call": "streamReset",
+          "stream": "utf16"
+        },
+        {
+          "call": "streamFeedUtf16",
+          "stream": "utf16",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectValue": null
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "utf16",
+          "expectValue": {
+            "text": "Synthetic Person + Synthetic Person",
+            "restoredMarkers": 2,
+            "issues": []
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "utf16"
+        }
+      ]
+    },
+    {
+      "id": "scoped-late-failure-no-partial-final-response",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "other",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Other Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 12
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Other Person"
+              },
+              "conversation": {
+                "id": [
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11,
+                  11
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "other"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "otherConfirmed",
+          "operationByte": 6,
+          "occurredAtMs": 6,
+          "logicalIdByte": 11,
+          "intentFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_b"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "otherConfirmed"
+        },
+        {
+          "call": "progressiveRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "failure",
+          "encoding": "utf8"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "failure",
+          "text": "safe 👋 "
+        },
+        {
+          "call": "streamFeed",
+          "stream": "failure",
+          "textFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          },
+          "expectCode": "invalid_marker",
+          "expectError": {
+            "complete": false,
+            "delivered": {
+              "bytes": 10,
+              "codepoints": 7,
+              "utf16": 8,
+              "restoredMarkers": 0
+            },
+            "markerIssues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 10,
+                  "end": 27
+                },
+                "codepointRange": {
+                  "start": 7,
+                  "end": 24
+                },
+                "utf16Range": {
+                  "start": 8,
+                  "end": 25
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "failure"
+        },
+        {
+          "call": "bufferedRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "strict",
+          "encoding": "utf8"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "strict",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "streamFeed",
+          "stream": "strict",
+          "textFrom": {
+            "plan": "other",
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "strict",
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 1,
+            "issues": [
+              {
+                "kind": "not_issued_in_conversation",
+                "byteRange": {
+                  "start": 17,
+                  "end": 34
+                },
+                "codepointRange": {
+                  "start": 17,
+                  "end": 34
+                },
+                "utf16Range": {
+                  "start": 17,
+                  "end": 34
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "strict"
+        }
+      ]
+    },
+    {
+      "id": "scoped-stream-epoch-noop-and-owner-close",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "progressiveRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "live",
+          "encoding": "utf8"
+        },
+        {
+          "call": "bufferedRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "buffered",
+          "encoding": "utf8"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before_noop"
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 5
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after_noop",
+          "sameBundleAs": "before_noop"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "live",
+          "text": "safe ",
+          "expectValue": {
+            "text": "safe ",
+            "complete": false,
+            "delivered": {
+              "bytes": 5,
+              "codepoints": 5,
+              "utf16": 5,
+              "restoredMarkers": 0
+            }
+          }
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "follow",
+          "operationByte": 6,
+          "occurredAtMs": 6,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "textFrom": {
+                  "plan": "send",
+                  "inputIndex": 0
+                }
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "follow"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "live",
+          "textFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "expectCode": "workspace_conflict",
+          "expectError": {
+            "complete": false,
+            "delivered": {
+              "bytes": 5,
+              "codepoints": 5,
+              "utf16": 5,
+              "restoredMarkers": 0
+            }
+          }
+        },
+        {
+          "call": "streamFinalize",
+          "stream": "buffered",
+          "expectCode": "workspace_conflict",
+          "expectError": {
+            "complete": null,
+            "delivered": null
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "live"
+        },
+        {
+          "call": "streamClose",
+          "stream": "buffered"
+        },
+        {
+          "call": "prepareDefinitelyNotSent",
+          "workspace": "w",
+          "plan": "cancelled",
+          "intentFrom": {
+            "plan": "follow",
+            "inputIndex": 0
+          },
+          "logicalIdByte": 10,
+          "operationByte": 7,
+          "occurredAtMs": 7
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "cancelled"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 5,
+            "preparedInputs": 2,
+            "transformedSpans": 1,
+            "confirmedHandoffs": 1,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "progressiveRestoreInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "stream": "closed",
+          "encoding": "utf8"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "streamFeed",
+          "stream": "closed",
+          "text": "A",
+          "expectCode": "closed_workspace",
+          "expectError": {
+            "complete": false,
+            "delivered": {
+              "bytes": 0,
+              "codepoints": 0,
+              "utf16": 0,
+              "restoredMarkers": 0
+            }
+          }
+        },
+        {
+          "call": "streamClose",
+          "stream": "closed"
+        }
+      ]
+    },
+    {
+      "id": "immutable-binding-bounds-and-atomic-rejections",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 3,
+          "occurredAtMs": 3,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [
+                  {
+                    "entityType": "PERSON",
+                    "matchedText": "Synthetic Person",
+                    "range": {
+                      "unit": "utf8_bytes",
+                      "start": 0,
+                      "end": 16
+                    },
+                    "source": "user",
+                    "needsReview": true
+                  }
+                ],
+                "corrections": [],
+                "text": "Synthetic Person"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "confirmed",
+          "operationByte": 4,
+          "occurredAtMs": 4,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "confirmed"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "saved"
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "badBound",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ],
+          "expectCode": "invalid_conversation",
+          "expectError": {
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "badBudget",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 129
+              }
+            }
+          ],
+          "expectCode": "invalid_conversation",
+          "expectError": {
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "badBatch",
+          "operationByte": 5,
+          "occurredAtMs": 5,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            },
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": "thread_a",
+                "siteIdByteBudget": 128
+              }
+            }
+          ],
+          "expectCode": "resource_limit"
+        },
+        {
+          "call": "conversation",
+          "expectCode": "conversation_unknown",
+          "workspace": "w",
+          "logicalIdByte": 99
+        },
+        {
+          "call": "conversationForSite",
+          "expectCode": "invalid_conversation",
+          "workspace": "w",
+          "surface": "",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "unchanged",
+          "sameBundleAs": "saved"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 3,
+            "preparedInputs": 1,
+            "transformedSpans": 1,
+            "confirmedHandoffs": 1,
+            "reportedBlockedAttempts": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "legacy-v1-exact-noop-and-explicit-context-upgrade",
+      "commands": [
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "inlineBundleHex": "a7000101500101010101010101010101010101010102821b0020000000000001500303030303030303030303030303030303818566504552534f4e644a616e6566374b51345a4d50030303030303030303030303030303031b002000000000000104818266504552534f4e1b0020000000000001058006a2006c73796e7468657469635f76310180"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "legacy"
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 200
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "same",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 201,
+          "occurredAtMs": 201,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ],
+          "expectFields": {
+            "snapshotFormat": {
+              "currentVersion": 1,
+              "candidateVersion": 3
+            }
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "restoreInConversation",
+          "expectCode": "conversation_pending",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "ordinary"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "resolved",
+          "operationByte": 202,
+          "occurredAtMs": 202,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "resolved"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "ordinary",
+          "expectValue": {
+            "text": "ordinary",
+            "restoredMarkers": 0,
+            "issues": []
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "conversationForSite",
+          "workspace": "w",
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectValue": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legacy-v2-exact-noop-and-explicit-context-upgrade",
+      "commands": [
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "inlineBundleHex": "a80002015001010101010101010101010101010101028202500404040404040404040404040404040403818566504552534f4e644a616e656651464a38323850030303030303030303030303030303030104818266504552534f4e01058006a2006c70726f7465637465645f7631018007818466504552534f4e634d6179015004040404040404040404040404040404"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "legacy"
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 200
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "same",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareConversationSend",
+          "workspace": "w",
+          "plan": "send",
+          "operationByte": 201,
+          "occurredAtMs": 201,
+          "inputs": [
+            {
+              "input": {
+                "scannerFindings": [],
+                "userSelections": [],
+                "corrections": [],
+                "text": "ordinary"
+              },
+              "conversation": {
+                "id": [
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10,
+                  10
+                ],
+                "surface": "synthetic_chat",
+                "siteId": null,
+                "siteIdByteBudget": 128
+              }
+            }
+          ],
+          "expectFields": {
+            "snapshotFormat": {
+              "currentVersion": 2,
+              "candidateVersion": 3
+            }
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "send"
+        },
+        {
+          "call": "restoreInConversation",
+          "expectCode": "conversation_pending",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "ordinary"
+        },
+        {
+          "call": "prepareObservedSend",
+          "workspace": "w",
+          "plan": "resolved",
+          "operationByte": 202,
+          "occurredAtMs": 202,
+          "logicalIdByte": 10,
+          "intentFrom": {
+            "plan": "send",
+            "inputIndex": 0
+          },
+          "surface": "synthetic_chat",
+          "siteId": "thread_a"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "resolved"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "restoreReportInConversation",
+          "workspace": "w",
+          "logicalIdByte": 10,
+          "text": "ordinary",
+          "expectValue": {
+            "text": "ordinary",
+            "restoredMarkers": 0,
+            "issues": []
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "conversationForSite",
+          "workspace": "w",
+          "surface": "synthetic_chat",
+          "siteId": "thread_a",
+          "expectValue": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ]
+        }
+      ]
+    }
+  ]
+}

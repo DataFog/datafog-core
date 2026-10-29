@@ -2,10 +2,10 @@
 
 This is the current-field inventory for [#152](https://github.com/DataFog/datafog-core/issues/152).
 It covers supported Core snapshot versions 1, 2 and the current version 3
-operation ledger/counts. It does **not** complete the full 0.5.0-beta.3 backup gate:
-conversation state and any later persisted launch fields still require their own
-implemented schema, fixtures and encrypted recovery qualification. An approved
-design or reserved key is not persisted runtime support.
+operation ledger/counts and the committed conversation candidate. It does **not**
+complete the full 0.5.0-beta.3 backup gate or freeze the schema: current map11
+conversation fields have concrete fixtures/encrypted recovery below, while final
+joint acceptance and shipping-host review remain separate.
 
 The inner canonical CBOR snapshot version, encrypted vault version and exported
 backup-file version are independent contracts. A current backup file uses version
@@ -16,7 +16,7 @@ imply that its inner snapshot contains every planned beta.3 field.
 
 The authoritative codec is [workspace/codec.rs](../../crates/core/src/workspace/codec.rs).
 V1 has exactly keys 0–6; V2 has exactly keys 0–7; current V3 has exactly keys
-0–8 and 10. Key 9 is absent. All use canonical order. Unknown,
+0–10 (map11), including the conversation payload at key9. All use canonical order. Unknown,
 duplicate, missing or noncanonical fields reject rather than being discarded.
 
 | Key / member | Supported content and recovery behavior | Concrete proof |
@@ -34,11 +34,15 @@ duplicate, missing or noncanonical fields reject rather than being discarded.
 | 6 / policy[0] | Profile: `synthetic_v1` in V1 or `protected_v1` in V2/V3. | Existing policy-profile rejection tests; current fixture and missing-profile rejection |
 | 6 / policy[1] | V1: empty array. V2/V3: rule records `[type, rule code, operation ID]`. Protected types cannot receive a generic keep rule. | Nonempty hide/keep rules, each missing rule member, missing rules field and existing forged-permission tests; encrypted byte/settings preservation |
 | 7 / choice[0–3] | V2/V3: `[type, first display spelling, disposition code, operation ID]`. Exact normalized choices include explicit protected-type `not_sensitive` and allowed custom-type `keep`. | Both dispositions in the nonempty fixture; every missing choice member; exact settings/alias preservation with both backup credentials |
-| 8 / operation[0] | V3: retained 16-byte operation ID. Existing rows remain in order and prevent replay even if no entry/rule/choice currently references the ID. | Two operation gold histories; retained history-only ID rejects after recovery/reopen through Core and installed SDKs |
-| 8 / operation[1] | One of the eight implemented kinds: create, prepare, recovery, policy_change, copy_confirmed, user_cancelled, blocked_input, restore_blocked. No successful-send/conversation kind is assumed. | All eight kinds in nonempty gold; unknown kind and extra/missing tuple members reject |
+| 8 / operation[0] | V3: retained 16-byte operation ID. Existing rows remain in order and prevent replay even if no entry/rule/choice currently references the ID. | Four gold histories, including pending/resolved conversation state; retained history-only ID rejects after recovery/reopen through Core and installed SDKs |
+| 8 / operation[1] | One of eleven implemented kinds: create, prepare, recovery, policy_change, conversation_prepare, send_confirmed, send_not_sent, copy_confirmed, user_cancelled, blocked_input, restore_blocked. | Original eight kinds plus pending/observed-send gold histories and public definite-non-delivery lifecycle; unknown kind and extra/missing tuple members reject |
 | 8 / operation[2] | Explicit nullable caller-reported epoch milliseconds. Unknown legacy times remain null; zero and the supported upper bound remain exact. No timestamp is fabricated on recovery. | Gold contains known/unknown times; invalid outcome null and above-bound time reject |
 | 8 / operation[3–4] | Input and transformed-occurrence deltas. Batch input count, repeated aliases and different typed values remain distinct from operation count and unique-alias count. | Three prepared inputs/five transformed occurrences/three aliases; invalid deltas and mapping-issuance inconsistency reject |
-| 10 / count[0–4] | V3 totals: operations, preparedInputs, transformedSpans, confirmedHandoffs, reportedBlockedAttempts. Confirmed handoffs are currently zero. A blocked row counts once regardless of reported issue count. | All five missing/mismatched totals reject; recovery increments operations only |
+| 9 / position 0 | Context tuples `[logicalId16, surface, siteIdOrNull, siteIdByteBudget]`: permanent logical identity, immutable surface/budget and one-time observed site binding. | Pending/resolved public-lifecycle gold; orphaned context, capacity declaration and wrong payload reject; both-credential recovery |
+| 9 / position 1 | Pending-intent tuples `[prepareOperationId, inputIndex, contextIndex, markerRefs]`; references are sorted unique `[label, code]` pairs. They retain funded confirmation row/byte obligations through recovery. | Pending gold remains paused before/after recovery; missing intent and malformed relationships reject |
+| 9 / position 2 | Resolution tuples `[resolutionOperationId, prepareOperationId, inputIndex, contextIndex, outcome, markerRefs]`; outcome `0` is observed sent and `1` definite non-delivery. Original intended references remain retained. | Resolved gold and public definite-non-delivery lifecycle; malformed operation/intent ordering and known future issuance reject; unknown pre-upgrade legacy issuance remains allowed |
+| 9 / position 3 | Membership tuples `[contextIndex, label, code, firstConfirmationOperationId]`: unique issued marker membership tied to its first saved confirmation. | Scoped restore before/after encrypted recovery; missing membership and unproven handoff totals reject |
+| 10 / count[0–4] | V3 totals: operations, preparedInputs, transformedSpans, confirmedHandoffs, reportedBlockedAttempts. Confirmed handoffs count saved send_confirmed rows, not pending intentions, copying or definite non-delivery. A blocked row counts once regardless of reported issue count. | All five missing/mismatched totals reject; unproven handoff totals reject; recovery increments operations only |
 | Derived historyCoverage | Not a serialized field: recordedHistoryOnly is true; preUpgradeHistory is not_applicable for a retained create-first history or unknown after legacy upgrade. | Full and legacy-upgraded gold, public views and both-credential encrypted recovery; recovery never invents pre-upgrade rows |
 
 The synthetic [current-field fixture](../../fixtures/workspace/backup-current-fields.json)
@@ -77,15 +81,18 @@ authentication, rather than merely failing a damaged ciphertext tag.
 
 The [operation-field fixture](../../fixtures/workspace/backup-operation-fields.json)
 is generated by the actual public Core API, with source-tree and generator-hash
-provenance. One V3 history contains nine rows spanning all eight kinds, including
+provenance. One V3 history contains nine rows spanning the original eight kinds, including
 legacy null times, epoch zero and the maximum supported known time; another is a
-legacy V2 upgrade with unknown prior history. Core tests and mandatory installed
+legacy V2 upgrade with unknown prior history. Two additional public-lifecycle histories
+retain a saved pending intent and an observed-send confirmation with issued
+membership and a one-time site binding. All four use the candidate map11 with key9. Core tests and mandatory installed
 Python, Node and browser-WASM consumers verify exact read/export bytes, abandoned
 and staged recovery invariants, preserved row order and metadata, derived
-coverage, pages, replay categories and saved/reopened aliases. Its 32 malformed
+coverage, pages, replay categories and saved/reopened aliases. Its 42 malformed
 vectors remove every ledger/count tuple member or corrupt kind, time, deltas,
 counts, capacity declaration or cross-field consistency. All reject through the
-actual Core decoder; the JavaScript byte-span helper only inspects already
+actual Core decoder, including missing/wrong conversation payload, orphaned
+context, missing intent/membership and unproven handoff counts; the JavaScript byte-span helper only inspects already
 validated synthetic fixture fields.
 
 `verifyOperationFieldBackups` additionally exports each nonempty V3 history and
@@ -93,10 +100,10 @@ recovers it with **both password and recovery code** in separate browser profile
 After approval/restart/unlock, every old ledger row and count delta is retained;
 exactly one new recovery row has unknown time and zero input/span deltas, only the
 operation total increases, and the head and destination encryption key are fresh.
-The complete/unknown history-coverage distinction survives. Five authenticated
-malformed ledger/count snapshots reject without writes, preview or approval:
-missing ledger, missing counts, null outcome time, unsupported handoff total and
-mapping issuance exceeding recorded spans. These are valid outer authenticated
+The complete/unknown history-coverage distinction survives. Fifteen authenticated
+malformed ledger/count/conversation snapshots reject without writes, preview or approval:
+missing ledger, missing counts, null outcome time, unproven handoff total and
+mapping issuance exceeding recorded spans, plus all ten conversation negatives. These are valid outer authenticated
 backups, so the rejection reaches inner state validation.
 
 The existing backup/policy suites additionally cover occupied destinations,
@@ -115,7 +122,7 @@ Host credentials, key persistence and memory handling retain their separate revi
 | Planned state | Current status | Coverage still required |
 | --- | --- | --- |
 | Current operation records and event counts (#147) | V3 keys 8/10 are implemented and covered here. Legacy reads/no-ops remain exact; history coverage is derived, not an extra field. | Extend this matrix for any later accepted operation kinds, count members or issuance reservations |
-| Conversations/provenance (#148) | Not implemented in this current V3 field inventory; key 9 remains absent. | Relationships, aliases across conversation scope, restore behavior and encrypted recovery fixtures |
+| Conversations/provenance (#148) | The current candidate map11/key9 corpus includes pending/resolved state, relationships, scoped restore and byte-exact recovery retention. | Run the complete combined installed-SDK/encrypted matrix before acceptance; shipping-host observation remains separate |
 | Reserved merge key 5 | Empty-only rejection is covered; post-V1 merge state is outside this scope. | No merge feature should be inferred from reservation |
 | CSV-specific state (#149) | Awaiting the separate CSV decision; no new field is assumed. | Add fixtures only if an approved implementation persists new state |
 

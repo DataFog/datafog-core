@@ -27,4 +27,6 @@ export type {
   WorkspaceOperation, WorkspaceOutcome, WorkspaceOperationRecord,
   WorkspaceOperationPage, WorkspaceHistoryCoverage, WorkspaceCounts,
   WorkspaceRestoreReport, WorkspaceRestoreProgress,
+  WorkspaceConversation, WorkspaceConversationInput, WorkspaceConversationState,
+  WorkspaceSendIntent, WorkspaceSendStatus,
 } from "../../bindings/wasm/index.js";

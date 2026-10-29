@@ -1,0 +1,75 @@
+/** Actual SDK contract checks; synthetic values, no provider observations invented. */
+export async function verifyWorkspaceConversations(api) {
+  let checks=0;
+  const check=(condition,label)=>{checks++;if(!condition)throw new Error(label);};
+  const reject=(call,code)=>{let failure;try{call();}catch(error){failure=error;}check(failure?.code===code,`conversation rejection ${code}`);check(failure.message===code,"content-free failure");return failure;};
+  const equal=(left,right)=>{
+    if(left===right)return true;
+    if(!left || !right || typeof left!=="object" || typeof right!=="object" || Array.isArray(left)!==Array.isArray(right))return false;
+    const keys=Object.keys(left);return keys.length===Object.keys(right).length && keys.every(key=>Object.hasOwn(right,key) && equal(left[key],right[key]));
+  };
+  const id=value=>new Uint8Array(16).fill(value),op=value=>({id:id(value),occurredAtMs:value});
+  const context=(value,siteId=null)=>({id:id(value),surface:"synthetic_chat",siteId,siteIdByteBudget:128});
+  const review=(text,mark=false)=>({text,scannerFindings:[],userSelections:mark?[{entityType:"PERSON",matchedText:text,range:{unit:"utf8_bytes",start:0,end:new TextEncoder().encode(text).length}}]:[]});
+  const save=(workspace,plan)=>{const heads=plan.heads(),bytes=plan.exportCandidateBundle(),reopened=api.Workspace.openBundle(bytes);try{check(equal(reopened.head(),heads.candidateHead),"candidate reopens canonically");}finally{reopened.close();bytes.fill(0);}workspace.activateSaved(plan,heads.expectedHead,heads.candidateHead);};
+  await api.init();let workspace=api.Workspace.createWithOperation(id(1),op(2));
+  try {
+    const definition=context(10),input=review("Synthetic 👋 Person",true);
+    let getterCalls=0;
+    const bad={...definition};Object.defineProperty(bad,"surface",{enumerable:true,get(){getterCalls++;throw new Error("private accessor");}});
+    reject(()=>workspace.prepareConversationSend([{input,conversation:bad}],op(3)),"invalid_conversation");check(getterCalls===0,"context getters never execute");
+    reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,siteIdByteBudget:0}}],op(3)),"invalid_conversation");
+    reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,extra:true}}],op(3)),"invalid_conversation");
+    for(const change of [{surface:1},{siteId:undefined},{id:new Uint8Array(15)}])reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,...change}}],op(3)),"invalid_conversation");
+    reject(()=>workspace.conversationForSite(1,"thread_a"),"invalid_conversation");
+    reject(()=>workspace.conversationForSite("","thread_a"),"invalid_conversation");
+    reject(()=>workspace.conversationForSite("synthetic_chat",""),"invalid_conversation");
+    let first=workspace.prepareConversationSend([{input,conversation:definition},{input,conversation:definition}],op(3));
+    const intents=first.sendIntents(),marker=first.previews()[0].text;
+    check(intents.length===2 && equal(intents.map(item=>item.inputIndex),[0,1]),"every member gets a separate intent");
+    reject(()=>workspace.conversation(id(10)),"conversation_unknown");check(workspace.counts().confirmedHandoffs===0,"preview grants no issuance");
+    save(workspace,first);
+    check(workspace.conversation(id(10)).pendingIntents===2,"both pending members saved");
+    for(const text of ["plain",marker])reject(()=>workspace.restoreInConversation(text,id(10)),"conversation_pending");
+    reject(()=>workspace.bufferedRestoreInConversation(id(10)),"conversation_pending");
+    reject(()=>workspace.progressiveRestoreInConversation(id(10)),"conversation_pending");
+    check(workspace.restore(marker)==="Synthetic 👋 Person","explicit compatibility mode unchanged");
+    const before=workspace.exportBundle();
+    reject(()=>workspace.prepareObservedSend(intents[0],id(11),"synthetic_chat","thread_a",op(4)),"invalid_send_intent");
+    reject(()=>workspace.prepareObservedSend(intents[0],id(10),"synthetic_chat","a".repeat(129),op(4)),"invalid_conversation");
+    check(equal([...workspace.exportBundle()],[...before]),"failed confirmation leaves saved bytes unchanged");before.fill(0);
+    let confirmation=workspace.prepareObservedSend(intents[0],id(10),"synthetic_chat","thread_a",op(4));confirmation.discard();
+    check(workspace.sendIntentStatus(intents[0])==="pending","discard does not resolve");
+    confirmation=workspace.prepareObservedSend(intents[0],id(10),"synthetic_chat","thread_a",op(5));save(workspace,confirmation);
+    check(workspace.counts().confirmedHandoffs===1,"one saved member counts one despite shared alias");
+    reject(()=>workspace.restoreInConversation(marker,id(10)),"conversation_pending");
+    const bytes=workspace.exportBundle();workspace.close();workspace=api.Workspace.openBundle(bytes);bytes.fill(0);
+    check(workspace.sendIntentStatus(intents[0])==="observed_sent" && workspace.sendIntentStatus(intents[1])==="pending","lost ack reconciles exact saved members");
+    let recovery=workspace.prepareRecoveryWithOperation(op(6));save(workspace,recovery);
+    reject(()=>workspace.restoreInConversation("old plain reply",id(10)),"conversation_pending");
+    confirmation=workspace.prepareObservedSend(intents[1],id(10),"synthetic_chat","thread_a",op(7));save(workspace,confirmation);
+    check(workspace.counts().confirmedHandoffs===2 && workspace.conversation(id(10)).issuedMarkers===1,"two observed members count two, one membership");
+    check(equal([...workspace.conversationForSite("synthetic_chat","thread_a")],[...id(10)]),"one-time exact site lookup");
+    check(workspace.restoreInConversation(marker,id(10))==="Synthetic 👋 Person","confirmed context restores");
+    reject(()=>workspace.prepareObservedSend(intents[1],id(10),"synthetic_chat","thread_a",op(8)),"invalid_send_intent");
+    let other=workspace.prepareConversationSend([{input:review("Second Synthetic",true),conversation:context(11)}],op(9));
+    const otherIntent=other.sendIntents()[0],otherMarker=other.preview().text;save(workspace,other);
+    check(workspace.restoreInConversation(marker,id(10))==="Synthetic 👋 Person","another pending context stays isolated");
+    reject(()=>workspace.prepareObservedSend(otherIntent,id(11),"synthetic_chat","thread_a",op(10)),"invalid_conversation");
+    confirmation=workspace.prepareObservedSend(otherIntent,id(11),"synthetic_chat","thread_b",op(10));save(workspace,confirmation);
+    const text=`👋 ${otherMarker}`,report=workspace.restoreReportInConversation(text,id(10));
+    check(report.text===null && report.issues[0].kind==="not_issued_in_conversation","wrong context fails strict");
+    check(report.restoredMarkers===0,"unissued markers never count as resolvable in this context");
+    check(report.issues[0].byteRange.start===5 && report.issues[0].codepointRange.start===2 && report.issues[0].utf16Range.start===3,"original Unicode issue ranges");
+    const buffered=workspace.bufferedRestoreInConversation(id(10));buffered.feed(new TextEncoder().encode(text));check(buffered.finalize().text===null,"buffering publishes no partial text");buffered.close();
+    const stream=workspace.progressiveRestoreInConversation(id(10));
+    const safe=stream.feed(new TextEncoder().encode("safe 👋 ")),failure=reject(()=>stream.feed(new TextEncoder().encode(otherMarker)),"invalid_marker");
+    check(failure.complete===false && equal(failure.delivered,safe.delivered),"scoped progressive stop retains only prior delivery");
+    check(failure.markerIssues[0].kind==="not_issued_in_conversation","scope failure has explicit kind");stream.close();
+    const follow=workspace.prepareConversationSend([{input:review(marker),conversation:context(10,"thread_a")}],op(11));const followIntent=follow.sendIntents()[0];save(workspace,follow);
+    const cancelled=workspace.prepareDefinitelyNotSent(followIntent,id(10),op(12));save(workspace,cancelled);
+    check(workspace.counts().confirmedHandoffs===3 && workspace.sendIntentStatus(followIntent)==="definitely_not_sent","non-delivery never counts a send");
+    const active=workspace.progressiveRestoreInConversation(id(10));workspace.close();reject(()=>active.feed(new Uint8Array([65])),"closed_workspace");active.close();
+    return {checks,scope:"actual Core-backed conversation methods; synthetic trusted observations only, no provider acceptance",partialBatch:true,oneTimeBinding:true,wholeChatPause:true,scopedUnicode:true};
+  } finally {workspace.close();}
+}

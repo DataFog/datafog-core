@@ -89,7 +89,7 @@ fn snapshot(count: usize, marker: &str, maximum: bool) -> Result<Vec<u8>, Box<dy
         .and_then(|value| value.strip_suffix("]]"))
         .ok_or("unexpected synthetic marker")?;
     let mut e = Encoder::new(Vec::new());
-    e.map(10)?
+    e.map(11)?
         .u8(0)?
         .u8(3)?
         .u8(1)?
@@ -153,6 +153,7 @@ fn snapshot(count: usize, marker: &str, maximum: bool) -> Result<Vec<u8>, Box<dy
         };
         e.u64(inputs)?.u64(spans)?;
     }
+    e.u8(9)?.array(4)?.array(0)?.array(0)?.array(0)?.array(0)?;
     e.u8(10)?
         .array(5)?
         .u64(count as u64)?

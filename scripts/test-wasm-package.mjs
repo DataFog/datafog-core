@@ -187,6 +187,21 @@ const missingInputIndex: import("@datafog/wasm").DataFogError["inputIndex"] = nu
 const missingFindingIndex: import("@datafog/wasm").DataFogError["findingIndex"] = null;
 void missingInputIndex; void missingFindingIndex;
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
+const conversationDefinition = {id: new Uint8Array(16), surface: "synthetic_chat", siteId: null, siteIdByteBudget: 128};
+const conversationPlan = workspace.prepareConversationSend([{input: {text: "Jane", scannerFindings: [], userSelections: []}, conversation: conversationDefinition}], {id: new Uint8Array(16), occurredAtMs: 0});
+const sendIntent = conversationPlan.sendIntents()[0];
+const sendStatus: "pending" | "observed_sent" | "definitely_not_sent" = workspace.sendIntentStatus(sendIntent);
+workspace.prepareObservedSend(sendIntent, new Uint8Array(16), "synthetic_chat", "thread_a", {id: new Uint8Array(16), occurredAtMs: 0});
+workspace.prepareDefinitelyNotSent(sendIntent, new Uint8Array(16), {id: new Uint8Array(16), occurredAtMs: 0});
+const scopedReport: WorkspaceRestoreReport = workspace.restoreReportInConversation("text", new Uint8Array(16));
+const scopedAtomic = workspace.bufferedRestoreInConversation(new Uint8Array(16));
+const scopedProgressive = workspace.progressiveRestoreInConversation(new Uint8Array(16), "utf16");
+const resolvedContext: Uint8Array = workspace.conversationForSite("synthetic_chat", "thread_a");
+// @ts-expect-error Nullable site identity is required before first send.
+workspace.prepareConversationSend([{input: {text: "x", scannerFindings: [], userSelections: []}, conversation: {id: new Uint8Array(16), surface: "synthetic_chat", siteIdByteBudget: 128}}], {id: new Uint8Array(16), occurredAtMs: 0});
+// @ts-expect-error Observed send cannot accept replacement mappings or arbitrary text.
+workspace.prepareObservedSend(sendIntent, new Uint8Array(16), "synthetic_chat", "thread_a", {id: new Uint8Array(16), occurredAtMs: 0}, "replacement");
+void sendStatus; void scopedReport; void scopedAtomic; void scopedProgressive; void resolvedContext;
 const nullableWorkspaceFinding: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, confidence: null, detectorName: null, detectorVersion: null};
 const reviewedNullable = workspace.review({text: "Jane", scannerFindings: [nullableWorkspaceFinding], userSelections: []});
 workspace.prepare("Jane", reviewedNullable.candidates.map(candidate => candidate.finding), new Uint8Array(16));
@@ -335,6 +350,7 @@ try {
   for(const file of ["workspace-backup-field-bytes.mjs","workspace-backup-operation-fields-conformance.mjs"])writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   writeFileSync(path.join(temporaryDirectory,"workspace-backup-operation-fields.json"),readFileSync(path.join(root,"fixtures/workspace/backup-operation-fields.json")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-streaming-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"workspace-conversation-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-conversation-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
@@ -903,6 +919,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     verifyWorkspaceBackupOperationFields(workspaceApi,await fetch("/workspace-backup-operation-fields.json").then(response=>response.json()));
     const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");
     await verifyWorkspaceStreaming(workspaceApi,await fetch("/workspace-streaming.json").then(r=>r.json()));
+    const {verifyWorkspaceConversations}=await import("/workspace-conversation-conformance.mjs");
+    await verifyWorkspaceConversations(workspaceApi);
     const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
     const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
     try {

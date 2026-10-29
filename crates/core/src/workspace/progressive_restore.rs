@@ -86,6 +86,7 @@ pub struct ProgressiveRestore {
     lifetime: Arc<AtomicBool>,
     epoch: Arc<AtomicBool>,
     encoding: RestoreEncoding,
+    context: Option<usize>,
     // Canonical public markers sorted for logarithmic lookup; private copies wipe on drop.
     lookup: Vec<(String, Zeroizing<String>)>,
     carry: Zeroizing<Vec<u8>>,
@@ -110,6 +111,7 @@ impl ProgressiveRestore {
         lifetime: Arc<AtomicBool>,
         epoch: Arc<AtomicBool>,
         encoding: RestoreEncoding,
+        context: Option<usize>,
     ) -> Result<Self> {
         let mut lookup = Vec::new();
         lookup
@@ -129,6 +131,7 @@ impl ProgressiveRestore {
             lifetime,
             epoch,
             encoding,
+            context,
             lookup,
             carry: Zeroizing::new(Vec::new()),
             mode: Mode::Text,
@@ -332,6 +335,17 @@ impl ProgressiveRestore {
                             },
                         ));
                     };
+                    if let Some(context) = self.context {
+                        let state = self
+                            .state
+                            .as_deref()
+                            .ok_or_else(|| error(ErrorCode::InactiveStream))?;
+                        if !conversation::eligible(state, context, &self.lookup[index].0) {
+                            return Err(
+                                self.issue(self.start, MarkerIssueKind::NotIssuedInConversation)
+                            );
+                        }
+                    }
                     self.emit(stage, self.lookup[index].1.as_bytes())?;
                     *markers += 1;
                     self.carry.zeroize();
