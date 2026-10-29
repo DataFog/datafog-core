@@ -226,3 +226,9 @@ The separate [ordinary confirmation-capacity decision packet](conversation-confi
 The [technical wire/API packet](conversation-wire-api.md) proposes the coordinated
 key9 shape, derived resource bounds, native SDK matrix and encoder-only experiment.
 It does not implement conversation runtime or the pending capacity choice.
+
+The later [first-chat identity packet](conversation-first-chat-identity.md) records
+the inspected extension's missing send/site-ID correlation and compares immutable
+logical contexts with one-time binding against an explicit unsupported-first-send
+boundary. Neither option is approved; keep this later question behind the pending
+ordinary confirmation-capacity question.

@@ -66,6 +66,31 @@ resolution may be appended later in history than a recovery. Before implementati
 reserved capacity and append position. Do not silently let arbitrary ordinary
 operations use a recovery-only slot or discard a credit during recovery.
 
+## Revision capacity is a separate checked resource
+
+Operation-row and byte space alone cannot guarantee a later resolution. A released
+legacy snapshot can have revision `u64::MAX - 1` despite few retained rows. Its
+first state-changing save consumes the last revision; the second save must fail,
+never wrap. Existing read/export/no-op/discard bytes remain unchanged at that head.
+
+If reservations are approved, include checked available revision increments in
+the same proof. Let `A = u64::MAX - currentRevision`, `M` be actual increments for
+the candidate, and `P` be still-funded later resolution increments. Every saved
+mutation, including recovery, must preserve `A >= M + P` using checked arithmetic;
+an ordinary first save also funds its new resolution increments before transport.
+If claiming preservation of a remaining recovery allocation `R`, require room for
+`M + P + R` as well. Derive `R` from the actual approved remaining recovery budget;
+the 256 row slots alone do not create 256 available revision increments in an
+already exhausted imported vault. Do not promise that they do.
+
+The technical admission design must handle recovery/resolution interleavings and
+state what future increments it preserves. No unapproved ledger or head-budget
+exception is implemented here. Required boundary cases include imported heads at
+`MAX`, `MAX-1` and the exact admitted two-save boundary, pending resolutions across
+recovery, unchanged no-op reads, and failure before external send where the funded
+increments do not fit. Retrying against an exhausted head cannot invent a send,
+change an old operation ID, wrap the counter or silently reset namespace/history.
+
 ## Encoded bytes and required proof
 
 Use the final coordinated v3/key9 encoder to bound the **largest possible positive

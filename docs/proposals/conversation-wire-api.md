@@ -15,7 +15,7 @@ operations/policy meanings; key 9 becomes a mandatory four-element array:
 | --- | --- | --- |
 | 0 | `[surface, conversationId]` | Workspace-local conversation identities, stable append-order indices. |
 | 1 | `[prepareOperationId, inputIndex, contextIndex, markerRefs]` | Active saved intents; `markerRefs` is a sorted unique array of `[label, code]`. |
-| 2 | `[resolutionOperationId, prepareOperationId, inputIndex, contextIndex, outcome]` | Retained terminal resolutions; proposed outcome `0=observed_sent`, `1=definitely_not_sent`. |
+| 2 | `[resolutionOperationId, prepareOperationId, inputIndex, contextIndex, outcome, markerRefs]` | Retained terminal resolutions and exact original intended references; proposed outcome `0=observed_sent`, `1=definitely_not_sent`. |
 | 3 | `[contextIndex, label, code, firstConfirmationOperationId]` | Unique issued membership and the first saved confirmation establishing it. |
 
 IDs are existing 16-byte operation IDs. Labels and six-character codes use existing
@@ -37,6 +37,22 @@ adds membership only for an observed successful send. Both outcomes count as rea
 operations; only observed-sent increments `confirmedHandoffs`. Terminal tuples and
 operation rows remain forever; this is content-free event history, not archived
 prompts or per-message text. No resolution can change aliases or first spellings.
+
+Terminal `markerRefs` must retain the exact canonical intended set after its
+active intent is removed. Without those references, a decoder cannot cross-check
+which first saved confirmation established an issued membership. Define a context's
+creating operation as the earliest retained preparation row referenced by that
+context's active or terminal members, using operation **row order**, not lexical ID
+order, with input index as the tie-break within a preparation. Context array order
+must follow that creating-member order. Reject orphan contexts. Each referenced
+preparation must have the expected
+preparation kind and valid input count. For each membership, recompute the earliest
+observed-sent terminal containing that `(label,code)` for that context and require
+its resolution ID to equal `firstConfirmationOperationId`; require that resolution
+to reference a matching retained resolution-kind operation row. Repeated sends do
+not change the first confirmation. No membership can be justified by a not-sent
+terminal, unrelated operation, arbitrary counter or only an active intent. These
+are structural saved-history checks; they cannot prove a host observation truthful.
 
 New operation-kind codes must be allocated jointly with #162 before runtime; no
 wire number is assigned by this packet. Recompute counts from retained operation
@@ -78,6 +94,9 @@ multiply maximum contexts by maximum aliases to preallocate a Cartesian product.
 Shorter practical host limits can be documented by that host; Core must not silently
 introduce them as a universal conversation policy. The final implementation still
 needs measured heap/CPU evidence before these structural bounds are called qualified.
+If reservation is approved, derive any stronger outstanding-intent/index budget
+from its funded ordinary resources rather than adding an arbitrary quota. A wire
+cap is not proof of bounded practical heap usage or acceptable processing time.
 
 Reject indefinite/noncanonical/trailing/unknown fields; duplicate identities,
 intents, terminal keys or memberships; out-of-range indices; active-and-resolved

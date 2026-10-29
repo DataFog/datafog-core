@@ -504,7 +504,11 @@
             "membership confirmed in different context",
             "unallocated marker reference",
             "success count without terminal success",
-            "declared collection larger than remaining encoded bytes"
+            "declared collection larger than remaining encoded bytes",
+            "orphan context with no retained creating preparation member",
+            "context ordering disagrees with creating operation/member order",
+            "first membership claims a later or unrelated confirmation",
+            "terminal marker references disagree with membership provenance"
           ],
           "expectError": {
             "codeCandidate": "invalid_snapshot",
