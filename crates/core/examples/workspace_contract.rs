@@ -278,6 +278,12 @@ impl Runtime {
             "openBundle" => {
                 let bytes = if let Some(value) = command.get("inlineBundleHex") {
                     unhex(value.as_str().ok_or(Failure::Fixture)?)?
+                } else if let Some(plan) = command.get("fromPlan").and_then(Value::as_str) {
+                    self.plans
+                        .get(plan)
+                        .ok_or(Failure::Fixture)?
+                        .export_candidate_bundle()?
+                        .to_vec()
                 } else {
                     self.bundles
                         .get(name(command, "bundle")?)

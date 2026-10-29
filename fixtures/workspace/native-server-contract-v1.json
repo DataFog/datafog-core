@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "profile": "native-server-cas-v1",
+  "sdks": [
+    "python",
+    "node"
+  ],
+  "scope": "Existing native Python/Node encrypted SQLite hosts only. Rust supplies deterministic Core candidates; no Rust/WASM SQL-host claim, provider/KMS/admission policy or conversation/send confirmation. High-level handoff/stream suites remain mandatory separately.",
+  "namespaceByte": 1,
+  "bootstrapOperationByte": 2,
+  "candidateDefinitions": {
+    "a": {
+      "operationByte": 3,
+      "occurredAtMs": 3,
+      "text": "👋 Jane",
+      "findings": [
+        {
+          "entityType": "PERSON",
+          "matchedText": "Jane",
+          "range": {
+            "unit": "utf8_bytes",
+            "start": 5,
+            "end": 9
+          },
+          "source": "user",
+          "needsReview": true
+        }
+      ]
+    },
+    "b": {
+      "operationByte": 4,
+      "occurredAtMs": 4,
+      "text": "👋 Kate",
+      "findings": [
+        {
+          "entityType": "PERSON",
+          "matchedText": "Kate",
+          "range": {
+            "unit": "utf8_bytes",
+            "start": 5,
+            "end": 9
+          },
+          "source": "user",
+          "needsReview": true
+        }
+      ]
+    }
+  },
+  "oracle": {
+    "schemaVersion": 1,
+    "profile": "native-server-core-oracle-v1",
+    "requiredMethods": [
+      "createWithOperation",
+      "prepareWithOperation",
+      "prepare",
+      "plan.heads",
+      "plan.previews",
+      "plan.snapshotFormat",
+      "plan.policyPreview",
+      "plan.exportCandidateBundle",
+      "openBundle",
+      "counts",
+      "operations",
+      "historyCoverage"
+    ],
+    "cases": [
+      {
+        "id": "deterministic-candidates",
+        "commands": [
+          {
+            "call": "createWithOperation",
+            "workspace": "seed",
+            "namespaceByte": 1,
+            "operationByte": 2,
+            "occurredAtMs": 0
+          },
+          {
+            "call": "counts",
+            "workspace": "seed"
+          },
+          {
+            "call": "operations",
+            "workspace": "seed"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "seed"
+          },
+          {
+            "call": "prepareWithOperation",
+            "workspace": "seed",
+            "plan": "a",
+            "operationByte": 3,
+            "occurredAtMs": 3,
+            "text": "👋 Jane",
+            "findings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Jane",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 9
+                },
+                "source": "user",
+                "needsReview": true
+              }
+            ]
+          },
+          {
+            "call": "prepareWithOperation",
+            "workspace": "seed",
+            "plan": "b",
+            "operationByte": 4,
+            "occurredAtMs": 4,
+            "text": "👋 Kate",
+            "findings": [
+              {
+                "entityType": "PERSON",
+                "matchedText": "Kate",
+                "range": {
+                  "unit": "utf8_bytes",
+                  "start": 5,
+                  "end": 9
+                },
+                "source": "user",
+                "needsReview": true
+              }
+            ]
+          },
+          {
+            "call": "prepare",
+            "workspace": "seed",
+            "plan": "noop",
+            "operationByte": 5,
+            "text": "ordinary",
+            "findings": []
+          },
+          {
+            "call": "openBundle",
+            "workspace": "a",
+            "fromPlan": "a"
+          },
+          {
+            "call": "counts",
+            "workspace": "a"
+          },
+          {
+            "call": "operations",
+            "workspace": "a"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "a"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "b",
+            "fromPlan": "b"
+          },
+          {
+            "call": "counts",
+            "workspace": "b"
+          },
+          {
+            "call": "operations",
+            "workspace": "b"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "b"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "noop",
+            "fromPlan": "noop"
+          },
+          {
+            "call": "counts",
+            "workspace": "noop"
+          },
+          {
+            "call": "operations",
+            "workspace": "noop"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "noop"
+          }
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "acknowledged-save",
+      "steps": [
+        "open",
+        "save",
+        "activate",
+        "reopen"
+      ]
+    },
+    {
+      "id": "full-parent-conflict",
+      "steps": [
+        "wrong-revision",
+        "wrong-commit-id",
+        "unchanged"
+      ]
+    },
+    {
+      "id": "abort-rollback",
+      "steps": [
+        "save-aborted",
+        "unchanged"
+      ]
+    },
+    {
+      "id": "lost-acknowledgment",
+      "steps": [
+        "save-uncertain",
+        "reopen-committed"
+      ]
+    },
+    {
+      "id": "process-changed-head-race",
+      "steps": [
+        "two-processes-ready",
+        "race",
+        "reopen-winner"
+      ]
+    },
+    {
+      "id": "process-noop-race",
+      "steps": [
+        "two-processes-ready",
+        "race",
+        "reopen-same-head"
+      ]
+    },
+    {
+      "id": "process-crash-before-commit",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-original"
+      ]
+    },
+    {
+      "id": "process-crash-after-commit",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-committed"
+      ]
+    },
+    {
+      "id": "authentication-and-isolation",
+      "steps": [
+        "tampered-ciphertext",
+        "tampered-head-metadata",
+        "wrong-key",
+        "other-tenant",
+        "restored-row"
+      ]
+    }
+  ],
+  "hostErrors": {
+    "conflict": {
+      "python": [
+        "workspace_conflict"
+      ],
+      "node": [
+        "workspace_conflict",
+        "storage_busy"
+      ]
+    },
+    "abort": {
+      "python": [
+        "storage_failure"
+      ],
+      "node": [
+        "storage_failure"
+      ]
+    },
+    "lostAck": {
+      "python": [
+        "save_uncertain"
+      ],
+      "node": [
+        "save_ack_unknown"
+      ]
+    },
+    "authentication": {
+      "python": [
+        "invalid_envelope"
+      ],
+      "node": [
+        "invalid_snapshot"
+      ]
+    },
+    "otherTenant": {
+      "python": [
+        "state_unavailable"
+      ],
+      "node": [
+        "workspace_unavailable"
+      ]
+    }
+  },
+  "minimumExistingPythonTests": 22,
+  "requiredExistingNodeChecks": [
+    "storedBoundsRejected",
+    "metadataOnlyCas",
+    "progressiveComplete",
+    "progressiveLateFailure",
+    "progressiveCancellation",
+    "progressiveTransportFailure",
+    "failedAuthenticationWiped",
+    "cooperativeReleaseCancellation",
+    "crashBefore",
+    "crashAfter",
+    "lostAck",
+    "cancellation",
+    "tenantIsolation",
+    "historyOnlyRejected"
+  ]
+}

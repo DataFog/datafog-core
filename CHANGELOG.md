@@ -31,6 +31,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Workspace parity now also requires actual Python/Node encrypted-store CAS,
+  process-crash and isolation qualification, counted separately from four-SDK
+  scenarios and retaining real winner IDs and host errors.
 - Workspace parity now requires a real four-SDK operation/history/count/page
   profile, preserving exact bundles, legacy unknown times, replay errors and
   explicit-save lifecycle checks alongside foundation and streaming profiles.
