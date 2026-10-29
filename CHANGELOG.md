@@ -28,6 +28,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes the shared workspace lifecycle, staged changes, policy,
+  recall, combined review, strict buffered and opt-in progressive restoration
+  without loading browser WASM. Streaming preserves Core error counts, encoding
+  validation and parent/head lifecycle cleanup.
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and
