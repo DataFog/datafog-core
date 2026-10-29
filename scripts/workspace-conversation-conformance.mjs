@@ -20,6 +20,10 @@ export async function verifyWorkspaceConversations(api) {
     reject(()=>workspace.prepareConversationSend([{input,conversation:bad}],op(3)),"invalid_conversation");check(getterCalls===0,"context getters never execute");
     reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,siteIdByteBudget:0}}],op(3)),"invalid_conversation");
     reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,extra:true}}],op(3)),"invalid_conversation");
+    for(const change of [{surface:1},{siteId:undefined},{id:new Uint8Array(15)}])reject(()=>workspace.prepareConversationSend([{input,conversation:{...definition,...change}}],op(3)),"invalid_conversation");
+    reject(()=>workspace.conversationForSite(1,"thread_a"),"invalid_conversation");
+    reject(()=>workspace.conversationForSite("","thread_a"),"invalid_conversation");
+    reject(()=>workspace.conversationForSite("synthetic_chat",""),"invalid_conversation");
     let first=workspace.prepareConversationSend([{input,conversation:definition},{input,conversation:definition}],op(3));
     const intents=first.sendIntents(),marker=first.previews()[0].text;
     check(intents.length===2 && equal(intents.map(item=>item.inputIndex),[0,1]),"every member gets a separate intent");
