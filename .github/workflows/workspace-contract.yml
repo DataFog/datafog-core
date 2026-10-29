@@ -5,12 +5,20 @@ on:
     paths:
       - 'docs/contracts/**'
       - 'bindings/wasm/index.d.ts'
+      - 'bindings/node/index.d.ts'
+      - 'bindings/node/dts-header.d.ts'
+      - 'bindings/python/python/datafog_core/__init__.pyi'
+      - 'bindings/python/tests/requirements-typing.txt'
       - '.github/workflows/workspace-contract.yml'
   push:
     branches: [main]
     paths:
       - 'docs/contracts/**'
       - 'bindings/wasm/index.d.ts'
+      - 'bindings/node/index.d.ts'
+      - 'bindings/node/dts-header.d.ts'
+      - 'bindings/python/python/datafog_core/__init__.pyi'
+      - 'bindings/python/tests/requirements-typing.txt'
       - '.github/workflows/workspace-contract.yml'
 
 permissions:
@@ -28,5 +36,16 @@ jobs:
           cache: npm
           cache-dependency-path: bindings/wasm/package-lock.json
       - run: npm ci --prefix bindings/wasm
-      - name: Compile actual main runtime and separate beta.3 proposal examples
+      - name: Compile actual candidate JavaScript surfaces and negative boundaries
         run: bindings/wasm/node_modules/.bin/tsc --project docs/contracts/tsconfig.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r bindings/python/tests/requirements-typing.txt
+      - name: Compile actual candidate Python surface and negative boundaries
+        env:
+          MYPYPATH: bindings/python/python
+        run: |
+          python -m mypy --strict --no-incremental --python-version 3.10 docs/contracts/launch-api-python-example.py
+          python -m pyright --project docs/contracts/pyrightconfig.json
