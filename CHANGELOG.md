@@ -55,5 +55,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- WASM workspace activation drops retained plans whose parent head is stale,
+  releasing their previews and capacity. No-op and failed activations preserve
+  valid current-head plans; explicitly discard unused live plans as before.
+
+- Workspace preparation rejects damaged, unknown and unbracketed committed source
+  markers before approval, with content-free byte, codepoint and UTF-16 ranges.
+  The browser harness highlights blocked input and supports editing and retry.
+
 - Development containers build with the pinned tool versions and mount the repository at the configured workspace path.
 - GLiNER2 entity-count gating now floors predictions at 1, preventing valid spans from being skipped when the count classifier selects 0 (#112)

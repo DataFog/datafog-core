@@ -91,6 +91,8 @@ export declare class DataFogError extends Error {
   readonly path?: string;
   readonly findingIndex?: number;
   readonly inputIndex?: number;
+  /** Content-free source issue ranges when workspace preparation rejects marker text. */
+  readonly markerIssues?: readonly WorkspaceMarkerIssue[];
 }
 
 export interface TextRange {
@@ -230,11 +232,12 @@ export interface PreparedWorkspaceChange {
   exportCandidateBundle(): Uint8Array;
   discard(): void;
 }
-/** A span of model output that blocked restoration. Covers pseudonym text only. */
+/** Content-free source or output issue ranges; never contains a source or restored value. */
 export interface WorkspaceMarkerIssue {
   /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets. */
   readonly kind: "unknown" | "damaged" | "unbracketed";
   readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
   readonly utf16Range: TextRange;
 }
 export interface WorkspaceRestoreReport {
@@ -252,11 +255,11 @@ export class Workspace {
   exportBundle(): Uint8Array;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
-  /** Exact committed full markers pass through; findings must not overlap them. */
+  /** Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
-  /** The trusted host must confirm atomic persistence before calling this method. */
+  /** The trusted host must confirm atomic persistence first. Success consumes this plan and drops retained plans based on older heads; failure preserves current plans. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
   /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
   restore(text: string): string;

@@ -36,6 +36,12 @@
     <button id="add-input">Add text to batch</button>
     <ul id="inputs" aria-label="Queued synthetic inputs"></ul>
     <output id="batch-error" aria-live="polite"></output>
+    <section id="source-issues" hidden aria-label="Blocked source markers">
+      <h2>Input needs editing</h2>
+      <p>Highlighted marker text would block restoration. Correct it and prepare a new preview. For a queued input, remove it and add the corrected text again.</p>
+      <pre id="source-issue-preview"></pre>
+      <button id="select-source-issue" hidden>Select issue in input</button>
+    </section>
     <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
     <h2>Local preview</h2><pre id="preview"></pre><button id="approve" disabled>Approve and save</button>
     <h2>Approved local handoff sink</h2><pre id="sink"></pre>

@@ -71,7 +71,24 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 
 try {
   await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
-  let page = await launch();
+  let page = await fresh("source-markers");
+  await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
+  await page.locator("#prepare").click(); await status(page, "invalid_marker");
+  check(await page.locator("#source-issue-preview mark").count() === 2, "source preflight highlights every blocked marker through both worker hops");
+  check(await page.locator("#source-issue-preview mark").first().textContent() === "[[my_note]]", "source highlights preserve exact literal text");
+  check(await page.locator("#approve").isDisabled() && (await control(page, "state")).head.revision === "0", "source rejection grants no approval and saves no mappings");
+  await noRelease(page, "source rejection releases no text");
+  await page.locator("#select-source-issue").click();
+  check(await page.locator("#source").evaluate(element => element.selectionStart === 6 && element.selectionEnd === 17), "edit selection uses UTF-16 offsets after emoji and combining text");
+  await page.locator("#source").fill("👋 é [[my note]]");
+  check(await page.locator("#source-issues").isHidden() && await page.locator("#source-issue-preview").textContent() === "", "editing clears blocked source copies");
+  await page.locator("#prepare").click(); await status(page, "preview_ready");
+  await page.locator("#approve").click(); await status(page, "saved");
+  await restored(page, "👋 é [[my note]]", "restored");
+  check(await page.locator("#restored").textContent() === "👋 é [[my note]]", "ordinary corrected source round trips after explicit retry");
+  await context.close(); context = undefined;
+  console.log("PASS source preflight, Unicode highlights, edit/retry and no release before approval");
+  page = await launch();
   await create(page);
   const january = await prepare(page);
   check(/^2026-01-06 \| \[\[PERSON_[0-9A-HJKMNP-TV-Z]{6}\]\] \| -40\.00 USD$/.test(january), "A1 preview preserves non-selected text");
