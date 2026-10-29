@@ -16,6 +16,8 @@ partially transformed result.
 | `message` | Sanitized human-readable explanation |
 | `path` | Optional RFC 6901 request path |
 | `finding_index` / `findingIndex` | Optional index of an invalid supplied finding |
+| `input_index` / `inputIndex` | Optional batch member index; finding indexes are local to that member |
+| `markerIssues` | Browser workspace preflight issues with kind and byte/codepoint/UTF-16 ranges |
 
 Error messages and metadata do not include matched PII, key material,
 credentials, token payloads, or restored plaintext.
@@ -52,6 +54,40 @@ credentials, token payloads, or restored plaintext.
 
 - `unsupported_strategy`
 - `internal_error`
+
+### Workspace operations in 0.5.0-beta.1
+
+- `invalid_batch`
+- `closed_workspace`
+- `inactive_plan`
+- `workspace_conflict`
+- `invalid_marker`
+- `invalid_snapshot`
+- `invalid_operation_id`
+- `resource_limit`
+
+`Workspace.restoreReport` returns marker issues with `text: null`; the strict
+`Workspace.restore` wrapper throws `invalid_marker` for those issues. Validation
+and resource errors can still throw from either call. Source preparation rejects
+invalid markers before approval and may carry `markerIssues` on the error.
+
+### Optional browser model operations in 0.5.0-beta.1
+
+- `model_load_failed`
+- `model_inference_failed`
+- `model_resource_exhausted`
+- `model_session_busy`
+- `model_session_closed`
+- `model_cleanup_failed`
+
+Some model pre-validation and initialization failures are native JavaScript
+exceptions. Catch those at the host boundary too; do not treat failures as an
+empty successful scan or an implicit rule-only fallback.
+
+The [0.5.0-beta.1 integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.1.md#errors-and-retry)
+lists every declared browser SDK code, retry/lifecycle handling and the separate
+reference host's persistence/worker errors. Provider codes in the shared error
+union do not enable key/token providers in browser WASM.
 
 ## JavaScript example
 

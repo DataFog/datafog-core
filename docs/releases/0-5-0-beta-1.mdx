@@ -1,0 +1,80 @@
+---
+title: "0.5.0 beta.1"
+description: "0.5.0-beta.1: persistent workspace integration and optional English browser Small detection."
+icon: "tag"
+---
+
+This is the **0.5.0-beta.1 developer integration candidate** tracked in
+[#132](https://github.com/DataFog/datafog-core/issues/132). Publication and the
+installed-package acceptance result must be recorded there before treating this
+version as available. Use synthetic data while building the extension integration.
+
+The coordinated versions are Cargo/npm `0.5.0-beta.1` and Python `0.5.0b1`.
+After publication, pin the exact package and commit its lockfile:
+
+```bash
+npm install --save-exact @datafog/wasm@0.5.0-beta.1
+```
+
+Node and WASM publish to npm's `beta` dist-tag. The release must preserve `latest`.
+
+## Workspace handoff and restoration
+
+Rust and WASM support persistent workspace pseudonyms, local preview and approval,
+strict all-or-nothing restoration, committed-marker follow-ups, atomic batches
+and encrypted backup/recovery through the reference host workflow. Damaged,
+unknown or unbracketed committed source markers block preparation before approval;
+safe byte, codepoint and UTF-16 ranges let a host highlight the input for editing.
+WASM releases retained stale plans when the saved head advances, while preserving
+valid current-head plans after no-op or failed activation.
+
+The host still owns credentials, encryption, durable storage and user approval.
+It must save the exact encrypted candidate with a complete-head comparison before
+calling `activateSaved`, and release text only after activation succeeds. A package
+upgrade does not add an extension vault, review UI or send-button enforcement.
+
+Follow the [0.5.0-beta.1 integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.1.md)
+for `Workspace`, opaque plans, offset units, failure handling, follow-ups and
+close/reopen behavior. Its reference harness uses actual IndexedDB and local
+cryptography; test fault controls are not shipping extension features.
+
+## Optional English GLiNER2.5 Small in the browser
+
+Import `ModelSession` from `@datafog/wasm/models`, explicitly provision the pinned
+model/tokenizer files (about 297 MB), and serve matching ONNX Runtime Web assets
+locally under the extension's CSP. Open, scan and close the session explicitly.
+Pass the returned canonical findings into workspace preparation. Synchronous
+`scan()` remains rule-based.
+
+The [browser model guide](https://github.com/DataFog/datafog-core/blob/main/docs/browser-model.md)
+covers asset hashes, runtime paths and the unpacked MV3 proof. Requests are bounded
+to 65,536 UTF-8 bytes and 512 tokens including the schema. There is one inference
+at a time, with no inference cancellation/deadline or automatic chunking. English
+coverage and full-address `ADDRESS` spans require review; native GLiNER2 accuracy
+numbers do not qualify this browser model. Loading may stall its owning page and
+uses substantial memory; development-run measurements are not hardware guarantees.
+
+Native sessions also accept an explicit engine selector and expose configured
+engine/model/label metadata. Shared adapter construction, the model registry and
+Decima remain separate work; they do not block the current browser Small adapter.
+
+## Compatibility and acceptance
+
+The workspace API and schema-1 snapshot format remain provisional. Pin the exact
+beta and recreate disposable development vaults on upgrades unless a migration has
+been explicitly qualified. This release does not promise real-data vault migration.
+
+The candidate is checked as a packed SDK in an unpacked Manifest V3 extension:
+model inference, offsets, approval and encrypted save before activation, failed-save
+non-release, strict restore, stale plans, missing/corrupt assets and browser restart.
+Final candidate hashes and local/CI evidence belong in #132. All SDK publication
+workflows also require the separate native model integration matrix for the exact
+release commit, followed by publication dry runs.
+
+Josh's product still needs the extension integration and its own end-to-end
+acceptance against exact Core and extension commits. Finding sources and recall
+target `0.5.0-beta.2`; later choices/rules and
+provenance/conversation work follow the versions or TBD assignments in the
+[requirements spreadsheet](https://docs.google.com/spreadsheets/d/1Z5bwpzXiyncgg4nC5tPehSoO3mvg6nTGh8gxI4Q-3y0/edit).
+A real-data pilot additionally needs the snapshot/contract
+freeze, shipping-model qualification, provider marker tests and vault/backup review.
