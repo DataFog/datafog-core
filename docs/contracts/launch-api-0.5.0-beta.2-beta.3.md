@@ -487,19 +487,19 @@ synthetic packet with zero provider runs and no preservation rate or G1 pass. It
 gold/witness must be deliberately reconciled to the coordinated v3 source before
 any future trial. This inventory introduces no provider execution or CSV API.
 
-## Remaining launch gates and compilation
+## Delivered beta.3 scope, follow-ups and compilation
 
 | Requirement | Implementation / remaining evidence |
 | --- | --- |
 | Released sources/recall/policy/combined review/rules/stronger backup | beta.2 release; #140/#141/#144/#145/#146/#142 |
-| C1/C3 recorded operations | #147/#162 with native #186/#187 and operation parity #188; implemented/merged, release-artifact verification pending |
+| C1/C3 recorded operations | #147/#162 with native #186/#187 and operation parity #188; fresh beta.3 registry consumers pass |
 | C2/R3 conversation/send intent/restore | #185/#197 merged with reservation, binding and scoped restoration; actual shipping-host observation remains a separate deferred acceptance |
-| X6 / X7 native bindings | #195/#196 implemented conversation adapters assembled by #197; actual installed packages and declarations qualified, not published beta.2 features |
+| X6 / X7 native bindings | #195/#196 conversation adapters assembled by #197; fresh beta.3 registry installs and declarations pass, not retroactive beta.2 features |
 | R4 strict/progressive | #169/#176/#174/#175 and scoped #185 implemented/merged; actual native/browser/host parity passes |
-| X8 workspace parity | Merged #199 executes four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16; release-artifact checks retain that scope |
+| X8 workspace parity | Fresh registry consumers pass four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16 from #199 |
 | W6 / G4 server and vault | Reference-host functional proofs merged; actual shipping keys/storage/site observation remains separate, with Josh product-host acceptance deferred |
-| B2 complete backup | #152/#181/#192 plus #185 map11 migration covers all implemented fields: four gold states, 42 malformed vectors and encrypted recovery; rerun against release artifacts |
-| G1 / G2 qualification | #150 real provider trials and #151 extended shipping pilot deferred; native model integration remains a publishing check |
+| B2 complete backup | #152/#181/#192 plus #185 map11 migration covers all implemented fields: four gold states, 42 malformed vectors and encrypted recovery; fresh registry browser recovery passes |
+| G1 / G2 qualification | #150 real provider trials and #151 extended shipping pilot deferred; the released source passed all twelve required native model publishing jobs |
 | D9 CSV | #149 deferred beyond beta.3; no signature or implementation here |
 | G3 permanent freeze | #154 deferred beyond this functional release; the versioned API/snapshot is documented but remains provisional |
 
