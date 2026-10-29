@@ -1,0 +1,18 @@
+{
+  "pullRequest": "https://github.com/DataFog/datafog-core/pull/115",
+  "headCommit": "54dad9d9af4d73e25659b5a766b5c6176fa79409",
+  "path": "fixtures/d4-names-addresses.jsonl",
+  "gitBlob": "729f60c64dff1a9a1073e737e388b422d5e839e8",
+  "contentSha256": "3e7702a540c2713677237ea79b4d389338eba29aa63e417449430ecd0a5e3358",
+  "records": 85,
+  "entities": 106,
+  "invalidCodepointOffsets": 0,
+  "nativeScoresImported": false,
+  "findings": [
+    {"kind": "boundary-contract", "examples": ["d4-addr-0007", "d4-addr-0008", "d4-addr-0010", "d4-addr-0030", "d4-mixed-0002"], "description": "STREET_ADDRESS labels include city, postcode or country despite the street-line-only convention. Overlapping ZIP_CODE annotations also need an explicit scoring policy."},
+    {"kind": "label-policy", "examples": ["d4-person-0013", "d4-person-0017"], "description": "The account handle mcarthur.patricia is PERSON gold; Smith and Jones families are a hard negative. Maintainers should explicitly review PERSON versus USERNAME and household-name handling."},
+    {"kind": "runtime-contract", "description": "Default browser Small uses person -> PERSON and address -> ADDRESS (full span). Native STREET_ADDRESS results and prompt/threshold-dependent scores cannot qualify this export."},
+    {"kind": "annotation-coverage", "description": "Do not pool partially PERSON/address-labelled legacy detector corpora and call every model prediction a false positive. This preparation set completely annotates its declared scored types and keeps other findings visible but unscored."}
+  ],
+  "disposition": "Reviewed definitions only. Selected shape/Unicode scenarios informed an independent preparation corpus; candidate native baseline/scoring implementation was not imported or merged. Final corpus/policy approval is still required."
+}
