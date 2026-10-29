@@ -3,7 +3,10 @@
 DataFog Core supports DataFog and GLiNER2 on Linux x86_64 GNU, Linux ARM64 GNU,
 macOS ARM64, macOS Intel and Windows x86_64 MSVC. Existing rule-based APIs are
 unchanged. No model downloads or model-runtime imports happen on ordinary import.
-Rust callers enable the optional `models` feature. WASM remains rule-based.
+Rust callers enable the optional `models` feature. Browsers can explicitly open
+[GLiNER2.5 Small ONNX sessions](browser-model.md); the synchronous WASM scan API
+remains rule-based. The native setup and lifecycle below apply to Python, Node
+and Rust sessions.
 
 ## DataFog setup
 
@@ -31,6 +34,7 @@ not performance targets or library defaults:
 
 ```json
 {
+  "engine": "datafog",
   "bundle": "/tmp/datafog-bundle",
   "manifest_sha256": "<digest emitted by the provisioner>",
   "limits": {
@@ -44,6 +48,16 @@ not performance targets or library defaults:
 ```
 
 See [GLiNER2 setup](gliner2-model.md) to use that model instead.
+
+Native sessions accept `engine: "datafog"` or `engine: "gliner2"` in the shared
+Rust/Python/Node configuration. GLiNER2 requires the `gliner2` settings object;
+DataFog rejects it. Unknown engine names fail at `/engine` before loading a
+worker. When `engine` is omitted, existing configurations keep selecting GLiNER2
+when its settings are present and DataFog otherwise. Rust callers can use
+`ModelEngine` and `ModelSessionConfig::selected_engine` for the same selection.
+Rust struct literals must include `engine: None` to retain legacy selection.
+The selector does not change routing, inference or the model identified by a
+verified bundle. Browser sessions retain their existing explicit factory.
 
 ## Python and Node
 
@@ -75,6 +89,13 @@ outside the event loop. Use `ModelCancellation` and the scan's `cancellation`
 option to cancel from another thread/call. `close` is safe to repeat and stops
 active work. A request that fails during inference retires its worker; open a
 new session to continue. Concurrent scans on one session return `model_busy`.
+
+`session.describe()` returns the configured `backend`, `model`, `adapter_version`,
+native-label-to-canonical-entity `labels` map and raw `score_scale`. Rust returns
+the same `ModelDescriptor`; Python returns a dictionary and Node/browser return
+plain objects with these snake_case keys. Each call returns an independent
+snapshot, available after close. It describes this session's configured contract;
+it does not probe runtime readiness or list engines available on other platforms.
 
 Both models return `contract_version`/`contractVersion`, `model`, `findings` and
 `evidence`. Findings retain the existing entity, text and offset fields. Python
@@ -132,7 +153,8 @@ options object with a `TypeError`.
 
 ## Tests and publication
 
-Routine CI does not download models. Manually run the `Model integration`
+The scoped browser-model CI downloads the pinned Small assets for browser tests.
+Native model qualification remains manual. Run the `Model integration`
 workflow for DataFog, PII GLiNER2 and general-purpose GLiNER2 on all five native
 platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.

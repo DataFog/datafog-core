@@ -42,13 +42,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check-release.py node
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+        shell: bash
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: bindings/node/package-lock.json
       - run: npm ci --prefix bindings/node
@@ -85,7 +88,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.17.0
       - run: npm ci --prefix bindings/node

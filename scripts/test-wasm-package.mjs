@@ -95,6 +95,20 @@ import {
   type RestoreResult,
 } from "@datafog/wasm";
 
+import {ModelSession, type ModelScanResult} from "@datafog/wasm/models";
+async function modelTypes() {
+  const session = await ModelSession.open({modelBaseUrl: "/models/", labels: {person: "PERSON"}});
+  const nativeLabel: string = session.describe().labels.person;
+  const result: ModelScanResult = await session.scan("John Smith", {entities: ["PERSON"]});
+  transform("John Smith", result.findings, {default: {strategy: "redact"}});
+  await session.scanModel("John Smith");
+  await session.close();
+}
+// @ts-expect-error Models require an explicit asset URL.
+ModelSession.open();
+// @ts-expect-error Threshold is numeric.
+ModelSession.open({modelBaseUrl: "/models/", threshold: "high"});
+void modelTypes;
 const ready: Promise<void> = init();
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
@@ -145,6 +159,26 @@ const protectedTogether: StructuredTransformResult = scanAndTransformStructured(
 void discovered;
 void protectedDocument;
 void protectedTogether;
+
+import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
+const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
+const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
+const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
+const previews: readonly WorkspacePreview[] = pending.previews();
+const recovery = workspace.prepareRecovery(new Uint8Array(16));
+const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
+workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
+const position: number | undefined = ({} as DataFogError).inputIndex;
+// @ts-expect-error Batch findings must declare their coordinate system.
+workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
+const report: WorkspaceRestoreReport = workspace.restoreReport("Jane");
+const restoredText: string | null = report.text;
+// @ts-expect-error Issue kinds are a closed set.
+const unexpectedKind: "missing" = report.issues[0].kind;
+void previews;
+void position;
+void restoredText;
+void unexpectedKind;
 
 `.trimStart(),
   );
@@ -226,9 +260,19 @@ try {
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
   const page = await browser.newPage();
+  const modelRequests = [];
+  page.on("request", request => {
+    if (/onnxruntime|huggingface|model\.onnx|tokenizer\.json/.test(request.url())) modelRequests.push(request.url());
+  });
   await page.goto(serverInfo.url);
+  await page.evaluate(async () => {
+    const {ModelSession} = await import("/node_modules/@datafog/wasm/models/index.js");
+    if (typeof ModelSession.open !== "function") throw new Error("Model subpath is missing from the installed package");
+  });
 
   await page.evaluate(async () => {
     const { DataFogError, init, restore, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured, restoreStructured } = await import(
@@ -249,6 +293,20 @@ try {
 
     expectThrows(() => scan("Email jane@example.com"), "Error");
     await Promise.all([init(), init()]);
+    const {BrowserModelContract} = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const contract = new BrowserModelContract(JSON.parse('{"company":"COMPANY","__proto__":"PERSON"}'));
+    try {
+      const descriptor = JSON.parse(contract.describe());
+      if (descriptor.backend !== "gliner25_onnx_web" ||
+          descriptor.labels.company !== "COMPANY" ||
+          !Object.hasOwn(descriptor.labels, "__proto__") ||
+          descriptor.labels.__proto__ !== "PERSON" ||
+          descriptor.score_scale !== "gliner25_pair_sigmoid") {
+        throw new Error("Browser descriptor does not match configured Core metadata");
+      }
+      descriptor.labels.company = "CHANGED";
+      if (JSON.parse(contract.describe()).labels.company !== "COMPANY") throw new Error("Descriptor changed Core labels");
+    } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
     const {verifyGerman} = await import("/german-conformance.mjs");
@@ -694,7 +752,14 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     }
   });
 
-  console.log("Installed @datafog/wasm package matches fixtures and the Finding contract.");
+  await page.evaluate(async () => {
+    const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
+    const { verifyWorkspace } = await import("/workspace-conformance.mjs");
+    await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+  });
+  console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
+  if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));
+
 } finally {
   await browser?.close();
   await new Promise((resolve) => server?.close(resolve) ?? resolve());

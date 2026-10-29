@@ -28,9 +28,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - run: python3 scripts/check-release.py rust
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - run: cargo publish --package datafog-core --locked --dry-run
       - run: cargo publish --package datafog-core --locked
         if: github.event_name == 'push' || !inputs.dry_run

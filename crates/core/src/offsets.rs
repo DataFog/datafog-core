@@ -13,6 +13,7 @@ struct Position {
 enum Coordinate {
     Byte,
     Codepoint,
+    Utf16,
 }
 
 impl Coordinate {
@@ -20,6 +21,7 @@ impl Coordinate {
         match self {
             Self::Byte => position.byte,
             Self::Codepoint => position.codepoint,
+            Self::Utf16 => position.utf16,
         }
     }
 }
@@ -55,6 +57,26 @@ impl<'a> TextIndex<'a> {
         Ok(TextRange {
             start: self.locate(range.start, Coordinate::Byte).utf16,
             end: self.locate(range.end, Coordinate::Byte).utf16,
+        })
+    }
+
+    /// Convert zero-based, end-exclusive UTF-16 offsets into exact byte boundaries.
+    /// A range splitting a surrogate pair is invalid, rather than rounded.
+    pub fn byte_range_from_utf16(
+        &mut self,
+        range: TextRange,
+    ) -> Result<TextRange, Utf16RangeError> {
+        if range.start > range.end {
+            return Err(Utf16RangeError);
+        }
+        let start = self.locate(range.start, Coordinate::Utf16);
+        let end = self.locate(range.end, Coordinate::Utf16);
+        if start.utf16 != range.start || end.utf16 != range.end {
+            return Err(Utf16RangeError);
+        }
+        Ok(TextRange {
+            start: start.byte,
+            end: end.byte,
         })
     }
 

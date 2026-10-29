@@ -10,6 +10,7 @@ pub use capabilities::{
 };
 mod german;
 mod jwt;
+pub mod model_scan;
 #[cfg(all(feature = "models", not(target_arch = "wasm32")))]
 pub mod models;
 mod npi;
@@ -18,6 +19,7 @@ mod private_key;
 pub mod structured;
 mod us_routing_number;
 mod uuid;
+pub mod workspace;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 pub use offsets::TextIndex;

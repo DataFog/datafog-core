@@ -37,9 +37,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
@@ -226,7 +228,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
 
       - name: Build Node binding for parity
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -234,7 +236,7 @@ jobs:
 
       - name: Install WASM tooling for nightly parity
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+        run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
 
       - name: Build WASM binding for parity
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

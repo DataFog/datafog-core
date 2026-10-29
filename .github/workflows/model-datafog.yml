@@ -48,16 +48,17 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
-          components: rustfmt, clippy
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
       - uses: actions/download-artifact@v4
         with:
           name: native-candidates-${{ matrix.platform }}
@@ -100,7 +101,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           bundle = root / "model-bundle"
           # Explicit CI fixture budgets, not library defaults or performance guarantees.
-          config = dict(bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
+          config = dict(engine="datafog", bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
                         limits=dict(max_input_bytes=65536, max_response_bytes=1048576, max_findings=1024, timeout_ms=30000, cleanup_timeout_ms=1000))
           (root / "model-session.json").write_text(json.dumps(config))
           with open(os.environ["GITHUB_ENV"], "a") as stream:
@@ -139,7 +140,7 @@ jobs:
           bundle=root / "model-bundle"
           labels = ([dict(label="current_employer", description="The organization the person currently works for", threshold=0.5)]
                     if os.environ["MODEL_BACKEND"] == "gliner2-general" else [dict(label="street_address", threshold=0.5)])
-          config=dict(bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
+          config=dict(engine="gliner2", bundle=str(bundle), manifest_sha256=hashlib.sha256((bundle / "bundle-manifest.json").read_bytes()).hexdigest(),
             gliner2=dict(python=str(interpreter), labels=labels,intra_threads=1,chunk_size=384,chunk_overlap=64),
             limits=dict(max_input_bytes=65536,max_response_bytes=16777216,max_findings=65536,timeout_ms=120000,cleanup_timeout_ms=5000))
           (root / "model-session.json").write_text(json.dumps(config),encoding="utf-8")

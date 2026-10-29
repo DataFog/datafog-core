@@ -1,0 +1,18 @@
+{
+  "name": "DataFog Core",
+  "build": {
+    "context": "..",
+    "dockerfile": "../.cursor/Dockerfile"
+  },
+  "remoteUser": "ubuntu",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "ms-python.python"
+      ]
+    }
+  }
+}

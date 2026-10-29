@@ -1,10 +1,5 @@
 FROM ubuntu:24.04
 
-ARG RUST_VERSION=1.88.0
-ARG NODE_VERSION=24
-ARG WASM_BINDGEN_VERSION=0.2.127
-ARG PLAYWRIGHT_VERSION=1.62.1
-
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,31 +19,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+COPY .nvmrc rust-toolchain.toml Cargo.lock /opt/datafog-pins/
+COPY bindings/wasm/package.json /opt/datafog-pins/bindings/wasm/package.json
+COPY scripts/pin.sh /opt/datafog-pins/scripts/pin.sh
+RUN chmod +x /opt/datafog-pins/scripts/pin.sh
+
+RUN NODE_VERSION=$(/opt/datafog-pins/scripts/pin.sh node) && \
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN PLAYWRIGHT_VERSION=$(/opt/datafog-pins/scripts/pin.sh playwright) && \
+    npx playwright@${PLAYWRIGHT_VERSION} install-deps chromium
 
 RUN python3 -m pip install --break-system-packages maturin huggingface_hub
 
-# Install Playwright system dependencies (as root, before switching to ubuntu)
-RUN npx playwright@${PLAYWRIGHT_VERSION} install-deps chromium
-
-RUN useradd -m -s /bin/bash -G sudo ubuntu \
+RUN usermod -aG sudo ubuntu \
     && echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 USER ubuntu
 WORKDIR /home/ubuntu
 
-# Install Rust, wasm target, and wasm-bindgen-cli for the agent user
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    --default-toolchain ${RUST_VERSION} --profile minimal \
-    && . "$HOME/.cargo/env" \
-    && rustup target add wasm32-unknown-unknown \
-    && cargo install wasm-bindgen-cli --version ${WASM_BINDGEN_VERSION} --locked
+COPY --chown=ubuntu:ubuntu rust-toolchain.toml /home/ubuntu/rust-toolchain.toml
+
+RUN RUST_VERSION=$(/opt/datafog-pins/scripts/pin.sh rust) && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+        --default-toolchain ${RUST_VERSION} --profile minimal && \
+    . "$HOME/.cargo/env" && \
+    rustup target add wasm32-unknown-unknown
 
 ENV PATH="/home/ubuntu/.cargo/bin:${PATH}"
 
-# Install Playwright Chromium browser (pinned to bindings version)
-RUN npx playwright@${PLAYWRIGHT_VERSION} install chromium
+RUN WASM_BINDGEN_VERSION=$(/opt/datafog-pins/scripts/pin.sh wasm-bindgen) && \
+    cargo install wasm-bindgen-cli --version ${WASM_BINDGEN_VERSION} --locked
+
+RUN PLAYWRIGHT_VERSION=$(/opt/datafog-pins/scripts/pin.sh playwright) && \
+    npx playwright@${PLAYWRIGHT_VERSION} install chromium
 
 WORKDIR /workspace

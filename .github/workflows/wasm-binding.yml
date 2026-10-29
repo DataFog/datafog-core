@@ -44,10 +44,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.88.0
-          components: rustfmt, clippy
+          toolchain: ${{ steps.rust-version.outputs.version }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
@@ -55,8 +56,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+          node-version-file: .nvmrc
+      - run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix bindings/wasm
       - run: npx --prefix bindings/wasm playwright install --with-deps chromium
       - run: npm run test:package --prefix bindings/wasm

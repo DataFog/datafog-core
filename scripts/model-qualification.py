@@ -31,9 +31,12 @@ if "gliner2" not in config:
     assert len(reference) == len(texts)
 report = {"cases": []}
 with ModelSession.open(config) as session:
+    report["descriptor"] = session.describe()
+    assert report["descriptor"]["labels"] and report["descriptor"]["score_scale"]
     for case_index, text in enumerate(texts):
         result = session.scan_model(text)
         assert result.contract_version == 1 and result.model
+        assert result.model == report["descriptor"]["model"]
         if "model" in manifest:
             assert result.model == manifest["model"]["id"]
         assert len(result.evidence) == len(result.findings)
@@ -101,6 +104,7 @@ with ModelSession.open(config) as session:
          "end": f.codepoint_range.end, "byte_start": f.byte_range.start, "byte_end": f.byte_range.end}
         for f in mixed.findings], "evidence": mixed.evidence}
 session.close()
+assert session.describe() == report["descriptor"]
 try:
     session.scan("")
 except DataFogModelError as error:

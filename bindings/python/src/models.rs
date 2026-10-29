@@ -82,6 +82,10 @@ pub(super) struct ModelSession {
 }
 #[pymethods]
 impl ModelSession {
+    fn describe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_object(py, &self.session.describe())
+    }
+
     #[staticmethod]
     fn open(py: Python<'_>, config: &Bound<'_, PyAny>) -> PyResult<Self> {
         let started = std::time::Instant::now();

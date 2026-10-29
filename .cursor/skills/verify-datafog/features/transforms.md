@@ -12,7 +12,7 @@ DataFog Core transforms detected PII using five strategies. Transformations prod
 | `mask` | `j***@***.com` | None | Yes |
 | `remove` | (deleted span) | None | Yes |
 | `pseudonymize` | Keyed HMAC-SHA-256 pseudonym | Key provider | No |
-| `tokenize` | Opaque reversible token | Token provider | Yes |
+| `tokenize` | Opaque reversible token | Token provider | No |
 
 ### Redact
 
@@ -216,7 +216,7 @@ Allowlisted findings are skipped during transformation.
 
 ### WASM limitations
 
-Browser/WASM bindings do not support `pseudonymize` because it requires a key provider callback. WASM does support `tokenize` and `restore()` for reversible tokenization.
+Browser/WASM bindings do not support `pseudonymize` or `tokenize` because they require provider callbacks. `restore()` also throws `unsupported_strategy`. Only `redact`, `mask`, and `remove` are usable in WASM.
 
 ### Structured transforms
 

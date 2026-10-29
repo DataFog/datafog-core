@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 #[test]
 fn versioned_manifest_selects_identity_without_a_compiled_model_catalog() {
@@ -221,7 +222,7 @@ fn results_keep_scores_and_reindex_duplicate_evidence() {
     )
     .unwrap();
     entries.push(entries[0].clone());
-    let result = session.compose(entries).unwrap();
+    let result = session.descriptor.compose(entries).unwrap();
     assert_eq!(result.findings.len(), 1);
     assert_eq!(result.evidence[0].sources.len(), 2);
     assert_eq!(result.evidence[0].finding_index, 0);
@@ -232,6 +233,111 @@ fn results_keep_scores_and_reindex_duplicate_evidence() {
     assert_eq!(
         session.scan("", &Cancellation::default()).unwrap_err().code,
         "model_session_closed"
+    );
+}
+
+#[test]
+fn session_descriptor_survives_close_without_probing_the_worker() {
+    let session = ModelSession {
+        descriptor: descriptor(),
+        inner: Mutex::new(SessionInner { worker: None }),
+        closing: AtomicBool::new(false),
+        state: AtomicU8::new(1),
+        cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
+    };
+    let description = session.describe();
+    assert_eq!(description.backend, "datafog_native");
+    assert_eq!(description.model, "DataFog/pii-en-65m");
+    assert_eq!(description.labels["email"], "EMAIL");
+    assert_eq!(description.score_scale, "normalized_token_softmax_min");
+    session.close().unwrap();
+    assert_eq!(session.describe(), description);
+}
+
+#[test]
+fn explicit_engine_selection_preserves_legacy_configs_and_rejects_conflicts() {
+    let datafog = serde_json::json!({
+        "bundle": "/missing/bundle", "manifest_sha256": "a".repeat(64),
+        "limits": descriptor().limits,
+    });
+    let mut gliner2 = datafog.clone();
+    gliner2["gliner2"] = serde_json::json!({
+        "python": std::env::temp_dir().join("engine-selection-python"),
+        "labels": [{"label": "person", "threshold": 0.5}],
+        "intra_threads": 1, "chunk_size": 384, "chunk_overlap": 64,
+    });
+    for (legacy, engine, name) in [
+        (&datafog, ModelEngine::Datafog, "datafog"),
+        (&gliner2, ModelEngine::Gliner2, "gliner2"),
+    ] {
+        assert_eq!(
+            parse_config(legacy).unwrap().selected_engine().unwrap(),
+            engine
+        );
+        let mut explicit = legacy.clone();
+        explicit["engine"] = name.into();
+        assert_eq!(
+            parse_config(&explicit).unwrap().selected_engine().unwrap(),
+            engine
+        );
+    }
+    let mut null_engine = datafog.clone();
+    null_engine["engine"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<ModelSessionConfig>(null_engine).is_err());
+    for (mut config, selector, path, reason) in [
+        (
+            datafog.clone(),
+            serde_json::json!("gliner2"),
+            "/gliner2",
+            "missing_field",
+        ),
+        (
+            gliner2.clone(),
+            serde_json::json!("datafog"),
+            "/gliner2",
+            "invalid_value",
+        ),
+        (
+            datafog.clone(),
+            serde_json::json!("private-engine"),
+            "/engine",
+            "invalid_value",
+        ),
+        (
+            datafog.clone(),
+            serde_json::json!(true),
+            "/engine",
+            "invalid_type",
+        ),
+        (
+            datafog.clone(),
+            serde_json::Value::Null,
+            "/engine",
+            "invalid_type",
+        ),
+    ] {
+        config["engine"] = selector;
+        let error = parse_config(&config).err().unwrap();
+        assert_eq!(error.path, path);
+        assert_eq!(error.reason, reason);
+        assert!(!format!("{error:?}").contains("private-engine"));
+    }
+    // Direct Rust callers can construct or deserialize configurations without
+    // parse_config; opening must still reject a contradictory selection first.
+    let mut direct: ModelSessionConfig = serde_json::from_value(datafog).unwrap();
+    direct.engine = Some(ModelEngine::Gliner2);
+    let error = ModelSession::open(direct).err().unwrap();
+    assert_eq!(
+        (error.path.as_str(), error.reason.as_str()),
+        ("/gliner2", "missing_field")
+    );
+    let mut direct: ModelSessionConfig = serde_json::from_value(gliner2).unwrap();
+    direct.engine = Some(ModelEngine::Datafog);
+    let error = ModelSession::open(direct).err().unwrap();
+    assert_eq!(
+        (error.path.as_str(), error.reason.as_str()),
+        ("/gliner2", "invalid_value")
     );
 }
 

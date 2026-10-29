@@ -39,6 +39,11 @@ function modelScanOptions(options, allowed) {
 export class ModelSession {
   #native;
   constructor(native) { this.#native = native; }
+  describe() {
+    // JSON.parse preserves custom labels such as __proto__ as own properties.
+    try { return JSON.parse(this.#native.describe()); }
+    catch (error) { throw normalizeError(error, "internal_error"); }
+  }
   static async open(config) {
     const snapshot = JSON.parse(structuredJson(config, true));
     try { return new ModelSession(await nativeOpenModelSession(snapshot)); }

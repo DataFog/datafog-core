@@ -1,0 +1,70 @@
+name: Workspace integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/core/src/workspace.rs'
+      - 'crates/core/src/workspace/**'
+      - 'crates/core/tests/workspace.rs'
+      - 'bindings/wasm/**'
+      - 'examples/workspace-extension/**'
+      - 'fixtures/workspace/**'
+      - '.github/workflows/workspace-integration.yml'
+  pull_request:
+    paths:
+      - 'crates/core/src/workspace.rs'
+      - 'crates/core/src/workspace/**'
+      - 'crates/core/tests/workspace.rs'
+      - 'bindings/wasm/**'
+      - 'examples/workspace-extension/**'
+      - 'fixtures/workspace/**'
+      - '.github/workflows/workspace-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Workspace integration (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            bindings/wasm/package-lock.json
+            examples/workspace-extension/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ runner.arch }}-workspace-rust-1.88-${{ hashFiles('Cargo.lock') }}
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: npm ci --prefix bindings/wasm
+      - run: npm ci --prefix examples/workspace-extension
+      - run: npx --prefix examples/workspace-extension playwright install --with-deps chromium
+      - run: npm run test:package --prefix bindings/wasm
+      - run: npm run test:workspace-integration --prefix examples/workspace-extension
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: workspace-integration-${{ matrix.os }}
+          path: |
+            examples/workspace-extension/dist/artifacts.json
+            examples/workspace-extension/dist/integration-result.json
+          if-no-files-found: error
+          retention-days: 14
