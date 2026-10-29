@@ -136,7 +136,7 @@ serve({
         finally { bundle.fill(0); }
         const id = toBase64url(randomId());
         pendingImport = {id, generation: g, vault: opened.vault, record: encrypted.record, change};
-        return {id, exportedAt: opened.exportedAt, revision: metadata.head.revision, workspaceTag: toBase64url(metadata.namespace)};
+        return {id, exportedAt: opened.exportedAt, revision: metadata.head.revision, format:change.format, workspaceTag: toBase64url(metadata.namespace)};
       } catch (error) { if (staging) stopImport(); throw error; }
       finally { opened?.bundle.fill(0); if (bytes instanceof Uint8Array) bytes.fill(0); }
     });
@@ -174,6 +174,27 @@ serve({
       return { entityType, matchedText: text.slice(start, end), range };
     });
   },
+  policy() {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("policy");guard(g);return result;
+    });
+  },
+  recall(text) {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("recall",[text]);guard(g);return result;
+    });
+  },
+  preparePolicy(edits) {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);
+      if(pending){const previous=pending;pending=undefined;await worker.call("discard",[previous.id]);guard(g);}
+      const next=await worker.call("preparePolicy",[edits,randomId()]);guard(g);
+      pending={...next,generation:g};return {id:next.id,policyPreview:next.policyPreview,format:next.format};
+    });
+  },
   prepare(inputs) {
     return run(async () => {
       const value = active(), g = generation;
@@ -182,7 +203,7 @@ serve({
       if (pending) { const previous = pending; pending = undefined; await worker.call("discard", [previous.id]); guard(g); }
       const next = await worker.call("prepareBatch", [inputs, randomId()]); guard(g);
       pending = { ...next, generation: g };
-      return { id: next.id, previews: next.previews };
+      return { id: next.id, previews: next.previews, format:next.format };
     });
   },
   approve(id) {
