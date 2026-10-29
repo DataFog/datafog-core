@@ -176,6 +176,17 @@ workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsRevie
 // @ts-expect-error Review source is a closed set.
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
 void findingSource; void needsReview;
+const currentPolicy = workspace.policy();
+const snapshotVersion: 1 | 2 = currentPolicy.snapshotVersion;
+const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
+const settingPreview = policyChange.policyPreview();
+const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
+const currentFormat: 1 | 2 = policyChange.snapshotFormat().currentVersion;
+// @ts-expect-error Choices use a closed disposition set.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
+// @ts-expect-error Review flags cannot grant an exception through a settings edit.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive", needsReview: false}]}, new Uint8Array(16));
+void snapshotVersion; void previousChoice; void currentFormat;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);

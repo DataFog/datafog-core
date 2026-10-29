@@ -12,6 +12,7 @@ export async function verifyWorkspacePolicy(api, counters) {
   check(w.policy().snapshotVersion === 2,"new workspaces use candidate v2");
   check(w.policy().defaultRule === "hide" && w.policy().protectedTypes.includes("PERSON"),"Core policy descriptor");
   throws(()=>w.preparePolicyChanges(edit("PERSON","May","keep"),id(3)),"invalid_policy");
+  throws(()=>w.preparePolicyChanges(edit("URL","https://example.test","keep"),id(3)),"invalid_policy");
   throws(()=>w.preparePolicyChanges({rules:[{entityType:"PERSON",rule:"keep"}],choices:[]},id(3)),"invalid_policy");
   const unwaived=w.prepare("May",[{...f("PERSON","May"),source:"user",needsReview:false}],id(3));
   check(unwaived.preview().text !== "May","source metadata cannot authorize disclosure");unwaived.discard();

@@ -86,11 +86,11 @@ this is their shape, and undoing a merge deletes the record.
 
 | Type | V1 rule |
 |---|---|
-| `PERSON` | Always hidden |
-| `ADDRESS` (street address) | Always hidden |
-| `EMAIL`, `PHONE` | Always hidden |
-| `ACCOUNT_NUMBER`, `CREDIT_CARD`, `SSN`, `US_ROUTING_NUMBER` | Always hidden |
-| Credentials (`API_KEY`, `BEARER_TOKEN`, `JWT`, `PRIVATE_KEY`, `CREDENTIAL_URI`) | Always hidden |
+| `PERSON`, `FIRST_NAME`, `LAST_NAME` | Hidden by default; generic keep forbidden |
+| `ADDRESS`, `STREET_ADDRESS` | Hidden by default; generic keep forbidden |
+| `EMAIL`, `PHONE` | Hidden by default; generic keep forbidden |
+| `ACCOUNT_NUMBER`, `CREDIT_CARD`, `SSN`, `US_ROUTING_NUMBER` | Hidden by default; generic keep forbidden |
+| Credentials (`API_KEY`, `BEARER_TOKEN`, `JWT`, `PRIVATE_KEY`, `CREDENTIAL_URI`) | Hidden by default; generic keep forbidden |
 
 Protected types stay hidden by default. Sid approved one narrow exception on
 2026-10-28: an explicit per-value `not_sensitive` false-positive correction may
@@ -104,12 +104,15 @@ waive a wider protected span. Previously issued aliases stay permanent.
 Per-value choices are remembered in the encrypted workspace: permitted keep
 (send as is) or explicit not sensitive (a scanner false-positive correction). Type rules, remembered choices and
 finding sources (`scanner`, `recall`, `user`, plus a needs-review flag) live in
-Core. Hosts only display them, so every surface hides the same things. Nothing
-sensitive is kept in browser extension storage.
+Core. Hosts display the decisions; every preparation surface applies the same
+rules. No sensitive plaintext is kept in extension storage; the encrypted
+workspace carries aliases, rules and remembered choices.
 
 ### What leaves the device
 
-Only the text the person approves, with every finding replaced by its marker.
+Only text the person approves leaves the local workflow. Remaining protected
+findings are replaced by markers; explicitly permitted exact-value choices can
+remain visible, including a protected value marked `not_sensitive`.
 Nothing from the vault is sent. Where the person pastes is the extension's design
 choice. Text pasted straight into ChatGPT's message box is already in ChatGPT's
 page before DataFog replaces it, so a paste target inside the extension is the
@@ -165,14 +168,18 @@ measure:
 
 ### Workspace snapshot
 
-The implemented snapshot currently uses version 1, with keys 0–6 only and a
-fixed `synthetic_v1` placeholder at key 6; the table below is the target layout,
-not proof that policy/choice persistence is implemented. #145 coordinates that
-upgrade with the separate #162 version-2 operation proposal.
+The beta.2 policy draft (#145) introduces candidate version 2 with actual policy
+and choices at keys 6/7; version 1 had only a fixed `synthetic_v1` placeholder at
+key 6. Sid approved byte-exact v1 read/export/no-op behavior and an explicit saved
+upgrade on a real mutation/recovery. Before approval/save the host must explain
+that beta.1 cannot open an upgraded vault. Discard and failed saves do not upgrade;
+old backup files stay unchanged. New workspaces bootstrap version 2.
 
-The snapshot keeps schema version 1 as a draft that each V1 task extends. It is
-frozen at the pilot gate. Until then, development snapshots fail closed rather
-than migrate. Target contents:
+The [policy/choice proposal](../proposals/workspace-policy-choices.md) defines that
+candidate layout. The separate #162 operation draft must rebase/version coherently
+rather than ship a second meaning of version 2. Keys 8–10 below are future target
+contents, not implemented policy-v2 fields. Snapshot freeze remains the pilot gate.
+Target contents:
 
 | Key | Contents | Lands with |
 |---|---|---|
@@ -182,8 +189,8 @@ than migrate. Target contents:
 | 3 | Entries: type, display, code, issuing operation, counter | Workspace PR |
 | 4 | Per-label counters | Workspace PR |
 | 5 | Merges: from code, to code, operation | Merges (after V1) |
-| 6 | Policy: rule per type | Rules and remembered choices |
-| 7 | Remembered choices: type, display, disposition, operation | Rules and remembered choices |
+| 6 | Policy profile and explicit type rules | Beta.2 policy draft |
+| 7 | Remembered choices: type, display, disposition, operation | Beta.2 policy draft |
 | 8 | Operations: ID, kind, time | Provenance |
 | 9 | Conversations: surface, the site's own ID, created operation, issued codes | Provenance |
 | 10 | Content-free counts | Provenance |

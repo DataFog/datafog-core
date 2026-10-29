@@ -60,6 +60,14 @@ fn every_builtin_and_model_name_address_type_is_protected() {
     ) {
         assert!(protected_type(&label), "{label}");
     }
+    for label in datafog_core::model_scan::ModelScanContract::gliner25_small(None)
+        .unwrap()
+        .describe()
+        .labels
+        .values()
+    {
+        assert!(protected_type(label), "Small default {label}");
+    }
     assert!(!protected_type("PRODUCT_CODE"));
     let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     assert_eq!(workspace.policy().unwrap().default_rule, TypeRule::Hide);
@@ -641,4 +649,34 @@ fn settings_limits_fail_atomically_without_eviction_or_oversized_decoding() {
         ))
         .is_err()
     );
+}
+
+#[test]
+fn choice_identity_uses_existing_unicode_lowercase_without_transliteration() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    activate(
+        &mut workspace,
+        &choice("PERSON", "İpek", Some(ChoiceDisposition::NotSensitive)),
+        3,
+    );
+    let exact = "i\u{307}pek";
+    let plan = workspace
+        .prepare(exact, &[finding("PERSON", exact)], [4; 16])
+        .unwrap();
+    assert_eq!(plan.preview().unwrap().text, exact);
+    drop(plan);
+    let plan = workspace
+        .prepare("Ipek", &[finding("PERSON", "Ipek")], [4; 16])
+        .unwrap();
+    assert_ne!(plan.preview().unwrap().text, "Ipek");
+    drop(plan);
+    activate(
+        &mut workspace,
+        &choice("PERSON", "Straße", Some(ChoiceDisposition::NotSensitive)),
+        4,
+    );
+    let plan = workspace
+        .prepare("STRASSE", &[finding("PERSON", "STRASSE")], [5; 16])
+        .unwrap();
+    assert_ne!(plan.preview().unwrap().text, "STRASSE");
 }

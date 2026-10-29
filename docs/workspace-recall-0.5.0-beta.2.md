@@ -79,10 +79,14 @@ coordinates. No `recallBatch` method is claimed.
   source preflight as preparation for unknown/damaged/unbracketed committed
   markers: `invalid_marker` with content-free byte/codepoint/UTF-16 issue ranges.
 
-These choices are deliberately visible for maintainer/product review. They do not
-resolve always-hidden versus not-sensitive policy, manual correction precedence
-or remembered choices. This slice recalls all currently committed identities;
-#145 must apply its reviewed eligibility rules later.
+These matching rules do not grant disclosure authority or correction precedence.
+When stacked with the [beta.2 policy implementation](proposals/workspace-policy-choices.md),
+recall indexes only committed identities still eligible under Core's type rules
+and exact normalized value choices. An explicit `not_sensitive` correction can
+exclude a protected value; generic protected-type keep remains forbidden. Source
+and needs-review metadata do not waive policy. Policy changes still require the
+normal approved save/activation transaction and never delete old aliases. Stronger
+combined-review conflict handling remains the separately reviewed #146 slice.
 
 ## Provisional bounds and implementation tradeoffs
 

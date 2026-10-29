@@ -1094,6 +1094,26 @@ pub fn byte_range_from_utf16(text: &str, range: TextRange) -> Result<TextRange> 
         .map_err(|_| error(ErrorCode::InvalidFinding))
 }
 
+fn ensure_fresh_operation(state: &State, operation: PublicId) -> Result<()> {
+    if state.head.commit_id == operation
+        || state
+            .entries
+            .values()
+            .any(|record| record.issuance == operation)
+        || state
+            .rules
+            .values()
+            .any(|record| record.operation == operation)
+        || state
+            .choices
+            .values()
+            .any(|record| record.operation == operation)
+    {
+        return Err(error(ErrorCode::InvalidId));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1151,24 +1171,4 @@ mod tests {
         let fallback = issue_code(namespace, operation, "PERSON", 2, &mut partial).unwrap();
         assert_eq!(fallback, all_codes.iter().next().unwrap().clone());
     }
-}
-
-fn ensure_fresh_operation(state: &State, operation: PublicId) -> Result<()> {
-    if state.head.commit_id == operation
-        || state
-            .entries
-            .values()
-            .any(|record| record.issuance == operation)
-        || state
-            .rules
-            .values()
-            .any(|record| record.operation == operation)
-        || state
-            .choices
-            .values()
-            .any(|record| record.operation == operation)
-    {
-        return Err(error(ErrorCode::InvalidId));
-    }
-    Ok(())
 }
