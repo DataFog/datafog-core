@@ -14,6 +14,11 @@ pub use policy::{
     PolicyEdits, PolicyPreview, PolicyView, RuleEditPreview, RuleView, TypeRule, TypeRuleEdit,
     ValueChoiceEdit, protected_type,
 };
+mod buffered_restore;
+pub use buffered_restore::{BufferedRestore, RestoreEncoding};
+mod private_bytes;
+mod progressive_restore;
+pub use progressive_restore::{ProgressiveRestore, RestoreChunk, RestoreProgress, StreamFailure};
 mod recall;
 mod review;
 pub use review::{
@@ -57,6 +62,8 @@ pub enum ErrorCode {
     InactivePlan,
     WorkspaceConflict,
     InvalidFinding,
+    InvalidEncoding,
+    InactiveStream,
     ReviewConflict,
     InvalidBatch,
     InvalidMarker,
@@ -75,6 +82,8 @@ impl ErrorCode {
             Self::InactivePlan => "inactive_plan",
             Self::WorkspaceConflict => "workspace_conflict",
             Self::InvalidFinding => "invalid_finding",
+            Self::InvalidEncoding => "invalid_encoding",
+            Self::InactiveStream => "inactive_stream",
             Self::ReviewConflict => "review_conflict",
             Self::InvalidBatch => "invalid_batch",
             Self::InvalidMarker => "invalid_marker",
@@ -375,8 +384,9 @@ impl PreparedChange {
 
 /// One runtime workspace. Closing it never deletes its saved bundle.
 pub struct Workspace {
-    state: Option<State>,
+    state: Option<Arc<State>>,
     lifetime: Arc<AtomicBool>,
+    read_epoch: Arc<AtomicBool>,
 }
 impl Drop for Workspace {
     fn drop(&mut self) {
@@ -386,13 +396,14 @@ impl Drop for Workspace {
 impl Workspace {
     fn from_state(state: State) -> Result<Self> {
         Ok(Self {
-            state: Some(state),
+            state: Some(Arc::new(state)),
             lifetime: Arc::new(AtomicBool::new(true)),
+            read_epoch: Arc::new(AtomicBool::new(true)),
         })
     }
     fn state(&self) -> Result<&State> {
         self.state
-            .as_ref()
+            .as_deref()
             .ok_or_else(|| error(ErrorCode::ClosedWorkspace))
     }
     /// IDs must come from the host OS CSPRNG. Shape checks cannot prove entropy.
@@ -434,6 +445,36 @@ impl Workspace {
     pub fn close(&mut self) {
         self.lifetime.store(false, Ordering::Release);
         self.state = None;
+    }
+
+    /// Buffer chunks against this committed head, returning no text before finalization.
+    /// This atomic adapter is not a progressive live-restoration API.
+    pub fn buffered_restore(&self, encoding: RestoreEncoding) -> Result<BufferedRestore> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ClosedWorkspace))?;
+        Ok(BufferedRestore::new(
+            Arc::clone(state),
+            Arc::clone(&self.lifetime),
+            Arc::clone(&self.read_epoch),
+            encoding,
+        ))
+    }
+
+    /// Opt in to irreversible chunk delivery. A later error marks the response
+    /// incomplete; text returned by earlier calls cannot be retracted.
+    pub fn progressive_restore(&self, encoding: RestoreEncoding) -> Result<ProgressiveRestore> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ClosedWorkspace))?;
+        ProgressiveRestore::new(
+            Arc::clone(state),
+            Arc::clone(&self.lifetime),
+            Arc::clone(&self.read_epoch),
+            encoding,
+        )
     }
 
     /// Find committed values without allocating aliases or changing the saved head.
@@ -819,11 +860,16 @@ impl Workspace {
         {
             return Err(error(ErrorCode::WorkspaceConflict));
         }
+        let head_changed = state.head != pending.candidate.head;
         let pending = plan
             .pending
             .take()
             .ok_or_else(|| error(ErrorCode::InactivePlan))?;
-        self.state = Some(pending.candidate);
+        if head_changed {
+            self.read_epoch.store(false, Ordering::Release);
+            self.read_epoch = Arc::new(AtomicBool::new(true));
+        }
+        self.state = Some(Arc::new(pending.candidate));
         Ok(())
     }
 
@@ -848,47 +894,50 @@ impl Workspace {
     /// Marker matching ignores case and accepts Crockford's `I`/`L` → `1` and
     /// `O` → `0` substitutions in the code.
     pub fn restore_report(&self, text: &str) -> Result<RestoreReport> {
-        let state = self.state()?;
-        if text.len() > MAX_BUNDLE_BYTES {
-            return Err(error(ErrorCode::ResourceLimit));
-        }
-        let lookup = marker_lookup(state);
-        let spans = marker_spans(text)?;
-        let issues = marker_issues(text, &spans, &lookup)?;
-        let restored_markers = spans
-            .iter()
-            .filter(|span| {
-                span.canonical
-                    .as_ref()
-                    .is_some_and(|canonical| lookup.contains_key(canonical))
-            })
-            .count();
-        if !issues.is_empty() {
-            return Ok(RestoreReport {
-                text: None,
-                restored_markers,
-                issues,
-            });
-        }
-        let mut output = String::new();
-        let mut cursor = 0;
-        for span in spans {
-            let display = span
-                .canonical
+        restore_report(self.state()?, text)
+    }
+}
+
+fn restore_report(state: &State, text: &str) -> Result<RestoreReport> {
+    if text.len() > MAX_BUNDLE_BYTES {
+        return Err(error(ErrorCode::ResourceLimit));
+    }
+    let lookup = marker_lookup(state);
+    let spans = marker_spans(text)?;
+    let issues = marker_issues(text, &spans, &lookup)?;
+    let restored_markers = spans
+        .iter()
+        .filter(|span| {
+            span.canonical
                 .as_ref()
-                .and_then(|canonical| lookup.get(canonical))
-                .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
-            append(&mut output, &text[cursor..span.range.start])?;
-            append(&mut output, display)?;
-            cursor = span.range.end;
-        }
-        append(&mut output, &text[cursor..])?;
-        Ok(RestoreReport {
-            text: Some(output),
+                .is_some_and(|canonical| lookup.contains_key(canonical))
+        })
+        .count();
+    if !issues.is_empty() {
+        return Ok(RestoreReport {
+            text: None,
             restored_markers,
             issues,
-        })
+        });
     }
+    let mut output = String::new();
+    let mut cursor = 0;
+    for span in spans {
+        let display = span
+            .canonical
+            .as_ref()
+            .and_then(|canonical| lookup.get(canonical))
+            .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
+        append(&mut output, &text[cursor..span.range.start])?;
+        append(&mut output, display)?;
+        cursor = span.range.end;
+    }
+    append(&mut output, &text[cursor..])?;
+    Ok(RestoreReport {
+        text: Some(output),
+        restored_markers,
+        issues,
+    })
 }
 
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";

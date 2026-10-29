@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
+  combined protected review, scoped detector rules and stronger backup passwords.
+  Old vaults retain v1 bytes until a real approved saved upgrade; beta.1 cannot
+  open upgraded policy-v2 state. Native workspace bindings remain beta.3 work.
+
 - New browser workspace backups require password reauthentication and use
   Argon2id with 256 MiB and three passes, replacing the older password wrapper.
   Legacy backups remain importable; restored new backups retain the stronger
@@ -27,6 +32,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
   counts, staged through saved transactions in a distinct v3 snapshot while
   preserving policy-v2 and legacy-v1 reads and no-ops. Capacity, replay-error and
   accounting choices remain under review for `0.5.0-beta.3`.
+- Native Python workspace handles expose Core preparation, combined review,
+  recall, protected choices, recovery and strict/opt-in progressive restoration
+  with typed errors, exact delivery counts, explicit saved-state activation and
+  bounded pending-plan lifetimes.
+- Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
+  head, with strict buffered finalization by default and a separate opt-in
+  progressive adapter. Late marker/encoding errors stop progressive output with
+  original ranges and delivered counts; unfinished or oversized possible markers
+  stop incomplete, while the strict default retains existing R2 behavior.
 - Detect bounded English street lines after explicit street/shipping/billing
   address labels across SDKs, retaining broader model address coverage.
 

@@ -1,3 +1,4 @@
+mod stream;
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,
     WorkspaceInput,
@@ -262,6 +263,7 @@ pub struct WasmWorkspace {
     inner: Workspace,
     plans: BTreeMap<u32, PreparedChange>,
     next_plan: u32,
+    streams: stream::Registry,
 }
 
 #[wasm_bindgen(js_class = NativeWorkspace)]
@@ -272,6 +274,7 @@ impl WasmWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     pub fn create_with_operation(namespace: &[u8], json: &str) -> Result<WasmWorkspace, JsValue> {
@@ -281,6 +284,7 @@ impl WasmWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     pub fn operations(&self) -> Result<String, JsValue> {
@@ -334,6 +338,7 @@ impl WasmWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     pub fn head(&self) -> Result<String, JsValue> {
@@ -617,7 +622,22 @@ impl WasmWorkspace {
             .map_err(from_error)?;
         self.plans
             .retain(|retained, _| *retained != handle && parents.get(retained) == Some(&saved));
+        if expected != saved {
+            self.streams.close();
+        }
         Ok(())
+    }
+    pub fn buffered_restore(
+        &mut self,
+        encoding: &str,
+    ) -> Result<stream::NativeRestoreStream, JsValue> {
+        self.streams.buffered(&self.inner, encoding)
+    }
+    pub fn progressive_restore(
+        &mut self,
+        encoding: &str,
+    ) -> Result<stream::NativeRestoreStream, JsValue> {
+        self.streams.progressive(&self.inner, encoding)
     }
     pub fn restore(&self, text: &str) -> Result<String, JsValue> {
         self.inner.restore(text).map_err(from_error)
@@ -635,6 +655,12 @@ impl WasmWorkspace {
     pub fn close(&mut self) {
         self.plans.clear();
         self.inner.close();
+        self.streams.close();
+    }
+}
+impl Drop for WasmWorkspace {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 impl WasmWorkspace {

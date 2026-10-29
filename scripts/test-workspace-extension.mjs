@@ -340,6 +340,15 @@ try {
   }, counterFixtures);
   console.log("PASS A3/A7/A8 installed WASM inputs, lifecycle, canonical CBOR and uint64 parity");
 
+  const streamingQualification = await browserPage.evaluate(async () => {
+    const api=await import("./vendor/package/index.js");
+    const {verifyWorkspaceStreaming}=await import("./workspace-streaming-conformance.mjs");
+    const fixture=await fetch("./workspace-streaming.json").then(response=>response.json());
+    const results=await verifyWorkspaceStreaming(api,fixture);
+    return {pass:true,profile:fixture.profile,cases:results.length,steps:results.reduce((sum,result)=>sum+result.steps.length,0)};
+  });
+  console.log("PASS R4 installed WASM streaming contract in actual MV3 extension (strict default and opt-in progressive)");
+
   for (const kdfCase of [kdfFixture, backupKdfFixture]) {
   const vector = await browserPage.evaluate(async fixture => {
     const worker = new Worker("./kdf-worker.js", { type: "module" });
@@ -397,6 +406,7 @@ try {
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
     reviewQualification,
+    streamingQualification,
     checks: ["D8", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,

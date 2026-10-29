@@ -388,8 +388,9 @@ mod operation_tests {
         Workspace::create([1; 16], [2; 16])
             .unwrap()
             .state
-            .clone()
+            .as_deref()
             .unwrap()
+            .clone()
     }
     fn invalid(state: State) {
         let bytes = encode(&state).unwrap();

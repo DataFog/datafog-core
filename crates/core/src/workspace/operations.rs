@@ -177,7 +177,7 @@ impl Workspace {
         validate_context(operation)?;
         let mut workspace = Self::create(namespace, operation.id)?;
         if let Some(state) = workspace.state.as_mut() {
-            state.operations[0].occurred_at_ms = Some(operation.occurred_at_ms);
+            Arc::make_mut(state).operations[0].occurred_at_ms = Some(operation.occurred_at_ms);
         }
         Ok(workspace)
     }
