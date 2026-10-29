@@ -168,7 +168,7 @@ required jobs that have not passed still block publication.
 Release packages build from source.
 
 Review the diff and passing tests before publishing. Target Cargo/npm
-`0.4.5-beta.4` and Python `0.4.5b4`; keep npm on the `beta` tag and GitHub releases
+`0.5.0-beta.1` and Python `0.5.0b1`; keep npm on the `beta` tag and GitHub releases
 marked as prereleases. Python publishes only the existing `datafog-core` project;
 its trusted publisher uses repository `DataFog/datafog-core`, workflow
 `publish-python.yml`, environment `pypi`. Upload retries skip existing files.
