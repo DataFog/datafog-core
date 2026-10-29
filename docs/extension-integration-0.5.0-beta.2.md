@@ -22,7 +22,7 @@ Scanner and user inputs use separate channels; caller metadata does not grant
 disclosure permission. Optional `corrections` may be omitted or an array; explicit
 null is invalid.
 
-Render the returned candidates and their `sources`, `needsReview`, original byte,
+Render the returned candidates and their `sources`, `finding.needsReview`, original byte,
 codepoint and UTF-16 ranges. `eligible` means saved policy requires hiding that
 candidate. `selected` describes the safe automatic selection; it is not approval
 or permission to send text. If there are conflicts, every candidate is unselected.
