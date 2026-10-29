@@ -112,13 +112,21 @@ class ConversationTests(unittest.TestCase):
         for bad in [None, Arbitrary(context(10)), {**context(10), "extra": True}, {key:value for key,value in context(10).items() if key != "siteId"}, {**context(10), "siteIdByteBudget": True}, {**context(10), "id": [True] * 16}]:
             failure = self.error("invalid_conversation", lambda: w.prepare_conversation_send([{"input":source,"conversation":bad}], operation(3)))
             self.assertEqual(failure.input_index, 0)
+        for bad, code in [({**context(10), "id": bytes(15)}, "invalid_operation_id"),
+                ({**context(10), "id": [10] * 15}, "invalid_conversation"),
+                ({**context(10), "surface": None}, "invalid_finding"),
+                ({**context(10), "surface": "\ud800"}, "invalid_finding"),
+                ({**context(10), "siteId": 7}, "invalid_finding"),
+                ({**context(10), "siteId": "\ud800"}, "invalid_finding")]:
+            failure = self.error(code, lambda: w.prepare_conversation_send([{"input":source,"conversation":bad}], operation(3)))
+            self.assertEqual(failure.input_index, 0)
         for bad in [None, {}, (), iter(())]:
             self.error("invalid_batch", lambda: w.prepare_conversation_send(bad, operation(3)))
         with w.prepare_conversation_send([{"input":source,"conversation":context(10)}], operation(3)) as plan:
             intents = plan.send_intents(); intents[0]["inputIndex"] = 31
             self.assertEqual(plan.send_intents()[0]["inputIndex"], 0)
             real = plan.send_intents()[0]; save(w, plan)
-        for bad in [None, {**real,"inputIndex":True}, {**real,"inputIndex":32}, {**real,"extra":True}, {**real,"preparationId":[1.5]*16}]:
+        for bad in [None, {**real,"preparationId":bytes(15)}, {**real,"inputIndex":True}, {**real,"inputIndex":32}, {**real,"extra":True}, {**real,"preparationId":[1.5]*16}]:
             self.error("invalid_send_intent", lambda: w.send_intent_status(bad))
         raw = w.export_bundle()
         self.error("resource_limit", lambda: w.prepare_conversation_send([{"input":source,"conversation":context(10)}] * 33, operation(4)))

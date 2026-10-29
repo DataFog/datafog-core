@@ -40,7 +40,18 @@ fn public_id(
 ) -> PyResult<w::PublicId> {
     let invalid = || failure(py, code);
     if let Ok(bytes) = value.cast_exact::<PyBytes>() {
-        return bytes.as_bytes().try_into().map_err(|_| invalid());
+        return bytes.as_bytes().try_into().map_err(|_| {
+            // Match typed-byte IDs in the existing WASM transport; malformed
+            // intent identifiers retain the dedicated intent category.
+            failure(
+                py,
+                if code == w::ErrorCode::InvalidConversation {
+                    w::ErrorCode::InvalidId
+                } else {
+                    code
+                },
+            )
+        });
     }
     let values = value.cast_exact::<PyList>().map_err(|_| invalid())?;
     if values.len() != 16 {
@@ -55,7 +66,8 @@ fn public_id(
     }
     Ok(result)
 }
-fn string(py: Python<'_>, value: &Bound<'_, PyAny>, code: w::ErrorCode) -> PyResult<String> {
+fn string(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> {
+    let code = w::ErrorCode::InvalidFinding;
     let value = value
         .cast_exact::<PyString>()
         .map_err(|_| failure(py, code))?;
@@ -117,12 +129,12 @@ pub(super) fn inputs(
                 code,
             )?;
             let id = public_id(py, &required(py, &context, "id", code)?, code)?;
-            let surface = string(py, &required(py, &context, "surface", code)?, code)?;
+            let surface = string(py, &required(py, &context, "surface", code)?)?;
             let site = required(py, &context, "siteId", code)?;
             let site_id = if site.is_none() {
                 None
             } else {
-                Some(string(py, &site, code)?)
+                Some(string(py, &site)?)
             };
             bytes = bytes
                 .saturating_add(surface.len())
