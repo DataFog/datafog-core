@@ -15,6 +15,7 @@ from host import EncryptedStore, Scope, RequestContext, HostError, HostStreamFai
 
 VALUE = "Synthetic Shared Person"
 UNKNOWN = "[[PERSON_AAAAAA]]"
+_OMITTED = object()
 OPAQUE_ARGUMENTS = '{\n  "literal": "[[PERSON_AAAAAA]]", "name": "Opaque Tool Person", "emoji": "👋"\n}'
 
 
@@ -109,10 +110,13 @@ class ToolEnvelopeTests(unittest.TestCase):
         self.capabilities[capability] = route
         return {"channel": channel, "capability": capability, "owner": store.scope, "sent": sent}
 
-    def authorize(self, item, *, capability=None, owner=None, channel=None):
-        route = self.channels.get(item["channel"] if channel is None else channel)
-        capability = item["capability"] if capability is None else capability
-        owner = item["owner"] if owner is None else owner
+    def authorize(self, item, *, capability=_OMITTED, owner=_OMITTED, channel=_OMITTED):
+        capability = item["capability"] if capability is _OMITTED else capability
+        owner = item["owner"] if owner is _OMITTED else owner
+        channel = item["channel"] if channel is _OMITTED else channel
+        if type(channel) is not object or type(capability) is not object or type(owner) is not Scope:
+            raise HostError("invalid_response_context")
+        route = self.channels.get(channel)
         if route is None or self.capabilities.get(capability) is not route or owner != route.context.scope:
             raise HostError("invalid_response_context")
         return route
@@ -154,13 +158,25 @@ class ToolEnvelopeTests(unittest.TestCase):
         first, other = different
         invalid = [(first, {"capability": other["capability"]}),
             (first, {"owner": other["owner"]}), (first, {"capability": object()}),
-            (first, {"channel": object()}), (same[0], {"capability": same[1]["capability"]})]
+            (first, {"channel": object()}), (same[0], {"capability": same[1]["capability"]}),
+            (first, {"capability": None}), (first, {"owner": None}), (first, {"channel": None}),
+            (first, {"capability": {}}), (first, {"channel": "untrusted_provider_id"}), (first, {"owner": {}})]
         for item, routing in invalid:
             prior = len(self.restore_stores)
             with self.assertRaises(HostError) as caught:
                 self.strict(item, envelope(item["sent"]["content"][0]["text"]), **routing)
             self.assertEqual(caught.exception.code, "invalid_response_context")
             self.assertEqual(len(self.restore_stores), prior, "authorization must precede every restore/open")
+            consumed, delivered = [], []
+            def chunks():
+                consumed.append(True)
+                yield b"unused"
+            with self.assertRaises(HostError) as caught:
+                self.progressive(item, envelope("unused"), chunks(), delivered.append, **routing)
+            self.assertEqual(caught.exception.code, "invalid_response_context")
+            self.assertEqual(len(self.restore_stores), prior)
+            self.assertEqual(consumed, [])
+            self.assertEqual(delivered, [])
         for store in self.stores:
             with store.open() as workspace:
                 self.assertEqual(workspace.recall("Opaque Tool Person")["findings"], [])

@@ -117,7 +117,9 @@ A test-only registry pairs opaque channel/capability objects with trusted server
 request/tenant/workspace contexts. It never takes authorization from the
 provider's IDs or metadata. Equal values across workspaces and equal aliases in
 concurrent same-workspace requests still require separate request routes; swapped,
-fabricated and wrong-workspace capabilities reject before restoration. The
+fabricated, explicit-null, wrong-type and wrong-workspace capabilities reject
+before restoration or stream input/delivery. Only an omitted private argument
+selects its registered default; null is never an authorization fallback. The
 concurrent requests reuse a committed alias and perform acknowledged no-op saves;
 this does not claim multiple winners for state-changing CAS updates. Strict
 failure returns no partially restored envelope and does not alter the input.
