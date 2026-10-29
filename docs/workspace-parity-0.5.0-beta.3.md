@@ -135,3 +135,9 @@ This qualifies deterministic operation semantics and saved-head receipts, not
 real durable server CAS, send confirmation, a conversation format/reservation,
 all-device capacity or overall C1/G3 completion. Actual encrypted capacity and
 32-pending-plan memory measurements remain in #162's separate qualification.
+
+[Committed operation-profile receipt](verification/evidence/workspace-operation-parity.json)
+records the clean qualified commit, source/package/fixture hashes and canonical
+per-runtime hashes. The CLI retains the corresponding full outputs and installed
+packages under its run directory; the same command reproduces them without a
+single-SDK bypass.
