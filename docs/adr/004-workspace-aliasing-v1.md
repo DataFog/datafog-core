@@ -176,8 +176,8 @@ that beta.1 cannot open an upgraded vault. Discard and failed saves do not upgra
 old backup files stay unchanged. New workspaces bootstrap version 2.
 
 The [policy/choice proposal](../proposals/workspace-policy-choices.md) defines that
-candidate layout. The separate #162 operation draft must rebase/version coherently
-rather than ship a second meaning of version 2. Keys 8–10 below are future target
+candidate layout. The separate #162 operation draft must integrate the merged policy normally and choose a coherent subsequent
+version, rather than ship a second meaning of version 2. Keys 8–10 below are future target
 contents, not implemented policy-v2 fields. Snapshot freeze remains the pilot gate.
 Target contents:
 

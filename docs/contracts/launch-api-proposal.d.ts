@@ -1,56 +1,11 @@
 /**
  * Docs-only contract for #143. Not npm exports or runtime implementations.
- * Main already exports recall/policy. #173 has a concrete combined-review candidate;
+ * Main exports recall, policy and combined review;
  * operation/conversation types below remain unapproved beta.3 proposals.
  */
 import type {
-  PreparedWorkspaceChange, TextRange, Workspace, WorkspaceFinding,
-  WorkspaceFindingSource, WorkspaceHead, WorkspaceMarkerIssue,
+  PreparedWorkspaceChange, Workspace, WorkspaceMarkerIssue,
 } from "../../bindings/wasm/index.js";
-
-/** #173 accepts/returns explicit null for optional detector metadata. */
-export interface CandidateFinding extends Omit<WorkspaceFinding, "confidence" | "detectorName" | "detectorVersion"> {
-  readonly confidence?: number | null;
-  readonly detectorName?: string | null;
-  readonly detectorVersion?: string | null;
-}
-/** Review-local, source/head/type/range-bound key; never persisted. */
-export type CandidateKey = string;
-export interface ReviewInputCandidate {
-  readonly text: string;
-  readonly scannerFindings: readonly CandidateFinding[];
-  readonly userSelections: readonly CandidateFinding[];
-  readonly corrections?: readonly {readonly candidateKey: CandidateKey; readonly replacement: CandidateFinding}[];
-}
-export interface ReviewConflictCandidate {
-  readonly kind: "protected_coverage" | "type_conflict";
-  readonly findingIndex: number;
-  readonly byteRange: TextRange;
-  readonly codepointRange: TextRange;
-  readonly utf16Range: TextRange;
-}
-export interface ReviewCandidate {
-  readonly key: CandidateKey;
-  readonly finding: CandidateFinding;
-  readonly sources: readonly WorkspaceFindingSource[];
-  readonly byteRange: TextRange;
-  readonly codepointRange: TextRange;
-  readonly utf16Range: TextRange;
-  readonly eligible: boolean;
-  /** False for every candidate while conflicts exist; never handoff approval. */
-  readonly selected: boolean;
-}
-export interface ReviewResultCandidate {
-  readonly head: WorkspaceHead;
-  readonly candidates: readonly ReviewCandidate[];
-  readonly conflicts: readonly ReviewConflictCandidate[];
-}
-/** Exact public candidate call shapes from #173; never cast a main Workspace. */
-export interface ReviewWorkspaceCandidate extends Pick<Workspace,
-  "head" | "recall" | "policy" | "preparePolicyChanges" | "activateSaved"> {
-  review(input: ReviewInputCandidate): ReviewResultCandidate;
-  prepareReview(inputs: readonly ReviewInputCandidate[], operationId: Uint8Array): PreparedWorkspaceChange;
-}
 
 /** Fresh host-random ID; proposed untrusted host time, not an authorization. */
 export interface OperationContextDraft {
@@ -98,7 +53,8 @@ export interface ConversationRestoreReportDraft {
   })[];
 }
 /** Future-only additions; #162/#147/#148 have not frozen these call shapes. */
-export interface LaunchWorkspaceDraft extends ReviewWorkspaceCandidate {
+export interface LaunchWorkspaceDraft extends Pick<Workspace,
+  "head" | "recall" | "review" | "prepareReview" | "policy" | "preparePolicyChanges" | "activateSaved"> {
   operations(): readonly OperationRecordDraft[];
   counts(): CountsDraft;
   conversations(): readonly ConversationRecordDraft[];

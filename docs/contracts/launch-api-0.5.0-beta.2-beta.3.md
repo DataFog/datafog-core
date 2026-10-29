@@ -12,14 +12,13 @@ baseline until the pilot gates pass.
 |---|---|---|
 | `0.5.0-beta.1` detection/model and workspace lifecycle | Released | `@datafog/wasm`, `@datafog/wasm/models`; [integration guide](../extension-integration-0.5.0-beta.1.md) |
 | D4 sources/review flags, D5 recall, D6/D7 policy and B3 backup profile | [#156](https://github.com/DataFog/datafog-core/pull/156), [#157](https://github.com/DataFog/datafog-core/pull/157), [#164](https://github.com/DataFog/datafog-core/pull/164) and [#166](https://github.com/DataFog/datafog-core/pull/166) merged into main; not yet released as beta.2 | Current checkout declarations and reference host; beta.1 packages do not gain these changes |
-| D8 combined review | Concrete runtime candidate [#173](https://github.com/DataFog/datafog-core/pull/173), targeting beta.2 | Candidate declarations below mirror its committed API; not a main/released export |
+| D8 combined review | [#173](https://github.com/DataFog/datafog-core/pull/173) merged into main, targeting beta.2 | Actual checkout declarations; not yet released as beta.2 |
 | C1–C3/R3, native SDKs, streaming and server qualification | beta.3 scope; design/implementation pending | No future runtime exports are supplied by this document |
 
 The adjacent [declarations](launch-api-proposal.d.ts) are a **type-only review
-artifact outside the npm package**. They separate the committed combined-review candidate
-shape from future provenance proposals; recall/policy import actual main types; neither augments `Workspace` or
-manufactures runtime methods. Obtain candidate capabilities only from the
-corresponding pinned, verified build. Implementation issues ship actual exports,
+artifact outside the npm package**. They import actual main workspace types and keep only future beta.3
+provenance/conversation proposals separate; neither augments `Workspace` or
+manufactures runtime methods. Use the corresponding pinned, verified build for runtime capabilities. Implementation issues ship actual exports,
 declarations and versioned guidance together. CSV remains an unresolved scope
 decision in [#149](https://github.com/DataFog/datafog-core/issues/149); no CSV API
 is proposed here.
@@ -54,7 +53,7 @@ based on older heads. Keep the 32-live-plan limit, explicit discard/close, marke
 preflight and atomic strict restore. Policy/record/recovery plans have no text
 previews and confer no permission to hand off text.
 
-## Beta.2 approved behavior and main/candidate APIs
+## Beta.2 approved behavior and implemented main APIs
 
 ### D4: declared source and review flags
 
@@ -77,7 +76,7 @@ separate behavior change; approving D4 does not approve D8 precedence.
 Merged #164 exposes `recall(text): WorkspaceRecallResult` on main. It reads only committed entries and
 returns findings tagged `recall` / `true`, a head and original coordinate ranges.
 It allocates no aliases and changes no state. Callers may feed these findings
-into existing preparation; #173's candidate `prepareReview` recomputes
+into existing preparation; main's `prepareReview` recomputes
 recall itself. An empty complete result means no eligible committed match, not
 that the input is free of PII.
 
@@ -156,16 +155,16 @@ trusted review surface, never telemetry/errors.
 
 ### D8: one Core-owned review list
 
-Concrete candidate [#173](https://github.com/DataFog/datafog-core/pull/173) exposes `review(input)` as read-only and
-`prepareReview(inputs, operationId)` as the authoritative transaction. These declarations are committed, but the
-candidate still needs review/verification before merging and release. Both validate
+Merged [#173](https://github.com/DataFog/datafog-core/pull/173) exposes `review(input)` as read-only and
+`prepareReview(inputs, operationId)` as the authoritative transaction on main. These APIs await the beta.2 release;
+merging them does not freeze the complete launch contract. Both validate
 scanner inputs and user selections, compute committed recall and apply policy.
 The latter recomputes against the current head and source rather than trusting a
 previous review list. Caller-supplied `source` does not grant precedence: the
 separate scanner/user input channels and explicit correction command establish
 the declared intent, all still subject to Core validation and protected coverage.
 
-The committed candidate implements these approved protection requirements:
+The main implementation enforces these approved protection requirements:
 
 1. Apply permitted choices to their exact type/value identities. Record remaining
    protected intervals as coverage obligations before resolving overlaps.
@@ -199,7 +198,7 @@ while any conflict remains. Conflicts carry `kind: "protected_coverage" |
 "type_conflict"`, `findingIndex` and original byte/codepoint/UTF-16 ranges;
 they do not contain candidate-key lists or source text. Conflict `findingIndex` retains original scanner, user then recall indexing
 through grouping and corrections. Optional confidence/detector metadata can
-be absent or explicitly null, as the actual candidate declarations specify.
+be absent or explicitly null, as the actual main declarations specify.
 
 Review keys identify the uncorrected candidates before applying corrections; they
 are ephemeral, deterministic for the same head/input and detection data, and
@@ -321,7 +320,8 @@ Policy-v2 is the authoritative main implementation targeting beta.2: keys 0–5 
 stores remembered choices. D4 metadata stays transient; recall adds no snapshot
 key. Strict canonical decoding and encrypted reopen/recovery tests are required.
 Unapproved operation-record proposal #162 currently uses a different v2 layout;
-it **must rebase and choose a coherent subsequent version**, never ship different
+it **must integrate the merged policy normally and choose a coherent subsequent
+version**, never ship different
 formats under the same version. Keys 8/9/10 below are future design allocations,
 not fields already present in policy-v2. Key 5 stays reserved for merges.
 
@@ -339,24 +339,23 @@ export. The recorded [#142 decision](https://github.com/DataFog/datafog-core/iss
 is Argon2id 256 MiB / t=3 / p=1, v2 strict export
 profile, no weaker inner password wrapper, with explicit legacy imports. Do not
 silently downgrade a profile to handle low-memory devices; fail explicitly.
-The adjacent `BackupHostDraft` is a host contract proposal, not a WASM export.
+The adjacent `BackupHostDraft` describes a host obligation, not a WASM export.
 An unlocked recovery-only user without the password receives a clear
 credential-required failure; no forgotten-password reset/export bypass is implied.
 Imported backups need the approved profile/version policy and fresh destination
 recovery head/key flow. Never log credentials or keep them in workspace snapshots.
 
-## Candidate calls, future calls and failure behavior
+## Main calls, future calls and failure behavior
 
-The type artifact separates candidate declarations from future proposals.
-Main recall/policy signatures are implemented but await the beta.2 release;
-combined-review candidate signatures mirror committed #173. Future error names remain proposals.
+Main workspace call shapes come directly from the checkout's declarations.
+Only future beta.3 proposals use separate docs-only interfaces. Future error names remain proposals.
 
 | Proposed call | Ownership and result | Failure/compatibility decision |
 |---|---|---|
 | Main `recall(text)` | Core read; head + complete original-coordinate candidates | Existing `invalid_marker`/`invalid_finding`/`resource_limit`; no partial results |
-| Candidate `review(input)` | Core read; candidates, attribution and ranged conflicts | Invalid input rejects; resolvable overlaps appear as conflicts |
+| Main `review(input)` | Core read; candidates, attribution and ranged conflicts | Invalid input rejects; resolvable overlaps appear as conflicts |
 | Main `policy()`; future `operations()`, `counts()`, `conversations()` | Trusted local reads of committed state only | Closed workspace rejects; lists obey saved-state bounds |
-| Candidate `prepareReview(inputs, operationId)` | Core mutation plan; validates and recomputes the approved source | `review_conflict`, existing range/head/resource errors; no trusting a stale review |
+| Main `prepareReview(inputs, operationId)` | Core mutation plan; validates and recomputes the approved source | `review_conflict`, existing range/head/resource errors; no trusting a stale review |
 | Main `preparePolicyChanges(edits, operationId)` | Core settings plan; policy before/after preview, zero text previews | `invalid_policy`; protected generic keep and duplicate edits reject atomically |
 | `prepareOutcome(outcome, operation)` | Explicit Core record plan; zero previews | Host-reported event only; errors never append an implicit event |
 | `prepareHandoffRecord(handoff, operation)` | Core record plan after actual observed handoff; zero previews | Proposed `invalid_conversation`; invalid markers/limits reject the whole record |
@@ -396,9 +395,8 @@ partial failures and lost acknowledgments preserve the existing failure model.
 | R4 streaming restore | `0.5.0-beta.3` | [#169](https://github.com/DataFog/datafog-core/issues/169); atomicity decision before implementation |
 | W6 server-host contract | `0.5.0-beta.3` | [#170](https://github.com/DataFog/datafog-core/issues/170); ownership, durable CAS, worker/retry isolation |
 
-Beta.2 remains the immediate release priority: finish and review recall, policy,
-combined review and rule slices before the independent beta.3 work joins the
-freeze. Review API details against committed runtime declarations as they land.
+Beta.2 remains the immediate release priority: finish remaining rule slices and release verification before the independent beta.3 work joins the
+freeze. Keep examples aligned with main's actual declarations as further APIs land.
 CSV waits for Sid's decision. Record approvals in issues/ADRs; merging this draft
 does not complete implementation or pilot gates.
 
@@ -421,8 +419,10 @@ No stream signature is frozen by the type artifact here. Provider SSE/tool parsi
 belongs to a separate adapter.
 
 Server-host qualification (#170) requires tenant/request/workspace ownership,
-complete-head atomic compare-and-save with exactly one race winner, no loser
-activation/release, uncertain-save reopening and fresh review. The 32-live-plan
+complete-head atomic compare-and-save with exactly one winner for state-changing
+candidates, no loser activation/release, uncertain-save reopening and fresh review.
+No-op candidates preserve their head; delivery deduplication/admission remains a
+host duty, not a consequence of snapshot CAS. The 32-live-plan
 cap is per handle; host-wide admission and worker coordination are separate.
 Stateless workers require a durable shared mapping store or an authenticated
 client-carried encrypted snapshot. Resent chat history alone cannot reconstruct
@@ -447,9 +447,8 @@ npm ci --prefix bindings/wasm
 bindings/wasm/node_modules/.bin/tsc --project docs/contracts/tsconfig.json
 ```
 
-The CI type check covers the checkout's current declarations, separately named
-combined-review candidate interfaces, and future-only examples. It deliberately does
-not assert that `Workspace` will always lack recall as runtime candidates land. It proves declaration consistency,
+The CI type check covers actual main workspace calls and separately named
+future beta.3 proposal interfaces/examples. Negative assertions cover unimplemented beta.3 calls only. It proves declaration consistency,
 not implemented matching, privacy correctness, cryptography or browser behavior.
 Each runtime issue still requires Core positive/negative tests, installed SDK
 checks, all coordinate units, packed-SDK MV3 save/restart/recovery tests and the

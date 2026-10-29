@@ -1,8 +1,7 @@
 /** Compile-only examples. Future types do not manufacture runtime methods. */
-import type {PreparedWorkspaceChange, Workspace, WorkspaceFinding, WorkspaceHead, WorkspacePreview} from "../../bindings/wasm/index.js";
+import type {PreparedWorkspaceChange, Workspace, WorkspaceFinding, WorkspaceHead, WorkspacePreview, WorkspaceReviewInput} from "../../bindings/wasm/index.js";
 import type {
-  BackupHostDraft, CandidateFinding, LaunchWorkspaceDraft, OperationContextDraft,
-  ReviewInputCandidate, ReviewWorkspaceCandidate,
+  BackupHostDraft, LaunchWorkspaceDraft, OperationContextDraft,
 } from "./launch-api-proposal.js";
 
 // This is a trusted-host boundary, not a Core promise of encryption/durability.
@@ -32,7 +31,7 @@ export async function currentRuntime(workspace: Workspace, save: SaveCandidate, 
   } finally { candidate.fill(0); }
 }
 
-async function activateDraft(workspace: ReviewWorkspaceCandidate, plan: PreparedWorkspaceChange, save: SaveCandidate) {
+async function activateDraft(workspace: Pick<Workspace, "activateSaved">, plan: PreparedWorkspaceChange, save: SaveCandidate) {
   const heads = plan.heads(), candidate = plan.exportCandidateBundle();
   try {
     const savedHead = await save(candidate, heads.expectedHead, heads.candidateHead);
@@ -40,9 +39,9 @@ async function activateDraft(workspace: ReviewWorkspaceCandidate, plan: Prepared
   } finally { candidate.fill(0); }
 }
 
-// Obtain the #173 candidate from its real build; main does not export review yet.
-export async function candidateReview(
-  workspace: ReviewWorkspaceCandidate, input: ReviewInputCandidate,
+// Combined review is implemented on main; approval and durable save are still required.
+export async function currentReview(
+  workspace: Workspace, input: WorkspaceReviewInput,
   operationId: Uint8Array, save: SaveCandidate,
   approve: (previews: ReturnType<PreparedWorkspaceChange["previews"]>, oldReaderWarning: string | null) => Promise<boolean>,
 ) {
@@ -100,13 +99,13 @@ export function typeBoundaries(current: Workspace, future: LaunchWorkspaceDraft,
   // @ts-expect-error conversation-aware restore remains future-only in this checkout.
   current.restoreInConversation("text", {surface: "chatgpt", siteConversationId: "synthetic"});
   // @ts-expect-error closed source names are required in the proposal.
-  const unsupportedSource: CandidateFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, source: "trusted"};
+  const unsupportedSource: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, source: "trusted"};
   // @ts-expect-error future interfaces are not an implementation of the current Workspace class.
   const cannotSubstitute: LaunchWorkspaceDraft = current;
   // @ts-expect-error explicit fresh password input is required for host export.
   backup.exportBackup({workspaceId: new Uint8Array(16), includeRecoveryCode: false});
   // @ts-expect-error the committed review API uses candidateKey, not target.
-  const obsoleteCorrection: ReviewInputCandidate = {text: "Jane", scannerFindings: [], userSelections: [], corrections: [{target: "old", replacement: {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}}]};
+  const obsoleteCorrection: WorkspaceReviewInput = {text: "Jane", scannerFindings: [], userSelections: [], corrections: [{target: "old", replacement: {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}}]};
   void obsoleteCorrection;
   // @ts-expect-error choice values remain a closed set.
   future.preparePolicyChanges({rules: [], choices: [{entityType: "CUSTOM", value: "synthetic", disposition: "allow_everything"}]}, new Uint8Array(16));
