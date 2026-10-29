@@ -40,6 +40,19 @@ export function validateWorkspaceOutput(value,fixture) {
   return canonicalWorkspaceValue(value);
 }
 
+// Retained wheels from earlier releases are valid artifacts, not current inputs.
+// Require the exact repository pin rather than deleting them or guessing newest.
+export function selectWorkspaceWheel(names,projectToml) {
+  const project=/^\[project\]\s*\r?\n([\s\S]*?)(?=^\[|$(?![\s\S]))/m.exec(projectToml)?.[1];
+  const versions=project ? [...project.matchAll(/^version[ \t]*=[ \t]*(["'])([A-Za-z0-9.!+_-]+)\1[ \t]*(?:#.*)?$/gm)] : [];
+  const distributions=project ? [...project.matchAll(/^name[ \t]*=[ \t]*(["'])([A-Za-z0-9._-]+)\1[ \t]*(?:#.*)?$/gm)] : [];
+  if(versions.length!==1 || distributions.length!==1) throw new Error("workspace parity Python project pin is invalid");
+  const version=versions[0][2],distribution=distributions[0][2].replaceAll(/[-_.]+/g,"_");
+  const candidates=names.filter(name=>typeof name==="string" && name.startsWith(`${distribution}-${version}-`) && name.endsWith(".whl"));
+  if(candidates.length!==1) throw new Error("workspace parity requires exactly one wheel matching the current Python project pin");
+  return {filename:candidates[0],version};
+}
+
 async function main() {
 let temporary,server,browser;
 const report={schemaVersion:1,pass:false,sdks:sdkNames,profile:null,errors:[],packages:{}};
@@ -60,14 +73,15 @@ try {
     const file=path.join(packages,packed[0].filename),bytes=await readFile(file);report.packages[sdk]={file,sha256:sha(bytes),bytes:bytes.length};tarballs.push(file);
   }
   command("npm",["install","--ignore-scripts","--no-audit","--no-fund",...tarballs],temporary);
-  const wheels=(await readdir(path.join(root,"target/wheels"))).filter(name=>name.endsWith(".whl"));
-  if(wheels.length!==1)throw new Error("workspace parity requires exactly one current Python wheel");
-  const wheel=path.join(packages,wheels[0]);await copyFile(path.join(root,"target/wheels",wheels[0]),wheel);
-  const wheelBytes=await readFile(wheel);report.packages.python={file:wheel,sha256:sha(wheelBytes),bytes:wheelBytes.length};
+  const projectBytes=await readFile(path.join(root,"bindings/python/pyproject.toml"));
+  const selected=selectWorkspaceWheel(await readdir(path.join(root,"target/wheels")),projectBytes.toString("utf8"));
+  const wheel=path.join(packages,selected.filename);await copyFile(path.join(root,"target/wheels",selected.filename),wheel);
+  const wheelBytes=await readFile(wheel);report.packages.python={file:wheel,sha256:sha(wheelBytes),bytes:wheelBytes.length,version:selected.version,projectSha256:sha(projectBytes)};
   command("python3",["-m","venv",path.join(temporary,"venv")]);
   const python=path.join(temporary,"venv/bin/python");
   command(python,["-m","pip","install","--no-deps","--disable-pip-version-check",wheel]);
   report.runtime.python=command(python,["--version"]).trim();
+  if(command(python,["-c","from importlib.metadata import version; print(version('datafog-core'))"]).trim()!==selected.version) throw new Error("workspace parity installed Python package version differs from its pin");
   const results={};
   results.rust=validateWorkspaceOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",fixturePath])),fixture);
   results.python=validateWorkspaceOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-python.py"),fixturePath])),fixture);

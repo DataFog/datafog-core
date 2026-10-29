@@ -39,6 +39,11 @@ prefix reported as success alongside marker issues. A dry run explicitly reports
 Reports live under `target/dfv/runs/<timestamp>/workspace-parity/`: raw canonical
 per-SDK outputs, the exact fixture, Python wheel/Node/WASM tarballs, SHA-256 receipts,
 runtime versions, source commit/dirty state, doctor data and final pass/failure.
+Python selection requires exactly one wheel matching the current package/version
+in `bindings/python/pyproject.toml`, then checks the installed distribution version.
+Historical wheels remain retained; they cannot replace the current wheel or make
+an otherwise valid current build ambiguous. Multiple current candidates or a
+missing/invalid pin fail rather than selecting an arbitrary artifact.
 The CLI never deletes reports. Temporary installed consumers and browser profiles
 are cleaned separately. Any process/runtime/parse failure prevents a complete
 comparison and returns nonzero without retaining arbitrary child diagnostics.
