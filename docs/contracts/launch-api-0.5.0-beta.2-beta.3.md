@@ -440,7 +440,7 @@ compiling this document.
 | C2/R3 conversation/send intent/restore | #148/#182/#185; approved sequencing/pause/reservation/logical-ID binding; implementation and final format pending |
 | X6 / X7 native bindings | #167/#168; installed wheel/package and typed errors, plus future conversation integration |
 | R4 strict/progressive | #169/#176/#174/#175 implemented; native/host/provenance acceptance still joint work |
-| X8 workspace parity | #171/#179 foundation+streaming actual four-SDK matrix; operation profile #188 under review, conversation profile still needed |
+| X8 workspace parity | #171/#179 foundation+streaming and #188 operation profiles merged; conversation and native-server qualification still needed |
 | W6 / G4 server and vault | #170/#153; actual host ownership, keys/storage/admission/cancellation and shipping review |
 | B2 complete backup | #152/#181; extend field-to-fixture coverage for every newly committed joint-v3 field |
 | G1 / G2 qualification | #150 real provider trials; #151 actual shipping model/rules/recall evidence |
