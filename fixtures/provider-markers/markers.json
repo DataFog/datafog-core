@@ -1,0 +1,305 @@
+{
+  "markers": [
+    {
+      "case": "C01",
+      "entityType": "PERSON",
+      "id": "M01",
+      "marker": "[[PERSON_K6BKS9]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "ADDRESS",
+      "id": "M02",
+      "marker": "[[ADDRESS_H91FSF]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "EMAIL",
+      "id": "M03",
+      "marker": "[[EMAIL_V5RM6J]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "PHONE",
+      "id": "M04",
+      "marker": "[[PHONE_T4MKE7]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "IDENTIFICATION_NUMBER",
+      "id": "M05",
+      "marker": "[[IDENTIFICATION_NUMBER_RHTR88]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "URL",
+      "id": "M06",
+      "marker": "[[URL_7FCKNJ]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "USERNAME",
+      "id": "M07",
+      "marker": "[[USERNAME_EAXFF8]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "ACCOUNT_NUMBER",
+      "id": "M08",
+      "marker": "[[ACCOUNT_NUMBER_6J6VGE]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "STREET_ADDRESS",
+      "id": "M09",
+      "marker": "[[STREET_ADDRESS_7P8FPN]]"
+    },
+    {
+      "case": "C01",
+      "entityType": "SSN",
+      "id": "M10",
+      "marker": "[[SSN_9MRHD3]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "PERSON",
+      "id": "M11",
+      "marker": "[[PERSON_M4Q67X]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "ADDRESS",
+      "id": "M12",
+      "marker": "[[ADDRESS_NSYTZ2]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "EMAIL",
+      "id": "M13",
+      "marker": "[[EMAIL_X8QX65]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "PHONE",
+      "id": "M14",
+      "marker": "[[PHONE_09ZHPD]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "IDENTIFICATION_NUMBER",
+      "id": "M15",
+      "marker": "[[IDENTIFICATION_NUMBER_DQR1T3]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "URL",
+      "id": "M16",
+      "marker": "[[URL_FJ6ABH]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "USERNAME",
+      "id": "M17",
+      "marker": "[[USERNAME_VBSX8A]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "ACCOUNT_NUMBER",
+      "id": "M18",
+      "marker": "[[ACCOUNT_NUMBER_KJ2R3W]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "STREET_ADDRESS",
+      "id": "M19",
+      "marker": "[[STREET_ADDRESS_V1Y17W]]"
+    },
+    {
+      "case": "C02",
+      "entityType": "SSN",
+      "id": "M20",
+      "marker": "[[SSN_KBHXZY]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "PERSON",
+      "id": "M21",
+      "marker": "[[PERSON_QK33RT]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "ADDRESS",
+      "id": "M22",
+      "marker": "[[ADDRESS_66344E]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "EMAIL",
+      "id": "M23",
+      "marker": "[[EMAIL_C76ATB]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "PHONE",
+      "id": "M24",
+      "marker": "[[PHONE_BXHVWN]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "IDENTIFICATION_NUMBER",
+      "id": "M25",
+      "marker": "[[IDENTIFICATION_NUMBER_KF2F5G]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "URL",
+      "id": "M26",
+      "marker": "[[URL_4AY18G]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "USERNAME",
+      "id": "M27",
+      "marker": "[[USERNAME_ZHWQ9B]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "ACCOUNT_NUMBER",
+      "id": "M28",
+      "marker": "[[ACCOUNT_NUMBER_8QYF0R]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "STREET_ADDRESS",
+      "id": "M29",
+      "marker": "[[STREET_ADDRESS_PBSS9Z]]"
+    },
+    {
+      "case": "C03",
+      "entityType": "SSN",
+      "id": "M30",
+      "marker": "[[SSN_XYW8GF]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "PERSON",
+      "id": "M31",
+      "marker": "[[PERSON_KAKGSD]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "ADDRESS",
+      "id": "M32",
+      "marker": "[[ADDRESS_1PDFM8]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "EMAIL",
+      "id": "M33",
+      "marker": "[[EMAIL_2R0XSK]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "PHONE",
+      "id": "M34",
+      "marker": "[[PHONE_6F4P5V]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "IDENTIFICATION_NUMBER",
+      "id": "M35",
+      "marker": "[[IDENTIFICATION_NUMBER_Y1QFXQ]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "URL",
+      "id": "M36",
+      "marker": "[[URL_EB4V6Y]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "USERNAME",
+      "id": "M37",
+      "marker": "[[USERNAME_AMETVA]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "ACCOUNT_NUMBER",
+      "id": "M38",
+      "marker": "[[ACCOUNT_NUMBER_HZZJXJ]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "STREET_ADDRESS",
+      "id": "M39",
+      "marker": "[[STREET_ADDRESS_QDGRN6]]"
+    },
+    {
+      "case": "C04",
+      "entityType": "SSN",
+      "id": "M40",
+      "marker": "[[SSN_FSK9V6]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "PERSON",
+      "id": "M41",
+      "marker": "[[PERSON_QWMKJ8]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "ADDRESS",
+      "id": "M42",
+      "marker": "[[ADDRESS_5D37XT]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "EMAIL",
+      "id": "M43",
+      "marker": "[[EMAIL_Y6QVZ4]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "PHONE",
+      "id": "M44",
+      "marker": "[[PHONE_6B8V3A]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "IDENTIFICATION_NUMBER",
+      "id": "M45",
+      "marker": "[[IDENTIFICATION_NUMBER_KNKSM0]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "URL",
+      "id": "M46",
+      "marker": "[[URL_B8NR8N]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "USERNAME",
+      "id": "M47",
+      "marker": "[[USERNAME_5EQPN5]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "ACCOUNT_NUMBER",
+      "id": "M48",
+      "marker": "[[ACCOUNT_NUMBER_9YMZBV]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "STREET_ADDRESS",
+      "id": "M49",
+      "marker": "[[STREET_ADDRESS_6MKJ00]]"
+    },
+    {
+      "case": "C05",
+      "entityType": "SSN",
+      "id": "M50",
+      "marker": "[[SSN_8DAS2W]]"
+    }
+  ],
+  "schemaVersion": 1
+}
