@@ -168,7 +168,7 @@ measure:
 
 ### Workspace snapshot
 
-The beta.2 policy draft (#145) introduces candidate version 2 with actual policy
+The merged beta.2 policy implementation (#145/#166) introduces version 2 with actual policy
 and choices at keys 6/7; version 1 had only a fixed `synthetic_v1` placeholder at
 key 6. Sid approved byte-exact v1 read/export/no-op behavior and an explicit saved
 upgrade on a real mutation/recovery. Before approval/save the host must explain

@@ -199,7 +199,7 @@ The release checklist is [issue #132](https://github.com/DataFog/datafog-core/is
 0.5.0-beta.1 is a developer integration package for synthetic Chrome extension tests;
 later prereleases and the final pilot-format freeze are separate milestones.
 Pin the exact
-package version. The approved #166 candidate preserves v1 bytes on reads/no-ops,
+package version. Merged #166 preserves v1 bytes on reads/no-ops,
 but a real saved mutation/recovery upgrades to policy-v2; warn before saving that
 beta.1 cannot open that upgraded vault. Beta.2 candidate validation and final
 pilot qualification remain distinct.

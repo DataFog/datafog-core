@@ -1,113 +1,58 @@
 /**
- * REVIEW DRAFT for #143, targeting 0.5.0-beta.2 / 0.5.0-beta.3.
- * Docs-only: not part of @datafog/wasm exports. Candidate shapes have PR implementations;
- * later review/provenance shapes remain proposals. Neither adds runtime exports here.
- * See launch-api-0.5.0-beta.2-beta.3.md before implementing any proposal.
+ * Docs-only contract for #143. Not npm exports or runtime implementations.
+ * Main already exports recall/policy. #173 has a concrete combined-review candidate;
+ * operation/conversation types below remain unapproved beta.3 proposals.
  */
 import type {
-  PreparedWorkspaceChange, TextRange, WorkspaceFinding, WorkspaceHead,
-  WorkspaceMarkerIssue, WorkspacePreview,
+  PreparedWorkspaceChange, TextRange, Workspace, WorkspaceFinding,
+  WorkspaceFindingSource, WorkspaceHead, WorkspaceMarkerIssue,
 } from "../../bindings/wasm/index.js";
 
-// #140 / merged PR #156; released beta.1 does not support these fields.
-export type FindingSourceDraft = "scanner" | "recall" | "user";
-export interface FindingDraft extends WorkspaceFinding {
-  readonly source?: FindingSourceDraft;
-  readonly needsReview?: boolean;
+/** #173 accepts/returns explicit null for optional detector metadata. */
+export interface CandidateFinding extends Omit<WorkspaceFinding, "confidence" | "detectorName" | "detectorVersion"> {
+  readonly confidence?: number | null;
+  readonly detectorName?: string | null;
+  readonly detectorVersion?: string | null;
 }
-export interface ReviewSpanDraft {
-  readonly source: FindingSourceDraft;
-  readonly needsReview: boolean;
+/** Review-local, source/head/type/range-bound key; never persisted. */
+export type CandidateKey = string;
+export interface ReviewInputCandidate {
+  readonly text: string;
+  readonly scannerFindings: readonly CandidateFinding[];
+  readonly userSelections: readonly CandidateFinding[];
+  readonly corrections?: readonly {readonly candidateKey: CandidateKey; readonly replacement: CandidateFinding}[];
 }
-export interface PreviewDraft extends Omit<WorkspacePreview, "transformations"> {
-  readonly transformations: readonly (WorkspacePreview["transformations"][number] & ReviewSpanDraft)[];
-}
-export interface PreparedChangeDraft extends Omit<PreparedPolicyChangeCandidate, "preview" | "previews"> {
-  preview(): PreviewDraft;
-  previews(): readonly PreviewDraft[];
-}
-export interface LocatedFindingDraft {
-  readonly finding: FindingDraft;
+export interface ReviewConflictCandidate {
+  readonly kind: "protected_coverage" | "type_conflict";
+  readonly findingIndex: number;
   readonly byteRange: TextRange;
   readonly codepointRange: TextRange;
   readonly utf16Range: TextRange;
 }
-export interface RecallResultCandidate {
+export interface ReviewCandidate {
+  readonly key: CandidateKey;
+  readonly finding: CandidateFinding;
+  readonly sources: readonly WorkspaceFindingSource[];
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+  readonly eligible: boolean;
+  /** False for every candidate while conflicts exist; never handoff approval. */
+  readonly selected: boolean;
+}
+export interface ReviewResultCandidate {
   readonly head: WorkspaceHead;
-  readonly findings: readonly (Omit<LocatedFindingDraft, "finding"> & {
-    readonly finding: WorkspaceFinding & {readonly source: "recall"; readonly needsReview: true};
-  })[];
-  /** Empty results are not a statement that input contains no PII. */
-  readonly complete: true;
+  readonly candidates: readonly ReviewCandidate[];
+  readonly conflicts: readonly ReviewConflictCandidate[];
+}
+/** Exact public candidate call shapes from #173; never cast a main Workspace. */
+export interface ReviewWorkspaceCandidate extends Pick<Workspace,
+  "head" | "recall" | "policy" | "preparePolicyChanges" | "activateSaved"> {
+  review(input: ReviewInputCandidate): ReviewResultCandidate;
+  prepareReview(inputs: readonly ReviewInputCandidate[], operationId: Uint8Array): PreparedWorkspaceChange;
 }
 
-export type TypeRuleDraft = "hide" | "keep";
-export type ChoiceDispositionDraft = "keep" | "not_sensitive";
-export interface ChoiceDraft {
-  readonly entityType: string;
-  /** Sensitive display value, for a trusted local review surface only. */
-  readonly value: string;
-  readonly disposition: ChoiceDispositionDraft;
-}
-/** Mirrors runtime candidate #166, not a claim of a main/released export. */
-export interface PolicyCandidate {
-  readonly snapshotVersion: 1 | 2;
-  readonly defaultRule: "hide";
-  readonly protectedTypes: readonly string[];
-  readonly rules: readonly {readonly entityType: string; readonly rule: TypeRuleDraft}[];
-  readonly choices: readonly ChoiceDraft[];
-}
-export interface PolicyEditsCandidate {
-  readonly rules: readonly {readonly entityType: string; readonly rule: TypeRuleDraft | null}[];
-  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: ChoiceDispositionDraft | null}[];
-}
-export interface PolicyPreviewCandidate {
-  readonly rules: readonly {readonly entityType: string; readonly before: TypeRuleDraft | null; readonly after: TypeRuleDraft | null}[];
-  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: ChoiceDispositionDraft | null; readonly after: ChoiceDispositionDraft | null}[];
-}
-export interface PreparedPolicyChangeCandidate extends PreparedWorkspaceChange {
-  policyPreview(): PolicyPreviewCandidate | null;
-  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
-}
-/** Obtain from a real #164/#166 candidate build, never by casting beta.1/main. */
-export interface WorkspaceCandidate {
-  head(): WorkspaceHead;
-  recall(text: string): RecallResultCandidate;
-  policy(): PolicyCandidate;
-  preparePolicyChanges(edits: PolicyEditsCandidate, operationId: Uint8Array): PreparedPolicyChangeCandidate;
-  activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
-}
-
-/** Review-local key; invalid after the source/head changes, never persisted. */
-export type CandidateKeyDraft = string;
-export interface CorrectionDraft {
-  readonly target: CandidateKeyDraft;
-  readonly replacement: FindingDraft;
-}
-export interface ReviewInputDraft {
-  readonly text: string;
-  readonly scannerFindings: readonly FindingDraft[];
-  readonly userSelections: readonly FindingDraft[];
-  readonly corrections: readonly CorrectionDraft[];
-}
-export interface ReviewCandidateDraft extends LocatedFindingDraft {
-  readonly key: CandidateKeyDraft;
-  /** Local attribution for exact duplicates, not trusted detector evidence. */
-  readonly contributingSources: readonly FindingSourceDraft[];
-}
-export interface ReviewResultDraft {
-  readonly head: WorkspaceHead;
-  readonly candidates: readonly ReviewCandidateDraft[];
-  readonly conflicts: readonly {
-    readonly kind: "partial_overlap" | "protected_coverage" | "conflicting_types";
-    readonly candidates: readonly CandidateKeyDraft[];
-    readonly byteRange: TextRange;
-    readonly codepointRange: TextRange;
-    readonly utf16Range: TextRange;
-  }[];
-}
-
-/** Same fresh random 16-byte ID discipline as beta.1; time is untrusted host metadata. */
+/** Fresh host-random ID; proposed untrusted host time, not an authorization. */
 export interface OperationContextDraft {
   readonly id: Uint8Array;
   readonly occurredAtMs: number;
@@ -115,12 +60,11 @@ export interface OperationContextDraft {
 export type OutcomeKindDraft = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
 export interface OutcomeDraft {
   readonly kind: OutcomeKindDraft;
-  /** A bounded count, not text or detector/identity strings. */
   readonly issueCount: number;
 }
 export interface OperationRecordDraft {
   readonly id: readonly number[];
-  /** Null only for a legacy call shape without host time; never fabricate a timestamp. */
+  /** Null for a legacy call without time; never fabricate history. */
   readonly occurredAtMs: number | null;
   readonly kind: "create" | "prepare" | "policy_change" | "recovery" | "handoff_confirmed" | OutcomeKindDraft;
 }
@@ -137,9 +81,8 @@ export interface ConversationDraft {
 }
 export interface HandoffDraft {
   readonly conversation: ConversationDraft;
-  /** Host-observed insertion/send acknowledgment; not proof of provider acceptance. */
   readonly action: "insert" | "send";
-  /** Actual released text is validated locally and discarded, never stored as history. */
+  /** Validated locally then discarded, never stored as history. */
   readonly releasedText: string;
 }
 export interface ConversationRecordDraft {
@@ -154,25 +97,16 @@ export interface ConversationRestoreReportDraft {
     readonly kind: WorkspaceMarkerIssue["kind"] | "wrong_conversation";
   })[];
 }
-
-/** Proposed capabilities only. Never cast a released Workspace to this interface. */
-export interface LaunchWorkspaceDraft {
-  head(): WorkspaceHead;
-  recall(text: string): RecallResultCandidate;
-  review(input: ReviewInputDraft): ReviewResultDraft;
-  policy(): PolicyCandidate;
+/** Future-only additions; #162/#147/#148 have not frozen these call shapes. */
+export interface LaunchWorkspaceDraft extends ReviewWorkspaceCandidate {
   operations(): readonly OperationRecordDraft[];
   counts(): CountsDraft;
   conversations(): readonly ConversationRecordDraft[];
-  prepareReview(inputs: readonly ReviewInputDraft[], operationId: Uint8Array): PreparedChangeDraft;
-  preparePolicyChanges(edits: PolicyEditsCandidate, operationId: Uint8Array): PreparedPolicyChangeCandidate;
-  prepareOutcome(outcome: OutcomeDraft, operation: OperationContextDraft): PreparedChangeDraft;
-  prepareHandoffRecord(handoff: HandoffDraft, operation: OperationContextDraft): PreparedChangeDraft;
-  activateSaved(change: PreparedChangeDraft, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
+  prepareOutcome(outcome: OutcomeDraft, operation: OperationContextDraft): PreparedWorkspaceChange;
+  prepareHandoffRecord(handoff: HandoffDraft, operation: OperationContextDraft): PreparedWorkspaceChange;
   restoreInConversation(text: string, conversation: ConversationDraft): ConversationRestoreReportDraft;
 }
-
-/** Host proposal, not a Core/WASM package export. Export must freshly verify the password. */
+/** Host proposal only; actual #157 flow freshly verifies export passwords. */
 export interface BackupHostDraft {
   exportBackup(request: {
     readonly workspaceId: Uint8Array;
@@ -181,5 +115,4 @@ export interface BackupHostDraft {
   }): Promise<Uint8Array>;
 }
 export type AdditionalErrorCodeDraft =
-  | "invalid_conversation" | "invalid_operation" | "operation_reused"
-  | "review_conflict";
+  | "invalid_conversation" | "invalid_operation" | "operation_reused";
