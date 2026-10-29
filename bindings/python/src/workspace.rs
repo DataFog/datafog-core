@@ -732,19 +732,21 @@ impl Workspace {
             self.inner.prepare_conversation_send(&borrowed, operation)
         })
     }
-    fn conversation(&self, py: Python<'_>, logical_id: &[u8]) -> PyResult<Py<PyAny>> {
+    fn conversation(&self, py: Python<'_>, logical_id: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let value = self
             .inner
-            .conversation(id(py, logical_id)?)
+            .conversation(conversation::selector(py, logical_id)?)
             .map_err(|error| workspace_error(py, error))?;
         json_object(py, &value)
     }
     fn conversation_for_site<'py>(
         &self,
         py: Python<'py>,
-        surface: &str,
-        site_id: &str,
+        surface: &Bound<'_, PyAny>,
+        site_id: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyBytes>> {
+        let surface = conversation::text(py, surface, w::ErrorCode::InvalidConversation)?;
+        let site_id = conversation::text(py, site_id, w::ErrorCode::InvalidConversation)?;
         material_limit(py, surface.len().saturating_add(site_id.len()))?;
         let value = self
             .inner
@@ -764,14 +766,16 @@ impl Workspace {
         &self,
         py: Python<'_>,
         intent: &Bound<'_, PyAny>,
-        logical_id: &[u8],
-        surface: &str,
-        site_id: &str,
+        logical_id: &Bound<'_, PyAny>,
+        surface: &Bound<'_, PyAny>,
+        site_id: &Bound<'_, PyAny>,
         operation: &Bound<'_, PyAny>,
     ) -> PyResult<WorkspacePreparedChange> {
+        let surface = conversation::text(py, surface, w::ErrorCode::InvalidConversation)?;
+        let site_id = conversation::text(py, site_id, w::ErrorCode::InvalidConversation)?;
         material_limit(py, surface.len().saturating_add(site_id.len()))?;
         let intent = conversation::intent(py, intent)?;
-        let logical_id = id(py, logical_id)?;
+        let logical_id = conversation::selector(py, logical_id)?;
         let operation = operations::context(py, operation)?;
         self.stage(py, || {
             self.inner
@@ -783,11 +787,11 @@ impl Workspace {
         &self,
         py: Python<'_>,
         intent: &Bound<'_, PyAny>,
-        logical_id: &[u8],
+        logical_id: &Bound<'_, PyAny>,
         operation: &Bound<'_, PyAny>,
     ) -> PyResult<WorkspacePreparedChange> {
         let intent = conversation::intent(py, intent)?;
-        let logical_id = id(py, logical_id)?;
+        let logical_id = conversation::selector(py, logical_id)?;
         let operation = operations::context(py, operation)?;
         self.stage(py, || {
             self.inner
@@ -798,22 +802,24 @@ impl Workspace {
     fn restore_in_conversation(
         &self,
         py: Python<'_>,
-        text: &str,
-        logical_id: &[u8],
+        text: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
     ) -> PyResult<String> {
+        let text = conversation::text(py, text, w::ErrorCode::InvalidFinding)?;
         self.inner
-            .restore_in_conversation(text, id(py, logical_id)?)
+            .restore_in_conversation(text, conversation::selector(py, logical_id)?)
             .map_err(|error| workspace_error(py, error))
     }
     fn restore_report_in_conversation(
         &self,
         py: Python<'_>,
-        text: &str,
-        logical_id: &[u8],
+        text: &Bound<'_, PyAny>,
+        logical_id: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
+        let text = conversation::text(py, text, w::ErrorCode::InvalidFinding)?;
         let value = self
             .inner
-            .restore_report_in_conversation(text, id(py, logical_id)?)
+            .restore_report_in_conversation(text, conversation::selector(py, logical_id)?)
             .map_err(|error| workspace_error(py, error))?;
         json_object(
             py,
@@ -824,10 +830,10 @@ impl Workspace {
     fn buffered_restore_in_conversation(
         &self,
         py: Python<'_>,
-        logical_id: &[u8],
+        logical_id: &Bound<'_, PyAny>,
         encoding: &str,
     ) -> PyResult<stream::WorkspaceBufferedRestore> {
-        let logical_id = id(py, logical_id)?;
+        let logical_id = conversation::selector(py, logical_id)?;
         let encoding = stream::encoding(py, encoding)?;
         let result = (|| -> NativeResult<_> {
             let value = self
@@ -841,10 +847,10 @@ impl Workspace {
     fn progressive_restore_in_conversation(
         &self,
         py: Python<'_>,
-        logical_id: &[u8],
+        logical_id: &Bound<'_, PyAny>,
         encoding: &str,
     ) -> PyResult<stream::WorkspaceProgressiveRestore> {
-        let logical_id = id(py, logical_id)?;
+        let logical_id = conversation::selector(py, logical_id)?;
         let encoding = stream::encoding(py, encoding)?;
         let result = (|| -> NativeResult<_> {
             let value = self

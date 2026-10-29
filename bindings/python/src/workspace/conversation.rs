@@ -40,18 +40,7 @@ fn public_id(
 ) -> PyResult<w::PublicId> {
     let invalid = || failure(py, code);
     if let Ok(bytes) = value.cast_exact::<PyBytes>() {
-        return bytes.as_bytes().try_into().map_err(|_| {
-            // Match typed-byte IDs in the existing WASM transport; malformed
-            // intent identifiers retain the dedicated intent category.
-            failure(
-                py,
-                if code == w::ErrorCode::InvalidConversation {
-                    w::ErrorCode::InvalidId
-                } else {
-                    code
-                },
-            )
-        });
+        return bytes.as_bytes().try_into().map_err(|_| invalid());
     }
     let values = value.cast_exact::<PyList>().map_err(|_| invalid())?;
     if values.len() != 16 {
@@ -66,14 +55,24 @@ fn public_id(
     }
     Ok(result)
 }
-fn string(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> {
-    let code = w::ErrorCode::InvalidFinding;
+// Direct restoration borrows the caller string; saved context fields clone explicitly.
+pub(super) fn text<'a>(
+    py: Python<'_>,
+    value: &'a Bound<'_, PyAny>,
+    code: w::ErrorCode,
+) -> PyResult<&'a str> {
     let value = value
         .cast_exact::<PyString>()
         .map_err(|_| failure(py, code))?;
     let text = value.to_str().map_err(|_| failure(py, code))?;
     material_limit(py, text.len())?;
-    Ok(text.to_owned())
+    Ok(text)
+}
+pub(super) fn selector(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<w::PublicId> {
+    let bytes = value
+        .cast_exact::<PyBytes>()
+        .map_err(|_| failure(py, w::ErrorCode::InvalidId))?;
+    id(py, bytes.as_bytes())
 }
 pub(super) fn intent(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<w::SendIntentId> {
     let code = w::ErrorCode::InvalidSendIntent;
@@ -129,12 +128,12 @@ pub(super) fn inputs(
                 code,
             )?;
             let id = public_id(py, &required(py, &context, "id", code)?, code)?;
-            let surface = string(py, &required(py, &context, "surface", code)?)?;
+            let surface = text(py, &required(py, &context, "surface", code)?, code)?.to_owned();
             let site = required(py, &context, "siteId", code)?;
             let site_id = if site.is_none() {
                 None
             } else {
-                Some(string(py, &site)?)
+                Some(text(py, &site, code)?.to_owned())
             };
             bytes = bytes
                 .saturating_add(surface.len())
