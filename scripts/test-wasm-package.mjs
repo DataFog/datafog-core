@@ -265,7 +265,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -284,6 +284,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
@@ -358,6 +359,23 @@ try {
     const {verifyNpi} = await import("/npi-conformance.mjs");
     const npiRecords = (await fetch("/npi.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyNpi(germanApi,npiRecords);
+    const streetContract = new BrowserModelContract({"street line":"STREET_ADDRESS", "address":"ADDRESS"});
+    try {
+      const text = "👋 Street address: 12 Willow Road, Anytown";
+      const start = new TextEncoder().encode(text.slice(0,text.indexOf("12 Willow"))).length;
+      const streetEnd = start + "12 Willow Road".length;
+      const end = new TextEncoder().encode(text).length;
+      if (!streetContract.needs_model(text, {entities:["STREET_ADDRESS"]})) throw new Error("street rule skipped configured model");
+      const result = streetContract.complete(text, [
+        {native_label:"street line",start,end:streetEnd,coordinate_unit:"utf8_byte"},
+        {native_label:"address",start,end,coordinate_unit:"utf8_byte"},
+      ], {});
+      const index = result.findings.findIndex(f => f.entityType === "STREET_ADDRESS");
+      if (index < 0 || result.evidence[index].sources.length !== 2 ||
+          !result.findings.some(f => f.entityType === "ADDRESS" && f.matchedText === "12 Willow Road, Anytown")) throw new Error("street/full-address evidence changed");
+    } finally { streetContract.free(); }
+    const {verifyStreetAddress} = await import("/street-address-conformance.mjs");
+    verifyStreetAddress(germanApi, (await fetch("/street-address.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
     const {verifyAccountNumber} = await import("/account-number-conformance.mjs");
     verifyAccountNumber(germanApi, (await fetch("/account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
     verifyAccountNumber(germanApi, (await fetch("/masked-account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));

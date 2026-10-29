@@ -135,6 +135,7 @@
                   "reference/uuid",
                   "reference/us-routing-number",
                   "reference/account-number",
+                  "reference/street-address",
                   "reference/npi",
                   "reference/credential-uri"
                 ]

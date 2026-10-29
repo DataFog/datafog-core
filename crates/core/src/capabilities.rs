@@ -117,6 +117,12 @@ static REGISTRY: LazyLock<Vec<Detector>> = LazyLock::new(|| {
             detect: crate::account_number::detect,
             replaces_model: false,
         },
+        Detector {
+            labels: vec![Label::StreetAddress],
+            activation: Default,
+            detect: crate::street_address::detect,
+            replaces_model: false,
+        },
         Detector::single(Label::BearerToken, crate::bearer_token::detect, Default),
         Detector::single(Label::ApiKey, crate::api_key::detect, Default),
         Detector::single(Label::CredentialUri, crate::credential_uri::detect, Default),
