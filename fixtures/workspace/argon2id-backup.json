@@ -1,0 +1,9 @@
+{
+  "source": "Native libsodium 1.0.22 crypto_pwhash ALG_ARGON2ID13; independent native reference for backup profile 2",
+  "password": "synthetic-test-password-only",
+  "saltHex": "000102030405060708090a0b0c0d0e0f",
+  "opslimit": 3,
+  "memlimit": 268435456,
+  "outputHex": "2c55c9c5b78b14a1a5e5d68c7a810ff2e7d96d222ec617d998722eb43144c289",
+  "profile": 2
+}

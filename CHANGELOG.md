@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- New browser workspace backups require password reauthentication and use
+  Argon2id with 256 MiB and three passes, replacing the older password wrapper.
+  Legacy backups remain importable; restored new backups retain the stronger
+  profile for password unlock.
+
 - Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults

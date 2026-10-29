@@ -33,7 +33,7 @@ export function validateVault(vault) {
   const names = ["version", "vaultId", "vaultKeyId", "workspaceId", "profile", "salt", "rootNonce", "wrappedRoot", "accessGeneration"];
   if (vault?.version === 2) names.push("recovery");
   fields(vault, names);
-  if (![1, 2].includes(vault.version) || vault.profile !== 1) throw new HostError("invalid_envelope");
+  if (![1, 2].includes(vault.version) || ![1, 2].includes(vault.profile) || (vault.version === 1 && vault.profile !== 1)) throw new HostError("invalid_envelope");
   for (const name of ["vaultId", "vaultKeyId", "workspaceId", "accessGeneration", "salt"]) bytes(vault[name], 16);
   bytes(vault.rootNonce, 12); bytes(vault.wrappedRoot, 48);
   if (vault.version === 2) {
@@ -77,18 +77,20 @@ function recoverySecret(code) {
   catch { throw new HostError("invalid_credentials"); }
 }
 
-function derive(password, salt, signal) {
+function derive(password, salt, signal, profile = 1) {
   const passwordBytes = encoder.encode(password);
-  if (typeof password !== "string" || !password.isWellFormed() || passwordBytes.length === 0 || passwordBytes.length > 1024) return Promise.reject(new HostError("invalid_credentials"));
+  const valid = typeof password === "string" && password.isWellFormed() && passwordBytes.length > 0 && passwordBytes.length <= 1024;
+  passwordBytes.fill(0);
+  if (!valid) return Promise.reject(new HostError("invalid_credentials"));
   const worker = new Worker(new URL("./kdf-worker.js", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     const stop = () => { worker.terminate(); signal?.removeEventListener("abort", cancel); };
     const cancel = () => { stop(); reject(new HostError("cancelled")); };
-    worker.onmessage = ({ data }) => { stop(); if (data.key instanceof Uint8Array && data.key.length === 32) resolve(data.key); else reject(new HostError("invalid_credentials")); };
-    worker.onerror = () => { stop(); reject(new HostError("invalid_credentials")); };
+    worker.onmessage = ({ data }) => { stop(); if (data.key instanceof Uint8Array && data.key.length === 32) resolve(data.key); else reject(new HostError(data.error === "kdf_unavailable" ? "kdf_unavailable" : "invalid_credentials")); };
+    worker.onerror = () => { stop(); reject(new HostError("kdf_unavailable")); };
     signal?.addEventListener("abort", cancel, { once: true });
     if (signal?.aborted) { cancel(); return; }
-    worker.postMessage({ password, salt });
+    worker.postMessage({ password, salt, profile });
   });
 }
 
@@ -123,7 +125,7 @@ export async function openVault(credential, vault, record, signal, method = "pas
   let derived, secret, root, data, bundle;
   try {
     if (method === "password") {
-      derived = await derive(credential, vault.salt, signal);
+      derived = await derive(credential, vault.salt, signal, vault.profile);
       root = await decrypt(await importKey(derived), vault.rootNonce, passwordAAD(vault), vault.wrappedRoot);
     } else if (method === "recovery" && vault.version === 2) {
       secret = recoverySecret(credential);
@@ -139,6 +141,24 @@ export async function openVault(credential, vault, record, signal, method = "pas
     if (error instanceof HostError) throw error;
     throw new HostError("invalid_credentials");
   } finally { derived?.fill(0); secret?.fill(0); root?.fill(0); data?.fill(0); }
+}
+/** Reauthenticate and replace only the password slot for a standalone backup. */
+export async function rewrapBackupVault(vault, password, signal) {
+  validateVault(vault);
+  if (vault.version !== 2) throw new HostError("recovery_unavailable");
+  let current, stronger, root;
+  try {
+    current = await derive(password, vault.salt, signal, vault.profile);
+    root = await decrypt(await importKey(current), vault.rootNonce, passwordAAD(vault), vault.wrappedRoot);
+    const exported = {...vault, profile: 2, salt: random(16), rootNonce: random(12)};
+    stronger = await derive(password, exported.salt, signal, exported.profile);
+    exported.wrappedRoot = await encrypt(await importKey(stronger), exported.rootNonce, passwordAAD(exported), root);
+    if (signal?.aborted) throw new HostError("cancelled");
+    return exported;
+  } catch (error) {
+    if (error instanceof HostError) throw error;
+    throw new HostError("invalid_credentials");
+  } finally { current?.fill(0); stronger?.fill(0); root?.fill(0); }
 }
 export async function encryptCandidate(dataKey, record, head, bundle) {
   if (bundle.length > MAX_BUNDLE) throw new HostError("resource_limit");
