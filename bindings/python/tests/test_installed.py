@@ -23,6 +23,7 @@ from datafog_core import (
     DataFogFindingError,
     DataFogKeyProviderError,
     Finding,
+    StructuredFinding,
     ModelSession,
     PrivacyManager,
     TextRange,
@@ -37,6 +38,45 @@ from datafog_core import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def verify_coverage_conflicts() -> None:
+    text = "👋 abcdef"
+    first = Finding("PERSON", "abcd", TextRange(5, 9), TextRange(2, 6), "synthetic")
+    second = Finding("CUSTOM", "cdef", TextRange(7, 11), TextRange(4, 8), "synthetic")
+    config = {"default": {"strategy": "redact"}}
+    for inputs, index in [([first, second], 1), ([second, first], 0)]:
+        for operation in [
+            lambda: transform(text, inputs, config),
+            lambda: transform_structured({"z": text}, [StructuredFinding("/z", f) for f in inputs], config),
+        ]:
+            try:
+                operation()
+            except DataFogFindingError as error:
+                assert error.code == "review_conflict" and error.finding_index == index
+                assert "abcdef" not in str(error)
+            else:
+                raise AssertionError("crossing findings returned partial output")
+    assert transform(text, [first, second], {**config, "entities": ["PERSON"]}).text == "👋 [PERSON]ef"
+    assert transform(text, [first, second], {**config, "allow": {"exact": {"PERSON": ["abcd"]}}}).text == "👋 ab[CUSTOM]"
+    class UnusedProvider:
+        def __init__(self): self.calls = 0
+        async def resolve_key(self, *args): self.calls += 1; raise AssertionError("provider must not run")
+        async def tokenize_batch(self, *args): self.calls += 1; raise AssertionError("provider must not run")
+        async def restore_batch(self, *args): self.calls += 1; raise AssertionError("provider must not run")
+    provider = UnusedProvider()
+    async def verify_providers():
+        manager = PrivacyManager(provider, provider)
+        for strategy in [{"strategy":"pseudonymize", "key_ref":"unused"}, {"strategy":"tokenize", "token_ref":"unused"}]:
+            for operation in [
+                lambda: manager.transform(text, [first, second], {"default":strategy}, {"scope":"synthetic"}),
+                lambda: manager.transform_structured({"z":text}, [StructuredFinding("/z", f) for f in [first, second]], {"default":strategy}, {"scope":"synthetic"}),
+            ]:
+                try: await operation()
+                except DataFogFindingError as error: assert error.code == "review_conflict"
+                else: raise AssertionError("provider-backed conflict returned output")
+    asyncio.run(verify_providers())
+    assert provider.calls == 0
 
 
 def verify_model_engine_selection() -> None:
@@ -186,6 +226,7 @@ def verify_text_selection() -> None:
 
 
 def main() -> None:
+    verify_coverage_conflicts()
     verify_text_selection()
     capabilities_conformance.verify()
     german_conformance.verify()
@@ -528,6 +569,25 @@ def main() -> None:
     print("Installed datafog_core wheel matches fixtures and transform contracts.")
 
 
+def verify_ssn_person_priority() -> None:
+    text = "👋 José: 123-45-6789"
+    ssn = next(finding for finding in scan(text) if finding.entity_type == "SSN")
+    person = Finding(
+        "PERSON", ssn.matched_text, ssn.byte_range, ssn.codepoint_range,
+        "semantic-person", 1.0,
+    )
+    for findings in ([ssn, person], [person, ssn]):
+        protected = transform(text, findings, {"default": {"strategy": "redact"}})
+        assert protected.text == "👋 José: [SSN]"
+        assert protected.transformations[0].entity_type == "SSN"
+        allowed = transform(text, findings, {
+            "default": {"strategy": "redact"},
+            "allow": {"exact": {"SSN": [ssn.matched_text]}},
+        })
+        assert allowed.text == "👋 José: [PERSON]"
+
+
 if __name__ == "__main__":
     verify_model_engine_selection()
+    verify_ssn_person_priority()
     main()

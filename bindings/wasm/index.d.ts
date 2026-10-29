@@ -54,6 +54,8 @@ export type DataFogErrorCode =
   | "invalid_configuration"
   | "invalid_batch"
   | "invalid_finding"
+  | "review_conflict"
+  | "invalid_operation" | "operation_reused"
   | "closed_workspace"
   | "inactive_plan"
   | "workspace_conflict"
@@ -93,6 +95,7 @@ export declare class DataFogError extends Error {
   readonly inputIndex?: number;
   /** Content-free source issue ranges when workspace preparation rejects marker text. */
   readonly markerIssues?: readonly WorkspaceMarkerIssue[];
+  readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
 }
 
 export interface TextRange {
@@ -197,14 +200,21 @@ export function scanAndTransformStructured(data: JsonDocument, config: Structure
 /** Always rejects with unsupported_strategy after input validation. */
 export function restoreStructured(data: JsonDocument, context: PrivacyContext): never;
 
+/** Caller-declared review origin, not an authorization or authenticity claim. */
+export type WorkspaceFindingSource = "scanner" | "recall" | "user";
+
 /** Provisional workspace input; exact values and type codes are never normalized. */
 export interface WorkspaceFinding {
   readonly entityType: string;
   readonly matchedText: string;
   readonly range: TextRange & { readonly unit: "utf8_bytes" };
-  readonly confidence?: number;
-  readonly detectorName?: string;
-  readonly detectorVersion?: string;
+  readonly confidence?: number | null;
+  readonly detectorName?: string | null;
+  readonly detectorVersion?: string | null;
+  /** Defaults to scanner for existing callers; not inferred from detectorName. */
+  readonly source?: WorkspaceFindingSource;
+  /** Defaults to true. False does not waive host approval/save/activation. */
+  readonly needsReview?: boolean;
 }
 /** One batch input; finding offsets are relative to this text only. */
 export interface WorkspaceInput {
@@ -212,9 +222,23 @@ export interface WorkspaceInput {
   readonly findings: readonly WorkspaceFinding[];
 }
 export interface WorkspaceHead { readonly revision: string; readonly commitId: readonly number[]; }
+export interface WorkspaceRecalledFinding {
+  readonly finding: WorkspaceFinding & {readonly source: "recall"; readonly needsReview: true};
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceRecallResult {
+  readonly head: WorkspaceHead;
+  /** All matches or an explicit failure. Empty is not a clean-text verdict. */
+  readonly complete: true;
+  readonly findings: readonly WorkspaceRecalledFinding[];
+}
 export interface WorkspacePreview {
   readonly text: string;
   readonly transformations: readonly {
+    readonly source: WorkspaceFindingSource;
+    readonly needsReview: boolean;
     readonly sourceByteRange: TextRange;
     readonly sourceCodepointRange: TextRange;
     readonly sourceUtf16Range: TextRange;
@@ -223,7 +247,28 @@ export interface WorkspacePreview {
     readonly outputUtf16Range: TextRange;
   }[];
 }
+export type WorkspaceTypeRule = "hide" | "keep";
+export type WorkspaceChoiceDisposition = "keep" | "not_sensitive";
+export interface WorkspacePolicyEdits {
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
+}
+export interface WorkspacePolicy {
+  readonly snapshotVersion: 1 | 2 | 3;
+  readonly defaultRule: "hide";
+  readonly protectedTypes: readonly string[];
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition}[];
+}
+export interface WorkspacePolicyPreview {
+  readonly rules: readonly {readonly entityType: string; readonly before: WorkspaceTypeRule | null; readonly after: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: WorkspaceChoiceDisposition | null; readonly after: WorkspaceChoiceDisposition | null}[];
+}
 export interface PreparedWorkspaceChange {
+  /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
+  snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
+  /** Present only for settings edits; values are sensitive and remain local. */
+  policyPreview(): WorkspacePolicyPreview | null;
   /** Requires a single-input plan. */
   preview(): WorkspacePreview;
   previews(): readonly WorkspacePreview[];
@@ -246,13 +291,44 @@ export interface WorkspaceRestoreReport {
   readonly restoredMarkers: number;
   readonly issues: readonly WorkspaceMarkerIssue[];
 }
-/** Draft operation API: host time is untrusted UTC Unix milliseconds, never authorization. */
+export interface WorkspaceReviewInput {
+  readonly text: string;
+  /** Model/rule findings; caller source flags are ignored for channel attribution. */
+  readonly scannerFindings: readonly WorkspaceFinding[];
+  readonly userSelections: readonly WorkspaceFinding[];
+  readonly corrections?: readonly { readonly candidateKey: string; readonly replacement: WorkspaceFinding }[];
+}
+export interface WorkspaceReviewConflict {
+  readonly kind: "protected_coverage" | "type_conflict";
+  readonly findingIndex: number;
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceReviewCandidate {
+  /** Binds exact source/head/type/range; changes on source edits or saved-head changes. */
+  readonly key: string;
+  readonly finding: WorkspaceFinding;
+  readonly sources: readonly ("scanner" | "recall" | "user")[];
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+  /** Committed policy requires this candidate to be hidden. */
+  readonly eligible: boolean;
+  /** Conflict-free selection only; false for every candidate while conflicts remain. Never handoff permission. */
+  readonly selected: boolean;
+}
+export interface WorkspaceReviewResult {
+  readonly head: WorkspaceHead;
+  readonly candidates: readonly WorkspaceReviewCandidate[];
+  readonly conflicts: readonly WorkspaceReviewConflict[];
+}
 export interface WorkspaceOperation { readonly id: Uint8Array; readonly occurredAtMs: number; }
 export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
 export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
 export interface WorkspaceOperationRecord {
   readonly id: readonly number[];
-  readonly kind: "create" | "prepare" | "recovery" | WorkspaceOutcomeKind;
+  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | WorkspaceOutcomeKind;
   readonly occurredAtMs: number | null;
   readonly preparedInputs: number;
   readonly transformedSpans: number;
@@ -263,21 +339,30 @@ export interface WorkspaceCounts {
 }
 export class Workspace {
   private constructor();
-  static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
   static createWithOperation(namespace: Uint8Array, operation: WorkspaceOperation): Workspace;
+  static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
   static openBundle(bytes: Uint8Array): Workspace;
   head(): WorkspaceHead;
   namespace(): Uint8Array;
+  exportBundle(): Uint8Array;
+  /** Read committed values only, returning all overlaps in original coordinates. No aliases, plans or state changes. */
+  recall(text: string): WorkspaceRecallResult;
+  /** Combine supplied scanner/manual findings with committed recall, without plans or state mutation. */
+  review(input: WorkspaceReviewInput): WorkspaceReviewResult;
+  /** Recompute review for every input. Any unresolved overlap rejects the whole batch before a plan exists. Approval and durable save remain required. */
+  prepareReview(inputs: readonly WorkspaceReviewInput[], operationId: Uint8Array): PreparedWorkspaceChange;
+  policy(): WorkspacePolicy;
+  /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
+  preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   operations(): readonly WorkspaceOperationRecord[];
   counts(): WorkspaceCounts;
-  exportBundle(): Uint8Array;
-  /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
-  prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
   prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareWithOperation(text: string, findings: readonly WorkspaceFinding[], operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareBatchWithOperation(inputs: readonly WorkspaceInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareOutcome(outcome: WorkspaceOutcome, operation: WorkspaceOperation): PreparedWorkspaceChange;
-  /** Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
+  prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Supplied findings only: omissions are never proof of PII-free input; use prepareReview for combined recall. Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;

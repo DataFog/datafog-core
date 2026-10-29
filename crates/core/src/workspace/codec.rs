@@ -30,17 +30,21 @@ fn encode_into(
     state: &State,
     e: &mut Encoder<BoundedWriter>,
 ) -> std::result::Result<(), minicbor::encode::Error<()>> {
-    e.map(if state.snapshot_version == 1 { 7 } else { 9 })?
-        .u8(0)?
-        .u8(state.snapshot_version)?
-        .u8(1)?
-        .bytes(&state.namespace)?
-        .u8(2)?
-        .array(2)?
-        .u64(state.head.revision)?
-        .bytes(&state.head.commit_id)?
-        .u8(3)?
-        .array(state.entries.len() as u64)?;
+    e.map(match state.snapshot_version {
+        1 => 7,
+        2 => 8,
+        _ => 10,
+    })?
+    .u8(0)?
+    .u8(state.snapshot_version)?
+    .u8(1)?
+    .bytes(&state.namespace)?
+    .u8(2)?
+    .array(2)?
+    .u64(state.head.revision)?
+    .bytes(&state.head.commit_id)?
+    .u8(3)?
+    .array(state.entries.len() as u64)?;
     for (identity, entry) in &state.entries {
         e.array(5)?
             .str(&identity.entity_type)?
@@ -53,15 +57,29 @@ fn encode_into(
     for (label, counter) in &state.counters {
         e.array(2)?.str(label)?.u64(*counter)?;
     }
-    e.u8(5)?
-        .array(0)?
-        .u8(6)?
-        .map(2)?
-        .u8(0)?
-        .str("synthetic_v1")?
-        .u8(1)?
-        .array(0)?;
-    if state.snapshot_version == 2 {
+    e.u8(5)?.array(0)?.u8(6)?.map(2)?.u8(0)?;
+    if state.snapshot_version == 1 {
+        e.str("synthetic_v1")?.u8(1)?.array(0)?;
+    } else {
+        e.str(policy::PROFILE)?
+            .u8(1)?
+            .array(state.rules.len() as u64)?;
+        for (label, record) in &state.rules {
+            e.array(3)?
+                .str(label)?
+                .u8(record.rule.code())?
+                .bytes(&record.operation)?;
+        }
+        e.u8(7)?.array(state.choices.len() as u64)?;
+        for (identity, record) in &state.choices {
+            e.array(4)?
+                .str(&identity.entity_type)?
+                .str(&record.display)?
+                .u8(record.disposition.code())?
+                .bytes(&record.operation)?;
+        }
+    }
+    if state.snapshot_version == 3 {
         e.u8(8)?.array(state.operations.len() as u64)?;
         for operation in &state.operations {
             e.array(5)?
@@ -116,12 +134,12 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         return Err(error(ErrorCode::ResourceLimit));
     }
     let mut d = Decoder::new(bytes);
-    let field_count = d.map()?;
+    let fields = d.map()?;
     key(&mut d, 0)?;
     let snapshot_version = d.u8()?;
     require(matches!(
-        (snapshot_version, field_count),
-        (1, Some(7)) | (2, Some(9))
+        (snapshot_version, fields),
+        (1, Some(7)) | (2, Some(8)) | (3, Some(10))
     ))?;
     key(&mut d, 1)?;
     let namespace = id(&mut d)?;
@@ -144,10 +162,10 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         let entity_type = d.str()?;
         require(valid_type(entity_type))?;
         let display = d.str()?;
+        require(display.len() <= MAX_SOURCE_BYTES)?;
         let key = identity_key(display);
         require(
             !key.is_empty()
-                && display.len() <= MAX_SOURCE_BYTES
                 && marker_spans(display)?
                     .iter()
                     .all(|span| span.canonical.is_none()),
@@ -194,12 +212,80 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     key(&mut d, 6)?;
     require(d.map()? == Some(2))?;
     key(&mut d, 0)?;
-    require(d.str()? == "synthetic_v1")?;
+    require(
+        d.str()?
+            == if snapshot_version == 1 {
+                "synthetic_v1"
+            } else {
+                policy::PROFILE
+            },
+    )?;
     key(&mut d, 1)?;
-    array(&mut d, 0)?;
+    let issuance_ids: BTreeSet<_> = entries.values().map(|entry| entry.issuance).collect();
+    let mut rules = BTreeMap::new();
+    let mut choices = BTreeMap::new();
+    if snapshot_version == 1 {
+        array(&mut d, 0)?;
+    } else {
+        let count = d
+            .array()?
+            .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
+        require(count <= MAX_POLICY_ITEMS as u64)?;
+        for _ in 0..count {
+            array(&mut d, 3)?;
+            let label = d.str()?;
+            require(valid_type(label))?;
+            let rule = match d.u8()? {
+                0 => TypeRule::Hide,
+                1 => TypeRule::Keep,
+                _ => return Err(error(ErrorCode::InvalidSnapshot)),
+            };
+            require(!(protected_type(label) && rule == TypeRule::Keep))?;
+            let operation = id(&mut d)?;
+            require(!issuance_ids.contains(&operation))?;
+            require(
+                rules
+                    .insert(label.to_owned(), policy::RuleRecord { rule, operation })
+                    .is_none(),
+            )?;
+        }
+        key(&mut d, 7)?;
+        let count = d
+            .array()?
+            .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
+        require(count <= MAX_POLICY_ITEMS as u64)?;
+        for _ in 0..count {
+            array(&mut d, 4)?;
+            let label = d.str()?;
+            let display = d.str()?;
+            let identity = policy::choice_identity(label, display)
+                .map_err(|_| error(ErrorCode::InvalidSnapshot))?;
+            let disposition = match d.u8()? {
+                0 => ChoiceDisposition::Keep,
+                1 => ChoiceDisposition::NotSensitive,
+                _ => return Err(error(ErrorCode::InvalidSnapshot)),
+            };
+            require(!(protected_type(label) && disposition == ChoiceDisposition::Keep))?;
+            let operation = id(&mut d)?;
+            require(!issuance_ids.contains(&operation))?;
+            require(
+                choices
+                    .insert(
+                        identity,
+                        policy::ChoiceRecord {
+                            display: display.to_owned(),
+                            disposition,
+                            operation,
+                        },
+                    )
+                    .is_none(),
+            )?;
+        }
+        require((rules.is_empty() && choices.is_empty()) || head.revision > 0)?;
+    }
     let mut operations = Vec::new();
     let mut operation_counts = OperationCounts::default();
-    if snapshot_version == 2 {
+    if snapshot_version == 3 {
         key(&mut d, 8)?;
         let count = d
             .array()?
@@ -244,11 +330,47 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             require(head.revision >= operations.len() as u64)?;
         }
     }
+    if snapshot_version == 3 {
+        let complete = operations
+            .first()
+            .is_some_and(|record| record.kind == OperationKind::Create);
+        let by_id: BTreeMap<_, _> = operations
+            .iter()
+            .map(|record| (record.id, record))
+            .collect();
+        let mut issued = BTreeMap::<PublicId, u64>::new();
+        for entry in entries.values() {
+            if let Some(record) = by_id.get(&entry.issuance) {
+                require(record.kind == OperationKind::Prepare)?;
+            } else {
+                require(!complete)?;
+            }
+            *issued.entry(entry.issuance).or_default() += 1;
+        }
+        for (id, count) in issued {
+            if let Some(record) = by_id.get(&id) {
+                require(count <= record.transformed_spans)?;
+            }
+        }
+        for operation in rules
+            .values()
+            .map(|r| r.operation)
+            .chain(choices.values().map(|r| r.operation))
+        {
+            if let Some(record) = by_id.get(&operation) {
+                require(record.kind == OperationKind::PolicyChange)?;
+            } else {
+                require(!complete)?;
+            }
+        }
+    }
     require(d.position() == bytes.len())?;
     let state = State {
         snapshot_version,
         operations,
         operation_counts,
+        rules,
+        choices,
         namespace,
         head,
         entries,
@@ -320,11 +442,139 @@ mod operation_tests {
         invalid(value);
     }
     #[test]
+    fn full_history_rejects_mapping_or_policy_issuance_without_matching_record_kind() {
+        let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+        let mut plan = workspace
+            .prepare(
+                "Jane",
+                &[WorkspaceFinding::new(
+                    "PERSON",
+                    "Jane",
+                    TextRange { start: 0, end: 4 },
+                )],
+                [3; 16],
+            )
+            .unwrap();
+        let parent = plan.expected_head().unwrap();
+        let next = plan.candidate_head().unwrap();
+        workspace.activate_saved(&mut plan, parent, next).unwrap();
+        let mut state = workspace.state().unwrap().clone();
+        state.operations[1].kind = OperationKind::UserCancelled;
+        state.operations[1].occurred_at_ms = Some(0);
+        state.operations[1].prepared_inputs = 0;
+        state.operations[1].transformed_spans = 0;
+        state.operation_counts = operations::summarize(&state.operations).unwrap();
+        invalid(state);
+        let mut state = workspace.state().unwrap().clone();
+        state.operations[1].id = [8; 16];
+        state.head.commit_id = [8; 16];
+        invalid(state);
+        let mut state = workspace.state().unwrap().clone();
+        state.operations[1].transformed_spans = 0;
+        state.operation_counts = operations::summarize(&state.operations).unwrap();
+        invalid(state);
+        let mut policy = workspace
+            .prepare_policy_changes(
+                &PolicyEdits {
+                    rules: vec![TypeRuleEdit {
+                        entity_type: "CUSTOM".into(),
+                        rule: Some(TypeRule::Keep),
+                    }],
+                    choices: vec![],
+                },
+                [4; 16],
+            )
+            .unwrap();
+        let parent = policy.expected_head().unwrap();
+        let next = policy.candidate_head().unwrap();
+        workspace.activate_saved(&mut policy, parent, next).unwrap();
+        let mut state = workspace.state().unwrap().clone();
+        state.operations[2].kind = OperationKind::Prepare;
+        state.operations[2].prepared_inputs = 1;
+        state.operation_counts = operations::summarize(&state.operations).unwrap();
+        invalid(state);
+    }
+    #[test]
+    fn unshipped_old_operations_v2_is_not_misread_as_committed_policy_v2() {
+        let mut encoder = Encoder::new(Vec::new());
+        encoder
+            .map(9)
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .u8(2)
+            .unwrap()
+            .u8(1)
+            .unwrap()
+            .bytes(&[1; 16])
+            .unwrap()
+            .u8(2)
+            .unwrap()
+            .array(2)
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .bytes(&[2; 16])
+            .unwrap()
+            .u8(3)
+            .unwrap()
+            .array(0)
+            .unwrap()
+            .u8(4)
+            .unwrap()
+            .array(0)
+            .unwrap()
+            .u8(5)
+            .unwrap()
+            .array(0)
+            .unwrap()
+            .u8(6)
+            .unwrap()
+            .map(2)
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .str("synthetic_v1")
+            .unwrap()
+            .u8(1)
+            .unwrap()
+            .array(0)
+            .unwrap()
+            .u8(8)
+            .unwrap()
+            .array(1)
+            .unwrap()
+            .array(5)
+            .unwrap()
+            .bytes(&[2; 16])
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .null()
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .u8(0)
+            .unwrap()
+            .u8(10)
+            .unwrap()
+            .array(5)
+            .unwrap();
+        encoder.u8(1).unwrap();
+        for _ in 0..4 {
+            encoder.u8(0).unwrap();
+        }
+        assert_eq!(
+            decode(&encoder.into_writer()).err().unwrap().code,
+            ErrorCode::InvalidSnapshot
+        );
+    }
+    #[test]
     fn unknown_kind_and_duplicate_top_level_keys_reject_before_canonical_import() {
         let bytes = encode(&state()).unwrap();
         let mut d = Decoder::new(&bytes);
         d.map().unwrap();
-        for _ in 0..7 {
+        for _ in 0..8 {
             d.u8().unwrap();
             d.skip().unwrap();
         }
@@ -384,6 +634,24 @@ mod operation_tests {
             .err()
             .unwrap();
         assert_eq!(failure.code, ErrorCode::ResourceLimit);
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+        // This is a documented defect in the existing proposed cap/accounting
+        // combination, not an approved launch behavior or a reason to evict IDs.
+        assert_eq!(
+            workspace.prepare_recovery([10; 16]).err().unwrap().code,
+            ErrorCode::ResourceLimit
+        );
+        assert_eq!(
+            workspace
+                .prepare_recovery_with_operation(OperationContext {
+                    id: [11; 16],
+                    occurred_at_ms: 0
+                })
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
         assert_eq!(workspace.export_bundle().unwrap(), saved);
         assert_eq!(
             workspace

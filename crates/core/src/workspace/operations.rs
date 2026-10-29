@@ -1,6 +1,7 @@
 //! Proposed content-free history. Host timestamps and outcomes are assertions, not authority.
 use super::*;
 
+/// Existing draft candidate for measurement, NOT an approved launch capacity.
 pub const MAX_OPERATIONS: usize = 10_000;
 pub const MAX_OPERATION_TIME_MS: u64 = 253_402_300_799_999;
 
@@ -19,6 +20,7 @@ pub enum OperationKind {
     UserCancelled,
     BlockedInput,
     RestoreBlocked,
+    PolicyChange,
 }
 impl OperationKind {
     pub fn as_str(self) -> &'static str {
@@ -30,6 +32,7 @@ impl OperationKind {
             Self::UserCancelled => "user_cancelled",
             Self::BlockedInput => "blocked_input",
             Self::RestoreBlocked => "restore_blocked",
+            Self::PolicyChange => "policy_change",
         }
     }
     pub(super) fn code(self) -> u8 {
@@ -41,6 +44,7 @@ impl OperationKind {
             Self::UserCancelled => 4,
             Self::BlockedInput => 5,
             Self::RestoreBlocked => 6,
+            Self::PolicyChange => 7,
         }
     }
     pub(super) fn from_code(code: u8) -> Result<Self> {
@@ -52,6 +56,7 @@ impl OperationKind {
             4 => Ok(Self::UserCancelled),
             5 => Ok(Self::BlockedInput),
             6 => Ok(Self::RestoreBlocked),
+            7 => Ok(Self::PolicyChange),
             _ => Err(error(ErrorCode::InvalidSnapshot)),
         }
     }
@@ -131,7 +136,11 @@ pub(super) fn summarize(records: &[OperationRecord]) -> Result<OperationCounts> 
 }
 impl State {
     pub(super) fn validate_operation_id(&self, id: PublicId, legacy: bool) -> Result<()> {
-        if self.head.commit_id == id || self.entries.values().any(|entry| entry.issuance == id) {
+        if self.head.commit_id == id
+            || self.entries.values().any(|entry| entry.issuance == id)
+            || self.rules.values().any(|record| record.operation == id)
+            || self.choices.values().any(|record| record.operation == id)
+        {
             return Err(error(if legacy {
                 ErrorCode::InvalidId
             } else {
@@ -147,9 +156,12 @@ impl State {
         if self.operations.len() >= MAX_OPERATIONS {
             return Err(error(ErrorCode::ResourceLimit));
         }
+        self.operations
+            .try_reserve_exact(1)
+            .map_err(|_| error(ErrorCode::ResourceLimit))?;
         self.operations.push(operation);
         self.operation_counts = summarize(&self.operations)?;
-        self.snapshot_version = 2;
+        self.snapshot_version = 3;
         Ok(())
     }
 }
@@ -238,9 +250,11 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews: Vec::new(),
+                policy_preview: None,
             }),
         })
     }

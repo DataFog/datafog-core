@@ -105,12 +105,13 @@ serve({
       finally { opened.bundle.fill(0); }
     });
   },
-  exportBackup() {
+  exportBackup(password) {
     return run(async () => {
       const value = active(), g = generation;
       await current(value, g);
-      const bytes = await exportBackup(value.vault, value.record, value.dataKey);
-      try { guard(g); await current(value, g); return bytes; }
+      controller?.abort(); controller = new AbortController();
+      const bytes = await exportBackup(value.vault, value.record, value.dataKey, password, controller.signal);
+      try { await checkpoint("after-export-wrap"); guard(g); await current(value, g); return bytes; }
       catch (error) { bytes.fill(0); throw error; }
     });
   },
@@ -135,7 +136,7 @@ serve({
         finally { bundle.fill(0); }
         const id = toBase64url(randomId());
         pendingImport = {id, generation: g, vault: opened.vault, record: encrypted.record, change};
-        return {id, exportedAt: opened.exportedAt, revision: metadata.head.revision, workspaceTag: toBase64url(metadata.namespace)};
+        return {id, exportedAt: opened.exportedAt, revision: metadata.head.revision, format:change.format, workspaceTag: toBase64url(metadata.namespace)};
       } catch (error) { if (staging) stopImport(); throw error; }
       finally { opened?.bundle.fill(0); if (bytes instanceof Uint8Array) bytes.fill(0); }
     });
@@ -173,15 +174,43 @@ serve({
       return { entityType, matchedText: text.slice(start, end), range };
     });
   },
+  policy() {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("policy");guard(g);return result;
+    });
+  },
+  recall(text) {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("recall",[text]);guard(g);return result;
+    });
+  },
+  review(input) {
+    return run(async()=>{
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("review",[input]);guard(g);return result;
+    });
+  },
+  preparePolicy(edits) {
+    return run(async () => {
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);
+      if(pending){const previous=pending;pending=undefined;await worker.call("discard",[previous.id]);guard(g);}
+      const next=await worker.call("preparePolicy",[edits,randomId()]);guard(g);
+      pending={...next,generation:g};return {id:next.id,policyPreview:next.policyPreview,format:next.format};
+    });
+  },
   prepare(inputs) {
     return run(async () => {
       const value = active(), g = generation;
       await current(value, g);
       const worker = await loaded(value, g);
       if (pending) { const previous = pending; pending = undefined; await worker.call("discard", [previous.id]); guard(g); }
-      const next = await worker.call("prepareBatch", [inputs, randomId()]); guard(g);
+      const reviewed=inputs.map(input=>({text:input.text,scannerFindings:[],userSelections:input.findings}));
+      const next = await worker.call("prepareReview", [reviewed, randomId()]); guard(g);
       pending = { ...next, generation: g };
-      return { id: next.id, previews: next.previews };
+      return { id: next.id, previews: next.previews, format:next.format };
     });
   },
   approve(id) {

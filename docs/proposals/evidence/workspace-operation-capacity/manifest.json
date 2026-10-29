@@ -1,0 +1,36 @@
+{
+  "scope": "synthetic unapproved capacity experiments, not a selected shipping limit",
+  "baselineCommit": "2a898467d59b14a2091c45626a6ef73157c4a86c",
+  "baselineDirty": true,
+  "system": "Darwin",
+  "arch": "arm64",
+  "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+  "baselineInputs": {
+    "crates/core/src/workspace.rs": "609760207b23d5d369c260239abf7cec38294527c4a8f8e0f28aef1b8af7c352",
+    "crates/core/src/workspace/operations.rs": "546f778cc221468c5f82a87ef274ef41a1536652deace4c375865cf5858efff7",
+    "crates/core/src/workspace/codec.rs": "a5d60c496a00d2d975118d0bf11b60eae0dd6d3230de487c749f15b8647d7054",
+    "crates/core/src/workspace/policy.rs": "0cd027b2f2ab8506d5fb0504ab7b74dd73aa6d9abb31e6356408c7c9052cabe6",
+    "crates/core/examples/workspace_operation_cost.rs": "f94f759c17a74d191747b02e51f70b3754b23a5f3b1bc46f747349ec29581842"
+  },
+  "profiles": [
+    {
+      "cap": 10000,
+      "operationsSourceSha256": "b8ec35791733553ea3702e379ddc5ccbf15fb656dcea018bdfad4226c37ed92a",
+      "report": "cap-10000.json",
+      "reportSha256": "ad8426caefdae627cce7334c9649e3476e344793e4be0310aa38a449e5d65564"
+    },
+    {
+      "cap": 100000,
+      "operationsSourceSha256": "6fe768b63e9d74a3a417830e010c389fa4f4d783fa09e3489596b32114497d7e",
+      "report": "cap-100000.json",
+      "reportSha256": "109f39e534637346f15ade36ea0d5a5dd5464fb18c5898165be2c7abd950d22a"
+    },
+    {
+      "cap": 300000,
+      "operationsSourceSha256": "8664915cca3a086596088ed46def0c3dd9930447838e01148f30364daab9c6f5",
+      "report": "cap-300000.json",
+      "reportSha256": "804e6703a69abc8e262860acf516db939f1468e47940cc7936d3dedb34da59a4"
+    }
+  ],
+  "restoredSourceSha256": "546f778cc221468c5f82a87ef274ef41a1536652deace4c375865cf5858efff7"
+}

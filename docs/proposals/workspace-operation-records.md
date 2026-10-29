@@ -1,156 +1,183 @@
-# C1/C3 operation records and counts: implementation proposal
+# C1/C3 operation records and counts — v3 review proposal
 
-**Draft for review, targeting `0.5.0-beta.3`.** This implements a concrete proposal
-for [#147](https://github.com/DataFog/datafog-core/issues/147), based on the
-[C1/C3 contract draft in #158](https://github.com/DataFog/datafog-core/pull/158).
-The API, retention and snapshot choices are not approved or frozen. This work
-does not publish a package, complete conversation handoffs or settle snapshot
-compatibility for the launch.
+Draft for #147 / `0.5.0-beta.3`, reconciling #143/#158 with the committed
+policy-v2 implementation. **Do not merge or publish this draft yet.** Sid approved
+preserving every operation record: no deletion, sampling or summary replacement.
+Lossless compression is separate postlaunch work in #165. The lifetime capacity,
+accounting and legacy replay-error choices below remain unapproved.
 
-## Recommended choices for review
+## Compatibility and transaction boundary
 
-1. Retain up to **10,000** operation records without automatic deletion or
-   compaction. Reaching that limit, or the existing 16 MiB bundle limit, fails
-   explicitly with `resource_limit`. Raising or changing retention needs review;
-   old operation IDs are never silently forgotten.
-2. Use a fresh host-generated random 16-byte ID for every committed operation.
-   IDs are workspace-local replay checks, not credentials or proof of external
-   delivery. Use the normal expected-parent/candidate-head save contract.
-3. Treat host `occurredAtMs` as untrusted UTC Unix milliseconds in
-   `0..253402300799999`, including both endpoints. It does not order commits or
-   authorize activity; the head revision orders commits. Nonmonotonic host times
-   are accepted. Legacy mutations have `null` time, not a fabricated current time.
-4. Add bounded numeric `preparedInputs` and `transformedSpans` deltas to each
-   operation record. These differ from #158's three-field record proposal and
-   allow the decoder to reconstruct and verify persisted totals without raw text.
-5. Keep legacy no-change `prepare`/`prepareBatch` byte- and head-preserving. An
-   explicitly recorded no-change preparation uses the new timed call. This is a
-   deliberate compatibility choice requiring review against #158, which suggests
-   recording successful preparation input members even with empty findings.
+Policy-v2 already uses snapshot version 2 and keys 6/7. This draft therefore uses
+**version 3**, never the old unmerged #162 version-2 layout. The old draft layout
+was not released and is rejected rather than being mistaken for a policy vault.
 
-## Proposed API and transaction behavior
+The proposed v3 map retains keys 1–7 and their current meaning, adds operation
+rows at key 8 and covered-history counts at key 10. Key 9 remains reserved for
+#148 conversations. This is one coordinated beta.3 format proposal, not permission
+for a separate conversation implementation to claim a conflicting version 3.
+Conversations and their accounting must be reconciled before the format freezes.
 
-Rust provides `OperationContext`, `OperationOutcome`, `OperationRecord` and
-`OperationCounts`; WASM exposes matching `WorkspaceOperation`, `WorkspaceOutcome`,
-`WorkspaceOperationRecord` and `WorkspaceCounts` declarations.
+Actual released v1 and policy-v2 bundles open and re-export byte for byte with
+empty covered history. Reads, legacy no-change preparation, no-change policy
+edits, discarded candidates and failed activation preserve their original bytes,
+head and version. A real saved mutation or explicit recorded operation stages v3
+through prepare → candidate export → approved durable save → activation. No lost
+history or historical timestamp is invented. New draft workspaces bootstrap a v3
+create record; bootstrap is unsaved until the host actually persists it.
 
-```ts
-const operation = {id: crypto.getRandomValues(new Uint8Array(16)), occurredAtMs: Date.now()};
-const change = workspace.prepareBatchWithOperation(inputs, operation);
-const {expectedHead, candidateHead} = change.heads();
-const encrypted = await encryptForHost(change.exportCandidateBundle());
-await saveAtomically(encrypted, expectedHead, candidateHead);
-workspace.activateSaved(change, expectedHead, candidateHead);
-const records = workspace.operations();
-const counts = workspace.counts();
-```
+**Before approving a v1/v2-to-v3 save, explain that `0.5.0-beta.1` and
+`0.5.0-beta.2` cannot open the upgraded vault.** The reference host shows the notice
+before text/settings saves and legacy backup recovery. Existing backup files are
+unchanged. The stronger password-reauthenticated 256 MiB backup envelope and both
+password/recovery imports are preserved; inner-format changes do not restore the
+old weaker password wrapper.
 
-The host supplies encryption, approval and durable saving. Core cannot verify a
-host's durability assertion. Candidate export can be repeated for an unsaved
-retry; candidate contents and committed records/counts remain unchanged until
-activation. A rejected save, stale parent/candidate, discard, lock/close, preview,
-getter or restore call adds no committed record. Saving then losing acknowledgment
-requires reopening the saved bundle before another attempt; an operation ID does
-not provide exactly-once site delivery.
+## Concrete choices still needing review
 
-The added WASM entry points are `createWithOperation`, `prepareWithOperation`,
-`prepareBatchWithOperation`, `prepareRecoveryWithOperation`, `prepareOutcome`,
-`operations` and `counts`; Rust uses the corresponding snake-case names. Timed
-preparation explicitly stages one operation and advances the head even with no
-new mappings or findings. Empty batches remain invalid; a single empty text input
-is a valid explicit preparation input. A batch records one operation, its input
-member count and the number of replaced occurrences, including repeated values.
+### Capacity and recovery
 
-Creation bootstraps an initial record at revision zero; that initial state is
-unsaved until the host persists it. Creation is the only API that starts a new
-workspace without activating a preexisting candidate. Existing create/real
-mutation calls also write records, with unknown (`null`) time. A legacy
-preparation that introduces no mappings retains its original no-op behavior.
-Read-only export of any opened bundle does not upgrade it.
+The code retains the original **10,000-record draft limit only as a candidate**.
+It is not the selected launch limit. Reaching it fails without dropping IDs or
+committed data. This combination has an important defect: recovery appends a
+record too, so a backup already at the record limit cannot complete normal
+fresh-head import. The regression test makes that failure explicit; it is not an
+approved shipping behavior. Read/export still work.
 
-The runtime rejects IDs present in retained records. New explicit calls return
-`operation_reused` for all recognized replays. Legacy calls preserve their
-existing `invalid_operation_id` for current-head or mapping-issuance IDs and use
-`operation_reused` for other retained historical IDs. This error compatibility
-choice is another explicit difference from #158. An imported legacy snapshot
-cannot reveal operations whose IDs were never stored; only its current head and
-mapping issuance IDs remain checkable. No lost history is invented.
+Recommended review choice: a **100,000-record hard ceiling**, with the final 256
+slots reserved for recovery and a small encoded-byte reserve for recovery
+metadata. Ordinary recorded activity would stop at 99,744 total rows; a fresh
+recovery could still retain every row and append its own record. This is a
+bounded beta proposal, not unlimited history or an indefinite-recovery promise.
+At the hard record/byte ceiling, writes including further recovery still fail;
+read/export must remain available and the host must make the limit visible.
+The byte reserve must be derived from the final #148 wire schema, not guessed.
+Neither the proposed limit nor reserve is implemented or approved here.
 
-## Content-free records and count definitions
+Why this recommendation: 10,000 rows are inexpensive but can be exhausted after
+5,000 round trips if an application records preparation and copy confirmation.
+At an illustrative 60 round trips/minute that is about 83 minutes. That is a
+scenario, not measured user traffic. The 100,000-row experiment costs materially
+less memory than 300,000 rows while leaving room in the existing 16 MiB snapshot
+budget. Persisting all history in one finite snapshot still has a lifetime limit;
+compression or a later reviewed archive/segmentation design cannot be silently
+substituted for retaining every record during these betas.
 
-Each record contains only random operation ID, bounded kind, nullable timestamp,
-input count and transformed-occurrence count. There is no source text, identity
-key, mapping value, URL, arbitrary error message or free-form context. The two
-numeric deltas are positive/bounded only for preparation records; every other
-kind has zero deltas.
+### Accounting
 
-| Count | Meaning |
+Recommended: retain per-record numeric `preparedInputs` and `transformedSpans`
+deltas so the decoder can independently recompute the totals. These extend #158's
+three-field row and require approval. No source value, identity key, URL, arbitrary
+message or free-form context enters the row.
+
+The candidate keeps legacy no-op bytes and uses explicit timed calls to record a
+successful no-change preparation. Real legacy preparation/recovery mutations
+record unknown (`null`) time. A batch records one operation, its input-member
+count and replaced occurrences, including repeated values. Current policy saves
+also append a proposed `policy_change` row with zero input/span deltas and unknown
+time; combined review delegates to the same preparation path. These accounting
+choices remain proposals. A policy no-op stays byte-preserving.
+
+Counts describe **recorded covered history**, not all lifetime activity. Older
+vaults have unknown prior history, and successful legacy no-change preparations
+remain unrecorded. The API/UI must communicate that boundary before describing
+these numbers as lifetime totals. Host UTC Unix milliseconds are untrusted
+assertions, accepted in `0..253402300799999`; head revision, not host clock,
+orders committed mutations. Nonmonotonic times are allowed.
+
+`confirmedHandoffs` stays zero. Copy confirmation is not proof of site insertion,
+send, or provider delivery. #148 must implement a reviewed observed-handoff
+transaction before that counter changes.
+
+### Reused IDs
+
+Recommended: legacy APIs consistently retain `invalid_operation_id` for recognized
+reuses, while new explicit operation APIs return `operation_reused`. The existing
+candidate still has the older proposed split: legacy current-head/mapping/settings
+IDs return `invalid_operation_id`, but other retained historical IDs return
+`operation_reused`. That difference is not approved. Existing records are never
+silently forgotten. Older snapshots cannot reveal removed/unrecorded IDs; the
+runtime cannot reconstruct them or promise to detect unknowable replays.
+
+## Proposed API and count definitions
+
+Existing proposed Rust calls are `create_with_operation`, `prepare_with_operation`,
+`prepare_batch_with_operation`, `prepare_recovery_with_operation`, `prepare_outcome`,
+`operations` and `counts`. WASM exposes matching camelCase calls. Native Python,
+Node and X8 must extend the complete actual-call/error matrix after this contract
+is approved; declarations or placeholders do not count as implementation.
+
+An operation context contains a fresh host-generated random 16-byte ID and bounded
+`occurredAtMs`. IDs are workspace-local replay checks, not credentials. A pending
+operation follows the normal complete-parent/candidate-head save contract. Preview,
+read, restore, candidate export, discard, failed save and stale activation do not
+change committed records or totals. Losing an acknowledgment requires reopening
+saved state and fresh approval; an ID does not prove exactly-once external delivery.
+
+| Counter | Proposed covered-history meaning |
 | --- | --- |
-| `operations` | Number of retained committed operation records, including create/recovery and explicitly recorded outcomes. |
-| `preparedInputs` | Sum of input members in recorded preparation operations. Legacy no-change preparations are unrecorded. |
-| `transformedSpans` | Replaced source occurrences in recorded preparation operations, not distinct identities or marker references. |
-| `confirmedHandoffs` | Zero in this slice. Only a later reviewed observed-insert/send transaction may increment it. Copy confirmation is not a handoff. |
-| `reportedBlockedAttempts` | Number of explicitly committed `blocked_input` or `restore_blocked` outcome records, not the number of underlying issues. |
+| `operations` | Every retained committed row, including create/recovery and explicit outcomes. |
+| `preparedInputs` | Sum of recorded preparation input members; not unrecorded legacy no-ops. |
+| `transformedSpans` | Replaced source occurrences, not distinct identities or marker references. |
+| `confirmedHandoffs` | Zero until #148's observed-handoff transaction exists. |
+| `reportedBlockedAttempts` | Explicitly saved blocked-input/restore outcomes, not underlying issue count. |
 
-`prepareOutcome({kind, issueCount}, operation)` accepts `copy_confirmed`,
-`user_cancelled`, `blocked_input` and `restore_blocked`. Blocked outcomes require
-1–10,000 issues; copy/cancel require zero. The issue count validates the bounded
-assertion and is not retained. No event is automatically recorded on a failure,
-cancellation, copy callback or blocked restore. A host deliberately stages and
-saves the optional outcome after observing it. Omitting that record does not
-convert the original failure into success.
+Rows contain ID, bounded kind, nullable time and the two numeric deltas. Only
+preparation rows have nonzero deltas. `prepareOutcome` supports `copy_confirmed`,
+`user_cancelled`, `blocked_input` and `restore_blocked`. A blocked outcome validates
+1–10,000 issues but does not retain their content/count; copy/cancel require zero.
+No callback or failure automatically records an outcome. Internal consistency of
+these rows does not attest that a reported external action actually happened.
 
-These are totals over the retained documented history, not lifetime telemetry.
-Policy-change records and observed conversation handoffs are not implemented;
-their later APIs must use the same staging/count invariants.
+The strict decoder checks canonical/duplicate/truncated CBOR, exact version/map
+shape, kinds, IDs, times, deltas, complete heads, resource bounds and recomputed
+counts. Full create-based history must account for its revisions. Upgraded
+v1/v2 history starts after an unknown prefix. Mappings/settings retain their
+existing first spelling, aliases, counters and protection rules.
 
-## Snapshot and backup compatibility proposal
+## Measured capacity experiments
 
-The outer encrypted vault/backup formats are unchanged by this branch. The inner
-workspace CBOR snapshot gains **version 2**:
+Synthetic optimized native Rust runs on this Apple arm64 machine, with no model
+or provider call. These are single-run observations, not stable-runner benchmark
+gates, lower-hardware guarantees, Chrome timings or selected capacity defaults.
+The 100k/300k limits were temporary measurement builds and were restored to the
+original unapproved 10k candidate afterward.
 
-- Keys 1–6 preserve the existing namespace, head, entries, issuance counters and
-  synthetic privacy configuration. Key 0 contains version 2.
-- Key 8 is a bounded array of operation tuples
-  `[id16, kindCode, occurredAtMsOrNull, preparedInputs, transformedSpans]`.
-- Key 10 contains the five aggregate counts in the public field order above.
-  Key 9 remains absent/reserved for a later reviewed conversation proposal.
-- The decoder recomputes every total from operations and requires exact equality.
-  It rejects duplicate IDs, unknown kinds/keys, malformed/noncanonical/duplicate
-  CBOR, invalid times, inconsistent heads, invalid numeric deltas and over-limit
-  histories before admitting state. New workspaces retain complete create-based
-  revision history; upgraded legacy snapshots may start after unknown history.
+| Experimental ceiling | Rows tested below full | Wire bytes | Core open | Timed preparation | Record backing after append |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 9,999 | 330,054 | 0.98 ms | 0.59 ms | 560,000 B |
+| 100,000 | 99,999 | 3,300,060 | 11.40 ms | 6.93 ms | 5,600,000 B |
+| 300,000 | 299,999 | 9,900,060 | 35.21 ms | 21.04 ms | 16,800,000 B |
 
-Version-1 snapshots remain readable and re-export **byte for byte** with empty
-records and zero covered-history counts. No migration occurs on open/read/export,
-no-op legacy preparation or discarded candidates. The first explicit saved
-upgrade/mutation stages version 2 through prepare/export/save/activate. That
-candidate preserves mappings, marker bytes, counters and privacy configuration,
-then adds only the new operation. Recovery similarly preserves old markers and
-adds its own new operation; it does not invent prior history.
+The profiles use maximum numeric deltas and fixed synthetic timestamps. The
+record struct is 56 bytes on this target. Clone-and-append initially doubled its
+vector capacity; `try_reserve_exact(1)` now avoids that unnecessary doubling and
+surfaces allocation failure. These backing figures exclude allocator overhead,
+ID-validation trees, existing mappings/settings, encoded bundle capacity and
+runtime/binding copies. With 32 pending candidates, records plus wire payload
+alone are roughly 285 MB at 100k rows and 854 MB at 300k. Host admission limits
+remain necessary; there is no global Core counter across workers.
 
-An old decoder cannot open version 2. This is a proposed compatibility boundary,
-not a frozen migration policy or a promise that beta.1 can open future backups.
-The snapshot freeze, policy/source fields, conversation fields and final backup
-round-trip matrix must be reconciled before merging dependent implementations.
+Reproduce in an idle isolated worktree with `python3 scripts/measure-workspace-operations.py`.
+It runs the checked-in `workspace_operation_cost` example, restores the original
+proposal limit in `finally`, and rebuilds the ordinary default-feature example.
+Rebuild SDKs afterward before reusing their binaries. [Checked-in experimental receipts](evidence/workspace-operation-capacity/manifest.json)
+include source hashes, the explicitly dirty integration baseline and tested cap; only synthetic fixtures are constructed. Rows above an experiment's admission
+limit report rejection separately; their small rejection time is not a successful
+large-history decode measurement.
 
-## Evidence and remaining review
+## Verification and remaining gates
 
-Native tests cover exact batch/occurrence counts, no-change behavior, timestamp
-limits, replay/stale-head rejection, read/discard/failure preservation, canonical
-and malformed snapshot imports, retention exhaustion without ID eviction, and
-byte-preserving legacy import followed by a staged upgrade.
+Content-free metadata is still private vault data, not public telemetry, and is
+never automatically logged. The reconciliation adds an actual native-policy-v2 export fixture and tests exact
+v1/v2 read/no-op/discard/failed-save behavior before a staged v3 upgrade, preserving
+choices and permanent aliases. Existing Core policy, recall, protected coverage
+and operations suites pass on this integration work. All-SDK build/check, packed
+WASM/TypeScript and the full encrypted MV3 regression suite pass before commit.
+The clean committed-head receipts and Small qualification remain to be refreshed.
 
-The packed SDK tests exercise matching WASM APIs and TypeScript declarations,
-including malformed contexts, accessor rejection, invalid outcomes and mutable
-copies returned by getters. The actual MV3 extension test uses Web Crypto and
-real IndexedDB to abort and retry a timed batch, checks no count change on
-discard, reopens encrypted records, exports a backup, approves restore into an
-empty profile, restarts the browser and verifies preserved counts plus one
-legacy-timed recovery operation. Existing backup password/recovery paths and
-rollback/cancel/race checks run against the new snapshot keys too.
-
-Before this can merge, review the five choices above, the legacy reuse-error
-split, old-decoder incompatibility, and alignment with #143/#158 and forthcoming
-policy/handoff transactions. A successful local suite proves these draft
-behaviors, not approval of those product decisions or completion of C1/C3.
+Before merge: approve capacity/recovery behavior, numeric accounting and legacy
+reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
+full installed/encrypted backup and native/browser qualification matrix. This
+draft does not complete C1/C3, freeze snapshot compatibility or authorize a beta.3
+release.

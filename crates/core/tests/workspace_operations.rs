@@ -281,3 +281,66 @@ fn legacy_snapshot_bytes_and_unknown_history_remain_unchanged_until_saved_upgrad
         "Jane"
     );
 }
+
+#[test]
+fn policy_v2_bytes_noops_discard_and_failed_activation_are_preserved_before_v3_upgrade() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/workspace/policy-v2.json")).unwrap();
+    let bytes: Vec<u8> = fixture["bundleHex"]
+        .as_str()
+        .unwrap()
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect();
+    let mut workspace = Workspace::open_bundle(&bytes).unwrap();
+    assert_eq!(workspace.policy().unwrap().snapshot_version, 2);
+    assert!(workspace.operations().unwrap().is_empty());
+    assert_eq!(workspace.counts().unwrap().operations, 0);
+    assert_eq!(workspace.export_bundle().unwrap(), bytes);
+    let no_op = workspace.prepare("ordinary", &[], [5; 16]).unwrap();
+    assert_eq!(no_op.export_candidate_bundle().unwrap(), bytes);
+    assert_eq!(no_op.snapshot_format().unwrap().candidate_version, 2);
+    let mut staged = workspace
+        .prepare_with_operation("ordinary", &[], operation(5, 0))
+        .unwrap();
+    assert_eq!(staged.snapshot_format().unwrap().current_version, 2);
+    assert_eq!(staged.snapshot_format().unwrap().candidate_version, 3);
+    let before = staged.expected_head().unwrap();
+    assert_eq!(
+        workspace
+            .activate_saved(&mut staged, before, before)
+            .unwrap_err()
+            .code,
+        ErrorCode::WorkspaceConflict
+    );
+    staged.discard();
+    assert_eq!(workspace.export_bundle().unwrap(), bytes);
+    let mut staged = workspace
+        .prepare_with_operation("ordinary", &[], operation(5, 0))
+        .unwrap();
+    let upgraded = Workspace::open_bundle(staged.export_candidate_bundle().unwrap()).unwrap();
+    assert_eq!(upgraded.policy().unwrap().snapshot_version, 3);
+    assert_eq!(upgraded.counts().unwrap().operations, 1);
+    assert_eq!(
+        upgraded.operations().unwrap()[0].kind,
+        OperationKind::Prepare
+    );
+    assert_eq!(
+        upgraded
+            .restore(fixture["marker"].as_str().unwrap())
+            .unwrap(),
+        "Jane"
+    );
+    assert_eq!(upgraded.policy().unwrap().choices[0].value, "May");
+    assert_eq!(
+        upgraded.policy().unwrap().choices[0].disposition,
+        datafog_core::workspace::ChoiceDisposition::NotSensitive
+    );
+    assert_eq!(workspace.export_bundle().unwrap(), bytes);
+    activate(&mut workspace, &mut staged);
+    assert_eq!(
+        workspace.export_bundle().unwrap(),
+        upgraded.export_bundle().unwrap()
+    );
+}

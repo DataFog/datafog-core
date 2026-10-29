@@ -18,7 +18,8 @@
     <p>Status: <output id="status" aria-live="polite">loading</output></p>
     <section>
       <h2>Encrypted workspace backup</h2>
-      <p>Export saves committed mappings and privacy settings, without source text or drafts. Either the password or recovery code current at export can open it. Keep backups private; later credential changes do not update older files.</p>
+      <p>Export saves committed mappings and privacy settings, without source text or drafts. Either the vault password or recovery code current at export can open it. Reenter the vault password to create the stronger backup wrapper, including after unlocking with a recovery code. Keep backups private; later credential changes do not update older files.</p>
+      <label>Current vault password for export <input id="backup-export-password" type="password" autocomplete="off" maxlength="1024"></label>
       <button id="backup-export">Export encrypted backup</button>
       <p>Restore into an empty profile. Existing workspaces are never overwritten or merged.</p>
       <label>Backup file <input id="backup-file" type="file" accept=".dfbackup,application/octet-stream"></label>
@@ -26,8 +27,20 @@
       <label>Export-time backup credential <input id="backup-credential" type="password" autocomplete="off" maxlength="1024"></label>
       <button id="backup-review">Review backup locally</button>
       <pre id="backup-preview"></pre>
+      <p id="backup-format-upgrade" hidden>Saving this restored workspace upgrades its saved format. DataFog 0.5.0-beta.1 and 0.5.0-beta.2 cannot open the upgraded vault. Your existing backup is unchanged.</p>
       <p>The export time describes this saved copy and does not prove freshness. Later aliases and settings may be missing. Restore does not send anything and leaves the vault locked.</p>
       <button id="backup-approve" disabled>Approve restore into this empty profile</button>
+    </section>
+    <section>
+      <h2>Remember a local review choice</h2>
+      <p>A not-sensitive correction allows this value to remain visible, including its case and spacing variants. It can override real PII. Protected types cannot use generic keep. Old pseudonyms remain restorable.</p>
+      <label>Change <select id="policy-kind"><option value="choice">Exact value choice</option><option value="rule">Type rule</option></select></label>
+      <label>Entity type <input id="policy-type" value="PERSON" maxlength="32"></label>
+      <label>Exact observed value <textarea id="policy-value" rows="2" spellcheck="false" autocomplete="off"></textarea></label>
+      <label>Value choice <select id="policy-choice"><option value="not_sensitive">Not sensitive (false positive)</option><option value="keep">Keep visible</option><option value="remove">Remove remembered choice</option></select></label>
+      <label>Type rule <select id="policy-rule"><option value="hide">Hide</option><option value="keep">Keep visible (unprotected types only)</option><option value="remove">Restore default</option></select></label>
+      <button id="policy-prepare">Review settings change</button>
+      <p>Review the local preview below, then approve and save. Settings changes do not hand off text.</p>
     </section>
     <label>Synthetic text or follow-up question <textarea id="source" rows="4" spellcheck="false" autocomplete="off"></textarea></label>
     <p>For follow-ups, keep workspace pseudonyms intact and mark only new sensitive text outside them. Review and approve every question before its local handoff.</p>
@@ -43,6 +56,7 @@
       <button id="select-source-issue" hidden>Select issue in input</button>
     </section>
     <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
+    <p id="format-upgrade" hidden>Saving this change upgrades the vault’s saved format. DataFog 0.5.0-beta.1 and 0.5.0-beta.2 cannot open the upgraded vault. Your existing backups are unchanged.</p>
     <h2>Local preview</h2><pre id="preview"></pre><button id="approve" disabled>Approve and save</button>
     <h2>Approved local handoff sink</h2><pre id="sink"></pre>
     <h2>Local restoration</h2>

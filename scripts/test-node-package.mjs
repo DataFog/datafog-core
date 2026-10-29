@@ -52,9 +52,12 @@ import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-rout
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
+import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import * as germanApi from "@datafog/node";
+verifyCoverageConflicts(germanApi);
+await verifyCoverageProviderCalls(germanApi);
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
 
 const engineConfig = {
@@ -73,6 +76,21 @@ for (const [engine, errorPath, reason] of [
     error.reason === reason && !error.message.includes("private-engine"));
 }
 
+
+    const overlapText = "👋 José: 123-45-6789";
+    const nativeSsn = scan(overlapText).find(finding => finding.entityType === "SSN");
+    if (!nativeSsn) throw new Error("SSN overlap fixture was not detected");
+    const semanticPerson = {...nativeSsn, entityType: "PERSON", detectorName: "semantic-person", confidence: 1};
+    for (const findings of [[nativeSsn, semanticPerson], [semanticPerson, nativeSsn]]) {
+      const protectedCopy = transform(overlapText, findings, {default: {strategy: "redact"}});
+      if (protectedCopy.text !== "👋 José: [SSN]" || protectedCopy.transformations[0].entityType !== "SSN") {
+        throw new Error("Native SSN lost equal-span PERSON precedence");
+      }
+      const allowedCopy = transform(overlapText, findings, {
+        default: {strategy: "redact"}, allow: {exact: {SSN: [nativeSsn.matchedText]}}
+      });
+      if (allowedCopy.text !== "👋 José: [PERSON]") throw new Error("SSN allowlist suppressed PERSON protection");
+    }
 
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
@@ -703,6 +721,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
