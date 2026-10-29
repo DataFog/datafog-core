@@ -122,25 +122,36 @@ Rules catch emails, phones, card numbers, SSNs, routing numbers and credentials
 well. Names and street addresses in free text are the gap: rules miss most of
 them.
 
-The in-browser model for V1 is GLiNER2 (`fastino/gliner2-privacy-filter-PII-multi`).
-The DataFog PII model is on hold; it may return later through the planned
-model-engine interface (ROADMAP.md, step 6). GLiNER2 is a community-tier model
-engine: accuracy regressions are warn-only and do not block PRs.
+Beta A provides the optional English GLiNER2.5 Small browser adapter through
+`@datafog/wasm/models`, with the pinned ONNX export documented in
+[browser-model.md](../browser-model.md). Its model and tokenizer files total
+about 297 MB and are provisioned separately from the npm package. The existing
+synchronous scanner remains rule-based. The native GLiNER2 PII checkpoint and its
+count-head fix are a separate adapter; their accuracy numbers do not qualify Small.
+
+The DataFog PII model remains a native option. The shared engine construction and
+registry work is tracked in issues #124 and #125; Decima is a separate contributed
+engine proposal. Community model accuracy regressions are warn-only, while model
+loading, asset identity, valid offsets and integration behavior remain blocking
+contract checks.
 
 The fallback path, when no model is available or when the model misses a value,
 is workspace recall plus the person's own selection. Workspace recall catches
 every value they approved before; the person's selection catches anything the
-scanner and recall both missed.
+scanner and recall both missed. Recall is a Beta B target; Beta A supports the
+scanner and explicit user selection without claiming that recall is implemented.
 
 **Detection bar (D4).** The synthetic pasted-text set, once it exists, should
 measure:
 
 - No missed emails, phone numbers, card numbers, SSNs or account numbers (rules).
-- At least 90% of names caught before review, with no recall, using GLiNER2's
-  `person` label at a 0.5 threshold.
-- Street-address recall is an open measurement. The D4 fixtures have no labelled
-  `STREET_ADDRESS` examples yet, so the 90% bar cannot be verified. Add fixtures
-  and measure before the pilot gate.
+- At least 90% of names caught before review, with no recall, using the shipping
+  browser model's `person` prompt at its documented raw-score threshold.
+- Address recall is an open measurement. D4 fixtures and evaluation are proposed
+  in PR #115 and must be reviewed before pilot qualification. Small's `ADDRESS`
+  is a full-address span, distinct from the street-line `STREET_ADDRESS` gold
+  labels. Define the scoring alignment and measure the actual browser adapter;
+  do not reuse native GLiNER2 figures as Small qualification.
 - Every previously approved value caught by recall in later text.
 
 ### Workspace snapshot

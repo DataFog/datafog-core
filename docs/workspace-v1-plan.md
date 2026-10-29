@@ -5,7 +5,7 @@ paste: pseudonymize pasted text, send it to ChatGPT, restore the answer. Work ru
 in two repositories: `datafog-core` (Core, WASM, detection, harness), driven by
 Sid, and the Chrome extension, driven by Josh.
 
-## This stack
+## Foundation stack (merged)
 
 Each PR targets the one before it:
 
@@ -19,6 +19,8 @@ Each PR targets the one before it:
 | Follow-ups | Committed markers pass through new text |
 | Restore report | All-or-nothing restore that lists blocking markers |
 | Backup | Encrypted backup export and recovery |
+
+The Beta A host/SDK boundary is documented in [the extension integration contract](beta-a-extension-integration.md).
 
 The harness in `examples/workspace-extension` is synthetic-only conformance code.
 Its vault, broker and backup flows are the starting point for the extension.
@@ -49,34 +51,22 @@ If the file-upload investigation keeps CSV in V1, add:
 
 ## Detection, in parallel
 
-- **Browser model (D2).** The in-browser model for V1 is GLiNER2
-  (`fastino/gliner2-privacy-filter-PII-multi`). The DataFog PII model is on hold
-  and may return through the planned model-engine interface (ROADMAP.md, step 6).
-  GLiNER2 is community-tier: accuracy regressions warn but do not block PRs.
-  Owner: open.
+- **Browser model (D2).** Beta A uses the optional English GLiNER2.5 Small
+  adapter exposed by `@datafog/wasm/models`. It runs pinned ONNX assets locally
+  with no Python worker; importing the SDK does not activate it. Model/tokenizer
+  files are about 297 MB and are provisioned separately. See
+  [browser setup and limits](browser-model.md) and the
+  [Beta A extension contract](beta-a-extension-integration.md).
 
-  **Open questions (browser feasibility):**
-  - There is no existing WASM or browser path for GLiNER2 in this repo. The
-    Python worker (`bindings/python/python/datafog_core/_gliner2_worker.py`)
-    runs via a local Python interpreter; Node and Rust call that worker.
-  - Community ONNX exports exist and can run in ONNX Runtime Web:
-    - `okasi/gliner2-privacy-filter-pii-multi-onnx` — same checkpoint we use;
-      Q4 479 MB, Q8 533 MB, plus 16 MB tokenizer. Apache-2.0.
-    - `onnx-community/gliner2-multi-v1-agent-ONNX` — different model (multi-v1);
-      fp16 614 MB, fp32 1228 MB. Apache-2.0.
-    - No fp16 export of the privacy-filter checkpoint is published. The PyTorch
-      weights we use are 1228 MB.
-  - The GLiNER2 count-floor fix (issue #87) wraps `model.count_pred` in a
-    `FlooredCountPred` torch.nn.Module. At inference it boosts the count=1 score
-    when the predicted count is 0, lifting it to 1. A browser runtime must apply
-    the same floor to the count head's output, either in JS postprocessing or
-    inside the ONNX graph. No named export is verified to include this fix.
-  - Latency, memory and download size on real extension hardware are unmeasured.
-  - Language coverage: en, fr, es, de, it, pt, nl. Does not include Arabic,
-    Persian or Turkish.
-
-  The fallback, if in-browser inference is too slow or too large, is a small
-  local helper reached through native messaging. Size M–L.
+  Native GLiNER2 PII/general models and the DataFog native engine remain separate
+  adapters. The old native GLiNER2 count-floor fix does not establish Small
+  correctness. Qualify the actual browser export's spans and score semantics.
+  The browser adapter has input bounds, single-flight inference and strict
+  errors, but no inference cancellation/deadline, automatic chunking or worker
+  isolation. Measure load, memory and UI stalls in the owning extension context.
+  A local native helper remains a possible later fallback if browser resource
+  costs are unacceptable. Community accuracy is warn-only; contract regressions
+  block. Shared engine/Decima work is parallel, not a prerequisite for Beta A.
 
 - **Free-text rules (D1).** Account numbers after a label, masked forms ("ending
   in 1234", `XXXX1234`), and a baseline street-address rule. Positive and negative
@@ -87,13 +77,13 @@ If the file-upload investigation keeps CSV in V1, add:
 
   **Scoring notes:**
   - The D4 detection bar (ADR 004) requires at least 90% of names caught. Measure
-    with GLiNER2's `person` label at threshold 0.5.
-  - Street-address recall is an open measurement: the fixtures have no labelled
-    `STREET_ADDRESS` examples yet.
-  - The GLiNER2 eval baseline (`baselines/eval-models-gliner2.json`) is
-    provisional and warn-only; every score is currently n/a because there are no
-    `STREET_ADDRESS` labels. Until a stable baseline is committed, accuracy
-    regressions do not block.
+    on the shipping browser model with its documented prompt/threshold.
+  - PR #115 proposes name/street-address fixtures and evaluation, but remains
+    unmerged. Its native GLiNER2 measurements are not Small qualification.
+  - Small's full `ADDRESS` spans differ from street-line `STREET_ADDRESS`
+    annotations. Resolve that scoring contract before the pilot measurement.
+  - Native and browser baselines must retain their engine/export identity and
+    community-tier accuracy policy; model contract checks always block.
 
   Size M.
 
@@ -159,17 +149,26 @@ Real text goes into a workspace only when all of these hold:
 
 Before that, real-data testing uses a throwaway browser profile or a build that
 saves no mappings. The critical path is the review screen (Core PRs 1–4) and
-GLiNER2 in the browser, which decides how many names are caught before review.
+GLiNER2.5 Small in the browser, which decides how many names are caught before review.
 
-## Open risks for GLiNER2-first
+## Beta A readiness and remaining pilot risks
 
-1. **Browser feasibility.** No browser path exists today. ONNX exports exist but
-   download size (479–533 MB for the privacy-filter checkpoint, 614+ MB for
-   multi-v1) may be prohibitive for an extension. Measure before committing.
-2. **Count-floor (#87).** The `FlooredCountPred` fix wraps `model.count_pred` in
-   the Python worker. A browser runtime must apply the same floor to the count
-   head's output. No named export is verified to include it.
-3. **Street-address fixtures.** The D4 set has no labelled `STREET_ADDRESS`
-   examples, so the 90% bar cannot be measured until fixtures are added.
-4. **Accuracy baseline.** The GLiNER2 eval baseline is provisional and warn-only;
-   every score is n/a because there are no `STREET_ADDRESS` labels.
+The release checklist is [issue #132](https://github.com/DataFog/datafog-core/issues/132).
+Beta A is a developer integration package for synthetic Chrome extension tests;
+Betas B–D and the final pilot-format freeze are separate milestones. Pin the exact
+package version and recreate provisional development vaults on upgrades unless a
+migration has been explicitly qualified.
+
+1. **Extension execution.** The current adapter works in a browser page. The
+   candidate tarball must also load under actual Manifest V3 CSP with matching
+   local runtime assets, then prove model findings through approved encrypted
+   workspace save, activation, restore and browser restart.
+2. **Resource costs.** About 297 MB of model assets, first-load UI stalls and
+   process memory need recorded measurements. A successful developer test does
+   not establish low-memory or production PII qualification.
+3. **Detection scoring.** Review #115 and measure Small with matching prompt,
+   threshold and address-span definitions. Native GLiNER2 figures cannot be
+   substituted for browser qualification.
+4. **Pilot protection.** Finish recall/rules/provenance, provider marker tests,
+   vault/backup encryption review and the intended snapshot-key round trips
+   before declaring the pilot contract frozen.
