@@ -103,7 +103,13 @@ transitions, candidate visits and copied match bytes. Validation, regex category
 tests, bounded range conversion and sorted output are additional bounded work;
 this is not an instruction, memory-allocation or wall-clock quota. Source and
 entry/result/node ceilings bound those other phases. No background cache or saved
-index is added. Temporary matching state stays local to the call.
+index is added. Temporary matching state stays local to the call. Each private
+index character has stable boxed storage, cleared in place before deallocation
+on success and error exits. Map rebalancing moves only the owner, not that private
+scalar allocation. This adds one small allocation per distinct trie edge; the
+approved node/work/source limits are unchanged. Cleanup is best effort, not a
+memory-forensics guarantee; caller-owned input and returned findings retain their
+normal lifetimes.
 
 The node cap is additional to #158's initial proposal: it limits index memory for
 long unique keys. Consequently some otherwise valid large workspace snapshots
