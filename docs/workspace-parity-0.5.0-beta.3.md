@@ -16,8 +16,9 @@ or harness failure. Result keys normalize only representation (Python's exact
 revision integer to its decimal wire string, copied bytes to lowercase hex),
 without discarding offsets, choices, flags or errors.
 
-Streaming, operation/conversation provenance and actual W6 CAS/retry cases remain
-required additions before X8 can close. This foundation profile must never be
+Operation/conversation provenance and actual W6 CAS/retry cases remain
+required additions before X8 can close. Strict and opt-in progressive restoration
+now run as a second mandatory four-SDK profile, alongside the launch foundation. This foundation profile must never be
 presented as full 0.5.0-beta.3 or real-data security certification. The actual
 native wrappers are draft PRs #174 and #175; this branch integrates their committed
 code solely for qualification, not into the beta.2 release branch.
@@ -48,7 +49,7 @@ The CLI never deletes reports. Temporary installed consumers and browser profile
 are cleaned separately. Any process/runtime/parse failure prevents a complete
 comparison and returns nonzero without retaining arbitrary child diagnostics.
 
-The current matrix has 17 scenarios and 156 real operation steps, including every
+The launch foundation retains 17 scenarios and 156 real operation steps, including every
 current workspace error code, Unicode/source metadata, correction conflicts,
 failed activation receipts, protected policy, repeated operation IDs, atomic batch
 failure, strict marker reports, canonical reopen/recovery, v1→v2 upgrade and a
@@ -70,3 +71,27 @@ the public opaque SDK lifecycle contract. Core's lower-level cleanup remains
 idempotent; implicit/context cleanup is not treated as a second explicit public
 operation. Repeated explicit discard and discard after owner close are exercised
 in the same fixture across all SDKs.
+
+## Mandatory streaming profile
+
+The same invocation also executes `fixtures/workspace/streaming-contract-v1.json`
+against actual Core, installed Python/Node and Chromium WASM. Its 13 cases retain
+40 shared commands; each is replayed in both buffered and progressive modes,
+producing 80 recorded stream steps. The complete current run therefore compares
+30 cases and 236 recorded steps across all four SDKs, plus the shared installed
+JS conformance assertions. The fixture is not sampled and neither mode is optional.
+
+Each SDK retains `rust-streaming.json`, `python-streaming.json`,
+`node-streaming.json` or `wasm-streaming.json` with full chunk text, exact delivered
+counts, completion, all issue coordinate systems and error metadata. Buffered
+replays preserve R2 literal EOF/report semantics; progressive replays prove late
+failure, bare/unknown/damaged markers, encoding splits, EOF/oversized prefixes,
+reset, cancellation, closed workspaces and changed saved heads. Strict and
+progressive can intentionally differ; each mode must match the same Core reference.
+
+The report retains both fixture hashes and per-profile counts. Missing runtime
+methods, missing modes/steps/counts/ranges, partial output attached to failures,
+a falsely complete progressive feed or a strict report with text alongside issues
+cannot qualify. CLI success additionally requires both named profiles and modes.
+This is streaming parity for the committed surface, not operation/conversation,
+real server delivery, distributed admission or overall beta.3 freeze certification.
