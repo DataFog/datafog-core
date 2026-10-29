@@ -1,8 +1,9 @@
 # Native Python workspace binding (X6)
 
 Draft implementation against released `0.5.0-beta.2` plus committed Core streaming
-contract #176. The Core snapshot and workspace contract remain provisional; this
-binding does not freeze beta.3 operation or conversation proposals.
+contract #176 and the committed operation-history candidate #162. The Core
+snapshot and workspace contract remain provisional; this binding does not freeze
+beta.3 operation or conversation proposals.
 
 | Core contract | Python surface | Evidence |
 | --- | --- | --- |
@@ -16,7 +17,8 @@ binding does not freeze beta.3 operation or conversation proposals.
 | recall | Core normalized exact recall | Installed Unicode/case fixture passes; shared X8 corpus pending |
 | policy/prepare_policy_changes | Core protected rules and exact choices | Installed explicit-null/protected/cyclic-input tests pass |
 | prepare_recovery | Core staged recovery | Installed restored aliases/settings/fresh-head test passes |
-| operation records/counts/conversations | Not yet exposed by this native slice | Rust/WASM operation draft #147 and conversation #148 require native/all-SDK follow-up |
+| operation records/counts/coverage and explicit outcomes | thin native methods matching committed Core #162 | Mandatory installed operation profile covers staged saves, unknown legacy history and owned content-free results; complete X8 operation qualification remains separate |
+| conversations | Not exposed | Conversation #148 requires a committed Core contract and native/all-SDK follow-up |
 | strict/progressive streaming | `buffered_restore` / `progressive_restore` with owned response handles | Installed split-encoding, late-failure, terminal-count, resource and lifetime tests pass |
 
 The compiled PyO3 classes own Core handles directly. Preparing, querying and
@@ -51,7 +53,9 @@ threads can open the same saved bytes into separate workspaces.
 
 The installed-wheel tests run through the existing Python contract-check entrypoint
 on every supported CI Python version. Shared cross-SDK receipt qualification is
-tracked separately in X8 #171 and has not yet passed for this new wrapper.
+tracked separately in X8 #171. The new operation methods must enter that shared
+profile before whole-X6/C1 qualification; the existing lifecycle/streaming corpus
+does not establish operation or conversation parity.
 
 ## Response restoration
 
@@ -91,3 +95,77 @@ All successful values and typed Core failures are converted after native guards
 drop. Installed regression tests reenter the same response from its exception
 constructor with dynamic JSON decoding forbidden. Python caller-owned bytes,
 lists and returned strings still cannot be promised cryptographic erasure.
+
+
+## Recorded operation history (draft beta.3 dependency)
+
+The native methods call the actual committed Core implementation from #162:
+`create_with_operation`, `prepare_with_operation`,
+`prepare_batch_with_operation`, `prepare_recovery_with_operation`,
+`prepare_outcome`, `operations`, `counts` and `history_coverage`. No Python
+history engine, clock, durable write, logging or automatic failure callback is
+introduced. The [shared operation proposal](../proposals/workspace-operation-records.md)
+owns the provisional format and remaining review questions.
+
+Operation/outcome inputs are exact builtin dictionaries with camelCase fields,
+matching policy input and result conventions:
+
+```python
+from datafog_core import Workspace, WorkspaceInput
+from os import urandom
+from time import time_ns
+
+operation = {"id": urandom(16), "occurredAtMs": time_ns() // 1_000_000}
+workspace = Workspace.create_with_operation(urandom(16), operation)
+# Bootstrap creation is unsaved: the host must persist its exported bundle.
+change = workspace.prepare_batch_with_operation(
+    [WorkspaceInput("ordinary synthetic text", [])],
+    {"id": urandom(16), "occurredAtMs": time_ns() // 1_000_000},
+)
+# Review/approve and durably compare-and-save the candidate before activation.
+# Candidate export, previews and queries never change committed history.
+change.discard()
+workspace.close()
+```
+
+`id` is exactly 16 Python bytes; `occurredAtMs` is an exact integer in
+`0..253402300799999`. Booleans, floats, coercion callbacks, extra fields and custom
+mapping subclasses are rejected. The host supplies IDs and timestamps; timestamps
+are assertions and may go backwards. Core's committed head orders mutations.
+
+`operations()` returns copied dictionaries with `id: list[int]`, bounded `kind`,
+`occurredAtMs: int | None`, `preparedInputs` and `transformedSpans`.
+`counts()` returns the same exact numeric fields as WASM; totals describe retained
+recorded rows. `history_coverage()` explicitly returns `recordedHistoryOnly: True`
+and `preUpgradeHistory: "unknown"` for old history, or `"not_applicable"` when
+the retained create row is present. Reads and result mutation never change saved
+bytes. Unknown historical time stays `None`; it is never replaced with the current
+clock. Metadata is private vault data, even though rows contain no source text.
+
+Explicit preparation records a successful operation even if no mappings change;
+ordinary legacy no-ops still preserve their bytes/head/version. Outcomes accept
+only `copy_confirmed`, `user_cancelled`, `blocked_input` and `restore_blocked`.
+Blocked outcomes require 1–10,000 issues; copy/cancel require zero. Issue details
+and the count are validated but not retained. Each saved blocked outcome counts
+one reported attempt, rather than its issue count. `confirmedHandoffs` stays zero:
+copy confirmation grants no provider-delivery or handoff authority. Merely calling
+restore, observing a failure, exporting/discarding a candidate or failing a save
+never appends an outcome. All new changes use the existing bounded plan registry
+and complete-head save/activation contract.
+
+Actual v1/v2 read/re-export and legacy no-ops remain byte-preserving. An approved
+real save may stage v3, with old history explicitly unknown and original aliases
+and choices preserved. Explain that beta.1/beta.2 cannot reopen upgraded v3 state
+before host approval. Core controls the approved provisional 100,000 retained-row
+ceiling and final 256 recovery slots, along with the snapshot byte limit; the
+binding does not evict history or promise indefinite recovery. New explicit
+contexts report `operation_reused` for known reused IDs. The shared proposal's
+legacy replay split and future conversation schema remain review work.
+
+The mandatory installed operation tests exercise all eight methods without
+feature-detection skips, timestamps/transport errors, atomic batch counts and
+original error indices, read copies, staged no-ops, discarded/failed saves,
+explicit outcomes, recovery, consumed/closed/32-slot lifetimes and v1/v2 upgrades.
+The same public typed calls are checked by mypy and pyright, including negative
+missing/extra fields and invalid outcome kinds. Native host/provenance integration,
+shared operation parity and final v3 compatibility remain separate gates.

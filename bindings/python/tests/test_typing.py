@@ -182,6 +182,24 @@ assert_type(stream_error.delivered["bytes"], int)
 assert_type(stream_error.marker_issues[0]["byteRange"]["start"], int)
 """
 
+VALID += """
+from typing import Literal
+recorded = Workspace.create_with_operation(bytes(16), {"id": bytes(16), "occurredAtMs": 0})
+assert_type(recorded, Workspace)
+assert_type(recorded.operations()[0]["id"], list[int])
+assert_type(recorded.operations()[0]["occurredAtMs"], int | None)
+assert_type(recorded.operations()[0]["preparedInputs"], int)
+assert_type(recorded.operations()[0]["transformedSpans"], int)
+assert_type(recorded.counts()["operations"], int)
+assert_type(recorded.counts()["confirmedHandoffs"], int)
+assert_type(recorded.history_coverage()["recordedHistoryOnly"], Literal[True])
+assert_type(recorded.history_coverage()["preUpgradeHistory"], Literal["unknown", "not_applicable"])
+assert_type(recorded.prepare_with_operation("Jane", [workspace_finding], {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+assert_type(recorded.prepare_batch_with_operation([WorkspaceInput("Jane", [workspace_finding])], {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+assert_type(recorded.prepare_recovery_with_operation({"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+assert_type(recorded.prepare_outcome({"kind": "blocked_input", "issueCount": 1}, {"id": bytes(16), "occurredAtMs": 1}), WorkspacePreparedChange)
+"""
+
 # Each line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
@@ -229,6 +247,18 @@ Workspace.create(bytes(16), bytes(16)).buffered_restore("bytes")  # error
 Workspace.create(bytes(16), bytes(16)).progressive_restore().feed("text")  # error
 Workspace.create(bytes(16), bytes(16)).buffered_restore().feed_utf16([1.5])  # error
 Workspace.create(bytes(16), bytes(16)).buffered_restore().feed_utf16(b"text")  # error
+"""
+
+
+INVALID += """
+Workspace.create_with_operation(bytes(16), {"id": bytes(16)})  # error
+Workspace.create_with_operation(bytes(16), {"id": "bad", "occurredAtMs": 1})  # error
+Workspace.create_with_operation(bytes(16), {"id": bytes(16), "occurredAtMs": "1"})  # error
+Workspace.create_with_operation(bytes(16), {"id": bytes(16), "occurredAtMs": 1, "text": "forbidden"})  # error
+Workspace.create(bytes(16), bytes(16)).prepare_with_operation("", [], bytes(16))  # error
+Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "sent", "issueCount": 0}, {"id": bytes(16), "occurredAtMs": 1})  # error
+Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "user_cancelled", "issueCount": "0"}, {"id": bytes(16), "occurredAtMs": 1})  # error
+Workspace.create(bytes(16), bytes(16)).prepare_outcome({"kind": "copy_confirmed", "issueCount": 0, "text": "forbidden"}, {"id": bytes(16), "occurredAtMs": 1})  # error
 """
 
 
