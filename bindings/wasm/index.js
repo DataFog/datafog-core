@@ -257,7 +257,7 @@ function workspaceFindingsJson(findings) {
     for (const field of ["detectorName", "detectorVersion"]) if (f[field] !== undefined && f[field] !== null) string(f[field]);
     if (f.source !== undefined) string(f.source);
     if (f.needsReview !== undefined && typeof f.needsReview !== "boolean") throw workspaceFailure("invalid_finding");
-    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && typeof f.confidence !== "number")) throw workspaceFailure("invalid_finding");
+    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && (typeof f.confidence !== "number" || !Number.isFinite(f.confidence)))) throw workspaceFailure("invalid_finding");
     if (budget > maximum) throw workspaceFailure("resource_limit");
   }
   try { return structuredJson(findings, true); }
@@ -313,7 +313,7 @@ function workspaceReviewJson(input) {
   }
   const fields=object(input,["text","scannerFindings","userSelections","corrections"],["text","scannerFindings","userSelections"]);
   workspaceText(fields.text,1024*1024);
-  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections ?? []);
+  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections === undefined ? [] : fields.corrections);
   if (scanner.length+user.length+corrections.length>10000) throw workspaceFailure("resource_limit");
   const scannerJson=workspaceFindingsJson(scanner), userJson=workspaceFindingsJson(user);
   let budget=new TextEncoder().encode(scannerJson).length+new TextEncoder().encode(userJson).length+new TextEncoder().encode(JSON.stringify(fields.text)).length+128;

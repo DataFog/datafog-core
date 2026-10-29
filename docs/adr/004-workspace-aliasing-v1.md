@@ -168,7 +168,7 @@ measure:
 
 ### Workspace snapshot
 
-The beta.2 policy draft (#145) introduces candidate version 2 with actual policy
+The merged beta.2 policy implementation (#145/#166) introduces version 2 with actual policy
 and choices at keys 6/7; version 1 had only a fixed `synthetic_v1` placeholder at
 key 6. Sid approved byte-exact v1 read/export/no-op behavior and an explicit saved
 upgrade on a real mutation/recovery. Before approval/save the host must explain
@@ -176,8 +176,8 @@ that beta.1 cannot open an upgraded vault. Discard and failed saves do not upgra
 old backup files stay unchanged. New workspaces bootstrap version 2.
 
 The [policy/choice proposal](../proposals/workspace-policy-choices.md) defines that
-candidate layout. The separate #162 operation draft must rebase/version coherently
-rather than ship a second meaning of version 2. Keys 8–10 below are future target
+candidate layout. The separate #162 operation draft must integrate the merged policy normally and choose a coherent subsequent
+version, rather than ship a second meaning of version 2. Keys 8–10 below are future target
 contents, not implemented policy-v2 fields. Snapshot freeze remains the pilot gate.
 Target contents:
 
@@ -204,8 +204,22 @@ Its round-trip test must cover every key before the freeze.
 - **Extension repo.** The V1 Chrome extension lives in its own repository.
   `examples/workspace-extension` stays in Core as a non-shipping conformance
   harness and gets no new product features.
-- **WASM contract.** The WASM workspace API is the contract between the two
-  repositories. It is versioned and frozen together with the snapshot.
+- **SDK contract.** WASM is the extension boundary. Beta.3 adds native in-process
+  Python ([#167](https://github.com/DataFog/datafog-core/issues/167)) and Node
+  ([#168](https://github.com/DataFog/datafog-core/issues/168)) workspace APIs;
+  fail-closed cross-SDK parity ([#171](https://github.com/DataFog/datafog-core/issues/171))
+  and G3 ([#154](https://github.com/DataFog/datafog-core/issues/154)) freeze all
+  SDKs together with the supported snapshot versions.
+- **Streaming and server hosts.** Beta.3 streaming restoration
+  ([#169](https://github.com/DataFog/datafog-core/issues/169)) requires a reviewed
+  atomicity contract before implementation: progressive output cannot preserve
+  whole-response all-or-nothing behavior after release. Server qualification
+  ([#170](https://github.com/DataFog/datafog-core/issues/170)) covers durable
+  complete-head CAS, tenant/request ownership and worker retries. Stateless
+  workers require shared durable mappings or authenticated client-carried
+  encrypted snapshots; chat history alone cannot reconstruct mappings. G4
+  ([#153](https://github.com/DataFog/datafog-core/issues/153)) includes server
+  keys/storage. These additions do not expand beta.2 scope.
 - **Vault interface.** The extension puts IndexedDB and Web Crypto behind one
   interface: open, save-if-head-matches, lock, export, import. CI tests through
   it, and a later native app replaces it with a Keychain-backed module.
@@ -223,10 +237,10 @@ saves no mappings.
 - the statements product (below)
 - Excel, OCR and other file types, pending the file-upload investigation
 - remembered 7/30-day unlock
-- Python and Node workspace bindings
 - sites other than ChatGPT
 - merges and undoing them
-- the event log
+- a user-facing event-log product (the beta.3 minimal operation records remain in scope)
+- lossless operation-history compression ([#165](https://github.com/DataFog/datafog-core/issues/165)); retain every operation record
 
 ### Deferred: the statements product
 

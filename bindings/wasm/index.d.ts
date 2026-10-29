@@ -207,9 +207,9 @@ export interface WorkspaceFinding {
   readonly entityType: string;
   readonly matchedText: string;
   readonly range: TextRange & { readonly unit: "utf8_bytes" };
-  readonly confidence?: number;
-  readonly detectorName?: string;
-  readonly detectorVersion?: string;
+  readonly confidence?: number | null;
+  readonly detectorName?: string | null;
+  readonly detectorVersion?: string | null;
   /** Defaults to scanner for existing callers; not inferred from detectorName. */
   readonly source?: WorkspaceFindingSource;
   /** Defaults to true. False does not waive host approval/save/activation. */
