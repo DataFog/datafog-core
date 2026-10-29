@@ -155,6 +155,20 @@ and an empty destination; it never overwrites or merges an occupied workspace.
 `prepareRecovery` stages a fresh saved head and grants no text-handoff permission.
 Aliases issued after an older backup remain unknown after its restoration.
 
+## Close and reopen
+
+On lock or an invalidating edit, stop granting handoff permission immediately,
+clear temporary views and discard the affected plans. `workspace.close()`
+invalidates that runtime's plans. Reopen with `Workspace.openBundle()` only after
+the host decrypts and validates the saved vault record, then clear the temporary
+bundle bytes.
+
+`await model.close()` is idempotent after success and rejects with
+`model_session_busy` during inference. Handle that result explicitly; ignore late
+results after an approval-generation change, then close when inference finishes,
+or destroy the owning context if a hard stop is required. Open a new model session
+explicitly when needed. A model session is not persisted with the encrypted vault.
+
 ## Beta and pilot boundaries
 
 Pin the exact Beta A package. Snapshot schema 1 and the workspace contract remain
