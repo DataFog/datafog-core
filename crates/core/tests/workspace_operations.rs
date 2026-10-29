@@ -2,7 +2,7 @@ use datafog_core::{
     TextRange,
     workspace::{
         ErrorCode, MAX_OPERATION_TIME_MS, OperationContext, OperationKind, OperationOutcome,
-        OutcomeKind, Workspace, WorkspaceFinding, WorkspaceInput,
+        OutcomeKind, PreUpgradeHistory, Workspace, WorkspaceFinding, WorkspaceInput,
     },
 };
 fn operation(id: u8, time: u64) -> OperationContext {
@@ -343,4 +343,58 @@ fn policy_v2_bytes_noops_discard_and_failed_activation_are_preserved_before_v3_u
         workspace.export_bundle().unwrap(),
         upgraded.export_bundle().unwrap()
     );
+}
+
+#[test]
+fn coverage_never_invents_unknown_prior_history_or_changes_legacy_bytes() {
+    let mut created = Workspace::create([1; 16], [2; 16]).unwrap();
+    let coverage = created.history_coverage().unwrap();
+    assert!(coverage.recorded_history_only);
+    assert_eq!(
+        coverage.pre_upgrade_history,
+        PreUpgradeHistory::NotApplicable
+    );
+    created.close();
+    assert_eq!(
+        created.history_coverage().err().unwrap().code,
+        ErrorCode::ClosedWorkspace
+    );
+    for fixture in [
+        include_str!("../../../fixtures/workspace/policy-v2.json"),
+        include_str!("../../../fixtures/workspace/counters.json"),
+    ] {
+        let data: serde_json::Value = serde_json::from_str(fixture).unwrap();
+        let value = if data.get("bundleHex").is_some() {
+            &data
+        } else {
+            &data["high"]
+        };
+        let hex = value["bundleHex"].as_str().unwrap();
+        let bytes: Vec<_> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        let mut legacy = Workspace::open_bundle(&bytes).unwrap();
+        assert!(legacy.history_coverage().unwrap().recorded_history_only);
+        assert_eq!(
+            legacy.history_coverage().unwrap().pre_upgrade_history,
+            PreUpgradeHistory::Unknown
+        );
+        assert_eq!(legacy.counts().unwrap().operations, 0);
+        assert_eq!(legacy.export_bundle().unwrap(), bytes);
+        // A staged recovery records only its real new row; discarding preserves bytes.
+        if legacy.head().unwrap().revision != u64::MAX {
+            let mut plan = legacy.prepare_recovery([210; 16]).unwrap();
+            let candidate =
+                Workspace::open_bundle(plan.export_candidate_bundle().unwrap()).unwrap();
+            assert_eq!(
+                candidate.history_coverage().unwrap().pre_upgrade_history,
+                PreUpgradeHistory::Unknown
+            );
+            assert_eq!(candidate.counts().unwrap().operations, 1);
+            plan.discard();
+            assert_eq!(legacy.export_bundle().unwrap(), bytes);
+        }
+        legacy.close();
+    }
 }

@@ -2,28 +2,84 @@
 use super::*;
 use minicbor::{Decoder, Encoder};
 
-struct BoundedWriter(Vec<u8>);
+struct BoundedWriter {
+    bytes: Zeroizing<Vec<u8>>,
+    limit: usize,
+}
 impl minicbor::encode::Write for BoundedWriter {
     type Error = ();
     fn write_all(&mut self, bytes: &[u8]) -> std::result::Result<(), ()> {
-        if self
-            .0
-            .len()
-            .checked_add(bytes.len())
-            .is_none_or(|n| n > MAX_BUNDLE_BYTES)
-        {
-            return Err(());
-        }
-        self.0.try_reserve(bytes.len()).map_err(|_| ())?;
-        self.0.extend_from_slice(bytes);
-        Ok(())
+        // Encoding can fail at the admission limit. Reuse the reviewed storage
+        // helper so failed or reallocated private plaintext is wiped as well.
+        private_bytes::append(&mut self.bytes, bytes, self.limit).map_err(|_| ())
     }
 }
-
-pub(super) fn encode(state: &State) -> Result<Vec<u8>> {
-    let mut encoder = Encoder::new(BoundedWriter(Vec::new()));
+fn encode_with_limit(state: &State, limit: usize) -> Result<Vec<u8>> {
+    let mut encoder = Encoder::new(BoundedWriter {
+        bytes: Zeroizing::new(Vec::new()),
+        limit,
+    });
     encode_into(state, &mut encoder).map_err(|_| error(ErrorCode::ResourceLimit))?;
-    Ok(encoder.into_writer().0)
+    let mut writer = encoder.into_writer();
+    Ok(std::mem::take(&mut *writer.bytes))
+}
+pub(super) fn encode(state: &State) -> Result<Vec<u8>> {
+    encode_with_limit(state, MAX_BUNDLE_BYTES)
+}
+
+/// Reserve applies only to new ordinary records, never reads or byte-preserving no-ops.
+pub(super) fn encode_for_record(state: &State, recovery: bool) -> Result<Vec<u8>> {
+    let limit = if recovery {
+        MAX_BUNDLE_BYTES
+    } else {
+        MAX_BUNDLE_BYTES - recovery_byte_reserve()?
+    };
+    encode_with_limit(state, limit)
+}
+
+fn encode_operation<W: minicbor::encode::Write>(
+    operation: &OperationRecord,
+    e: &mut Encoder<W>,
+) -> std::result::Result<(), minicbor::encode::Error<W::Error>> {
+    e.array(5)?
+        .bytes(&operation.id)?
+        .u8(operation.kind.code())?;
+    if let Some(time) = operation.occurred_at_ms {
+        e.u64(time)?;
+    } else {
+        e.null()?;
+    }
+    e.u64(operation.prepared_inputs)?
+        .u64(operation.transformed_spans)?;
+    Ok(())
+}
+
+/// Current v3 recovery rows plus conservative full head/array/count headers.
+/// Future conversation fields (#148/key9) must extend this wire calculation.
+pub(super) fn recovery_byte_reserve() -> Result<usize> {
+    let mut row = Encoder::new(Vec::new());
+    encode_operation(
+        &OperationRecord {
+            id: [0; 16],
+            kind: OperationKind::Recovery,
+            occurred_at_ms: Some(MAX_OPERATION_TIME_MS),
+            prepared_inputs: 0,
+            transformed_spans: 0,
+        },
+        &mut row,
+    )
+    .map_err(|_| error(ErrorCode::ResourceLimit))?;
+    let mut headers = Encoder::new(Vec::new());
+    headers
+        .u64(u64::MAX)
+        .and_then(|e| e.array(MAX_OPERATIONS as u64))
+        .and_then(|e| e.u64(MAX_OPERATIONS as u64))
+        .map_err(|_| error(ErrorCode::ResourceLimit))?;
+    row.writer()
+        .len()
+        .checked_mul(RESERVED_RECOVERY_OPERATIONS)
+        .and_then(|rows| rows.checked_add(headers.writer().len()))
+        .ok_or_else(|| error(ErrorCode::ResourceLimit))
 }
 
 fn encode_into(
@@ -82,16 +138,7 @@ fn encode_into(
     if state.snapshot_version == 3 {
         e.u8(8)?.array(state.operations.len() as u64)?;
         for operation in &state.operations {
-            e.array(5)?
-                .bytes(&operation.id)?
-                .u8(operation.kind.code())?;
-            if let Some(time) = operation.occurred_at_ms {
-                e.u64(time)?;
-            } else {
-                e.null()?;
-            }
-            e.u64(operation.prepared_inputs)?
-                .u64(operation.transformed_spans)?;
+            encode_operation(operation, e)?;
         }
         let counts = state.operation_counts;
         e.u8(10)?
@@ -291,6 +338,9 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             .array()?
             .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
         require(count > 0 && count <= MAX_OPERATIONS as u64)?;
+        operations
+            .try_reserve_exact(count as usize)
+            .map_err(|_| error(ErrorCode::ResourceLimit))?;
         for _ in 0..count {
             array(&mut d, 5)?;
             let operation_id = id(&mut d)?;
@@ -636,8 +686,7 @@ mod operation_tests {
             .unwrap();
         assert_eq!(failure.code, ErrorCode::ResourceLimit);
         assert_eq!(workspace.export_bundle().unwrap(), saved);
-        // This is a documented defect in the existing proposed cap/accounting
-        // combination, not an approved launch behavior or a reason to evict IDs.
+        // Recovery is finite at the actual hard ceiling; reads/export remain valid.
         assert_eq!(
             workspace.prepare_recovery([10; 16]).err().unwrap().code,
             ErrorCode::ResourceLimit
@@ -669,5 +718,282 @@ mod operation_tests {
                 .code,
             ErrorCode::OperationReused
         );
+    }
+    fn filled_history(count: usize) -> State {
+        let mut value = state();
+        value.operations = (0..count)
+            .map(|index| OperationRecord {
+                id: ((index + 1) as u128).to_be_bytes(),
+                kind: if index == 0 {
+                    OperationKind::Create
+                } else {
+                    OperationKind::Prepare
+                },
+                occurred_at_ms: None,
+                prepared_inputs: u64::from(index != 0),
+                transformed_spans: 0,
+            })
+            .collect();
+        value.head = Head {
+            revision: (count - 1) as u64,
+            commit_id: value.operations[count - 1].id,
+        };
+        value.operation_counts = operations::summarize(&value.operations).unwrap();
+        value
+    }
+    fn adopt(workspace: &mut Workspace, plan: &mut PreparedChange) {
+        let saved = plan.export_candidate_bundle().unwrap();
+        let checked = Workspace::open_bundle(saved).unwrap();
+        workspace
+            .activate_saved(plan, plan.expected_head().unwrap(), checked.head().unwrap())
+            .unwrap();
+    }
+    #[test]
+    fn ordinary_ceiling_preserves_all_rows_and_reserves_recovery_only_slots() {
+        assert_eq!(MAX_OPERATIONS, 100_000);
+        assert_eq!(MAX_ORDINARY_OPERATIONS, 99_744);
+        assert_eq!(MAX_OPERATIONS - MAX_ORDINARY_OPERATIONS, 256);
+        let bytes = encode(&filled_history(MAX_ORDINARY_OPERATIONS - 1)).unwrap();
+        let mut workspace = Workspace::open_bundle(&bytes).unwrap();
+        let mut ordinary = workspace
+            .prepare_with_operation(
+                "",
+                &[],
+                OperationContext {
+                    id: [200; 16],
+                    occurred_at_ms: 0,
+                },
+            )
+            .unwrap();
+        assert_eq!(workspace.export_bundle().unwrap(), bytes);
+        adopt(&mut workspace, &mut ordinary);
+        let full = workspace.export_bundle().unwrap();
+        assert_eq!(
+            workspace.operations().unwrap().len(),
+            MAX_ORDINARY_OPERATIONS
+        );
+        assert_eq!(workspace.operations().unwrap()[0].id, 1u128.to_be_bytes());
+        assert_eq!(
+            workspace
+                .prepare_with_operation(
+                    "",
+                    &[],
+                    OperationContext {
+                        id: [201; 16],
+                        occurred_at_ms: 0
+                    }
+                )
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
+        // Legacy no-change calls are not new records or implicit upgrades.
+        let mut no_op = workspace.prepare("ordinary", &[], [202; 16]).unwrap();
+        assert_eq!(no_op.export_candidate_bundle().unwrap(), full);
+        adopt(&mut workspace, &mut no_op);
+        let mut recovery = workspace.prepare_recovery([203; 16]).unwrap();
+        assert_eq!(workspace.export_bundle().unwrap(), full);
+        adopt(&mut workspace, &mut recovery);
+        assert_eq!(
+            workspace.operations().unwrap().len(),
+            MAX_ORDINARY_OPERATIONS + 1
+        );
+        assert_eq!(
+            workspace.operations().unwrap().last().unwrap().kind,
+            OperationKind::Recovery
+        );
+        assert_eq!(workspace.operations().unwrap()[0].id, 1u128.to_be_bytes());
+        assert_eq!(
+            workspace
+                .prepare_with_operation(
+                    "",
+                    &[],
+                    OperationContext {
+                        id: [204; 16],
+                        occurred_at_ms: 0
+                    }
+                )
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
+        let reopened = Workspace::open_bundle(&workspace.export_bundle().unwrap()).unwrap();
+        assert_eq!(reopened.counts().unwrap(), workspace.counts().unwrap());
+    }
+    #[test]
+    fn last_recovery_slot_is_usable_but_hard_ceiling_never_evicts_history() {
+        let bytes = encode(&filled_history(MAX_OPERATIONS - 1)).unwrap();
+        let mut workspace = Workspace::open_bundle(&bytes).unwrap();
+        let mut recovery = workspace
+            .prepare_recovery_with_operation(OperationContext {
+                id: [211; 16],
+                occurred_at_ms: MAX_OPERATION_TIME_MS,
+            })
+            .unwrap();
+        adopt(&mut workspace, &mut recovery);
+        let saved = workspace.export_bundle().unwrap();
+        assert_eq!(
+            workspace.counts().unwrap().operations,
+            MAX_OPERATIONS as u64
+        );
+        assert_eq!(workspace.operations().unwrap()[0].id, 1u128.to_be_bytes());
+        assert_eq!(
+            workspace.operations().unwrap().last().unwrap().id,
+            [211; 16]
+        );
+        assert_eq!(
+            workspace.prepare_recovery([212; 16]).err().unwrap().code,
+            ErrorCode::ResourceLimit
+        );
+        assert_eq!(
+            workspace
+                .prepare_with_operation(
+                    "",
+                    &[],
+                    OperationContext {
+                        id: [213; 16],
+                        occurred_at_ms: 0
+                    }
+                )
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::ResourceLimit
+        );
+        assert_eq!(
+            workspace.restore("ordinary response").unwrap(),
+            "ordinary response"
+        );
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
+        assert_eq!(
+            Workspace::open_bundle(&saved)
+                .unwrap()
+                .operations()
+                .unwrap()
+                .len(),
+            MAX_OPERATIONS
+        );
+    }
+    #[test]
+    fn recovery_byte_reserve_is_derived_from_supported_wire_and_covers_all_reserved_rows() {
+        assert_eq!(recovery_byte_reserve().unwrap(), 7_699);
+        let mut value = state();
+        let before = encode(&value).unwrap().len();
+        for index in 0..RESERVED_RECOVERY_OPERATIONS {
+            let id = ((index + 1000) as u128).to_be_bytes();
+            value.head.revision += 1;
+            value.head.commit_id = id;
+            value
+                .record_operation(OperationRecord {
+                    id,
+                    kind: OperationKind::Recovery,
+                    occurred_at_ms: Some(MAX_OPERATION_TIME_MS),
+                    prepared_inputs: 0,
+                    transformed_spans: 0,
+                })
+                .unwrap();
+        }
+        let after = encode(&value).unwrap();
+        assert!(after.len() - before <= recovery_byte_reserve().unwrap());
+        assert_eq!(
+            decode(&after).unwrap().operations.len(),
+            RESERVED_RECOVERY_OPERATIONS + 1
+        );
+    }
+    fn padded_policy_v2(target: usize) -> State {
+        let mut value = state();
+        value.snapshot_version = 2;
+        value.operations.clear();
+        value.operation_counts = OperationCounts::default();
+        value.head = Head {
+            revision: 100,
+            commit_id: [250; 16],
+        };
+        for index in 0..17 {
+            let length = if index == 16 { 100_000 } else { 1_000_000 };
+            let display = format!("{index:02}{}", "x".repeat(length - 2));
+            value.entries.insert(
+                Identity {
+                    entity_type: "CUSTOM".into(),
+                    key: identity_key(&display),
+                },
+                Entry {
+                    display,
+                    code: format!("{:06}", index + 1),
+                    issuance: [(index + 10) as u8; 16],
+                    counter: (index + 1) as u64,
+                },
+            );
+        }
+        value.counters.insert("CUSTOM".into(), 17);
+        let initial = encode(&value).unwrap().len();
+        let (identity, mut entry) = value.entries.pop_last().unwrap();
+        let length = entry.display.len() + target - initial;
+        assert!((65_536..=MAX_SOURCE_BYTES).contains(&length));
+        entry.display = format!("16{}", "x".repeat(length - 2));
+        value.entries.insert(
+            Identity {
+                entity_type: identity.entity_type.clone(),
+                key: identity_key(&entry.display),
+            },
+            entry,
+        );
+        assert_eq!(encode(&value).unwrap().len(), target);
+        value
+    }
+    #[test]
+    fn byte_reserve_blocks_new_records_without_shrinking_valid_legacy_reads() {
+        for target in [
+            MAX_BUNDLE_BYTES - recovery_byte_reserve().unwrap() + 1,
+            MAX_BUNDLE_BYTES,
+        ] {
+            let value = padded_policy_v2(target);
+            let bytes = encode(&value).unwrap();
+            drop(value);
+            let workspace = Workspace::open_bundle(&bytes).unwrap();
+            assert_eq!(
+                workspace.history_coverage().unwrap().pre_upgrade_history,
+                PreUpgradeHistory::Unknown
+            );
+            assert_eq!(workspace.export_bundle().unwrap(), bytes);
+            assert_eq!(
+                workspace
+                    .prepare_with_operation(
+                        "",
+                        &[],
+                        OperationContext {
+                            id: [222; 16],
+                            occurred_at_ms: 0
+                        }
+                    )
+                    .err()
+                    .unwrap()
+                    .code,
+                ErrorCode::ResourceLimit
+            );
+            let mut no_op = workspace.prepare("ordinary", &[], [223; 16]).unwrap();
+            assert_eq!(no_op.export_candidate_bundle().unwrap(), bytes);
+            no_op.discard();
+            let recovery = workspace.prepare_recovery([224; 16]);
+            if target == MAX_BUNDLE_BYTES {
+                assert_eq!(recovery.err().unwrap().code, ErrorCode::ResourceLimit);
+            } else {
+                let change = recovery.unwrap();
+                let recovered =
+                    Workspace::open_bundle(change.export_candidate_bundle().unwrap()).unwrap();
+                assert_eq!(recovered.counts().unwrap().operations, 1);
+                assert_eq!(
+                    recovered.history_coverage().unwrap().pre_upgrade_history,
+                    PreUpgradeHistory::Unknown
+                );
+            }
+            assert_eq!(
+                workspace.restore("ordinary response").unwrap(),
+                "ordinary response"
+            );
+            assert_eq!(workspace.export_bundle().unwrap(), bytes);
+        }
     }
 }

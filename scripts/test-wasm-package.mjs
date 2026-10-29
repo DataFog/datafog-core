@@ -876,8 +876,9 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
 
   await page.evaluate(async () => {
     const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
-    const { verifyWorkspace } = await import("/workspace-conformance.mjs");
+    const { verifyWorkspace, verifyWorkspaceOperations } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    await verifyWorkspaceOperations(workspaceApi);
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");

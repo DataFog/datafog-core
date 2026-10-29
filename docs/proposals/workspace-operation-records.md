@@ -40,12 +40,12 @@ old weaker password wrapper.
 
 ### Capacity and recovery
 
-The code retains the original **10,000-record draft limit only as a candidate**.
-It is not the selected launch limit. Reaching it fails without dropping IDs or
-committed data. This combination has an important defect: recovery appends a
-record too, so a backup already at the record limit cannot complete normal
-fresh-head import. The regression test makes that failure explicit; it is not an
-approved shipping behavior. Read/export still work.
+The draft now enforces the approved count boundaries without evicting IDs. New
+ordinary records stop at 99,744 total retained rows; only recovery may enter the
+final 256 slots. At 100,000, further recovery fails explicitly while read/export
+remain available. Legacy byte-preserving no-ops do not consume a slot. Known
+record-producing calls preflight the count before cloning; legacy no-op detection
+retains the existing Core semantics before deciding whether a record is needed.
 
 **Approved October 29:** a provisional **100,000-record hard ceiling**, with the final 256
 slots reserved for recovery and a small encoded-byte reserve for recovery
@@ -54,10 +54,19 @@ recovery could still retain every row and append its own record. This is a
 bounded beta proposal, not unlimited history or an indefinite-recovery promise.
 At the hard record/byte ceiling, writes including further recovery still fail;
 read/export must remain available and the host must make the limit visible.
-The byte reserve must be derived from the final #148 wire schema, not guessed.
-The count ceiling and 256-slot recovery reserve are approved; this draft
-still needs their implementation and boundary/browser/recovery qualification.
-The encoded-byte reserve must match the supported final wire format.
+The current v3 encoder derives a conservative **7,699-byte reserve**: 256 maximum
+30-byte recovery rows plus full-width head-revision, operation-array and operation-
+count headers (19 bytes). Ordinary candidate encoding stops below that reserve;
+recovery can use the actual 16 MiB cap. Encoding reuses the reviewed bounded private
+storage helper so rejection/reallocation wipes intermediate plaintext. Valid older
+vaults already near the byte cap remain readable/exportable and may hit the hard
+byte limit before all recovery slots are usable. No data is trimmed to make room.
+
+#148's future key9 conversation payload must remain unchanged by recovery, or its
+extra recovery growth must extend this calculation. The conversation owner plans
+that invariant, but the joint final v3 wire still requires coordinated tests before
+G3 freeze. Count, byte-boundary and coverage tests pass; actual capacity-browser
+and allocation qualification are still being refreshed.
 
 Why this recommendation: 10,000 rows are inexpensive but can be exhausted after
 5,000 round trips if an application records preparation and copy confirmation.
@@ -78,13 +87,15 @@ lifetime totals. No source value, identity key, URL, arbitrary message or free-f
 context enters the row. This approval does not choose the specific action/kind,
 timestamp, replay, capacity or recovery behaviors discussed below.
 
-The candidate keeps legacy no-op bytes and uses explicit timed calls to record a
-successful no-change preparation. Real legacy preparation/recovery mutations
-record unknown (`null`) time. A batch records one operation, its input-member
+**Also approved October 29:** reads, restores and failures never mutate saved state.
+A host may deliberately save a content-free failure or unchanged-preparation row
+through prepare/export/durable-save/activate. Legacy calls without a timestamp
+record unknown (`null`) time rather than inventing a historical clock. Legacy
+no-op bytes remain unchanged. A batch records one operation, its input-member
 count and replaced occurrences, including repeated values. Current policy saves
 also append a proposed `policy_change` row with zero input/span deltas and unknown
 time; combined review delegates to the same preparation path. These accounting
-choices remain proposals. A policy no-op stays byte-preserving.
+details remain under technical compatibility review. A policy no-op stays byte-preserving.
 
 Counts describe **recorded covered history**, not all lifetime activity. Older
 vaults have unknown prior history, and successful legacy no-change preparations
@@ -142,6 +153,17 @@ shape, kinds, IDs, times, deltas, complete heads, resource bounds and recomputed
 counts. Full create-based history must account for its revisions. Upgraded
 v1/v2 history starts after an unknown prefix. Mappings/settings retain their
 existing first spelling, aliases, counters and protection rules.
+
+The read-only `historyCoverage()` (Rust `history_coverage`) view returns
+`recordedHistoryOnly: true` and `preUpgradeHistory: "unknown"` for v1/v2 or an
+upgraded history without its original create row. A new retained create-based
+history reports `"not_applicable"`. This never claims that legacy no-op calls or
+external activity were observed, and querying it never changes snapshot bytes.
+
+Native Python/Node do not yet expose the operation proposal calls. The existing
+shared workspace foundation remains mandatory for their installed tests; the new
+operation profile is separately mandatory in WASM and MV3. Native operation
+bindings and the all-SDK operation profile are follow-on work before C1/G3 is done.
 
 ## Measured capacity experiments
 

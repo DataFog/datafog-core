@@ -5,8 +5,9 @@
 mod codec;
 mod operations;
 pub use operations::{
-    MAX_OPERATION_TIME_MS, MAX_OPERATIONS, OperationContext, OperationCounts, OperationKind,
-    OperationOutcome, OperationRecord, OutcomeKind,
+    MAX_OPERATION_TIME_MS, MAX_OPERATIONS, MAX_ORDINARY_OPERATIONS, OperationContext,
+    OperationCounts, OperationHistoryCoverage, OperationKind, OperationOutcome, OperationRecord,
+    OutcomeKind, PreUpgradeHistory, RESERVED_RECOVERY_OPERATIONS,
 };
 mod policy;
 pub use policy::{
@@ -575,6 +576,7 @@ impl Workspace {
     ) -> Result<PreparedChange> {
         let state = self.state()?;
         state.validate_operation_id(operation_id, legacy)?;
+        state.admit_record(true)?;
         let mut candidate = state.clone();
         candidate.head = Head {
             revision: state
@@ -591,7 +593,7 @@ impl Workspace {
             prepared_inputs: 0,
             transformed_spans: 0,
         })?;
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(codec::encode_for_record(&candidate, true)?);
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
@@ -655,6 +657,9 @@ impl Workspace {
             }
         }
         state.validate_operation_id(operation_id, !explicit)?;
+        if explicit {
+            state.admit_record(false)?;
+        }
         let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
@@ -706,7 +711,11 @@ impl Workspace {
                     .sum(),
             })?;
         }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(if candidate.head != state.head {
+            codec::encode_for_record(&candidate, false)?
+        } else {
+            codec::encode(&candidate)?
+        });
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),

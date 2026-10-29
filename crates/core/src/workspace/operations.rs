@@ -1,8 +1,11 @@
 //! Proposed content-free history. Host timestamps and outcomes are assertions, not authority.
 use super::*;
 
-/// Existing draft candidate for measurement, NOT an approved launch capacity.
-pub const MAX_OPERATIONS: usize = 10_000;
+/// Approved provisional retained-history ceiling; records are never evicted.
+pub const MAX_OPERATIONS: usize = 100_000;
+/// Only recovery may consume these final slots. Recovery still has a finite ceiling.
+pub const RESERVED_RECOVERY_OPERATIONS: usize = 256;
+pub const MAX_ORDINARY_OPERATIONS: usize = MAX_OPERATIONS - RESERVED_RECOVERY_OPERATIONS;
 pub const MAX_OPERATION_TIME_MS: u64 = 253_402_300_799_999;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +83,20 @@ pub struct OperationCounts {
     pub confirmed_handoffs: u64,
     pub reported_blocked_attempts: u64,
 }
+/// Describes prior history without inventing counts or historical timestamps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreUpgradeHistory {
+    Unknown,
+    NotApplicable,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationHistoryCoverage {
+    pub recorded_history_only: bool,
+    pub pre_upgrade_history: PreUpgradeHistory,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutcomeKind {
     CopyConfirmed,
@@ -152,10 +169,19 @@ impl State {
         }
         Ok(())
     }
-    pub(super) fn record_operation(&mut self, operation: OperationRecord) -> Result<()> {
-        if self.operations.len() >= MAX_OPERATIONS {
+    pub(super) fn admit_record(&self, recovery: bool) -> Result<()> {
+        let limit = if recovery {
+            MAX_OPERATIONS
+        } else {
+            MAX_ORDINARY_OPERATIONS
+        };
+        if self.operations.len() >= limit {
             return Err(error(ErrorCode::ResourceLimit));
         }
+        Ok(())
+    }
+    pub(super) fn record_operation(&mut self, operation: OperationRecord) -> Result<()> {
+        self.admit_record(operation.kind == OperationKind::Recovery)?;
         self.operations
             .try_reserve_exact(1)
             .map_err(|_| error(ErrorCode::ResourceLimit))?;
@@ -183,6 +209,22 @@ impl Workspace {
     }
     pub fn operations(&self) -> Result<&[OperationRecord]> {
         Ok(&self.state()?.operations)
+    }
+    /// Counts always describe recorded rows; old unrecorded activity is not a lifetime total.
+    pub fn history_coverage(&self) -> Result<OperationHistoryCoverage> {
+        let state = self.state()?;
+        Ok(OperationHistoryCoverage {
+            recorded_history_only: true,
+            pre_upgrade_history: if state
+                .operations
+                .first()
+                .is_some_and(|record| record.kind == OperationKind::Create)
+            {
+                PreUpgradeHistory::NotApplicable
+            } else {
+                PreUpgradeHistory::Unknown
+            },
+        })
     }
     pub fn counts(&self) -> Result<OperationCounts> {
         Ok(self.state()?.operation_counts)
@@ -229,6 +271,7 @@ impl Workspace {
         if outcome.issue_count > MAX_FINDINGS || blocked != (outcome.issue_count > 0) {
             return Err(error(ErrorCode::InvalidOperation));
         }
+        state.admit_record(false)?;
         let mut candidate = state.clone();
         candidate.head = Head {
             revision: state
@@ -245,7 +288,7 @@ impl Workspace {
             prepared_inputs: 0,
             transformed_spans: 0,
         })?;
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(codec::encode_for_record(&candidate, false)?);
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),

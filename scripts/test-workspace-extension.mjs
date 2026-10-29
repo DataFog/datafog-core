@@ -332,8 +332,9 @@ try {
   const browserPage = await launch("wasm-contract");
   const reviewQualification = await browserPage.evaluate(async counters => {
     const api = await import("./vendor/package/index.js");
-    const { verifyWorkspace } = await import("./workspace-conformance.mjs");
+    const { verifyWorkspace, verifyWorkspaceOperations } = await import("./workspace-conformance.mjs");
     const qualified=await verifyWorkspace(api, counters);
+    await verifyWorkspaceOperations(api);
     const {verifyWorkspacePolicy} = await import("./workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(api, counters);
     return qualified;

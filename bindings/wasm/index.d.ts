@@ -338,6 +338,10 @@ export interface WorkspaceOperationRecord {
   readonly preparedInputs: number;
   readonly transformedSpans: number;
 }
+export interface WorkspaceHistoryCoverage {
+  readonly recordedHistoryOnly: true;
+  readonly preUpgradeHistory: "unknown" | "not_applicable";
+}
 export interface WorkspaceCounts {
   readonly operations: number; readonly preparedInputs: number; readonly transformedSpans: number;
   readonly confirmedHandoffs: number; readonly reportedBlockedAttempts: number;
@@ -389,6 +393,7 @@ export class Workspace {
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   operations(): readonly WorkspaceOperationRecord[];
   counts(): WorkspaceCounts;
+  historyCoverage(): WorkspaceHistoryCoverage;
   prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareWithOperation(text: string, findings: readonly WorkspaceFinding[], operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareBatchWithOperation(inputs: readonly WorkspaceInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;

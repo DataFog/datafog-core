@@ -294,6 +294,10 @@ impl WasmWorkspace {
         })).collect();
         Ok(json!(values).to_string())
     }
+    pub fn history_coverage(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.inner.history_coverage().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::ResourceLimit))
+    }
     pub fn counts(&self) -> Result<String, JsValue> {
         let counts = self.inner.counts().map_err(from_error)?;
         Ok(json!({"operations": counts.operations, "preparedInputs": counts.prepared_inputs,

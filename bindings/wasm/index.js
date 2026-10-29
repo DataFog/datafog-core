@@ -437,6 +437,7 @@ export class Workspace {
   }
   operations() { return JSON.parse(workspaceCall(this.#state, "operations")); }
   counts() { return JSON.parse(workspaceCall(this.#state, "counts")); }
+  historyCoverage() { return JSON.parse(workspaceCall(this.#state, "history_coverage")); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }
   prepareRecovery(operationId) {
     workspaceBytes(operationId, 16, true);

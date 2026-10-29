@@ -373,7 +373,11 @@ impl Workspace {
                 transformed_spans: 0,
             })?;
         }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(if changed {
+            codec::encode_for_record(&candidate, false)?
+        } else {
+            codec::encode(&candidate)?
+        });
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),

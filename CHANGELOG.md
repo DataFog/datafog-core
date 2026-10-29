@@ -28,10 +28,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- Proposed content-free workspace operation records and verified covered-history
-  counts, staged through saved transactions in a distinct v3 snapshot while
-  preserving policy-v2 and legacy-v1 reads and no-ops. Capacity, replay-error and
-  accounting choices remain under review for `0.5.0-beta.3`.
+- Proposed content-free workspace records and recorded-history counts use staged
+  v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
+  Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
+  remaining event/replay accounting stays under review for `0.5.0-beta.3`.
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and
