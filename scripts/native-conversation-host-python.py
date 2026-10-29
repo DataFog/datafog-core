@@ -1,6 +1,7 @@
 """Installed Python SDK + encrypted SQLite C2 qualification; controlled synthetic callbacks only."""
 from __future__ import annotations
 import hashlib
+import copy
 import json
 import multiprocessing
 import os
@@ -34,7 +35,8 @@ def error_value(error):
     value = {"type": "host" if isinstance(error, HostError) else "core", "code": error.code, "message": str(error)}
     if isinstance(error, api.DataFogWorkspaceError):
         value.update(inputIndex=error.input_index, findingIndex=error.finding_index,
-            markerIssues=error.marker_issues, reviewConflicts=error.review_conflicts)
+            markerIssues=error.marker_issues, reviewConflicts=error.review_conflicts,
+            delivered=getattr(error, "delivered", None), complete=getattr(error, "complete", None))
     return value
 
 def row_digest(store):
@@ -75,9 +77,29 @@ def persist(store, workspace, plan, fault=None, expected=None, checkpoint=None):
         receipt.update(ok=False, error=error_value(failure), localHead=head(workspace.head()))
     return receipt
 
+def exact_json(left, right):
+    if type(left) is not type(right): return False
+    if type(left) is dict:
+        return all(type(key) is str for key in left) and left.keys() == right.keys() and all(exact_json(left[key], right[key]) for key in left)
+    if type(left) is list: return len(left) == len(right) and all(exact_json(a, b) for a, b in zip(left, right))
+    if type(left) in (str, int, bool, type(None)): return left == right
+    return False
+
+def closed(value, keys): return type(value) is dict and all(type(key) is str for key in value) and set(value) == set(keys)
+def byte_id(value): return type(value) is list and len(value) == 16 and all(type(item) is int and 0 <= item <= 255 for item in value)
+def valid_scope(value): return closed(value, ("tenant", "workspace", "key_id")) and all(byte_id(value[key]) for key in value)
+def nonempty_string(value): return type(value) is str and bool(value)
 def association(binding, witness, callback):
-    return all(callback.get(key) == value for key, value in binding.items()) and all(
-        callback.get(key) == witness[key] for key in ("scope", "logicalId", "surface", "siteId"))
+    if not closed(binding, ("scope", "preparationId", "inputIndex", "logicalId", "surface", "payloadSha256")): return False
+    if not valid_scope(binding["scope"]) or not byte_id(binding["preparationId"]) or not byte_id(binding["logicalId"]): return False
+    if type(binding["inputIndex"]) is not int or not 0 <= binding["inputIndex"] < 32 or not nonempty_string(binding["surface"]): return False
+    digest = binding["payloadSha256"]
+    if type(digest) is not str or len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest): return False
+    if not closed(witness, ("scope", "logicalId", "surface", "siteId")) or not nonempty_string(witness["siteId"]): return False
+    if not exact_json({key: witness[key] for key in ("scope", "logicalId", "surface")}, {key: binding[key] for key in ("scope", "logicalId", "surface")}): return False
+    if not closed(callback, (*binding.keys(), "siteId", "kind")): return False
+    if type(callback["kind"]) is not str or callback["kind"] not in ("observed_sent", "definitely_not_sent", "uncertain"): return False
+    return exact_json(callback, {**binding, "siteId": witness["siteId"], "kind": callback["kind"]})
 
 def dispatch(store, fixture, intent, output, kind="observed_sent", callback_changes=None):
     # Inspect the actual durable store immediately before the controlled callback.
@@ -109,6 +131,29 @@ def scoped_error(workspace, text, logical=10):
     try: workspace.restore_in_conversation(text, public_id(logical))
     except api.DataFogWorkspaceError as failure: return error_value(failure)
     raise RuntimeError("scoped rejection missing")
+
+def verify_association(evidence):
+    assert association(evidence["attempt"], evidence["siteVerification"], evidence["received"])
+    def nested_boolean(_binding, _witness, callback): callback["scope"]["workspace"][0] = True
+    def nested_float(_binding, _witness, callback): callback["preparationId"][0] = float(callback["preparationId"][0])
+    def witness_boolean(_binding, witness, _callback): witness["scope"]["workspace"][0] = True
+    def witness_float(_binding, witness, _callback): witness["scope"]["workspace"][0] = float(witness["scope"]["workspace"][0])
+    mutations = [
+        ("boolean_index", lambda _b, _w, c: c.update(inputIndex=False)),
+        ("float_index", lambda _b, _w, c: c.update(inputIndex=0.0)),
+        ("nonstring_hash", lambda _b, _w, c: c.update(payloadSha256=b"not a string")),
+        ("nonstring_surface", lambda _b, _w, c: c.update(surface=False)),
+        ("nonstring_witness_site", lambda _b, w, _c: w.update(siteId=False)),
+        ("extra_callback", lambda _b, _w, c: c.update(extra=True)),
+        ("extra_witness", lambda _b, w, _c: w.update(extra=True)),
+        ("boolean_nested_id", nested_boolean), ("float_nested_id", nested_float),
+        ("boolean_witness_scope", witness_boolean), ("float_witness_scope", witness_float),
+    ]
+    for name, mutate in mutations:
+        binding, witness, callback = copy.deepcopy((evidence["attempt"], evidence["siteVerification"], evidence["received"]))
+        mutate(binding, witness, callback)
+        assert not association(binding, witness, callback), name
+    return {"passed": True, "rejected": len(mutations), "cases": [name for name, _ in mutations]}
 
 def receive(pipe):
     if not pipe.poll(20): raise RuntimeError("conversation child timeout")
@@ -231,11 +276,11 @@ def run(fixture, oracle):
                                 stopped_evidence = dispatch(store, fixture, intent, output, "definitely_not_sent")
                                 with resolution(workspace, stopped_evidence, intent, 14, not_sent=True) as stopped: record("not-sent-saved", {"observation": stopped_evidence, "save": persist(store, workspace, stopped)})
                                 with store.open() as reopened:
-                                    record("reopen-resumed", {"snapshot": snapshot(reopened), "old": reopened.restore_in_conversation(oracle["plans"]["sendA"]["previews"][0]["text"], public_id(10)), "otherNotIssued": scoped_error(reopened, oracle["plans"]["otherSend"]["previews"][0]["text"])})
+                                    record("reopen-resumed", {"snapshot": snapshot(reopened), "old": reopened.restore_in_conversation(oracle["plans"]["sendA"]["previews"][0]["text"], public_id(10)), "otherNotIssued": scoped_error(reopened, "👋 " + oracle["plans"]["otherSend"]["previews"][0]["text"])})
                             else:
                                 kind = "definitely_not_sent" if name == "definitely-not-sent" else "uncertain" if name == "uncertain-transport" else "observed_sent"
                                 if name in ["callback-mismatch", "context-and-tenant-isolation"]:
-                                    changes = [{"preparationId": list(public_id(99))}, {"logicalId": list(public_id(11))}, {"siteId": "wrong_site"}]
+                                    changes = [{"preparationId": list(public_id(99))}, {"logicalId": list(public_id(11))}, {"siteId": "wrong_site"}, {"inputIndex": False}, {"payloadSha256": 0}, {"surface": False}]
                                     if name == "context-and-tenant-isolation":
                                         foreign_scope = Scope(public_id(99), scope.workspace, scope.key_id);foreign = EncryptedStore(database, foreign_scope, os.urandom(32))
                                         with api.Workspace.open_bundle(bytes.fromhex(oracle["states"]["seed"]["bundleHex"])) as seed: foreign.create(seed)
@@ -281,7 +326,7 @@ def run(fixture, oracle):
                 if process.is_alive(): os.kill(process.pid, signal.SIGKILL)
                 process.join(10)
                 if process.is_alive(): raise RuntimeError("conversation child cleanup timeout")
-    return {"schemaVersion": 1, "profile": fixture["profile"], "sdk": "python", "cases": cases}
+    return {"schemaVersion": 1, "profile": fixture["profile"], "sdk": "python", "cases": cases, "associationChecks": verify_association(cases[0]["steps"][1]["value"])}
 
 if __name__ == "__main__":
     try:
