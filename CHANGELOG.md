@@ -26,6 +26,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Native Node exposes the shared workspace lifecycle, staged changes, policy,
   recall, combined review and strict restoration without loading browser WASM.
 
+- Native Python workspace handles expose Core preparation, combined review,
+  recall, protected choices and recovery with typed errors, explicit saved-state
+  activation and bounded pending-plan lifetimes.
 
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
