@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput} from "./test-workspace-parity.mjs";
 import {validateNativeServerOutput} from "./native-server-parity.mjs";
+import {validatePlanPressure} from "./native-plan-pressure.mjs";
 import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
@@ -140,4 +141,34 @@ test("race acknowledgments preserve exact Node heads and Python null without mis
   for(const mutate of [v=>delete v.cases[0].steps[1].value[0].acknowledgment,v=>{v.cases[0].steps[1].value[0].acknowledgment=oracle.a.head;}]) {
     const wrong=structuredClone(python);mutate(wrong);assert.throws(()=>validateNativeServerOutput(wrong,source,oracle,"python"));
   }
+});
+
+function pressureProtocol() {
+  const config={schemaVersion:1,profile:"native-plan-pressure-v1",sdks:["python","node"],workers:2,handlesPerWorker:2,plansPerHandle:32,cycles:1};
+  const sample=pid=>({pid,rss:1000000,heapUsed:100000,heapTotal:200000,external:1000,arrayBuffers:100});
+  const workers=[0,1].map(worker=>({held:{phase:"held",worker,cycle:0,handles:2,livePlans:64,admissionErrors:["resource_limit","resource_limit"],namespaces:[(20+worker).toString(16).repeat(16),(20+worker).toString(16).repeat(16)],heads:[{revision:"0",commitId:Array(16).fill(2)},{revision:"0",commitId:Array(16).fill(2)}],before:sample(100+worker),held:sample(100+worker)},released:{phase:"released",worker,cycle:0,retainedWrappers:98,discardSlotReused:true,changedHeadSlotsReused:32,afterCleanupAdmissionCode:"resource_limit",staleIndependentHandleRejected:true,staleCasCode:"workspace_conflict",counts:{operations:2,preparedInputs:1,transformedSpans:0,confirmedHandoffs:0,reportedBlockedAttempts:0},after:sample(100+worker)}}));
+  const value={schemaVersion:1,profile:config.profile,sdk:"node",cycles:[{cycle:0,observedLivePlansAtBarrier:128,workers}],done:[0,1].map(worker=>({phase:"done",worker,retainedWrappers:98,retainedReferenceListAfterDrop:0,after:sample(100+worker),afterDrop:sample(100+worker)})),exits:[{code:0,signal:null},{code:0,signal:null}]};
+  return {config,value};
+}
+test("native load proof requires each handle's real admission, cleanup and independent worker receipts",()=>{
+  const {config,value}=pressureProtocol();assert.doesNotThrow(()=>validatePlanPressure(value,config,"node"));
+  for(const mutate of [
+    v=>{v.cycles[0].workers[0].held.admissionErrors[1]="allowed";},
+    v=>{v.cycles[0].workers[0].held.livePlans=32;},
+    v=>{v.cycles[0].workers[0].released.changedHeadSlotsReused=31;},
+    v=>{v.cycles[0].workers[0].released.staleCasCode="saved";},
+    v=>{v.cycles[0].workers[0].released.counts.operations=3;},
+    v=>{v.cycles[0].workers[0].held.namespaces[1]="ff".repeat(16);},
+    v=>{v.done[0].retainedReferenceListAfterDrop=98;},
+    v=>{delete v.done[0].afterDrop.heapUsed;},
+    v=>{delete v.cycles[0].workers[0].released.after.arrayBuffers;},
+    v=>{v.exits[0].code=1;},
+    v=>{v.cycles=[];},
+  ]){const invalid=structuredClone(value);mutate(invalid);assert.throws(()=>validatePlanPressure(invalid,config,"node"));}
+  assert.throws(()=>validatePlanPressure(value,config,"wasm"));
+  assert.throws(()=>validatePlanPressure(value,{...config,sdks:["rust","python","node","wasm"]},"node"));
+});
+test("load observations do not invent a process RSS admission budget",()=>{
+  const {config,value}=pressureProtocol();for(const worker of value.cycles[0].workers)for(const sample of [worker.held.before,worker.held.held,worker.released.after])sample.rss=4_000_000_000;
+  assert.doesNotThrow(()=>validatePlanPressure(value,config,"node"));
 });

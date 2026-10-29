@@ -34,3 +34,33 @@ fn explicit_dry_run_never_claims_parity_pass() {
     assert_eq!(report["pass"], false);
     assert_eq!(report["executed"], false);
 }
+
+#[test]
+fn optional_memory_diagnostic_dry_run_never_claims_execution() {
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "parity",
+            "--workspace",
+            "--plan-memory-diagnostic",
+            "--dry-run",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["pass"], false);
+    assert_eq!(value["executed"], false);
+    assert_eq!(value["planMemoryDiagnosticRequested"], true);
+}
+
+#[test]
+fn memory_diagnostic_requires_the_explicit_workspace_profile() {
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["parity", "--plan-memory-diagnostic", "--json"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["pass"], false);
+}

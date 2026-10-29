@@ -248,10 +248,58 @@ fn measure(marker: &str, maximum: bool) -> Result<Value, Box<dyn Error>> {
         "notes":"Single optimized synthetic native process with counting allocator. Requested bytes exclude allocator overhead; RSS includes process/runtime and caching. Timing includes instrumentation. No browser/low-hardware SLA or global host admission guarantee."}),
     )
 }
+fn plan_pressure_cleanup() -> Result<Value, Box<dyn Error>> {
+    let workspace = Workspace::create([1; 16], [2; 16])?;
+    let mut source = String::with_capacity(256 * 1024);
+    for index in 0..4096 {
+        source.push_str(&digest(format!("native-plan-pressure:{index}").as_bytes()));
+    }
+    workspace
+        .prepare_with_operation(
+            &source,
+            &[],
+            OperationContext {
+                id: [3; 16],
+                occurred_at_ms: 0,
+            },
+        )?
+        .discard();
+    let before = workspace.export_bundle()?;
+    let mut plans = Vec::with_capacity(32);
+    let baseline = LIVE.load(Ordering::Relaxed);
+    PEAK.store(baseline, Ordering::Relaxed);
+    for index in 0..32 {
+        plans.push(workspace.prepare_with_operation(
+            &source,
+            &[],
+            OperationContext {
+                id: ((index + 100) as u128).to_be_bytes(),
+                occurred_at_ms: 0,
+            },
+        )?);
+    }
+    let held = LIVE.load(Ordering::Relaxed).saturating_sub(baseline);
+    let peak = PEAK.load(Ordering::Relaxed).saturating_sub(baseline);
+    for plan in &mut plans {
+        plan.discard();
+    }
+    let after = LIVE.load(Ordering::Relaxed);
+    if after != baseline || workspace.export_bundle()? != before {
+        return Err("discard retained candidate allocations or mutated saved state".into());
+    }
+    Ok(
+        json!({"sourceBytes":source.len(),"sourceSha256":digest(source.as_bytes()),"retainedPlanStructs":plans.len(),"requestedBytesWhilePending":held,"peakAdditionalRequestedBytes":peak,"additionalRequestedBytesAfterDiscard":after-baseline,
+        "scope":"Exact example-only shared-Core requested allocations, not PyO3/NAPI registries, RSS, a Core plan limit or global host admission policy."}),
+    )
+}
 fn main() -> Result<(), Box<dyn Error>> {
     let output = std::env::args()
         .nth(1)
-        .ok_or("usage: workspace_operation_capacity OUTPUT_DIRECTORY")?;
+        .ok_or("usage: workspace_operation_capacity OUTPUT_DIRECTORY | --plan-pressure")?;
+    if output == "--plan-pressure" {
+        println!("{}", serde_json::to_string(&plan_pressure_cleanup()?)?);
+        return Ok(());
+    }
     let output = Path::new(&output);
     fs::create_dir_all(output)?;
     let marker = marker()?;

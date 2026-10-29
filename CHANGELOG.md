@@ -31,6 +31,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native workspace qualification now exercises 32-plan admission and cleanup
+  across independently opened handles/workers, retaining allocator and RSS/heap
+  evidence without introducing a global host admission limit.
 - Workspace parity now also requires actual Python/Node encrypted-store CAS,
   process-crash and isolation qualification, counted separately from four-SDK
   scenarios and retaining real winner IDs and host errors.
