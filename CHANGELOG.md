@@ -36,6 +36,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Native encrypted-host qualification verifies saved conversation intents, trusted
   callback association and confirmation across crashes, CAS races and lost acknowledgments.
+
+- Workspace parity exercises saved conversation state and scoped restoration
+  through all four SDKs, with separately qualified native conversation hosts.
+
 - Native Node exposes saved conversation send intents, one-time site binding and
   scoped strict/buffered/progressive restoration through the shared Core.
 
