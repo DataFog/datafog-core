@@ -23,6 +23,7 @@ import workspace_conversation_conformance
 import workspace_operation_conformance
 import workspace_backup_operation_conformance
 import provider_marker_conformance
+import provider_desktop_capture_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -655,6 +656,7 @@ if __name__ == "__main__":
     workspace_backup_operation_conformance.verify_backup_operation_fields()
     workspace_conversation_conformance.verify_conversations()
     provider_marker_conformance.verify_provider_marker_preparation()
+    provider_desktop_capture_conformance.verify_provider_desktop_capture()
     verify_model_engine_selection()
     verify_ssn_person_priority()
     main()

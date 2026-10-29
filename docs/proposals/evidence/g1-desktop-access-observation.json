@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "state": "read_only_capability_observation",
+  "method": "Read-only CUA inventory, already-running app observation and nonmutating composer menu inspection; no navigation/input/chat creation/setting changes/send",
+  "existingChromeProviderTabs": [],
+  "claude": {
+    "displayName": "Claude",
+    "bundleId": "com.anthropic.claudefordesktop",
+    "appPathSurfacedByUi": "/Applications/Claude.app",
+    "appVersion": null,
+    "authenticatedComposerVisible": true,
+    "exactSelectorAxLabel": "Model: Fable 5.1 High",
+    "visibleModelLabel": "Fable 5.1",
+    "visibleAdjacentSetting": "High",
+    "underlyingModelId": null,
+    "modelVersion": null,
+    "subscriptionAllowanceAndLimitsVerified": false,
+    "toolsDisabledVerified": false,
+    "toolStateObservation": {
+      "researchValue": 0,
+      "connectorsEntry": "Connectors 1",
+      "modeLabel": "Auto",
+      "allToolsDisabled": null,
+      "freshChatDefaultsVerified": false,
+      "interpretation": "All-tools-off cannot be verified from this existing chat; execution prerequisite remains unresolved."
+    }
+  },
+  "otherProviders": {
+    "chatgpt": "No existing browser provider tab observed; com.openai.codex display name ChatGPT is the coding app, not provider-access evidence.",
+    "gemini": "No existing browser provider tab observed."
+  },
+  "notRetained": [
+    "private conversation title or URL",
+    "conversation contents",
+    "account label",
+    "credentials",
+    "cookies",
+    "full accessibility snapshot"
+  ],
+  "providerRunsExecuted": 0,
+  "initialObservationRecordedAtUtc": "2026-10-29T14:42:07Z",
+  "additionalToolObservationRecordedAtUtc": "2026-10-29T14:59:26Z"
+}
