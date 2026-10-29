@@ -1,0 +1,7 @@
+# Maintenance ownership for the current GLiNER2 adapters, not upstream model weights.
+/crates/core/src/models/gliner2.rs @sidmohan0
+/crates/core/src/models/gliner2-lock.json @sidmohan0
+/bindings/python/python/datafog_core/_gliner2_worker.py @sidmohan0
+/bindings/wasm/models/ @sidmohan0
+/spike/gliner2-browser/ @sidmohan0
+/scripts/provision-gliner2-model.py @sidmohan0
