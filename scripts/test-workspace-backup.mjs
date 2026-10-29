@@ -1,4 +1,5 @@
 import {createDecipheriv, hkdfSync} from "node:crypto";
+import {waitForBrokerState} from "./workspace-test-wait.mjs";
 
 const password = "synthetic-test-password-only";
 // Independently unwrap with native Node crypto, without exporting browser CryptoKeys.
@@ -201,7 +202,7 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   await page.locator("#source").fill("Changed synthetic draft");
   check(await page.locator("#backup-approve").isDisabled() && await page.locator("#backup-preview").textContent() === "", "G4 an edit invalidates pending restore approval");
   check(await fingerprint(page) === empty, "G4 editing a pending restore commits nothing");
-  await page.waitForFunction(async () => !(await (await import("./ui.js")).testCommand("state")).busy);
+  await waitForBrokerState(() => control(page, "state"), state => !state.busy, {label: "backup edit cancellation"});
   check(!(await control(page, "state")).importPending, "G4 editing discards the staged import in the broker");
   for (const mismatch of ["bundle", "namespace", "head"]) {
     const authenticatedInvalid = await page.evaluate(async ({password, mismatch}) => {

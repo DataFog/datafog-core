@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
 import {verifyBackups} from "./test-workspace-backup.mjs";
+import {waitForBrokerState} from "./workspace-test-wait.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const harness = path.join(root, "examples/workspace-extension");
@@ -13,6 +14,7 @@ const { chromium } = createRequire(path.join(harness, "package.json"))("playwrig
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
+execFileSync(process.execPath, ["--test", path.join(root, "scripts/test-workspace-wait.mjs")], {stdio: "inherit"});
 execFileSync("npm", ["run", "build", "--prefix", harness], { stdio: "inherit" });
 const temporary = await mkdtemp(path.join(os.tmpdir(), "datafog-workspace-"));
 let context;
@@ -53,7 +55,7 @@ async function control(page, command, value) {
   return page.evaluate(async args => (await import("./ui.js")).testCommand(...args), [command, value]);
 }
 async function paused(page, name) {
-  await page.waitForFunction(async name => (await (await import("./ui.js")).testCommand("state")).paused.includes(name), name);
+  await waitForBrokerState(() => control(page, "state"), state => state.paused.includes(name), {label: `checkpoint ${name}`});
 }
 async function restored(page, text, expected) {
   await page.locator("#restore-input").fill(text); await page.locator("#restore").click(); await status(page, expected);
