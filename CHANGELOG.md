@@ -18,6 +18,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Detect bounded English street lines after explicit street/shipping/billing
+  address labels across SDKs, retaining broader model address coverage.
+
 - Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
   Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
 

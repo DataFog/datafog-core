@@ -1,0 +1,48 @@
+---
+title: 'Labelled street addresses'
+description: 'Bounded English street-line coverage with broader model coverage preserved.'
+---
+
+`STREET_ADDRESS` detects the bounded number-first English street-line format
+immediately after `street address:`, `shipping address:` or `billing address:`.
+Labels and values stay on one line. The value includes a supported direction and
+single trailing unit, and excludes city, region, postcode and country. Exact
+suffixes, bounds and exclusions are in the [approved contract](../street-address-rule-proposal.md).
+This is lexical coverage, not universal postal-address validation.
+
+```python
+from datafog_core import scan_and_transform
+result = scan_and_transform("Street address: 12 Willow Road, Unit 4B, Anytown", {
+    "scan": {"entities": ["STREET_ADDRESS"]},
+    "transform": {"default": {"strategy": "redact"}}
+})
+assert result.text == "Street address: [STREET_ADDRESS], Anytown"
+```
+
+```javascript
+const result = scanAndTransform("Street address: 12 Willow Road, Anytown", {
+  scan: {entities: ["STREET_ADDRESS"]},
+  transform: {default: {strategy: "redact"}}
+});
+console.assert(result.text === "Street address: [STREET_ADDRESS], Anytown");
+```
+
+The rule runs by default across locales. Unlabelled addresses, bare `address:`
+fields, number-last formats, named premises, PO boxes, intersections and leading
+units are outside this baseline. Recognized malformed or additional unit
+continuations are rejected rather than silently reducing the finding to the
+street prefix. The contract lists the recognized markers; other comma components
+terminate the street span. Models and user review remain necessary for unknown
+unit vocabulary and broader coverage. Structured scanning applies the
+same rule within each decoded string; field keys do not supply context.
+
+Rust, Python, Node and browser WASM share the Core rule. Findings expose original
+byte/codepoint ranges, JavaScript UTF-16 ranges, no confidence score and
+`datafog-core/street-address` provenance. Normal selection, allowlists and
+transformation strategies apply; other detectors may overlap.
+
+This partial rule retains configured native/custom model `STREET_ADDRESS`
+findings. Small's full `ADDRESS` stays a distinct entity with its existing model
+coverage. Equal-span, equal-type duplicates retain both sources of evidence;
+existing Core transformation selection handles different spans. No model full
+address is renamed or truncated to a street line.

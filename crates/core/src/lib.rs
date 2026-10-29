@@ -17,6 +17,7 @@ pub mod models;
 mod npi;
 mod offsets;
 mod private_key;
+mod street_address;
 pub mod structured;
 mod us_routing_number;
 mod uuid;
@@ -2045,6 +2046,7 @@ enum Label {
     Email,
     Phone,
     Ssn,
+    StreetAddress,
     CreditCard,
     IpAddress,
     Date,
@@ -2074,6 +2076,7 @@ impl Label {
             Label::Email => "EMAIL",
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
+            Label::StreetAddress => "STREET_ADDRESS",
             Label::CreditCard => "CREDIT_CARD",
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
@@ -2102,6 +2105,7 @@ impl Label {
             Label::Email => "datafog-core/email",
             Label::Phone => "datafog-core/phone",
             Label::Ssn => "datafog-core/ssn",
+            Label::StreetAddress => "datafog-core/street-address",
             Label::CreditCard => "datafog-core/credit-card",
             Label::IpAddress => "datafog-core/ip-address",
             Label::Date => "datafog-core/date",
@@ -4782,6 +4786,42 @@ mod tests {
             assert_eq!(result.transformations.len(), 1);
             assert!(!result.text.contains("00123456"));
             assert!(result.text.starts_with("👋 account number: "));
+            if strategy["strategy"] == "tokenize" {
+                assert_eq!(
+                    block_on(manager.restore(&result.text, &context))
+                        .unwrap()
+                        .text,
+                    text
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn labelled_street_addresses_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "street",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("street").unwrap();
+        let text = "👋 Street address: 12 Willow Road, Unit 4B, Anytown";
+        for strategy in [
+            json!({"strategy":"pseudonymize","key_ref":"street"}),
+            json!({"strategy":"tokenize","token_ref":"street"}),
+        ] {
+            let config = parse_scan_and_transform_config(
+                &json!({"transform":{"default":strategy,"entities":["STREET_ADDRESS"]}}),
+            )
+            .unwrap();
+            let result =
+                block_on(manager.scan_and_transform_with_context(text, &config, Some(&context)))
+                    .unwrap();
+            assert_eq!(result.transformations.len(), 1);
+            assert!(!result.text.contains("Willow"));
+            assert!(result.text.ends_with(", Anytown"));
             if strategy["strategy"] == "tokenize" {
                 assert_eq!(
                     block_on(manager.restore(&result.text, &context))

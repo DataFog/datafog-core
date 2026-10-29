@@ -111,8 +111,8 @@ cancellation and cleanup failures never return partial findings or rule fallback
 
 ## Choosing rules or the model per entity type
 
-`scan` routes existing rule types to rules; the partial `ACCOUNT_NUMBER` rule
-adds coverage alongside a configured account model. It takes the rule scanner's
+`scan` routes existing rule types to rules; the partial `ACCOUNT_NUMBER` and
+labelled `STREET_ADDRESS` rules add coverage alongside configured models. It takes the rule scanner's
 configuration (`entities`, `locale`, `detect_uuid`, `format`), where `entities`
 may also name the session's model labels. As with the rule scanner, omitting the
 configuration equals `{}`.
@@ -138,9 +138,9 @@ only when a requested type is such a label, and only those types are kept from
 its output. A request that needs no model label runs without the model worker:
 it costs microseconds, does not wait for or reserve the worker, and never
 returns `model_busy`. It still fails once the session is closed or has failed.
-The partial `ACCOUNT_NUMBER` rule is an exception: a model configured for accounts
-still runs and contributes its broader account coverage, including unlabelled
-values. Equal-span duplicates retain both sources of evidence; no new source
+The partial `ACCOUNT_NUMBER` and labelled `STREET_ADDRESS` rules are exceptions:
+models configured for those types still run and contribute broader coverage,
+including unlabelled values. Model `ADDRESS` remains distinct from `STREET_ADDRESS`. Equal-span duplicates retain both sources of evidence; no new source
 precedence applies to different spans.
 
 A GLiNER2 session configured only with labels that replacement rules cover, such

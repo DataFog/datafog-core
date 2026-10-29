@@ -790,6 +790,84 @@ mod browser_tests {
     }
 
     #[test]
+    fn partial_street_rule_preserves_models_and_full_address_identity() {
+        let contract = ModelScanContract::gliner25_small(Some(&json!({
+            "street line":"STREET_ADDRESS", "address":"ADDRESS", "email":"EMAIL"
+        })))
+        .unwrap();
+        let text = "👋 Street address: 12 Willow Road, Anytown";
+        let start = text.find("12 Willow").unwrap();
+        let street_end = start + "12 Willow Road".len();
+        let routing = contract.routed_config(&json!({})).unwrap();
+        assert!(routing.model_entities.contains("STREET_ADDRESS"));
+        assert!(routing.model_entities.contains("ADDRESS"));
+        assert!(!routing.model_entities.contains("EMAIL"));
+        let result = contract
+            .complete(
+                text,
+                BackendResult {
+                    spans: vec![
+                        span("street line", start, street_end),
+                        span("address", start, text.len()),
+                    ],
+                },
+                Some(&routing),
+            )
+            .unwrap();
+        assert_eq!(result.findings.len(), 2);
+        let index = result
+            .findings
+            .iter()
+            .position(|finding| finding.entity_type == "STREET_ADDRESS")
+            .unwrap();
+        assert_eq!(result.findings[index].matched_text, "12 Willow Road");
+        assert_eq!(result.evidence[index].sources.len(), 2);
+        let address = result
+            .findings
+            .iter()
+            .find(|finding| finding.entity_type == "ADDRESS")
+            .unwrap();
+        assert_eq!(address.matched_text, "12 Willow Road, Anytown");
+        let transformed = crate::transform(
+            text,
+            &result.findings,
+            &crate::parse_transformation_config(&json!({"default":{"strategy":"redact"}})).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(transformed.text, "👋 Street address: [ADDRESS]");
+        let selected = contract
+            .routed_config(&json!({"entities":["STREET_ADDRESS"]}))
+            .unwrap();
+        assert!(selected.needs_model());
+        for text in ["12 Willow Road", "Beispielstraße 12"] {
+            let result = contract
+                .complete(
+                    text,
+                    BackendResult {
+                        spans: vec![span("street line", 0, text.len())],
+                    },
+                    Some(&selected),
+                )
+                .unwrap();
+            assert_eq!(result.findings.len(), 1);
+            assert_eq!(result.findings[0].matched_text, text);
+            assert_eq!(result.evidence[0].sources.len(), 1);
+        }
+        let small = ModelScanContract::gliner25_small(None).unwrap();
+        assert!(
+            small
+                .default_routed_config()
+                .model_entities
+                .contains("ADDRESS")
+        );
+        let only_address = small
+            .routed_config(&json!({"entities":["ADDRESS"]}))
+            .unwrap();
+        assert!(only_address.needs_model());
+        assert!(only_address.rules.is_none());
+    }
+
+    #[test]
     fn small_rule_only_and_negative_scans_do_not_require_model_output() {
         let contract = contract();
         let routing = contract

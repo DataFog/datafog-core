@@ -1,22 +1,24 @@
-# Street-address baseline: review decision
+# Street-address baseline: approved labelled scope
 
-Status: **human format review needed for 0.5.0-beta.2; no detector enabled**.
+Status: **Option A scope approved by Sid on 2026-10-28 (America/Los_Angeles)
+for 0.5.0-beta.2; implementation is a draft under verification/review**.
 This is the remaining street-address slice of
 [D2 / #144](https://github.com/DataFog/datafog-core/issues/144), independent of
 the masked-account slice. The proposal is based on #159's partial-rule/model
-compatibility foundation. It changes no runtime outputs or model ownership.
+compatibility foundation. The implementation adds the approved labelled rule
+while retaining configured model coverage.
 
-## Recommended decision
+## Approved decision
 
-Approve **A: explicit labels first**, using the bounded number-first English
+Use **A: explicit labels first**, using the bounded number-first English
 street-line format below. Keep unlabelled addresses with the configured model
 and user review. This adds useful deterministic coverage without deciding that
 every number/name/suffix phrase in prose is a private address.
 
-**B: unlabelled baseline** is the exact alternative: apply the same value grammar
-anywhere in text, without a label. It catches `Send to 12 Willow Road` but also
+**B: unlabelled baseline is not activated.** The reviewed
+alternative would apply the same value grammar anywhere in text, without a label. It catches `Send to 12 Willow Road` but also
 matches duration/navigation prose such as `We need a 10 minute drive`. That
-tradeoff needs human approval and a launch precision target before activation.
+tradeoff remains outside this implementation.
 Neither option is universal address validation or complete UK/US coverage.
 
 | Input | A: explicit labels | B: unlabelled |
@@ -28,14 +30,14 @@ Neither option is universal address validation or complete UK/US coverage.
 | `The road to success is long` | No rule finding | No rule finding |
 | `Street address: The Rectory` | Outside supported format | Outside supported format |
 
-The proposed corpus `fixtures/proposals/street-address.jsonl` makes both outcomes
-explicit. It is acceptance/design data, **not current detector output or a model
-qualification set**. `false_positive_tradeoff` rows describe B's cost rather than
-claiming the phrase is an address. The human decision is whether to approve A,
-approve B's broader tradeoff, or request a different geographic format before
-implementation.
+The decision-history corpus `fixtures/proposals/street-address.jsonl` makes both
+options explicit. Executable rule acceptance uses `fixtures/street-address.jsonl`,
+selecting only A and adding boundary regressions. Neither corpus is a model
+qualification set. `false_positive_tradeoff` rows describe B's cost rather than
+claiming the phrase is an address. Sid approved A. Any expansion to B or other
+geographic formats requires separate review.
 
-## Common proposed value contract
+## Approved value contract
 
 - Canonical type: `STREET_ADDRESS`, distinct from Small's full `ADDRESS`.
 - A requires exactly `street address:`, `shipping address:` or `billing address:`
@@ -60,14 +62,19 @@ implementation.
   line boundary or end of input terminates the line; sentence-final punctuation
   is outside the span except a period that belongs to a suffix abbreviation.
   Do not accept a shorter prefix of an unsupported leading-unit, numeric range
-  or continued value. Unsupported unit continuations need rejection, not silent
-  truncation. Fixtures make the intended boundaries concrete.
+  or continued value. Malformed/additional `Apt`, `Suite`, `Unit`, `Flat`, `Floor`
+  continuations and the unsupported English markers `Apartment`, `Ste`, `Room`,
+  `Building`, `Level` are rejected after a comma or line ending; the captured span
+  never crosses lines. Other comma components terminate the street span. Unknown
+  unit vocabulary cannot be distinguished universally from a city by this lexical
+  rule; retain model/user review for those formats. Fixtures make these boundaries
+  concrete.
 - Horizontal spacing is space, tab, NBSP or narrow NBSP. A label and its street
   line stay on one line; no multiline capture. Unicode letter/digit/underscore
   adjacency cannot be used to find a candidate inside another token.
 
-B uses the value and termination grammar even where A's label cannot apply (for
-example, after a newline). Neither option introduces a global code exemption: a
+For decision history, B would use the value and termination grammar even where
+A's label cannot apply (for example, after a newline). Neither option introduces a global code exemption: a
 supported literal phrase in a fenced code block still matches. A closing quote
 is not a supported terminator in this initial format.
 
@@ -103,7 +110,7 @@ alignment. The rule proposal does not solve the separate `ADDRESS` to
 
 ## Compatibility requirements for implementation
 
-Register a future partial street rule without replacing configured native/custom
+The implementation registers a partial street rule without replacing configured native/custom
 model `STREET_ADDRESS` coverage, using #159's internal distinction. Keep model
 `ADDRESS` labels unchanged. Default scans may combine a narrow street rule with
 a model's wider span; existing Core selection and evidence composition apply,
@@ -113,6 +120,23 @@ to make a street-only score pass.
 Runtime acceptance must cover positive/hard-negative formats, selected and
 default scans, all offset coordinate systems, structured field boundaries,
 allowlists, provider round trips and model routing. Retain existing precision
-and recall thresholds, installed SDK smoke and live parity. Add the user-facing
-changelog and public examples when code is enabled. This proposal keeps #144
-open and cannot by itself mark D2 implemented or beta.2 ready.
+and recall thresholds, installed SDK smoke and live parity. The implementation includes a user-facing changelog and public examples.
+Implementation, CI and release review still apply before #144 or D2 can be marked
+complete. This scope approval does not qualify the model or release beta.2.
+
+
+## Implementation evidence
+
+The executable rule corpus contains 112 cases: 62 supported labelled examples
+and 50 negatives, including the unlabelled-policy alternatives, unsupported
+formats and boundary regressions. Installed Rust/Python/Node/browser-WASM checks
+consume the same expected street-only ranges. Contract tests separately retain
+native/custom model `STREET_ADDRESS`, equal-span evidence and wider model
+`ADDRESS`; synthetic backend spans are not an inference qualification claim.
+
+On macOS ARM64 with Node 24.18.0, the 112 short fixture texts scanned 1,000 times
+each after warmup averaged 0.63 µs on #159 and 1.66 µs with the new coverage.
+This includes returning the new findings and is an uncontrolled local
+measurement, not a stable performance claim. Release WASM changed from 2,458,647
+to 2,466,557 bytes (+7,910 bytes, about 0.32%). `cargo dfv bench` remains the
+separate provisional performance gate.
