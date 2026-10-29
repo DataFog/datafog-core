@@ -1,0 +1,75 @@
+name: Native Python host qualification
+
+on:
+  pull_request:
+    paths:
+      - 'bindings/python/**'
+      - 'crates/core/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'fixtures/workspace/**'
+      - 'examples/native-python-host/**'
+      - '.github/workflows/native-python-host.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'bindings/python/**'
+      - 'crates/core/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'fixtures/workspace/**'
+      - 'examples/native-python-host/**'
+      - '.github/workflows/native-python-host.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Native encrypted host (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ['3.10', '3.14']
+        include:
+          - os: macos-15
+            python: '3.12'
+    steps:
+      - uses: actions/checkout@v4
+      - id: pins
+        run: echo "rust=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pins.outputs.rust }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install maturin==1.14.1
+      - name: Build this job's wheel outside the Rust cache
+        id: wheel
+        run: |
+          host_wheel_directory=$(mktemp -d "$RUNNER_TEMP/datafog-host-wheels.XXXXXX")
+          maturin build --manifest-path bindings/python/Cargo.toml --release --out "$host_wheel_directory"
+          echo "directory=$host_wheel_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify the installed host in a fresh environment
+        env:
+          DFV_HOST_WHEEL_DIRECTORY: ${{ steps.wheel.outputs.directory }}
+        run: |
+          host_environment=$(mktemp -d "$RUNNER_TEMP/datafog-host-venv.XXXXXX")
+          python -m venv --clear "$host_environment"
+          "$host_environment/bin/python" -m pip install --require-hashes -r examples/native-python-host/requirements.txt
+          "$host_environment/bin/python" -m pip install "$DFV_HOST_WHEEL_DIRECTORY"/*.whl
+          "$host_environment/bin/python" examples/native-python-host/test_host.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-python-host-${{ matrix.os }}-${{ matrix.python }}
+          path: target/python-host-proof.json
+          if-no-files-found: error
