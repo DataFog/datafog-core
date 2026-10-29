@@ -38,7 +38,7 @@ export function validateNativeServerOutput(value,fixture,oracle,sdk){
      const candidate=noop?oracle.noop:oracle[index===0?"a":"b"];
      same(outcome.operationId,Array(16).fill(noop?5+index:fixture.candidateDefinitions[index===0?"a":"b"].operationByte));
      if(outcome.saveCalls!==1 || outcome.candidateBundleHex!==candidate.bundleHex)bad();
-     if(outcome.ok===true){if(outcome.activated!==true)bad();same(outcome.head,candidate.head);winners.push({outcome,candidate});}
+     if(outcome.ok===true){if(outcome.activated!==true)bad();same(outcome.head,candidate.head);same(outcome.acknowledgment,sdk==="node"?candidate.head:null);winners.push({outcome,candidate});}
      else{if(outcome.ok!==false||outcome.activated!==false)bad();acceptedError(outcome.error,fixture,sdk,"conflict");}
     });
     if(winners.length!==(noop?2:1))bad();after=noop?oracle.seed:winners[0].candidate;
