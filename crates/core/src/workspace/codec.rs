@@ -30,9 +30,9 @@ fn encode_into(
     state: &State,
     e: &mut Encoder<BoundedWriter>,
 ) -> std::result::Result<(), minicbor::encode::Error<()>> {
-    e.map(7)?
+    e.map(if state.snapshot_version == 1 { 7 } else { 8 })?
         .u8(0)?
-        .u8(1)?
+        .u8(state.snapshot_version)?
         .u8(1)?
         .bytes(&state.namespace)?
         .u8(2)?
@@ -53,14 +53,28 @@ fn encode_into(
     for (label, counter) in &state.counters {
         e.array(2)?.str(label)?.u64(*counter)?;
     }
-    e.u8(5)?
-        .array(0)?
-        .u8(6)?
-        .map(2)?
-        .u8(0)?
-        .str("synthetic_v1")?
-        .u8(1)?
-        .array(0)?;
+    e.u8(5)?.array(0)?.u8(6)?.map(2)?.u8(0)?;
+    if state.snapshot_version == 1 {
+        e.str("synthetic_v1")?.u8(1)?.array(0)?;
+    } else {
+        e.str(policy::PROFILE)?
+            .u8(1)?
+            .array(state.rules.len() as u64)?;
+        for (label, record) in &state.rules {
+            e.array(3)?
+                .str(label)?
+                .u8(record.rule.code())?
+                .bytes(&record.operation)?;
+        }
+        e.u8(7)?.array(state.choices.len() as u64)?;
+        for (identity, record) in &state.choices {
+            e.array(4)?
+                .str(&identity.entity_type)?
+                .str(&record.display)?
+                .u8(record.disposition.code())?
+                .bytes(&record.operation)?;
+        }
+    }
     Ok(())
 }
 
@@ -93,9 +107,13 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         return Err(error(ErrorCode::ResourceLimit));
     }
     let mut d = Decoder::new(bytes);
-    require(d.map()? == Some(7))?;
+    let fields = d.map()?;
     key(&mut d, 0)?;
-    require(d.u8()? == 1)?;
+    let snapshot_version = d.u8()?;
+    require(matches!(
+        (snapshot_version, fields),
+        (1, Some(7)) | (2, Some(8))
+    ))?;
     key(&mut d, 1)?;
     let namespace = id(&mut d)?;
     key(&mut d, 2)?;
@@ -117,10 +135,10 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         let entity_type = d.str()?;
         require(valid_type(entity_type))?;
         let display = d.str()?;
+        require(display.len() <= MAX_SOURCE_BYTES)?;
         let key = identity_key(display);
         require(
             !key.is_empty()
-                && display.len() <= MAX_SOURCE_BYTES
                 && marker_spans(display)?
                     .iter()
                     .all(|span| span.canonical.is_none()),
@@ -167,11 +185,82 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     key(&mut d, 6)?;
     require(d.map()? == Some(2))?;
     key(&mut d, 0)?;
-    require(d.str()? == "synthetic_v1")?;
+    require(
+        d.str()?
+            == if snapshot_version == 1 {
+                "synthetic_v1"
+            } else {
+                policy::PROFILE
+            },
+    )?;
     key(&mut d, 1)?;
-    array(&mut d, 0)?;
+    let issuance_ids: BTreeSet<_> = entries.values().map(|entry| entry.issuance).collect();
+    let mut rules = BTreeMap::new();
+    let mut choices = BTreeMap::new();
+    if snapshot_version == 1 {
+        array(&mut d, 0)?;
+    } else {
+        let count = d
+            .array()?
+            .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
+        require(count <= MAX_POLICY_ITEMS as u64)?;
+        for _ in 0..count {
+            array(&mut d, 3)?;
+            let label = d.str()?;
+            require(valid_type(label))?;
+            let rule = match d.u8()? {
+                0 => TypeRule::Hide,
+                1 => TypeRule::Keep,
+                _ => return Err(error(ErrorCode::InvalidSnapshot)),
+            };
+            require(!(protected_type(label) && rule == TypeRule::Keep))?;
+            let operation = id(&mut d)?;
+            require(!issuance_ids.contains(&operation))?;
+            require(
+                rules
+                    .insert(label.to_owned(), policy::RuleRecord { rule, operation })
+                    .is_none(),
+            )?;
+        }
+        key(&mut d, 7)?;
+        let count = d
+            .array()?
+            .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
+        require(count <= MAX_POLICY_ITEMS as u64)?;
+        for _ in 0..count {
+            array(&mut d, 4)?;
+            let label = d.str()?;
+            let display = d.str()?;
+            let identity = policy::choice_identity(label, display)
+                .map_err(|_| error(ErrorCode::InvalidSnapshot))?;
+            let disposition = match d.u8()? {
+                0 => ChoiceDisposition::Keep,
+                1 => ChoiceDisposition::NotSensitive,
+                _ => return Err(error(ErrorCode::InvalidSnapshot)),
+            };
+            require(!(protected_type(label) && disposition == ChoiceDisposition::Keep))?;
+            let operation = id(&mut d)?;
+            require(!issuance_ids.contains(&operation))?;
+            require(
+                choices
+                    .insert(
+                        identity,
+                        policy::ChoiceRecord {
+                            display: display.to_owned(),
+                            disposition,
+                            operation,
+                        },
+                    )
+                    .is_none(),
+            )?;
+        }
+        require((rules.is_empty() && choices.is_empty()) || head.revision > 0)?;
+    }
     require(d.position() == bytes.len())?;
     let state = State {
+        snapshot_version,
+        rules,
+        choices,
         namespace,
         head,
         entries,

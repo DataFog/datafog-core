@@ -26,6 +26,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
   Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
 
+- Core-owned workspace rules and exact remembered choices, including explicit
+  protected-type false-positive corrections, with staged approval/save, recall
+  enforcement and a warned, byte-preserving legacy-to-policy-v2 upgrade.
+
 - Rust and WASM workspaces can recall committed values in new text, with source
   metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
   or an explicit limit failure and never change saved mappings or bypass approval.
