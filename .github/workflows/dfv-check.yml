@@ -74,6 +74,10 @@ jobs:
         run: cargo dfv smoke --json
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv parity --live --json
+      - if: steps.scope.outputs.code == 'true'
+        run: node --test scripts/test-workspace-parity-protocol.mjs
+      - if: steps.scope.outputs.code == 'true'
+        run: cargo dfv parity --workspace --json
       - if: always() && steps.scope.outputs.code == 'true'
         uses: actions/upload-artifact@v4
         with:

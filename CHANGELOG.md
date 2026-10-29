@@ -38,6 +38,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
   Read-only pages expose every retained row without requiring a full JSON view.
   Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
   remaining event/replay accounting stays under review for `0.5.0-beta.3`.
+- `cargo dfv parity --workspace` compares deterministic workspace workflows across
+  Rust, installed native Python/Node and browser WASM, retaining exact inner
+  snapshots, source/package hashes and failures without skipping missing runtimes.
+  Strict and progressive response restoration are mandatory additional profiles.
+
 - The synthetic Node server host qualifies opt-in progressive response delivery,
   late-failure incomplete status and cooperative cancellation against durable mappings.
 
@@ -45,6 +50,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
   recall, combined review, strict buffered and opt-in progressive restoration
   without loading browser WASM. Streaming preserves Core error counts, encoding
   validation and parent/head lifecycle cleanup.
+
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and
