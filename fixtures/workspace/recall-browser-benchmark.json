@@ -1,0 +1,104 @@
+{
+  "kind": "synthetic-mv3-recall-observations",
+  "runUtc": "2026-10-29T04-34-25-800Z",
+  "sourceBase": "1b6db84ebdb88cd400cd6917842b15632f7d67e6",
+  "sourceWasDirty": true,
+  "sourceFiles": {
+    "crates/core/src/workspace.rs": "1f572b34c4e68ce067e690fec96ce2568dabefeda0794e6d65b8032051fb6031",
+    "crates/core/src/workspace/recall.rs": "15b2c16cb689342ef88e26606781bde2f715f0b13859a1c9cb89b113b04507ea",
+    "bindings/wasm/src/workspace.rs": "c459cc0163e0b997f9658f44b124a3a096d04e740e0c1e35875e6e255f7672ab",
+    "bindings/wasm/index.js": "947b58b8fb06ed55ff5478457ad473e3f10bfecf1ba29671e9eaf860b8bcd5ed",
+    "bindings/wasm/index.d.ts": "b082c714863498ab1051e42ae4d1a63c920831e44ba9dc1667886a6a388bb037",
+    "scripts/test-model-extension.mjs": "6c2995eace5a8ce359251935fe6db2678306c220888b191e72a32e8fb71653bb"
+  },
+  "candidateTarball": {
+    "bytes": 837206,
+    "sha256": "dff10376c20de31738754fcc5d990cda84ebda934b9780b76e0af8e26c71077c"
+  },
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 51539607552
+  },
+  "browser": {
+    "version": "151.0.7922.34",
+    "channel": "Playwright bundled Chromium"
+  },
+  "cases": [
+    {
+      "name": "1000 committed values, 128 KiB no-hit input",
+      "entries": 1000,
+      "inputBytes": 130500,
+      "samplesMs": [
+        2.1999999284744263,
+        3.5,
+        4.5
+      ],
+      "medianMs": 3.5,
+      "count": 0
+    },
+    {
+      "name": "1000 values, repeated boundary matches",
+      "entries": 1000,
+      "inputBytes": 7000,
+      "samplesMs": [
+        2,
+        2.100000023841858,
+        3.100000023841858
+      ],
+      "medianMs": 2.100000023841858,
+      "count": 500
+    },
+    {
+      "name": "maximum source without matches",
+      "entries": 1,
+      "inputBytes": 1048576,
+      "samplesMs": [
+        12.600000023841858,
+        12.700000047683716,
+        15
+      ],
+      "medianMs": 12.700000047683716,
+      "count": 0
+    },
+    {
+      "name": "result overflow rejects whole query",
+      "entries": 1,
+      "inputBytes": 40004,
+      "samplesMs": [
+        2.299999952316284,
+        2.3000000715255737,
+        2.799999952316284
+      ],
+      "medianMs": 2.3000000715255737,
+      "error": "resource_limit"
+    },
+    {
+      "name": "long-prefix work budget rejects whole query",
+      "entries": 1,
+      "inputBytes": 20000,
+      "samplesMs": [
+        129.60000002384186,
+        129.70000004768372,
+        130.09999990463257
+      ],
+      "medianMs": 129.70000004768372,
+      "error": "resource_limit"
+    },
+    {
+      "name": "index-node limit rejects whole query",
+      "entries": 1,
+      "inputBytes": 5,
+      "samplesMs": [
+        4.399999976158142,
+        4.600000023841858,
+        4.600000023841858
+      ],
+      "medianMs": 4.600000023841858,
+      "error": "resource_limit"
+    }
+  ],
+  "note": "Three in-page calls per synthetic case; fresh index each call, existing browser/WASM warm. No latency or low-memory SLA."
+}

@@ -3,6 +3,9 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod recall;
+
+pub use recall::{RecallFinding, RecallResult};
 
 use crate::{Finding, TextIndex, TextRange, TransformationConfig, TransformationStrategy};
 use hmac::{Hmac, Mac};
@@ -369,6 +372,12 @@ impl Workspace {
     pub fn close(&mut self) {
         self.lifetime.store(false, Ordering::Release);
         self.state = None;
+    }
+
+    /// Find committed values without allocating aliases or changing the saved head.
+    /// Returns all overlapping matches in original-input coordinates, not a clean-text verdict.
+    pub fn recall(&self, text: &str) -> Result<RecallResult> {
+        recall::find(self.state()?, text)
     }
 
     /// Stage recovery of this validated bundle under a fresh commit head.

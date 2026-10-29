@@ -18,6 +18,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Rust and WASM workspaces can recall committed values in new text, with source
+  metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
+  or an explicit limit failure and never change saved mappings or bypass approval.
+
 - Workspace findings and preview transformations carry scanner/recall/user source
   and review metadata in Rust and WASM. Existing callers default to scanner and
   review required; these display flags never bypass approval or persistence.

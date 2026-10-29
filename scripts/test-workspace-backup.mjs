@@ -101,6 +101,24 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
     await restored(page, output, "locked");
     await close(); page = await launch(`backup-${method}`);
     await unlock(page);
+    const recoveredRecall = await page.evaluate(async password => {
+      const {readRecords} = await import("./storage.js");
+      const {openVault} = await import("./vault.js");
+      const {init, Workspace} = await import("./vendor/package/index.js"); await init();
+      const {vault, workspace: record} = await readRecords();
+      const opened = await openVault(password, vault, record);
+      let workspace;
+      try {
+        workspace = Workspace.openBundle(opened.bundle);
+        const text = "👋 JANE\tSMITH", before = workspace.exportBundle();
+        const recall = workspace.recall(text);
+        const plan = workspace.prepare(text, recall.findings.map(span => span.finding), new Uint8Array(16).fill(212));
+        const result = {recall, restored: workspace.restore(plan.preview().text), unchanged: workspace.exportBundle().every((value, i) => value === before[i])};
+        plan.discard(); before.fill(0); return result;
+      } finally { workspace?.close(); opened.bundle.fill(0); }
+    }, password);
+    check(recoveredRecall.recall.findings.length === 1 && recoveredRecall.recall.findings[0].finding.source === "recall" && recoveredRecall.restored === "👋 Jane Smith" && recoveredRecall.unchanged,
+      "D5 committed recall survives encrypted backup, fresh recovery keys and browser restart without changing mappings");
     await restored(page, output, "restored");
     check((await page.locator("#restored").textContent()).includes("Jane Smith"), "G1 backup restores old full aliases");
     check(await prepare(page) === output, "G1 imported mapping is byte-identical");

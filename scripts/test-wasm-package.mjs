@@ -167,6 +167,11 @@ const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
 const findingSource: "scanner" | "recall" | "user" = previews[0].transformations[0].source;
 const needsReview: boolean = previews[0].transformations[0].needsReview;
+const recalled = workspace.recall("Jane");
+const completeRecall: true = recalled.complete;
+const recallSource: "recall" = recalled.findings[0].finding.source;
+workspace.prepare("Jane", recalled.findings.map(span => span.finding), new Uint8Array(16));
+void completeRecall; void recallSource;
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsReview: false}], new Uint8Array(16));
 // @ts-expect-error Review source is a closed set.
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
