@@ -193,6 +193,22 @@ workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads(
 const position: number | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
+const atomicResponse = workspace.bufferedRestore();
+const noFeedOutput: void = atomicResponse.feed(new Uint8Array([65]));
+const atomicReport: WorkspaceRestoreReport = atomicResponse.finalize();
+const liveResponse = workspace.progressiveRestore("utf16");
+const liveChunk = liveResponse.feedUtf16(new Uint16Array([65]));
+const deliveredBytes: number = liveChunk.delivered.bytes;
+const completeResponse: boolean = liveResponse.finalize().complete;
+const terminalCounts: number | undefined = ({} as DataFogError).delivered?.utf16;
+const terminalIncomplete: false | undefined = ({} as DataFogError).complete;
+// @ts-expect-error Progressive feed accepts bytes, not a coercible array/string.
+liveResponse.feed([65]);
+// @ts-expect-error Encoding is a closed set.
+workspace.progressiveRestore("utf32");
+// @ts-expect-error Atomic feeds never release text.
+const unexpectedAtomicChunk: string = atomicResponse.feed(new Uint8Array());
+void noFeedOutput; void atomicReport; void deliveredBytes; void completeResponse; void terminalCounts; void terminalIncomplete;
 const report: WorkspaceRestoreReport = workspace.restoreReport("Jane");
 const restoredText: string | null = report.text;
 // @ts-expect-error Issue kinds are a closed set.
@@ -283,6 +299,8 @@ try {
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-streaming-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
@@ -800,6 +818,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");
+    await verifyWorkspaceStreaming(workspaceApi,await fetch("/workspace-streaming.json").then(r=>r.json()));
     const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
     const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
     try {

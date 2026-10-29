@@ -479,6 +479,10 @@ fn shared_streaming_command_fixture_matches_actual_core_results() {
                         expected["restoredMarkers"].as_u64().unwrap() as usize
                     )
                 );
+                if let Some(issues) = expected.get("markerIssues") {
+                    let actual:Vec<_>=failure.error.marker_issues.iter().map(|issue|serde_json::json!({"kind":issue.kind.as_str(),"byteRange":issue.byte_range,"codepointRange":issue.codepoint_range,"utf16Range":issue.utf16_range})).collect();
+                    assert_eq!(serde_json::json!(actual), *issues);
+                }
                 if let Some(kind) = expected["issueKind"].as_str() {
                     assert_eq!(failure.error.marker_issues[0].kind.as_str(), kind);
                 }

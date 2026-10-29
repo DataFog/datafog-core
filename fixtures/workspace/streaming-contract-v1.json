@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "profile": "workspace-streaming-v1",
-  "status": "draft Core runtime contract; current packages have no streaming exports",
+  "status": "draft Rust/Core and WASM runtime contract; published packages have no streaming exports",
   "seed": {
     "namespaceByte": 1,
     "operationByte": 2,
@@ -444,6 +444,50 @@
             "deliveredText": "safe ",
             "restoredMarkers": 0,
             "complete": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "unicode-late-damaged-original-ranges",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "text": "👋 é ",
+          "expect": {
+            "text": "👋 é ",
+            "deliveredText": "👋 é ",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "text": "[[PERSON_BAD]]",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "👋 é ",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "damaged",
+            "markerIssues": [
+              {
+                "kind": "damaged",
+                "byteRange": {
+                  "start": 9,
+                  "end": 23
+                },
+                "codepointRange": {
+                  "start": 5,
+                  "end": 19
+                },
+                "utf16Range": {
+                  "start": 6,
+                  "end": 20
+                }
+              }
+            ]
           }
         }
       ]

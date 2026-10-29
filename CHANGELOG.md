@@ -23,7 +23,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- Rust can restore UTF-8 or UTF-16 response chunks against a committed workspace
+- Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
   head, with strict buffered finalization by default and a separate opt-in
   progressive adapter. Late marker/encoding errors stop progressive output with
   original ranges and delivered counts; unfinished or oversized possible markers

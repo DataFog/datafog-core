@@ -127,8 +127,31 @@ and injected fallible allocation failures clear the response. An 8 MiB debug-bui
 case retained an 82-byte carry and completed in about 1.15 seconds on the local
 machine; this is evidence, not a performance threshold or release benchmark.
 
-This is a Core runtime draft. Current published Python/Node/WASM packages do not
-claim streaming exports. Thin binding lifecycle/typing, full X8 streaming parity,
-actual browser cases and W6 host failure behavior remain required before R4 can
-close. Provider framing/SSE and LiteLLM integration belong outside this parser.
+## Draft WASM transport
+
+The installed draft WASM package exposes `workspace.bufferedRestore(encoding?)`
+and `workspace.progressiveRestore(encoding?)`, where encoding is `"utf8"`
+(default) or `"utf16"`. Factory-only interface objects mirror Core as `feed`
+(`Uint8Array`), `feedUtf16` (`Uint16Array`), `finalize`, `reset`, `close`.
+Atomic feeds return `undefined`; progressive feeds return the chunk/count fields
+above, with `restoredMarkers` in camel case. Terminal progressive `DataFogError`
+retains `delivered`, `complete: false`, and the usual marker ranges. A malformed
+transport type terminates through Core's invalid-encoding path instead of letting
+wasm-bindgen coerce arrays or strings. Encoding selection is a closed set.
+
+Native stream objects own Core adapters. A weak parent registry closes surviving
+children on changed-head activation or workspace close/drop, releasing private
+lookup/snapshot references immediately; a same-head no-op preserves children.
+Dropping a child does not retain it in the registry. Native ownership guards are
+released before JS value/error conversion, and private text is serialized by
+borrowing directly into JS rather than an intermediate reallocating JSON string.
+JS output strings remain host-owned and cannot promise secure wiping.
+
+This is a runtime draft. Current published Python/Node/WASM packages do not claim
+streaming exports. The shared script runs the executable fixture against the
+actual installed WASM package in Chromium, including the MV3 reference extension;
+it does not establish Josh's shipping product integration. Full native binding
+lifecycle/typing, X8 streaming parity and W6 host failure behavior remain required
+before R4 can close. Provider framing/SSE and LiteLLM integration belong outside
+this parser.
 No conversation scoping is claimed until #148 is integrated and reviewed.
