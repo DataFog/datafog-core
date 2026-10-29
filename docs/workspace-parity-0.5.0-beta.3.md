@@ -101,8 +101,10 @@ distributed admission or overall beta.3 freeze.
 `fixtures/workspace/operation-contract-v1.json` adds seven scenarios and 185 real
 steps. Together with foundation and streaming, this profile contributes 37 scenarios /
 421 steps across Rust, installed native Python/Node and Chromium WASM. Foundation remains 17/156 and
-streaming 13/80; their eight canonical runtime outputs remain byte-identical to
-the qualified `d5584e9` baseline. No runtime can omit the new profile or substitute
+streaming 13/80. The historical operation-profile receipt records the eight
+foundation/streaming outputs that were byte-identical to `d5584e9` at that
+qualification. Current candidate bytes also include the conversation-enabled v3
+layout; the current receipt below records those exact outputs. No runtime can omit the new profile or substitute
 a declaration, mock or skipped method. `cargo dfv parity --workspace` also rejects
 a receipt without an executed operation profile.
 
@@ -201,3 +203,8 @@ retry after ambiguous delivery, or approve a production host's authentication,
 key storage, site binding or deployment. Final qualification requires the complete
 current profile and raw oracle comparisons; a prior structural-validator pass
 cannot substitute for them.
+
+[Clean conversation-profile receipt](verification/evidence/workspace-conversation-parity.json)
+retains the qualified commit, actual package/source/output hashes and separate
+host applicability. All original 37 scenarios / 421 commands still execute
+against the current conversation-enabled state format.
