@@ -10,6 +10,9 @@ on:
       - 'bindings/wasm/**'
       - 'examples/workspace-extension/**'
       - 'fixtures/workspace/**'
+      - 'fixtures/browser-detection/**'
+      - 'scripts/*browser-detection*.mjs'
+      - 'baselines/browser-detection-small-*'
       - '.github/workflows/workspace-integration.yml'
   pull_request:
     paths:
@@ -19,6 +22,9 @@ on:
       - 'bindings/wasm/**'
       - 'examples/workspace-extension/**'
       - 'fixtures/workspace/**'
+      - 'fixtures/browser-detection/**'
+      - 'scripts/*browser-detection*.mjs'
+      - 'baselines/browser-detection-small-*'
       - '.github/workflows/workspace-integration.yml'
 
 permissions:
@@ -57,6 +63,7 @@ jobs:
       - run: npm ci --prefix bindings/wasm
       - run: npm ci --prefix examples/workspace-extension
       - run: npx --prefix examples/workspace-extension playwright install --with-deps chromium
+      - run: node --test scripts/test-browser-detection-scoring.mjs
       - run: npm run test:package --prefix bindings/wasm
       - run: npm run test:workspace-integration --prefix examples/workspace-extension
       - uses: actions/upload-artifact@v4
