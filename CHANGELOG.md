@@ -18,6 +18,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes the shared workspace lifecycle, staged changes, policy,
+  recall, combined review and strict restoration without loading browser WASM.
+
+
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
   coverage/type conflicts block handoff with ranged review errors before a plan is

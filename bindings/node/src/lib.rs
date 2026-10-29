@@ -1,6 +1,8 @@
 //! Node binding for datafog-core.
 mod models;
+mod workspace;
 pub use models::open_model_session;
+pub use workspace::NativeWorkspace;
 
 use napi::bindgen_prelude::Buffer;
 use napi::{Env, Error, Status, Unknown};

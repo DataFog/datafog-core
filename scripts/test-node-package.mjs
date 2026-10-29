@@ -55,7 +55,10 @@ import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
 import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage-conformance.mjs";
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
+import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
 import * as germanApi from "@datafog/node";
+const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
+await verifyNativeWorkspace(germanApi,workspaceCounters);
 verifyCoverageConflicts(germanApi);
 await verifyCoverageProviderCalls(germanApi);
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
@@ -639,6 +642,21 @@ void masked;
 void pseudonymized;
 
 import { discoverFields, scanStructured, transformStructured, scanAndTransformStructured, type StructuredScanResult, type StructuredTransformResult } from "@datafog/node";
+import {Workspace, type WorkspaceFinding, type WorkspaceHead, type WorkspaceReviewResult, type WorkspacePolicy, type PreparedWorkspaceChange, workspaceByteRangeFromUtf16} from "@datafog/node";
+const workspace=Workspace.create(new Uint8Array(16),new Uint8Array(16));
+const finding: WorkspaceFinding={entityType:"PERSON",matchedText:"Jane",range:workspaceByteRangeFromUtf16("Jane",0,4),source:"user",needsReview:true};
+const review: WorkspaceReviewResult=workspace.review({text:"Jane",scannerFindings:[],userSelections:[finding]});
+const policy: WorkspacePolicy=workspace.policy();
+const plan: PreparedWorkspaceChange=workspace.prepareReview([{text:"Jane",scannerFindings:[finding],userSelections:[]}],new Uint8Array(16));
+const head: WorkspaceHead=plan.heads().candidateHead;
+const revision: string=head.revision;
+plan.policyPreview();plan.snapshotFormat();plan.discard();workspace.close();
+// @ts-expect-error raw native plan handles are not public package declarations.
+import {NativeWorkspace} from "@datafog/node";
+// @ts-expect-error revisions cannot use lossy JavaScript numbers.
+const invalidHead: WorkspaceHead={revision:9007199254740993,commitId:[]};
+void review;void policy;void revision;void invalidHead;
+
 const document = { first_name: "May", count: 1 };
 const discovered = discoverFields(document, { mappings: { "/first_name": "PERSON" } });
 const structured: StructuredScanResult = scanStructured(document);
@@ -732,6 +750,9 @@ try {
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
+  for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs"]) {
+    writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
+  }
   writeConsumerTest();
 
   run(
@@ -751,6 +772,8 @@ try {
     ["test-installed.mjs", fixturesDirectory],
     temporaryDirectory,
   );
+
+  run(process.execPath,["--expose-gc","native-node-workspace-gc.mjs"],temporaryDirectory);
 
   run(
     process.execPath,
