@@ -87,60 +87,69 @@ pub(super) fn inputs(
     let code = w::ErrorCode::InvalidConversation;
     let values = value
         .cast_exact::<PyList>()
-        .map_err(|_| failure(py, code))?;
+        .map_err(|_| failure(py, w::ErrorCode::InvalidBatch))?;
     if values.len() > w::MAX_INPUTS {
         return Err(failure(py, w::ErrorCode::ResourceLimit));
     }
     let mut result = Vec::with_capacity(values.len());
     let mut bytes = 0usize;
-    for value in values.iter() {
-        let item = object(py, &value, &["input", "conversation"], code)?;
-        let input = required(py, &item, "input", code)?;
-        let input = input
-            .extract::<PyRef<'_, WorkspaceReviewInput>>()
-            .map_err(|_| failure(py, code))?;
-        bytes = bytes.saturating_add(input.text.len());
-        for finding in input.scanner.iter().chain(&input.user) {
-            bytes = bytes.saturating_add(finding_bytes(finding));
-        }
-        for correction in &input.corrections {
+    for (index, value) in values.iter().enumerate() {
+        let row = (|| -> PyResult<(ReviewOwned, w::Conversation)> {
+            let item = object(py, &value, &["input", "conversation"], code)?;
+            let input = required(py, &item, "input", code)?;
+            let input = input
+                .extract::<PyRef<'_, WorkspaceReviewInput>>()
+                .map_err(|_| failure(py, code))?;
+            bytes = bytes.saturating_add(input.text.len());
+            for finding in input.scanner.iter().chain(&input.user) {
+                bytes = bytes.saturating_add(finding_bytes(finding));
+            }
+            for correction in &input.corrections {
+                bytes = bytes
+                    .saturating_add(finding_bytes(&correction.replacement))
+                    .saturating_add(correction.candidate_key.len());
+            }
+            material_limit(py, bytes)?;
+            let context = object(
+                py,
+                &required(py, &item, "conversation", code)?,
+                &["id", "surface", "siteId", "siteIdByteBudget"],
+                code,
+            )?;
+            let id = public_id(py, &required(py, &context, "id", code)?, code)?;
+            let surface = string(py, &required(py, &context, "surface", code)?, code)?;
+            let site = required(py, &context, "siteId", code)?;
+            let site_id = if site.is_none() {
+                None
+            } else {
+                Some(string(py, &site, code)?)
+            };
             bytes = bytes
-                .saturating_add(finding_bytes(&correction.replacement))
-                .saturating_add(correction.candidate_key.len());
+                .saturating_add(surface.len())
+                .saturating_add(site_id.as_ref().map_or(0, String::len));
+            material_limit(py, bytes)?;
+            let budget = required(py, &context, "siteIdByteBudget", code)?;
+            if !budget.is_exact_instance_of::<PyInt>() {
+                return Err(failure(py, code));
+            }
+            let site_id_byte_budget = budget.extract::<usize>().map_err(|_| failure(py, code))?;
+            Ok((
+                input.owned(),
+                w::Conversation {
+                    id,
+                    surface,
+                    site_id,
+                    site_id_byte_budget,
+                },
+            ))
+        })();
+        match row {
+            Ok(row) => result.push(row),
+            Err(error) => {
+                error.value(py).setattr("input_index", index)?;
+                return Err(error);
+            }
         }
-        material_limit(py, bytes)?;
-        let context = object(
-            py,
-            &required(py, &item, "conversation", code)?,
-            &["id", "surface", "siteId", "siteIdByteBudget"],
-            code,
-        )?;
-        let id = public_id(py, &required(py, &context, "id", code)?, code)?;
-        let surface = string(py, &required(py, &context, "surface", code)?, code)?;
-        let site = required(py, &context, "siteId", code)?;
-        let site_id = if site.is_none() {
-            None
-        } else {
-            Some(string(py, &site, code)?)
-        };
-        bytes = bytes
-            .saturating_add(surface.len())
-            .saturating_add(site_id.as_ref().map_or(0, String::len));
-        material_limit(py, bytes)?;
-        let budget = required(py, &context, "siteIdByteBudget", code)?;
-        if !budget.is_exact_instance_of::<PyInt>() {
-            return Err(failure(py, code));
-        }
-        let site_id_byte_budget = budget.extract::<usize>().map_err(|_| failure(py, code))?;
-        result.push((
-            input.owned(),
-            w::Conversation {
-                id,
-                surface,
-                site_id,
-                site_id_byte_budget,
-            },
-        ));
     }
     Ok(result)
 }
