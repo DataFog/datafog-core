@@ -1,7 +1,7 @@
 // Synthetic reference host: storage/encryption are host responsibilities, not SDK exports.
 import {DatabaseSync} from "node:sqlite";
 import {createCipheriv,createDecipheriv,randomBytes,timingSafeEqual} from "node:crypto";
-import {Workspace} from "@datafog/node";
+import {Workspace,DataFogError} from "@datafog/node";
 
 export class HostFailure extends Error {
   constructor(code) {super(code);this.code=code;}
@@ -167,4 +167,50 @@ export function restoreStoredResponse({store,scope,requestId,text}) {
     workspace=Workspace.openBundle(saved.bundle);
     return {requestId,text:workspace.restore(text)};
   } finally {saved.bundle.fill(0);workspace?.close();}
+}
+
+/** Explicit irreversible restore delivery. Provider framing/transport remain host-owned. */
+export async function restoreStoredResponseProgressively({store,scope,requestId,expectedHead,chunks,deliver,signal,encoding="utf8"}) {
+  if(typeof requestId!=="string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(requestId) || typeof deliver!=="function")throw failure("invalid_request");
+  const owner=scopeValue(scope),expected=headValue(expectedHead);
+  let workspace,stream;
+  let delivered={bytes:0,codepoints:0,utf16:0,restoredMarkers:0};
+  const cancelled=()=>{if(signal?.aborted)throw failure("cancelled");};
+  const emit=async chunk=>{
+    delivered=chunk.delivered;
+    cancelled();
+    // Counts describe text returned by Core to this host, not a remote write acknowledgment.
+    if(chunk.text || chunk.complete) {
+      try {await deliver({...chunk,requestId,head:structuredClone(expected),signal});}
+      catch {throw failure(signal?.aborted ? "cancelled" : "stream_delivery_failed");}
+    }
+  };
+  async function* source() {
+    try {for await(const chunk of chunks)yield chunk;}
+    catch {throw failure(signal?.aborted ? "cancelled" : "stream_input_failed");}
+  }
+  try {
+    cancelled();
+    const saved=store.load(owner);
+    try {
+      if(!sameHead(saved.head,expected))throw failure("workspace_conflict");
+      workspace=Workspace.openBundle(saved.bundle);
+    } finally {saved.bundle.fill(0);}
+    stream=workspace.progressiveRestore(encoding);
+    // The provider iterator must also cooperate with signal while awaiting network I/O.
+    for await(const chunk of source()) {
+      cancelled();
+      await emit(encoding==="utf16" ? stream.feedUtf16(chunk) : stream.feed(chunk));
+    }
+    cancelled();
+    const last=stream.finalize();await emit(last);
+    return {requestId,head:expected,delivered:last.delivered,complete:true};
+  } catch(error) {
+    if(error instanceof DataFogError) {
+      if(error.delivered===undefined)error.delivered=delivered;
+      error.complete=false;throw error;
+    }
+    const rejected=error instanceof HostFailure ? error : failure("stream_input_failed");
+    rejected.delivered=delivered;rejected.complete=false;throw rejected;
+  } finally {stream?.close();workspace?.close();}
 }

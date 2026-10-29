@@ -80,3 +80,33 @@ The adapter uses pinned Node 24's built-in
 [`node:sqlite`](https://nodejs.org/docs/latest-v24.x/api/sqlite.html), adding no
 third-party database dependency. The native installed-package check must execute
 these tests; documentation or a mocked compare-and-save does not qualify W6.
+
+## Opt-in progressive response delivery
+
+`restoreStoredResponseProgressively` is reference-host conformance code. The trusted
+request supplies tenant/workspace, request ID and the full expected committed head;
+provider output cannot select these. The host authorizes and decrypts durable state,
+rejects a stale expected head before output, and opens a pinned native Core adapter.
+It accepts decoded response byte chunks (or UTF-16 units when explicitly selected),
+not SSE/provider framing. The existing whole-response restore path is unchanged.
+
+Only successful Core calls reach `deliver`; a failed feed releases none of that
+call. Every feed is incomplete, and only successful finalization supplies completion.
+Late marker/encoding/resource failures preserve original ranges and prior returned
+counts. Cancellation, iterator failure and callback failure stop without inventing a
+complete response or automatically retrying. Cleanup closes native children and the
+workspace. Earlier output is irreversible.
+
+`delivered` measures text Core returned to this host, not confirmed network receipt.
+A callback may write before failing, so its failure cannot prove non-delivery. The
+host checks cancellation before feed and callback invocation; once invoked, callbacks
+and provider iterators must cooperate with the supplied signal, including while
+awaiting network I/O. This helper cannot retract remote output or interrupt arbitrary
+uncooperative I/O. A same-head snapshot CAS remains unrelated to delivery admission,
+idempotency or exactly-once network effects.
+
+Installed tests use actual encrypted SQLite state and native Node restoration to
+prove complete Unicode delivery, late unknown-marker and invalid-encoding failure,
+stale expected-head rejection, cancellation between chunks and during a paused
+cooperative write, and sanitized iterator/callback failures. Production key storage,
+server-wide admission and client-carried state remain separate W6/G4 qualification.

@@ -9,7 +9,7 @@ import {Worker} from "node:worker_threads";
 import {fork} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
 import {Workspace} from "@datafog/node";
-import {EncryptedWorkspaceStore,HostFailure,runPreparedRequest,restoreStoredResponse} from "./node-workspace-host.mjs";
+import {EncryptedWorkspaceStore,HostFailure,runPreparedRequest,restoreStoredResponse,restoreStoredResponseProgressively} from "./node-workspace-host.mjs";
 
 export async function verifyNodeWorkspaceHost() {
   const directory=await mkdtemp(path.join(tmpdir(),"datafog-node-host-"));
@@ -169,6 +169,44 @@ export async function verifyNodeWorkspaceHost() {
 
     assert.throws(()=>restoreStoredResponse({store,scope:{...scope,workspaceId:"missing_history_only"},requestId:"history_response",text:alphaResult.text}),error=>error.code==="workspace_unavailable");
 
+    // Opt-in progressive response delivery uses authorized durable mappings and a full head.
+    const streamText=`👋 ${alphaResult.text}!`,streamBytes=new TextEncoder().encode(streamText),delivered=[];
+    const streamRequest=(options={})=>restoreStoredResponseProgressively({store,scope,requestId:"stream_response",expectedHead:head(scope),chunks:[streamBytes.slice(0,6),streamBytes.slice(6)],deliver:async chunk=>delivered.push(chunk),...options});
+    const complete=await streamRequest();
+    assert.equal(complete.complete,true);assert.equal(delivered.map(chunk=>chunk.text).join(""),"👋 Synthetic Alpha Name!");
+    assert(delivered.slice(0,-1).every(chunk=>chunk.complete===false));assert.equal(delivered.at(-1).complete,true);
+    assert.equal(complete.delivered.utf16,"👋 Synthetic Alpha Name!".length);
+    const staleHead={...head(scope),commitId:[...id(200)]};
+    const deliveredBefore=delivered.length;
+    await rejected(()=>streamRequest({expectedHead:staleHead}),"workspace_conflict");assert.equal(delivered.length,deliveredBefore);
+    const partial=[];
+    await assert.rejects(()=>streamRequest({chunks:[new TextEncoder().encode("safe "),new TextEncoder().encode("[[PERSON_AAAAAA]]")],deliver:async chunk=>partial.push(chunk)}),error=>{
+      assert.equal(error.code,"invalid_marker");assert.equal(error.complete,false);assert.equal(error.delivered.bytes,5);assert.equal(error.markerIssues[0].kind,"unknown");assert(!("text" in error));return true;
+    });
+    assert.deepEqual(partial.map(chunk=>chunk.text),["safe "]);assert(partial.every(chunk=>!chunk.complete));
+    const badEncoding=[];
+    await assert.rejects(()=>streamRequest({chunks:[new TextEncoder().encode("safe "),new Uint8Array([0xff])],deliver:async chunk=>badEncoding.push(chunk)}),error=>error.code==="invalid_encoding" && error.complete===false && error.delivered.bytes===5);
+    assert.deepEqual(badEncoding.map(chunk=>chunk.text),["safe "]);
+    const cancelledStream=new AbortController(),cancelledChunks=[];
+    await assert.rejects(()=>streamRequest({signal:cancelledStream.signal,chunks:[new TextEncoder().encode("safe "),streamBytes],deliver:async chunk=>{cancelledChunks.push(chunk);cancelledStream.abort();}}),error=>error.code==="cancelled" && error.complete===false && error.delivered.bytes===5);
+    assert.deepEqual(cancelledChunks.map(chunk=>chunk.text),["safe "]);
+    const pausedStream=new AbortController();let streamEntered,streamResume;
+    const enteringStream=new Promise(resolve=>streamEntered=resolve),resumeStream=new Promise(resolve=>streamResume=resolve);
+    const pausedChunks=[];
+    const pendingStream=streamRequest({signal:pausedStream.signal,deliver:async chunk=>{streamEntered();await resumeStream;if(chunk.signal.aborted)throw new HostFailure("cancelled");pausedChunks.push(chunk);}});
+    await enteringStream;pausedStream.abort();streamResume();
+    await assert.rejects(()=>pendingStream,error=>error.code==="cancelled" && error.complete===false);assert.equal(pausedChunks.length,0);
+    await assert.rejects(()=>streamRequest({deliver:async()=>{throw new Error("Synthetic private transport detail");}}),error=>error.code==="stream_delivery_failed" && error.complete===false && !error.message.includes("Synthetic"));
+    async function* brokenSource(){yield new TextEncoder().encode("safe ");throw Object.assign(new Error("Synthetic private provider detail"),{complete:false,delivered:{private:"Synthetic"}});}
+    await assert.rejects(()=>streamRequest({chunks:brokenSource()}),error=>error.code==="stream_input_failed" && error.complete===false && error.delivered.bytes===5 && !JSON.stringify(error).includes("Synthetic"));
+    await assert.rejects(()=>streamRequest({encoding:"utf32"}),error=>error.code==="invalid_encoding" && error.complete===false && error.delivered.bytes===0);
+    const sourceSignal=new AbortController();let sourceEntered;
+    const enteringSource=new Promise(resolve=>sourceEntered=resolve);
+    async function* pausedSource(){yield new TextEncoder().encode("safe ");sourceEntered();await new Promise(resolve=>sourceSignal.signal.addEventListener("abort",resolve,{once:true}));throw new Error("private cancelled provider detail");}
+    const pendingSource=streamRequest({signal:sourceSignal.signal,chunks:pausedSource()});await enteringSource;sourceSignal.abort();
+    await assert.rejects(()=>pendingSource,error=>error.code==="cancelled" && error.complete===false && error.delivered.bytes===5);
+    await assert.rejects(()=>streamRequest({scope:{...scope,workspaceId:"missing_history_only"}}),error=>error.code==="workspace_unavailable" && error.complete===false);
+
     // Authenticated metadata changes cannot redirect an encrypted mapping row.
     const raw=new DatabaseSync(database),row=raw.prepare("SELECT * FROM workspaces WHERE tenant=? AND workspace=?").get(scope.tenantId,scope.workspaceId);
     raw.prepare("UPDATE workspaces SET revision=? WHERE tenant=? AND workspace=?").run("999",scope.tenantId,scope.workspaceId);
@@ -210,7 +248,7 @@ export async function verifyNodeWorkspaceHost() {
       for(const text of [value,"Synthetic Crash Name","Synthetic Alpha Name","Synthetic Beta Name"])assert(!bytes.includes(Buffer.from(text)),"database/WAL must contain encrypted state only");
       assert(!bytes.includes(key) && !bytes.includes(otherKey),"host keys must not be persisted in database/WAL");
     }
-    return {stateChangingRaceWinners:1,stateChangingRaceLosers:1,noOpReleases:2,failedAuthenticationWiped:true,cooperativeReleaseCancellation:true,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
+    return {progressiveComplete:true,progressiveLateFailure:true,progressiveCancellation:true,progressiveTransportFailure:true,stateChangingRaceWinners:1,stateChangingRaceLosers:1,noOpReleases:2,failedAuthenticationWiped:true,cooperativeReleaseCancellation:true,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
   } finally {
     for(const {worker}of workers)await worker.terminate();
     store.close();key.fill(0);otherKey.fill(0);await rm(directory,{recursive:true,force:true});
