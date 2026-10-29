@@ -1,3 +1,4 @@
+mod stream;
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,
     WorkspaceInput,
@@ -13,6 +14,7 @@ fn failure(code: ErrorCode) -> JsValue {
         finding_index: None,
         input_index: None,
         marker_issues: Vec::new(),
+        review_conflicts: Vec::new(),
     })
 }
 fn marker_issue_value(issue: &workspace::MarkerIssue) -> serde_json::Value {
@@ -25,7 +27,7 @@ fn marker_issue_value(issue: &workspace::MarkerIssue) -> serde_json::Value {
 }
 fn from_error(error: WorkspaceError) -> JsValue {
     let issues: Vec<_> = error.marker_issues.iter().map(marker_issue_value).collect();
-    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index, "inputIndex": error.input_index, "markerIssues": issues }).to_string())
+    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index, "inputIndex": error.input_index, "markerIssues": issues, "reviewConflicts": error.review_conflicts }).to_string())
 }
 fn id(bytes: &[u8]) -> Result<workspace::PublicId, JsValue> {
     bytes.try_into().map_err(|_| failure(ErrorCode::InvalidId))
@@ -75,6 +77,14 @@ struct FindingInput {
     confidence: Option<f32>,
     detector_name: Option<String>,
     detector_version: Option<String>,
+    #[serde(default)]
+    source: workspace::FindingSource,
+    #[serde(default = "default_needs_review")]
+    needs_review: bool,
+}
+
+fn default_needs_review() -> bool {
+    workspace::DEFAULT_NEEDS_REVIEW
 }
 
 #[derive(Deserialize)]
@@ -82,6 +92,91 @@ struct FindingInput {
 struct Input {
     text: String,
     findings: Vec<FindingInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct CorrectionInput {
+    candidate_key: String,
+    replacement: FindingInput,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct ReviewInputData {
+    text: String,
+    scanner_findings: Vec<FindingInput>,
+    user_selections: Vec<FindingInput>,
+    #[serde(default)]
+    corrections: Vec<CorrectionInput>,
+}
+struct AdaptedReview {
+    text: String,
+    scanner: Vec<WorkspaceFinding>,
+    user: Vec<WorkspaceFinding>,
+    corrections: Vec<workspace::ReviewCorrection>,
+}
+impl AdaptedReview {
+    fn as_input(&self) -> workspace::ReviewInput<'_> {
+        workspace::ReviewInput {
+            text: &self.text,
+            scanner_findings: &self.scanner,
+            user_selections: &self.user,
+            corrections: &self.corrections,
+        }
+    }
+}
+fn adapt_review(input: ReviewInputData) -> Result<AdaptedReview, WorkspaceError> {
+    if input
+        .scanner_findings
+        .len()
+        .saturating_add(input.user_selections.len())
+        .saturating_add(input.corrections.len())
+        > workspace::MAX_FINDINGS
+    {
+        return Err(WorkspaceError {
+            code: ErrorCode::ResourceLimit,
+            finding_index: None,
+            input_index: None,
+            marker_issues: Vec::new(),
+            review_conflicts: Vec::new(),
+        });
+    }
+    let scanner = adapt_findings(input.scanner_findings)?;
+    let user = adapt_findings(input.user_selections).map_err(|mut error| {
+        error.finding_index = error.finding_index.map(|index| index + scanner.len());
+        error
+    })?;
+    let mut corrections = Vec::with_capacity(input.corrections.len());
+    for (index, correction) in input.corrections.into_iter().enumerate() {
+        let mut findings = adapt_findings(vec![correction.replacement]).map_err(|mut error| {
+            error.finding_index = Some(scanner.len() + user.len() + index);
+            error
+        })?;
+        corrections.push(workspace::ReviewCorrection {
+            candidate_key: correction.candidate_key,
+            replacement: findings.remove(0),
+        });
+    }
+    Ok(AdaptedReview {
+        text: input.text,
+        scanner,
+        user,
+        corrections,
+    })
+}
+fn review_value(result: workspace::ReviewResult) -> serde_json::Value {
+    let candidates: Vec<_> = result.candidates.into_iter().map(|candidate| {
+        let finding=candidate.finding;
+        json!({ "key":candidate.key,"finding":{
+            "entityType":finding.entity_type,"matchedText":finding.matched_text,
+            "range":{"unit":"utf8_bytes","start":finding.byte_range.start,"end":finding.byte_range.end},
+            "confidence":finding.confidence,"detectorName":finding.detector_name,"detectorVersion":finding.detector_version,
+            "source":finding.source.as_str(),"needsReview":finding.needs_review
+        }, "sources":candidate.sources.iter().map(|source| source.as_str()).collect::<Vec<_>>(),
+           "byteRange":finding.byte_range,"codepointRange":candidate.codepoint_range,"utf16Range":candidate.utf16_range,
+           "eligible":candidate.eligible,"selected":candidate.selected })
+    }).collect();
+    json!({"head":head_value(result.head),"candidates":candidates,"conflicts":result.conflicts})
 }
 
 fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, WorkspaceError> {
@@ -95,6 +190,7 @@ fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, Wo
                     finding_index: Some(index),
                     input_index: None,
                     marker_issues: Vec::new(),
+                    review_conflicts: Vec::new(),
                 });
             }
             Ok(WorkspaceFinding {
@@ -107,6 +203,8 @@ fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, Wo
                 confidence: f.confidence,
                 detector_name: f.detector_name,
                 detector_version: f.detector_version,
+                source: f.source,
+                needs_review: f.needs_review,
             })
         })
         .collect()
@@ -118,6 +216,8 @@ fn preview_value(preview: &workspace::Preview) -> serde_json::Value {
         .iter()
         .map(|t| {
             json!({
+                "source": t.source.as_str(),
+                "needsReview": t.needs_review,
                 "sourceByteRange": super::TextRange::from(t.source_byte_range),
                 "sourceCodepointRange": super::TextRange::from(t.source_codepoint_range),
                 "sourceUtf16Range": super::TextRange::from(t.source_utf16_range),
@@ -136,6 +236,7 @@ pub struct WasmWorkspace {
     inner: Workspace,
     plans: BTreeMap<u32, PreparedChange>,
     next_plan: u32,
+    streams: stream::Registry,
 }
 
 #[wasm_bindgen(js_class = NativeWorkspace)]
@@ -146,6 +247,7 @@ impl WasmWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     pub fn open_bundle(bytes: &[u8]) -> Result<WasmWorkspace, JsValue> {
@@ -154,6 +256,7 @@ impl WasmWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     pub fn head(&self) -> Result<String, JsValue> {
@@ -164,6 +267,107 @@ impl WasmWorkspace {
     }
     pub fn export_bundle(&self) -> Result<Vec<u8>, JsValue> {
         self.inner.export_bundle().map_err(from_error)
+    }
+    pub fn policy(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.inner.policy().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
+    pub fn prepare_policy_changes(
+        &mut self,
+        edits_json: &str,
+        operation: &[u8],
+    ) -> Result<u32, JsValue> {
+        if edits_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let edits: workspace::PolicyEdits =
+            serde_json::from_str(edits_json).map_err(|_| failure(ErrorCode::InvalidPolicy))?;
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_policy_changes(&edits, id(operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
+    pub fn snapshot_format(&self, handle: u32) -> Result<String, JsValue> {
+        serde_json::to_string(&self.plan(handle)?.snapshot_format().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
+    pub fn policy_preview(&self, handle: u32) -> Result<String, JsValue> {
+        serde_json::to_string(&self.plan(handle)?.policy_preview().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
+    pub fn recall(&self, text: &str) -> Result<String, JsValue> {
+        let result = self.inner.recall(text).map_err(from_error)?;
+        let findings: Vec<_> = result.findings.iter().map(|span| {
+            let finding = &span.finding;
+            json!({
+                "finding": {
+                    "entityType": finding.entity_type,
+                    "matchedText": finding.matched_text,
+                    "range": { "unit": "utf8_bytes", "start": finding.byte_range.start, "end": finding.byte_range.end },
+                    "source": finding.source.as_str(),
+                    "needsReview": finding.needs_review,
+                },
+                "byteRange": super::TextRange::from(finding.byte_range),
+                "codepointRange": super::TextRange::from(span.codepoint_range),
+                "utf16Range": super::TextRange::from(span.utf16_range),
+            })
+        }).collect();
+        Ok(
+            json!({ "head": head_value(result.head), "complete": true, "findings": findings })
+                .to_string(),
+        )
+    }
+    pub fn review(&self, input_json: &str) -> Result<String, JsValue> {
+        if input_json.len() > workspace::MAX_BUNDLE_BYTES {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let data: ReviewInputData =
+            serde_json::from_str(input_json).map_err(|_| failure(ErrorCode::InvalidFinding))?;
+        let input = adapt_review(data).map_err(from_error)?;
+        let value =
+            review_value(self.inner.review(input.as_input()).map_err(from_error)?).to_string();
+        if value.len() > workspace::MAX_BUNDLE_BYTES {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        Ok(value)
+    }
+    pub fn prepare_review(&mut self, inputs_json: &str, operation: &[u8]) -> Result<u32, JsValue> {
+        if inputs_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let data: Vec<ReviewInputData> =
+            serde_json::from_str(inputs_json).map_err(|_| failure(ErrorCode::InvalidFinding))?;
+        if data.len() > workspace::MAX_INPUTS {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let mut inputs = Vec::with_capacity(data.len());
+        for (input_index, input) in data.into_iter().enumerate() {
+            inputs.push(adapt_review(input).map_err(|mut error| {
+                error.input_index = Some(input_index);
+                from_error(error)
+            })?);
+        }
+        let borrowed: Vec<_> = inputs.iter().map(AdaptedReview::as_input).collect();
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_review(&borrowed, id(operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
     }
     pub fn prepare_recovery(&mut self, operation: &[u8]) -> Result<u32, JsValue> {
         if self.plans.len() >= 32 {
@@ -229,6 +433,7 @@ impl WasmWorkspace {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
                     marker_issues: Vec::new(),
+                    review_conflicts: Vec::new(),
                     finding_index: None,
                 }));
             }
@@ -314,7 +519,22 @@ impl WasmWorkspace {
             .map_err(from_error)?;
         self.plans
             .retain(|retained, _| *retained != handle && parents.get(retained) == Some(&saved));
+        if expected != saved {
+            self.streams.close();
+        }
         Ok(())
+    }
+    pub fn buffered_restore(
+        &mut self,
+        encoding: &str,
+    ) -> Result<stream::NativeRestoreStream, JsValue> {
+        self.streams.buffered(&self.inner, encoding)
+    }
+    pub fn progressive_restore(
+        &mut self,
+        encoding: &str,
+    ) -> Result<stream::NativeRestoreStream, JsValue> {
+        self.streams.progressive(&self.inner, encoding)
     }
     pub fn restore(&self, text: &str) -> Result<String, JsValue> {
         self.inner.restore(text).map_err(from_error)
@@ -332,6 +552,12 @@ impl WasmWorkspace {
     pub fn close(&mut self) {
         self.plans.clear();
         self.inner.close();
+        self.streams.close();
+    }
+}
+impl Drop for WasmWorkspace {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 impl WasmWorkspace {

@@ -160,17 +160,59 @@ void discovered;
 void protectedDocument;
 void protectedTogether;
 
-import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
+import { Workspace, DataFogError, type WorkspaceFinding, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
+const nullableWorkspaceFinding: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, confidence: null, detectorName: null, detectorVersion: null};
+const reviewedNullable = workspace.review({text: "Jane", scannerFindings: [nullableWorkspaceFinding], userSelections: []});
+workspace.prepare("Jane", reviewedNullable.candidates.map(candidate => candidate.finding), new Uint8Array(16));
+
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
+const findingSource: "scanner" | "recall" | "user" = previews[0].transformations[0].source;
+const needsReview: boolean = previews[0].transformations[0].needsReview;
+const recalled = workspace.recall("Jane");
+const completeRecall: true = recalled.complete;
+const recallSource: "recall" = recalled.findings[0].finding.source;
+workspace.prepare("Jane", recalled.findings.map(span => span.finding), new Uint8Array(16));
+void completeRecall; void recallSource;
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsReview: false}], new Uint8Array(16));
+// @ts-expect-error Review source is a closed set.
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
+void findingSource; void needsReview;
+const currentPolicy = workspace.policy();
+const snapshotVersion: 1 | 2 = currentPolicy.snapshotVersion;
+const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
+const settingPreview = policyChange.policyPreview();
+const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
+const currentFormat: 1 | 2 = policyChange.snapshotFormat().currentVersion;
+// @ts-expect-error Choices use a closed disposition set.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
+// @ts-expect-error Review flags cannot grant an exception through a settings edit.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive", needsReview: false}]}, new Uint8Array(16));
+void snapshotVersion; void previousChoice; void currentFormat;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
 const position: number | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
+const atomicResponse = workspace.bufferedRestore();
+const noFeedOutput: void = atomicResponse.feed(new Uint8Array([65]));
+const atomicReport: WorkspaceRestoreReport = atomicResponse.finalize();
+const liveResponse = workspace.progressiveRestore("utf16");
+const liveChunk = liveResponse.feedUtf16(new Uint16Array([65]));
+const deliveredBytes: number = liveChunk.delivered.bytes;
+const completeResponse: boolean = liveResponse.finalize().complete;
+const terminalCounts: number | undefined = ({} as DataFogError).delivered?.utf16;
+const terminalIncomplete: false | undefined = ({} as DataFogError).complete;
+// @ts-expect-error Progressive feed accepts bytes, not a coercible array/string.
+liveResponse.feed([65]);
+// @ts-expect-error Encoding is a closed set.
+workspace.progressiveRestore("utf32");
+// @ts-expect-error Atomic feeds never release text.
+const unexpectedAtomicChunk: string = atomicResponse.feed(new Uint8Array());
+void noFeedOutput; void atomicReport; void deliveredBytes; void completeResponse; void terminalCounts; void terminalIncomplete;
 const report: WorkspaceRestoreReport = workspace.restoreReport("Jane");
 const restoredText: string | null = report.text;
 // @ts-expect-error Issue kinds are a closed set.
@@ -239,7 +281,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -248,6 +290,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
@@ -257,10 +300,16 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-streaming-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
   const page = await browser.newPage();
@@ -309,6 +358,8 @@ try {
     } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
+    const {verifyCoverageConflicts} = await import("/coverage-conformance.mjs");
+    verifyCoverageConflicts(germanApi);
     const {verifyGerman} = await import("/german-conformance.mjs");
     const {verifyCredentialOverlaps} = await import("/credential-overlap-conformance.mjs");
     const {verifyJwt} = await import("/jwt-conformance.mjs");
@@ -326,6 +377,43 @@ try {
     const {verifyNpi} = await import("/npi-conformance.mjs");
     const npiRecords = (await fetch("/npi.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyNpi(germanApi,npiRecords);
+    const streetContract = new BrowserModelContract({"street line":"STREET_ADDRESS", "address":"ADDRESS"});
+    try {
+      const text = "👋 Street address: 12 Willow Road, Anytown";
+      const start = new TextEncoder().encode(text.slice(0,text.indexOf("12 Willow"))).length;
+      const streetEnd = start + "12 Willow Road".length;
+      const end = new TextEncoder().encode(text).length;
+      if (!streetContract.needs_model(text, {entities:["STREET_ADDRESS"]})) throw new Error("street rule skipped configured model");
+      const result = streetContract.complete(text, [
+        {native_label:"street line",start,end:streetEnd,coordinate_unit:"utf8_byte"},
+        {native_label:"address",start,end,coordinate_unit:"utf8_byte"},
+      ], {});
+      const index = result.findings.findIndex(f => f.entityType === "STREET_ADDRESS");
+      if (index < 0 || result.evidence[index].sources.length !== 2 ||
+          !result.findings.some(f => f.entityType === "ADDRESS" && f.matchedText === "12 Willow Road, Anytown")) throw new Error("street/full-address evidence changed");
+    } finally { streetContract.free(); }
+    const {verifyStreetAddress} = await import("/street-address-conformance.mjs");
+    verifyStreetAddress(germanApi, (await fetch("/street-address.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    const {verifyAccountNumber} = await import("/account-number-conformance.mjs");
+    verifyAccountNumber(germanApi, (await fetch("/account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    verifyAccountNumber(germanApi, (await fetch("/masked-account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    const accountContract = new BrowserModelContract({"bank account":"ACCOUNT_NUMBER"});
+    try {
+      for (const [text, value, sources] of [
+        ["👋 account number: 12345678", "12345678", 2],
+        ["👋 12345678", "12345678", 1],
+        ["👋 account ending in 1234", "1234", 2],
+        ["👋 account number: XXXX1234", "XXXX1234", 2],
+        ["👋 XXXX1234", "XXXX1234", 1],
+      ]) {
+        const config = {entities:["ACCOUNT_NUMBER"]};
+        if (!accountContract.needs_model(text, config)) throw new Error("partial account rule skipped model");
+        const start = new TextEncoder().encode(text.slice(0,text.indexOf(value))).length;
+        const result = accountContract.complete(text, [{native_label:"bank account", start, end:start+value.length, coordinate_unit:"utf8_byte"}], config);
+        if (result.findings.length !== 1 || result.findings[0].matchedText !== value) throw new Error("model account coverage lost");
+        if (result.evidence[0].sources.length !== sources) throw new Error("account evidence lost");
+      }
+    } finally { accountContract.free(); }
     verifyGerman(germanApi,germanRecords);
     verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
     verifyJwt(germanApi,jwtRecords);
@@ -478,6 +566,21 @@ for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tok
 let restoreRejected = false;
 try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
 if (!restoreRejected) throw new Error("structured restore accepted in WASM");
+
+    const overlapText = "👋 José: 123-45-6789";
+    const nativeSsn = scan(overlapText).find(finding => finding.entityType === "SSN");
+    if (!nativeSsn) throw new Error("SSN overlap fixture was not detected");
+    const semanticPerson = {...nativeSsn, entityType: "PERSON", detectorName: "semantic-person", confidence: 1};
+    for (const findings of [[nativeSsn, semanticPerson], [semanticPerson, nativeSsn]]) {
+      const protectedCopy = transform(overlapText, findings, {default: {strategy: "redact"}});
+      if (protectedCopy.text !== "👋 José: [SSN]" || protectedCopy.transformations[0].entityType !== "SSN") {
+        throw new Error("Native SSN lost equal-span PERSON precedence");
+      }
+      const allowedCopy = transform(overlapText, findings, {
+        default: {strategy: "redact"}, allow: {exact: {SSN: [nativeSsn.matchedText]}}
+      });
+      if (allowedCopy.text !== "👋 José: [PERSON]") throw new Error("SSN allowlist suppressed PERSON protection");
+    }
 
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
@@ -756,6 +859,25 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
     const { verifyWorkspace } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
+    await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");
+    await verifyWorkspaceStreaming(workspaceApi,await fetch("/workspace-streaming.json").then(r=>r.json()));
+    const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
+    try {
+      const before = native.export_bundle();
+      for (const edits of [
+        {rules: [{entityType: "PRODUCT_CODE"}], choices: []},
+        {rules: [], choices: [{entityType: "PERSON", value: "May"}]},
+      ]) {
+        let code;
+        try { native.prepare_policy_changes(JSON.stringify(edits), new Uint8Array(16).fill(3)); }
+        catch (error) { code = JSON.parse(String(error)).code; }
+        if (code !== "invalid_policy") throw new Error("Raw policy input requires an explicit action");
+      }
+      if (JSON.stringify(native.export_bundle()) !== JSON.stringify(before)) throw new Error("Malformed policy input changed workspace");
+    } finally { native.close(); native.free(); }
   });
   console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
   if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));

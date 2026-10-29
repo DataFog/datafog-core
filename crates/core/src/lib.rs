@@ -1,7 +1,9 @@
 //! Core PII scanning API for DataFog.
+mod account_number;
 mod api_key;
 mod bearer_token;
 mod capabilities;
+mod coverage;
 mod credential_uri;
 mod email_context;
 pub use capabilities::{
@@ -16,6 +18,7 @@ pub mod models;
 mod npi;
 mod offsets;
 mod private_key;
+mod street_address;
 pub mod structured;
 mod us_routing_number;
 mod uuid;
@@ -1690,6 +1693,8 @@ pub enum PrivacyErrorCode {
     InvalidConfiguration,
     /// One caller-supplied finding is invalid.
     InvalidFinding,
+    /// Overlap selection cannot preserve all eligible source coverage.
+    ReviewConflict,
     /// Pseudonymization was selected without a runtime provider.
     KeyProviderRequired,
     /// The requested provider key does not exist.
@@ -1732,6 +1737,7 @@ impl PrivacyErrorCode {
         match self {
             Self::InvalidConfiguration => "invalid_configuration",
             Self::InvalidFinding => "invalid_finding",
+            Self::ReviewConflict => "review_conflict",
             Self::KeyProviderRequired => "key_provider_required",
             Self::KeyNotFound => "key_not_found",
             Self::KeyAccessDenied => "key_access_denied",
@@ -1803,6 +1809,15 @@ pub struct PrivacyError {
 }
 
 impl PrivacyError {
+    fn review_conflict(finding_index: usize) -> Self {
+        Self {
+            code: PrivacyErrorCode::ReviewConflict,
+            reason: None,
+            path: Some(format!("/findings/{finding_index}")),
+            finding_index: Some(finding_index),
+            message: "overlapping findings require review before transformation".to_owned(),
+        }
+    }
     fn invalid_configuration(
         reason: PrivacyErrorReason,
         path: impl Into<String>,
@@ -2038,11 +2053,13 @@ impl std::error::Error for PrivacyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Label {
+    AccountNumber,
     ApiKey,
     CredentialUri,
     Email,
     Phone,
     Ssn,
+    StreetAddress,
     CreditCard,
     IpAddress,
     Date,
@@ -2066,11 +2083,13 @@ enum Label {
 impl Label {
     fn as_str(self) -> &'static str {
         match self {
+            Label::AccountNumber => "ACCOUNT_NUMBER",
             Label::ApiKey => "API_KEY",
             Label::CredentialUri => "CREDENTIAL_URI",
             Label::Email => "EMAIL",
             Label::Phone => "PHONE",
             Label::Ssn => "SSN",
+            Label::StreetAddress => "STREET_ADDRESS",
             Label::CreditCard => "CREDIT_CARD",
             Label::IpAddress => "IP_ADDRESS",
             Label::Date => "DATE",
@@ -2093,11 +2112,13 @@ impl Label {
 
     fn detector_name(self) -> &'static str {
         match self {
+            Label::AccountNumber => "datafog-core/account-number",
             Label::ApiKey => "datafog-core/api-key",
             Label::CredentialUri => "datafog-core/credential-uri",
             Label::Email => "datafog-core/email",
             Label::Phone => "datafog-core/phone",
             Label::Ssn => "datafog-core/ssn",
+            Label::StreetAddress => "datafog-core/street-address",
             Label::CreditCard => "datafog-core/credit-card",
             Label::IpAddress => "datafog-core/ip-address",
             Label::Date => "datafog-core/date",
@@ -2571,17 +2592,37 @@ fn select_findings(
         }
     }
 
-    Ok(select_validated_findings(findings, config))
+    let selected = select_validated_findings(findings, config);
+    let eligible: Vec<_> = findings
+        .iter()
+        .enumerate()
+        .filter(|(_, finding)| config.includes(finding) && !config.allows(finding))
+        .collect();
+    let required: Vec<_> = eligible
+        .iter()
+        .map(|(_, finding)| finding.byte_range)
+        .collect();
+    let selected_ranges: Vec<_> = selected.iter().map(|finding| finding.byte_range).collect();
+    if let Some(&uncovered) = coverage::uncovered(&required, &selected_ranges).first() {
+        return Err(PrivacyError::review_conflict(eligible[uncovered].0));
+    }
+    Ok(selected)
 }
 
 fn select_validated_findings(findings: &[Finding], config: &TransformationConfig) -> Vec<Finding> {
     // Selection works on references; only the findings that survive are cloned.
     let mut selected_findings: Vec<&Finding> = Vec::with_capacity(findings.len());
     let mut duplicate_indices = BTreeMap::new();
+    let mut native_ssn_ranges = BTreeSet::new();
     for finding in findings
         .iter()
         .filter(|finding| config.includes(finding) && !config.allows(finding))
     {
+        if finding.entity_type == Label::Ssn.as_str()
+            && finding.detector_name == Label::Ssn.detector_name()
+        {
+            native_ssn_ranges.insert((finding.byte_range.start, finding.byte_range.end));
+        }
         // Validation against the same text makes the byte range determine both
         // the matched text and the code-point range. Preserve encounter order
         // within each group: mixed confidence is not a sortable preference.
@@ -2603,6 +2644,12 @@ fn select_validated_findings(findings: &[Finding], config: &TransformationConfig
             }
         }
     }
+    // An eligible native SSN supersedes a generic PERSON claim on the same
+    // value. Different spans retain the existing overlap policy.
+    selected_findings.retain(|finding| {
+        finding.entity_type != "PERSON"
+            || !native_ssn_ranges.contains(&(finding.byte_range.start, finding.byte_range.end))
+    });
     selected_findings.sort_by(|left, right| {
         (
             left.codepoint_range.start,
@@ -4754,6 +4801,86 @@ mod tests {
     }
 
     #[test]
+    fn labelled_account_numbers_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "account",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("account").unwrap();
+        for text in [
+            "👋 account number: 00123456",
+            "👋 account ending in 1234",
+            "👋 account number: XXXX1234",
+        ] {
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"account"}),
+                json!({"strategy":"tokenize","token_ref":"account"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({
+                    "transform":{"default":strategy,"entities":["ACCOUNT_NUMBER"]}
+                }))
+                .unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), 1);
+                assert!(!result.text.contains("1234"));
+                assert!(result.text.starts_with("👋 account"));
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn labelled_street_addresses_use_existing_key_and_token_providers() {
+        let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
+            "street",
+            None,
+            vec![7; 32],
+            "1",
+        ))
+        .with_token_provider(TestTokenProvider::default());
+        let context = PrivacyContext::new("street").unwrap();
+        let text = "👋 Street address: 12 Willow Road, Unit 4B, Anytown";
+        for strategy in [
+            json!({"strategy":"pseudonymize","key_ref":"street"}),
+            json!({"strategy":"tokenize","token_ref":"street"}),
+        ] {
+            let config = parse_scan_and_transform_config(
+                &json!({"transform":{"default":strategy,"entities":["STREET_ADDRESS"]}}),
+            )
+            .unwrap();
+            let result =
+                block_on(manager.scan_and_transform_with_context(text, &config, Some(&context)))
+                    .unwrap();
+            assert_eq!(result.transformations.len(), 1);
+            assert!(!result.text.contains("Willow"));
+            assert!(result.text.ends_with(", Anytown"));
+            if strategy["strategy"] == "tokenize" {
+                assert_eq!(
+                    block_on(manager.restore(&result.text, &context))
+                        .unwrap()
+                        .text,
+                    text
+                );
+            }
+        }
+    }
+
+    #[test]
     fn us_routing_number_fixtures_use_existing_key_and_token_providers() {
         let manager = PrivacyManager::new(TestKeyProvider::default().with_key(
             "german",
@@ -6267,20 +6394,98 @@ mod tests {
     }
 
     #[test]
-    fn equal_partial_overlaps_prefer_the_earlier_source_position() {
+    fn equal_partial_overlaps_require_review_instead_of_exposing_the_suffix() {
         let text = "abcdef";
         let earlier = supplied_ascii_finding(text, "ZETA", 0, 4, None, "z");
         let later = supplied_ascii_finding(text, "ALPHA", 2, 6, None, "a");
 
-        let result = transform(
+        let failure = transform(
             text,
             &[later, earlier.clone()],
             &config(TransformationStrategy::Redact),
         )
-        .unwrap();
+        .unwrap_err();
+        assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+        assert_eq!(failure.finding_index(), Some(0));
+    }
 
-        assert_eq!(result.text, "[ZETA]ef");
-        assert_transformation_source(&result.transformations[0], &earlier);
+    #[test]
+    fn every_transform_selector_rejects_lost_coverage_before_provider_work() {
+        let text = "abcdef";
+        let first = supplied_ascii_finding(text, "ALPHA", 0, 4, None, "first");
+        let second = supplied_ascii_finding(text, "ZETA", 2, 6, None, "second");
+        let findings = [first, second];
+        let redaction = config(TransformationStrategy::Redact);
+        let context = PrivacyContext::new("synthetic").unwrap();
+        for failure in [
+            transform(text, &findings, &redaction).unwrap_err(),
+            crate::required_key_selectors(text, &findings, &redaction).unwrap_err(),
+            crate::transform_with_resolved_keys(text, &findings, &redaction, vec![]).unwrap_err(),
+            crate::required_tokenization_items(text, &findings, &redaction, Some(&context))
+                .unwrap_err(),
+            crate::transform_with_provider_results(
+                text,
+                &findings,
+                &redaction,
+                Some(&context),
+                vec![],
+                vec![],
+            )
+            .unwrap_err(),
+        ] {
+            assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+            assert_eq!(failure.finding_index(), Some(1));
+            assert_eq!(failure.path(), Some("/findings/1"));
+            assert!(!failure.to_string().contains(text));
+        }
+        let tokens = TestTokenProvider::default();
+        let manager =
+            PrivacyManager::new(TestKeyProvider::default()).with_token_provider(tokens.clone());
+        let pseudonymize = parse_transformation_config(
+            &json!({"default":{"strategy":"pseudonymize","key_ref":"unqueried"}}),
+        )
+        .unwrap();
+        assert_eq!(
+            block_on(manager.transform(text, &findings, &pseudonymize))
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::ReviewConflict
+        );
+        let tokenize = parse_transformation_config(
+            &json!({"default":{"strategy":"tokenize","token_ref":"unqueried"}}),
+        )
+        .unwrap();
+        assert_eq!(
+            block_on(manager.transform_with_context(text, &findings, &tokenize, Some(&context)))
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::ReviewConflict
+        );
+        assert_eq!(manager.provider.call_count(), 0);
+        assert!(tokens.tokenize_calls.lock().unwrap().is_empty());
+        let data = json!({"a":"xy", "z":text});
+        let located = vec![
+            crate::structured::StructuredFinding {
+                path: "/a".to_owned(),
+                finding: supplied_ascii_finding("xy", "ALPHA", 0, 2, None, "first"),
+            },
+            crate::structured::StructuredFinding {
+                path: "/z".to_owned(),
+                finding: findings[0].clone(),
+            },
+            crate::structured::StructuredFinding {
+                path: "/z".to_owned(),
+                finding: findings[1].clone(),
+            },
+        ];
+        let failure =
+            block_on(manager.transform_structured(&data, &located, &pseudonymize, Some(&context)))
+                .unwrap_err();
+        assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+        assert_eq!(failure.finding_index(), Some(2));
+        assert_eq!(failure.path(), Some("/findings/2/finding"));
+        assert_eq!(manager.provider.call_count(), 0);
+        assert!(tokens.tokenize_calls.lock().unwrap().is_empty());
     }
 
     #[test]

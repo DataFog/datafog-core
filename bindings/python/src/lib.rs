@@ -1,5 +1,6 @@
 use ::datafog_core as core;
 mod models;
+mod workspace;
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -921,7 +922,7 @@ fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
         core::PrivacyErrorCode::InvalidConfiguration => {
             PyErr::new::<DataFogConfigurationError, _>(error.to_string())
         }
-        core::PrivacyErrorCode::InvalidFinding => {
+        core::PrivacyErrorCode::InvalidFinding | core::PrivacyErrorCode::ReviewConflict => {
             PyErr::new::<DataFogFindingError, _>(error.to_string())
         }
         core::PrivacyErrorCode::KeyProviderRequired
@@ -1274,6 +1275,7 @@ fn scan_and_transform_structured(
 #[pymodule]
 fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     models::register(module)?;
+    workspace::register(module)?;
     module.add(
         "DataFogConfigurationError",
         module.py().get_type::<DataFogConfigurationError>(),

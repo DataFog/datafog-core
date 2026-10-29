@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
+import {verifyReviewHost} from "./test-workspace-review.mjs";
+import {verifyPolicyHost} from "./test-workspace-policy.mjs";
 import {verifyBackups} from "./test-workspace-backup.mjs";
 import {waitForBrokerState} from "./workspace-test-wait.mjs";
 
@@ -13,6 +15,7 @@ const harness = path.join(root, "examples/workspace-extension");
 const { chromium } = createRequire(path.join(harness, "package.json"))("playwright");
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
+const backupKdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id-backup.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
 execFileSync(process.execPath, ["--test", path.join(root, "scripts/test-workspace-wait.mjs")], {stdio: "inherit"});
 execFileSync("npm", ["run", "build", "--prefix", harness], { stdio: "inherit" });
@@ -72,6 +75,7 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 }
 
 try {
+  await verifyPolicyHost({fresh,status,close:async()=>{await context.close();context=undefined;},launch,unlock,restored,control,check,counters:counterFixtures});
   await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
@@ -319,15 +323,31 @@ try {
   check(await page.locator("#restored").textContent() === fixture.january, "A8 validation failures preserve saved mappings");
   console.log("PASS A8 credentials, KDF bounds and authenticated-envelope tampering");
 
+  await verifyReviewHost({fresh,status,close:async()=>{await context?.close();context=undefined;},launch,unlock,control,check});
+  console.log("PASS D8 combined review conflicts, fresh edit, failed save, approved handoff and recall reopen");
+
   await context?.close(); context = undefined;
   const browserPage = await launch("wasm-contract");
-  await browserPage.evaluate(async counters => {
+  const reviewQualification = await browserPage.evaluate(async counters => {
     const api = await import("./vendor/package/index.js");
     const { verifyWorkspace } = await import("./workspace-conformance.mjs");
-    await verifyWorkspace(api, counters);
+    const qualified=await verifyWorkspace(api, counters);
+    const {verifyWorkspacePolicy} = await import("./workspace-policy-conformance.mjs");
+    await verifyWorkspacePolicy(api, counters);
+    return qualified;
   }, counterFixtures);
   console.log("PASS A3/A7/A8 installed WASM inputs, lifecycle, canonical CBOR and uint64 parity");
 
+  const streamingQualification = await browserPage.evaluate(async () => {
+    const api=await import("./vendor/package/index.js");
+    const {verifyWorkspaceStreaming}=await import("./workspace-streaming-conformance.mjs");
+    const fixture=await fetch("./workspace-streaming.json").then(response=>response.json());
+    const results=await verifyWorkspaceStreaming(api,fixture);
+    return {pass:true,profile:fixture.profile,cases:results.length,steps:results.reduce((sum,result)=>sum+result.steps.length,0)};
+  });
+  console.log("PASS R4 installed WASM streaming contract in actual MV3 extension (strict default and opt-in progressive)");
+
+  for (const kdfCase of [kdfFixture, backupKdfFixture]) {
   const vector = await browserPage.evaluate(async fixture => {
     const worker = new Worker("./kdf-worker.js", { type: "module" });
     try {
@@ -339,11 +359,27 @@ try {
           data.key.fill(0); resolve(same);
         };
         worker.onerror = () => reject(new Error("KDF fixture failed"));
-        worker.postMessage({ password: fixture.password, salt: Uint8Array.from(fixture.saltHex.match(/../g), v => Number.parseInt(v, 16)) });
+        worker.postMessage({ password: fixture.password, profile: fixture.profile ?? 1, salt: Uint8Array.from(fixture.saltHex.match(/../g), v => Number.parseInt(v, 16)) });
       });
     } finally { worker.terminate(); }
-  }, kdfFixture);
-  check(vector, "A9 browser Argon2id matches independent native profile fixture");
+  }, kdfCase);
+  check(vector, "A9/B3 browser Argon2id matches independent native profile fixture");
+  }
+  const rejectedKdfInputs = await browserPage.evaluate(async () => {
+    for (const overrides of [{profile: undefined}, {profile: 0}, {profile: 3}, {profile: null}, {profile: "2"}, {memlimit: 67108864}, {opslimit: 1}, {salt: new Uint8Array(15)}, {password: ""}, {password: "x".repeat(1025)}, {password: String.fromCharCode(0xd800)}]) {
+      const worker = new Worker("./kdf-worker.js", {type: "module"});
+      try {
+        const result = await new Promise((resolve, reject) => {
+          worker.onmessage = ({data}) => resolve(data);
+          worker.onerror = () => reject(new Error("KDF rejection failed"));
+          worker.postMessage({password: "synthetic-only", salt: new Uint8Array(16), profile: 2, ...overrides});
+        });
+        if (result.error !== "invalid_credentials" || result.key !== undefined) return false;
+      } finally { worker.terminate(); }
+    }
+    return true;
+  });
+  check(rejectedKdfInputs, "B3 unknown profiles, arbitrary parameters and invalid credentials never derive a cheaper key");
   const nonextractable = await browserPage.evaluate(async password => {
     const api = await import("./vendor/package/index.js");
     const {createVault} = await import("./vault.js");
@@ -367,7 +403,9 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
+    reviewQualification,
+    streamingQualification,
+    checks: ["D8", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));

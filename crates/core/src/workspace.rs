@@ -3,6 +3,25 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod policy;
+pub use policy::{
+    ChoiceDisposition, ChoiceEditPreview, ChoiceView, MAX_POLICY_EDITS, MAX_POLICY_ITEMS,
+    PolicyEdits, PolicyPreview, PolicyView, RuleEditPreview, RuleView, TypeRule, TypeRuleEdit,
+    ValueChoiceEdit, protected_type,
+};
+mod buffered_restore;
+pub use buffered_restore::{BufferedRestore, RestoreEncoding};
+mod private_bytes;
+mod progressive_restore;
+pub use progressive_restore::{ProgressiveRestore, RestoreChunk, RestoreProgress, StreamFailure};
+mod recall;
+mod review;
+pub use review::{
+    ReviewCandidate, ReviewConflict, ReviewConflictKind, ReviewCorrection, ReviewInput,
+    ReviewResult,
+};
+
+pub use recall::{RecallFinding, RecallResult};
 
 use crate::{Finding, TextIndex, TextRange, TransformationConfig, TransformationStrategy};
 use hmac::{Hmac, Mac};
@@ -38,10 +57,14 @@ pub enum ErrorCode {
     InactivePlan,
     WorkspaceConflict,
     InvalidFinding,
+    InvalidEncoding,
+    InactiveStream,
+    ReviewConflict,
     InvalidBatch,
     InvalidMarker,
     InvalidSnapshot,
     InvalidId,
+    InvalidPolicy,
     ResourceLimit,
 }
 
@@ -52,10 +75,14 @@ impl ErrorCode {
             Self::InactivePlan => "inactive_plan",
             Self::WorkspaceConflict => "workspace_conflict",
             Self::InvalidFinding => "invalid_finding",
+            Self::InvalidEncoding => "invalid_encoding",
+            Self::InactiveStream => "inactive_stream",
+            Self::ReviewConflict => "review_conflict",
             Self::InvalidBatch => "invalid_batch",
             Self::InvalidMarker => "invalid_marker",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidId => "invalid_operation_id",
+            Self::InvalidPolicy => "invalid_policy",
             Self::ResourceLimit => "resource_limit",
         }
     }
@@ -69,6 +96,7 @@ pub struct WorkspaceError {
     pub input_index: Option<usize>,
     /// Content-free source spans that block preparation.
     pub marker_issues: Vec<MarkerIssue>,
+    pub review_conflicts: Vec<ReviewConflict>,
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -83,11 +111,35 @@ fn error(code: ErrorCode) -> WorkspaceError {
         finding_index: None,
         input_index: None,
         marker_issues: Vec::new(),
+        review_conflicts: Vec::new(),
     }
 }
 type Result<T> = std::result::Result<T, WorkspaceError>;
 
-/// Exact source span in UTF-8 bytes. Metadata is optional and never persisted.
+/// Caller-declared origin for review display, not authorization or proof of detection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingSource {
+    #[default]
+    Scanner,
+    Recall,
+    User,
+}
+
+impl FindingSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Scanner => "scanner",
+            Self::Recall => "recall",
+            Self::User => "user",
+        }
+    }
+}
+
+/// Omitted review metadata conservatively requests review; approval is always host-owned.
+pub const DEFAULT_NEEDS_REVIEW: bool = true;
+
+/// Exact source span in UTF-8 bytes. Review metadata is never persisted.
 #[derive(Clone)]
 pub struct WorkspaceFinding {
     pub entity_type: String,
@@ -96,6 +148,8 @@ pub struct WorkspaceFinding {
     pub confidence: Option<f32>,
     pub detector_name: Option<String>,
     pub detector_version: Option<String>,
+    pub source: FindingSource,
+    pub needs_review: bool,
 }
 
 impl WorkspaceFinding {
@@ -111,6 +165,8 @@ impl WorkspaceFinding {
             confidence: None,
             detector_name: None,
             detector_version: None,
+            source: FindingSource::default(),
+            needs_review: DEFAULT_NEEDS_REVIEW,
         }
     }
 }
@@ -125,6 +181,8 @@ pub struct WorkspaceInput<'a> {
 /// A transformed span, with explicit zero-based, end-exclusive coordinate systems.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transformation {
+    pub source: FindingSource,
+    pub needs_review: bool,
     pub source_byte_range: TextRange,
     pub source_codepoint_range: TextRange,
     pub source_utf16_range: TextRange,
@@ -237,6 +295,9 @@ fn identity_key(value: &str) -> String {
 }
 #[derive(Clone)]
 struct State {
+    snapshot_version: u8,
+    rules: BTreeMap<String, policy::RuleRecord>,
+    choices: BTreeMap<Identity, policy::ChoiceRecord>,
     namespace: PublicId,
     head: Head,
     entries: BTreeMap<Identity, Entry>,
@@ -246,9 +307,18 @@ struct State {
 struct Pending {
     lifetime: Arc<AtomicBool>,
     parent: Head,
+    parent_snapshot_version: u8,
     candidate: State,
     bundle: Zeroizing<Vec<u8>>,
     previews: Vec<Preview>,
+    policy_preview: Option<PolicyPreview>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotFormat {
+    pub current_version: u8,
+    pub candidate_version: u8,
 }
 
 /// An immutable pending change. Preview/export do not consume it; activation or discard do.
@@ -273,6 +343,16 @@ impl PreparedChange {
             _ => Err(error(ErrorCode::InvalidBatch)),
         }
     }
+    pub fn snapshot_format(&self) -> Result<SnapshotFormat> {
+        let pending = self.pending()?;
+        Ok(SnapshotFormat {
+            current_version: pending.parent_snapshot_version,
+            candidate_version: pending.candidate.snapshot_version,
+        })
+    }
+    pub fn policy_preview(&self) -> Result<Option<&PolicyPreview>> {
+        Ok(self.pending()?.policy_preview.as_ref())
+    }
     pub fn previews(&self) -> Result<&[Preview]> {
         Ok(&self.pending()?.previews)
     }
@@ -293,8 +373,9 @@ impl PreparedChange {
 
 /// One runtime workspace. Closing it never deletes its saved bundle.
 pub struct Workspace {
-    state: Option<State>,
+    state: Option<Arc<State>>,
     lifetime: Arc<AtomicBool>,
+    read_epoch: Arc<AtomicBool>,
 }
 impl Drop for Workspace {
     fn drop(&mut self) {
@@ -304,18 +385,22 @@ impl Drop for Workspace {
 impl Workspace {
     fn from_state(state: State) -> Result<Self> {
         Ok(Self {
-            state: Some(state),
+            state: Some(Arc::new(state)),
             lifetime: Arc::new(AtomicBool::new(true)),
+            read_epoch: Arc::new(AtomicBool::new(true)),
         })
     }
     fn state(&self) -> Result<&State> {
         self.state
-            .as_ref()
+            .as_deref()
             .ok_or_else(|| error(ErrorCode::ClosedWorkspace))
     }
     /// IDs must come from the host OS CSPRNG. Shape checks cannot prove entropy.
     pub fn create(namespace: PublicId, operation_id: PublicId) -> Result<Self> {
         Self::from_state(State {
+            snapshot_version: 2,
+            rules: BTreeMap::new(),
+            choices: BTreeMap::new(),
             namespace,
             head: Head {
                 revision: 0,
@@ -342,21 +427,128 @@ impl Workspace {
         self.state = None;
     }
 
+    /// Buffer chunks against this committed head, returning no text before finalization.
+    /// This atomic adapter is not a progressive live-restoration API.
+    pub fn buffered_restore(&self, encoding: RestoreEncoding) -> Result<BufferedRestore> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ClosedWorkspace))?;
+        Ok(BufferedRestore::new(
+            Arc::clone(state),
+            Arc::clone(&self.lifetime),
+            Arc::clone(&self.read_epoch),
+            encoding,
+        ))
+    }
+
+    /// Opt in to irreversible chunk delivery. A later error marks the response
+    /// incomplete; text returned by earlier calls cannot be retracted.
+    pub fn progressive_restore(&self, encoding: RestoreEncoding) -> Result<ProgressiveRestore> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::ClosedWorkspace))?;
+        ProgressiveRestore::new(
+            Arc::clone(state),
+            Arc::clone(&self.lifetime),
+            Arc::clone(&self.read_epoch),
+            encoding,
+        )
+    }
+
+    /// Find committed values without allocating aliases or changing the saved head.
+    /// Returns all overlapping matches in original-input coordinates, not a clean-text verdict.
+    pub fn recall(&self, text: &str) -> Result<RecallResult> {
+        recall::find(self.state()?, text)
+    }
+
+    /// Combine caller scanner/manual findings with committed recall. This read-only
+    /// result grants no handoff permission and never creates a plan or saved alias.
+    pub fn review(&self, input: ReviewInput<'_>) -> Result<ReviewResult> {
+        review::build(self.state()?, input)
+    }
+
+    /// Recompute combined review, then stage one atomic batch only if every input
+    /// preserves protected coverage. Approval and durable save are still required.
+    pub fn prepare_review(
+        &self,
+        inputs: &[ReviewInput<'_>],
+        operation_id: PublicId,
+    ) -> Result<PreparedChange> {
+        if inputs.is_empty() {
+            return Err(error(ErrorCode::InvalidBatch));
+        }
+        if inputs.len() > MAX_INPUTS {
+            return Err(error(ErrorCode::ResourceLimit));
+        }
+        let mut total_bytes = 0usize;
+        let mut total_findings = 0usize;
+        let mut finding_bytes = 0usize;
+        let mut reviewed = Vec::with_capacity(inputs.len());
+        for (input_index, input) in inputs.iter().enumerate() {
+            let result = (|| {
+                total_bytes = total_bytes.saturating_add(input.text.len());
+                total_findings = total_findings
+                    .saturating_add(input.scanner_findings.len())
+                    .saturating_add(input.user_selections.len())
+                    .saturating_add(input.corrections.len());
+                if total_bytes > MAX_SOURCE_BYTES || total_findings > MAX_FINDINGS {
+                    return Err(error(ErrorCode::ResourceLimit));
+                }
+                let result = self.review(*input)?;
+                total_findings =
+                    total_findings.saturating_add(result.finding_count.saturating_sub(
+                        input.scanner_findings.len()
+                            + input.user_selections.len()
+                            + input.corrections.len(),
+                    ));
+                finding_bytes = finding_bytes.saturating_add(result.finding_bytes);
+                if total_findings > MAX_FINDINGS || finding_bytes > MAX_BUNDLE_BYTES {
+                    return Err(error(ErrorCode::ResourceLimit));
+                }
+                if !result.conflicts.is_empty() {
+                    let mut failure = error(ErrorCode::ReviewConflict);
+                    failure.finding_index = result
+                        .conflicts
+                        .first()
+                        .map(|conflict| conflict.finding_index);
+                    failure.review_conflicts = result.conflicts;
+                    return Err(failure);
+                }
+                Ok(result
+                    .candidates
+                    .into_iter()
+                    .filter(|candidate| candidate.selected)
+                    .map(|candidate| candidate.finding)
+                    .collect::<Vec<_>>())
+            })()
+            .map_err(|mut failure| {
+                failure.input_index = Some(input_index);
+                failure
+            })?;
+            reviewed.push(result);
+        }
+        let borrowed: Vec<_> = inputs
+            .iter()
+            .zip(&reviewed)
+            .map(|(input, findings)| WorkspaceInput {
+                text: input.text,
+                findings,
+            })
+            .collect();
+        self.prepare_batch(&borrowed, operation_id)
+    }
+
     /// Stage recovery of this validated bundle under a fresh commit head.
     /// Issued markers, counters and privacy configuration retain their saved meaning.
     /// The host must reject destination conflicts and durably save before activation.
     /// Recovery has no text previews and grants no permission to release content.
     pub fn prepare_recovery(&self, operation_id: PublicId) -> Result<PreparedChange> {
         let state = self.state()?;
-        if state.head.commit_id == operation_id
-            || state
-                .entries
-                .values()
-                .any(|entry| entry.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        ensure_fresh_operation(state, operation_id)?;
         let mut candidate = state.clone();
+        candidate.snapshot_version = 2;
         candidate.head = Head {
             revision: state
                 .head
@@ -370,9 +562,11 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews: Vec::new(),
+                policy_preview: None,
             }),
         })
     }
@@ -412,15 +606,12 @@ impl Workspace {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
                     marker_issues: Vec::new(),
+                    review_conflicts: Vec::new(),
                     finding_index: None,
                 });
             }
         }
-        if state.head.commit_id == operation_id
-            || state.entries.values().any(|e| e.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        ensure_fresh_operation(state, operation_id)?;
         let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
@@ -446,12 +637,14 @@ impl Workspace {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
                     marker_issues: Vec::new(),
+                    review_conflicts: Vec::new(),
                     finding_index: None,
                 });
             }
             previews.push(preview);
         }
         if candidate.entries.len() != state.entries.len() {
+            candidate.snapshot_version = 2;
             candidate.head = Head {
                 revision: state
                     .head
@@ -466,9 +659,11 @@ impl Workspace {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
                 parent: state.head,
+                parent_snapshot_version: state.snapshot_version,
                 candidate,
                 bundle,
                 previews,
+                policy_preview: None,
             }),
         })
     }
@@ -482,67 +677,46 @@ impl Workspace {
         codes: &mut BTreeSet<String>,
         candidate: &mut State,
     ) -> Result<Preview> {
-        source_limit(text)?;
-        let markers = committed_marker_ranges(text, committed)?;
-        let mut index = TextIndex::new(text);
-        let mut adapted = Vec::with_capacity(findings.len());
-        let mut total_bytes = 0usize;
-        for (finding_index, finding) in findings.iter().enumerate() {
-            let invalid = || WorkspaceError {
-                code: ErrorCode::InvalidFinding,
-                finding_index: Some(finding_index),
-                input_index: None,
-                marker_issues: Vec::new(),
-            };
-            if !valid_type(&finding.entity_type)
-                || finding.byte_range.start >= finding.byte_range.end
-                || finding.matched_text.trim().is_empty()
-                || crate::validate_utf8_range(text, finding.byte_range).is_err()
-                || markers
-                    .get(markers.partition_point(|marker| marker.end <= finding.byte_range.start))
-                    .is_some_and(|marker| marker.start < finding.byte_range.end)
-                || finding
-                    .detector_name
-                    .as_ref()
-                    .is_some_and(|v| v.len() > 128)
-                || finding
-                    .detector_version
-                    .as_ref()
-                    .is_some_and(|v| v.len() > 128)
-            {
-                return Err(invalid());
-            }
-            total_bytes = total_bytes
-                .checked_add(finding.matched_text.len())
-                .ok_or_else(|| error(ErrorCode::ResourceLimit))?;
-            if total_bytes > MAX_BUNDLE_BYTES {
-                return Err(error(ErrorCode::ResourceLimit));
-            }
-            adapted.push(Finding {
-                entity_type: finding.entity_type.clone(),
-                matched_text: finding.matched_text.clone(),
-                byte_range: finding.byte_range,
-                codepoint_range: TextRange {
-                    start: index.codepoint_offset(finding.byte_range.start),
-                    end: index.codepoint_offset(finding.byte_range.end),
-                },
-                confidence: finding.confidence,
-                detector_name: finding.detector_name.clone().unwrap_or_default(),
-                detector_version: finding.detector_version.clone(),
-            });
+        let (adapted, mut index) = adapt_findings(text, findings, committed)?;
+        let (selected, conflicts) = review::select(text, &adapted, candidate, &[], &[])?;
+        if !conflicts.is_empty() {
+            let mut failure = error(ErrorCode::ReviewConflict);
+            failure.finding_index = conflicts.first().map(|conflict| conflict.finding_index);
+            failure.review_conflicts = conflicts;
+            return Err(failure);
         }
-        let config = TransformationConfig::new(TransformationStrategy::Redact);
-        let selected =
-            crate::select_findings(text, &adapted, &config).map_err(|e| WorkspaceError {
-                code: ErrorCode::InvalidFinding,
-                finding_index: e.finding_index(),
-                input_index: None,
-                marker_issues: Vec::new(),
-            })?;
+        // Selection keeps one finding per type/range. Recover its original metadata
+        // using exact selected fields; equal duplicates retain the first input.
+        let mut input_groups: BTreeMap<(&str, usize, usize), Vec<usize>> = BTreeMap::new();
+        for (input_index, finding) in adapted.iter().enumerate() {
+            input_groups
+                .entry((
+                    finding.entity_type.as_str(),
+                    finding.byte_range.start,
+                    finding.byte_range.end,
+                ))
+                .or_default()
+                .push(input_index);
+        }
         let mut output = String::new();
         let mut transformations = Vec::with_capacity(selected.len());
         let mut cursor = 0;
         for finding in selected {
+            let input_index = input_groups
+                .get(&(
+                    finding.entity_type.as_str(),
+                    finding.byte_range.start,
+                    finding.byte_range.end,
+                ))
+                .and_then(|group| {
+                    group.iter().copied().find(|&input_index| {
+                        adapted[input_index] == finding
+                            && adapted[input_index].confidence.map(f32::to_bits)
+                                == finding.confidence.map(f32::to_bits)
+                    })
+                })
+                .ok_or_else(|| error(ErrorCode::InvalidFinding))?;
+            let metadata = &findings[input_index];
             let identity = Identity {
                 entity_type: finding.entity_type.clone(),
                 key: identity_key(&finding.matched_text),
@@ -584,6 +758,8 @@ impl Workspace {
             let output_start = output.len();
             append(&mut output, &marker(&identity.entity_type, &entry.code))?;
             transformations.push(Transformation {
+                source: metadata.source,
+                needs_review: metadata.needs_review,
                 source_byte_range: finding.byte_range,
                 source_codepoint_range: finding.codepoint_range,
                 source_utf16_range: index
@@ -632,11 +808,16 @@ impl Workspace {
         {
             return Err(error(ErrorCode::WorkspaceConflict));
         }
+        let head_changed = state.head != pending.candidate.head;
         let pending = plan
             .pending
             .take()
             .ok_or_else(|| error(ErrorCode::InactivePlan))?;
-        self.state = Some(pending.candidate);
+        if head_changed {
+            self.read_epoch.store(false, Ordering::Release);
+            self.read_epoch = Arc::new(AtomicBool::new(true));
+        }
+        self.state = Some(Arc::new(pending.candidate));
         Ok(())
     }
 
@@ -661,47 +842,50 @@ impl Workspace {
     /// Marker matching ignores case and accepts Crockford's `I`/`L` → `1` and
     /// `O` → `0` substitutions in the code.
     pub fn restore_report(&self, text: &str) -> Result<RestoreReport> {
-        let state = self.state()?;
-        if text.len() > MAX_BUNDLE_BYTES {
-            return Err(error(ErrorCode::ResourceLimit));
-        }
-        let lookup = marker_lookup(state);
-        let spans = marker_spans(text)?;
-        let issues = marker_issues(text, &spans, &lookup)?;
-        let restored_markers = spans
-            .iter()
-            .filter(|span| {
-                span.canonical
-                    .as_ref()
-                    .is_some_and(|canonical| lookup.contains_key(canonical))
-            })
-            .count();
-        if !issues.is_empty() {
-            return Ok(RestoreReport {
-                text: None,
-                restored_markers,
-                issues,
-            });
-        }
-        let mut output = String::new();
-        let mut cursor = 0;
-        for span in spans {
-            let display = span
-                .canonical
+        restore_report(self.state()?, text)
+    }
+}
+
+fn restore_report(state: &State, text: &str) -> Result<RestoreReport> {
+    if text.len() > MAX_BUNDLE_BYTES {
+        return Err(error(ErrorCode::ResourceLimit));
+    }
+    let lookup = marker_lookup(state);
+    let spans = marker_spans(text)?;
+    let issues = marker_issues(text, &spans, &lookup)?;
+    let restored_markers = spans
+        .iter()
+        .filter(|span| {
+            span.canonical
                 .as_ref()
-                .and_then(|canonical| lookup.get(canonical))
-                .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
-            append(&mut output, &text[cursor..span.range.start])?;
-            append(&mut output, display)?;
-            cursor = span.range.end;
-        }
-        append(&mut output, &text[cursor..])?;
-        Ok(RestoreReport {
-            text: Some(output),
+                .is_some_and(|canonical| lookup.contains_key(canonical))
+        })
+        .count();
+    if !issues.is_empty() {
+        return Ok(RestoreReport {
+            text: None,
             restored_markers,
             issues,
-        })
+        });
     }
+    let mut output = String::new();
+    let mut cursor = 0;
+    for span in spans {
+        let display = span
+            .canonical
+            .as_ref()
+            .and_then(|canonical| lookup.get(canonical))
+            .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
+        append(&mut output, &text[cursor..span.range.start])?;
+        append(&mut output, display)?;
+        cursor = span.range.end;
+    }
+    append(&mut output, &text[cursor..])?;
+    Ok(RestoreReport {
+        text: Some(output),
+        restored_markers,
+        issues,
+    })
 }
 
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -975,6 +1159,96 @@ pub fn byte_range_from_utf16(text: &str, range: TextRange) -> Result<TextRange> 
     index
         .byte_range_from_utf16(range)
         .map_err(|_| error(ErrorCode::InvalidFinding))
+}
+
+fn ensure_fresh_operation(state: &State, operation: PublicId) -> Result<()> {
+    if state.head.commit_id == operation
+        || state
+            .entries
+            .values()
+            .any(|record| record.issuance == operation)
+        || state
+            .rules
+            .values()
+            .any(|record| record.operation == operation)
+        || state
+            .choices
+            .values()
+            .any(|record| record.operation == operation)
+    {
+        return Err(error(ErrorCode::InvalidId));
+    }
+    Ok(())
+}
+
+fn adapt_findings<'a>(
+    text: &'a str,
+    findings: &[WorkspaceFinding],
+    committed: &BTreeMap<String, &str>,
+) -> Result<(Vec<Finding>, TextIndex<'a>)> {
+    source_limit(text)?;
+    let markers = committed_marker_ranges(text, committed)?;
+    let mut index = TextIndex::new(text);
+    let mut adapted = Vec::with_capacity(findings.len());
+    let mut total_bytes = 0usize;
+    for (finding_index, finding) in findings.iter().enumerate() {
+        let invalid = || WorkspaceError {
+            code: ErrorCode::InvalidFinding,
+            finding_index: Some(finding_index),
+            input_index: None,
+            marker_issues: Vec::new(),
+            review_conflicts: Vec::new(),
+        };
+        if !valid_type(&finding.entity_type)
+            || finding.byte_range.start >= finding.byte_range.end
+            || finding.matched_text.trim().is_empty()
+            || crate::validate_utf8_range(text, finding.byte_range).is_err()
+            || markers
+                .get(markers.partition_point(|marker| marker.end <= finding.byte_range.start))
+                .is_some_and(|marker| marker.start < finding.byte_range.end)
+            || finding
+                .detector_name
+                .as_ref()
+                .is_some_and(|v| v.len() > 128)
+            || finding
+                .detector_version
+                .as_ref()
+                .is_some_and(|v| v.len() > 128)
+        {
+            return Err(invalid());
+        }
+        total_bytes = total_bytes
+            .checked_add(finding.matched_text.len())
+            .ok_or_else(|| error(ErrorCode::ResourceLimit))?;
+        if total_bytes > MAX_BUNDLE_BYTES {
+            return Err(error(ErrorCode::ResourceLimit));
+        }
+        adapted.push(Finding {
+            entity_type: finding.entity_type.clone(),
+            matched_text: finding.matched_text.clone(),
+            byte_range: finding.byte_range,
+            codepoint_range: TextRange {
+                start: index.codepoint_offset(finding.byte_range.start),
+                end: index.codepoint_offset(finding.byte_range.end),
+            },
+            confidence: finding.confidence,
+            detector_name: finding.detector_name.clone().unwrap_or_default(),
+            detector_version: finding.detector_version.clone(),
+        });
+    }
+    // Every finding must validate before any remembered choice can waive it.
+    for (finding_index, finding) in adapted.iter().enumerate() {
+        crate::validate_finding_with_index(text, finding, &mut index).map_err(|_| {
+            WorkspaceError {
+                code: ErrorCode::InvalidFinding,
+                finding_index: Some(finding_index),
+                input_index: None,
+                marker_issues: Vec::new(),
+                review_conflicts: Vec::new(),
+            }
+        })?;
+    }
+    Ok((adapted, index))
 }
 
 #[cfg(test)]

@@ -1,6 +1,17 @@
 """Fast structured PII detection implemented in Rust."""
 
 from .datafog_core import (
+    DataFogWorkspaceError as DataFogWorkspaceError,
+    Workspace as Workspace,
+    WorkspaceBufferedRestore as WorkspaceBufferedRestore,
+    WorkspaceProgressiveRestore as WorkspaceProgressiveRestore,
+    DataFogWorkspaceStreamError as DataFogWorkspaceStreamError,
+    WorkspaceHead as WorkspaceHead,
+    WorkspaceFinding as WorkspaceFinding,
+    WorkspaceInput as WorkspaceInput,
+    WorkspaceReviewCorrection as WorkspaceReviewCorrection,
+    WorkspaceReviewInput as WorkspaceReviewInput,
+    WorkspacePreparedChange as WorkspacePreparedChange,
     DataFogModelError as DataFogModelError,
     ModelSession as ModelSession,
     ModelCancellation as ModelCancellation,
@@ -34,6 +45,10 @@ from .datafog_core import (
 )
 
 __all__ = [
+    "DataFogWorkspaceError", "Workspace", "WorkspaceHead", "WorkspaceFinding",
+    "WorkspaceInput", "WorkspaceReviewCorrection", "WorkspaceReviewInput",
+    "WorkspacePreparedChange", "WorkspaceBufferedRestore", "WorkspaceProgressiveRestore",
+    "DataFogWorkspaceStreamError",
     "DataFogModelError",
     "ModelSession",
     "ModelCancellation",

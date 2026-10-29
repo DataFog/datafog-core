@@ -19,7 +19,7 @@ function freshWorkspaceKey(backup, recoveryCode, recovered) {
     root = decrypt(wrapping, vault.recovery.nonce, Buffer.concat([Buffer.from("DFG2:RC:"), decode(vault.vaultId), decode(vault.vaultKeyId), Buffer.from([1]), decode(vault.recovery.salt)]), vault.recovery.wrappedRoot);
     const unwrap = record => decrypt(root, record.keyNonce, Buffer.concat([Buffer.from("DFG1:WK:"), decode(record.vaultId), decode(record.workspaceId), decode(record.keyId)]), record.wrappedKey);
     originalKey = unwrap(payload.workspace); newKey = unwrap(recovered);
-    const empty = decrypt(originalKey, nonce, Buffer.from(`DFGB1:AUTH:${JSON.stringify(payload)}`), tag);
+    const empty = decrypt(originalKey, nonce, Buffer.from(`DFGB${payload.version}:AUTH:${JSON.stringify(payload)}`), tag);
     return empty.length === 0 && !originalKey.equals(newKey);
   } finally { secret.fill(0); wrapping?.fill(0); root?.fill(0); originalKey?.fill(0); newKey?.fill(0); }
 }
@@ -55,12 +55,71 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   const output = await prepare(page);
   await page.locator("#approve").click(); await status(page, "saved");
   const unsaved = await markName(page, "Unsaved Synthetic", status);
+  const beforeExport = await fingerprint(page);
+  const workerStartFailures = await page.evaluate(async password => {
+    const {readRecords} = await import("./storage.js");
+    const {openVault} = await import("./vault.js");
+    const {exportBackup} = await import("./backup.js");
+    const {vault, workspace} = await readRecords();
+    const opened = await openVault(password, vault, workspace);
+    const OriginalWorker = globalThis.Worker;
+    let attempts = 0;
+    try {
+      globalThis.Worker = class {
+        constructor() { attempts++; throw new DOMException("synthetic worker startup denied", "SecurityError"); }
+      };
+      const aborted = new AbortController(); aborted.abort();
+      const errors = [];
+      for (const attempt of [
+        () => exportBackup(vault, workspace, opened.dataKey, ""),
+        () => exportBackup(vault, workspace, opened.dataKey, password, aborted.signal),
+        () => exportBackup(vault, workspace, opened.dataKey, password),
+        () => openVault(password, vault, workspace),
+      ]) {
+        try { await attempt(); errors.push("unexpected_success"); }
+        catch (error) { errors.push(error.code); }
+      }
+      return {attempts, errors};
+    } finally { globalThis.Worker = OriginalWorker; opened.bundle.fill(0); }
+  }, password);
+  check(workerStartFailures.attempts === 2 && workerStartFailures.errors.join() === "invalid_credentials,cancelled,kdf_unavailable,kdf_unavailable",
+    "B3 worker construction failure is unavailable while invalid credentials and cancellation retain their codes");
+  check(await fingerprint(page) === beforeExport, "B3 worker startup failure changes no encrypted records");
+  await page.locator("#backup-export-password").fill("incorrect-synthetic-password");
+  await page.locator("#backup-export").click(); await status(page, "invalid_credentials");
+  check(await fingerprint(page) === beforeExport && await page.locator("#backup-export-password").inputValue() === "", "B3 failed export reauthentication changes no records and clears the password");
+  await page.locator("#backup-export-password").fill(password);
   const downloadEvent = page.waitForEvent("download");
   await page.locator("#backup-export").click();
   const download = await downloadEvent;
   await status(page, "backup_exported");
   const {readFile} = await import("node:fs/promises");
   const backup = await readFile(await download.path());
+  const exportProperties = await page.evaluate(async raw => {
+    const {readRecords} = await import("./storage.js");
+    const {toBase64url} = await import("./vault.js");
+    const {vault} = await readRecords(), file = JSON.parse(raw);
+    return {version: file.payload.version, profile: file.payload.vault.profile,
+      excludesOld: ![vault.salt, vault.rootNonce, vault.wrappedRoot].some(bytes => raw.includes(toBase64url(bytes))),
+      liveProfile: vault.profile};
+  }, backup.toString());
+  check(exportProperties.version === 2 && exportProperties.profile === 2 && exportProperties.excludesOld && exportProperties.liveProfile === 1, "B3 v2 export replaces the complete old password wrapper without changing the live vault");
+  check(await page.locator("#backup-export-password").inputValue() === "", "B3 export clears reauthentication input");
+  // Build a legacy v1 file independently from stored profile-1 ciphertext, as old clients did.
+  const legacyBackup = Buffer.from(await page.evaluate(async ({raw, password}) => {
+    const {readRecords} = await import("./storage.js");
+    const {openVault, toBase64url} = await import("./vault.js");
+    const {vault, workspace} = await readRecords(), file = JSON.parse(raw);
+    const opened = await openVault(password, vault, workspace);
+    try {
+      file.payload.version = 1;
+      for (const key of ["profile", "salt", "rootNonce", "wrappedRoot"]) file.payload.vault[key] = key === "profile" ? vault[key] : toBase64url(vault[key]);
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const tag = new Uint8Array(await crypto.subtle.encrypt({name: "AES-GCM", iv: nonce, tagLength: 128,
+        additionalData: new TextEncoder().encode(`DFGB1:AUTH:${JSON.stringify(file.payload)}`)}, opened.dataKey, new Uint8Array()));
+      return JSON.stringify({payload: file.payload, nonce: toBase64url(nonce), tag: toBase64url(tag)});
+    } finally { opened.bundle.fill(0); }
+  }, {raw: backup.toString(), password}));
   check(![password, recoveryCode, "Jane Smith", "Unsaved Synthetic", unsaved].some(value => backup.includes(Buffer.from(value))), "G1 file excludes plaintext credentials, originals and previews");
   const storedPrivate = await page.evaluate(async ({password, recoveryCode}) => {
     const {readRecords} = await import("./storage.js");
@@ -78,6 +137,34 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   check(!storedPrivate, "G1 persistent records contain no plaintext secret, mapping or pending draft");
   await page.locator("#cancel").click(); await status(page, "cancelled");
   check(await page.locator("#recovery-created").inputValue() === "", "G1 cancellation hides the one-time code");
+  const exportAbort = await page.evaluate(async password => {
+    const {readRecords} = await import("./storage.js");
+    const {rewrapBackupVault} = await import("./vault.js");
+    const {vault} = await readRecords();
+    for (const immediate of [true, false]) {
+      const controller = new AbortController();
+      if (immediate) controller.abort();
+      const attempt = rewrapBackupVault(vault, password, controller.signal);
+      const timer = setTimeout(() => controller.abort(), 10);
+      try { await attempt; return false; }
+      catch (error) { if (error.code !== "cancelled") return false; }
+      finally { clearTimeout(timer); }
+    }
+    return true;
+  }, password);
+  check(exportAbort && await fingerprint(page) === beforeExport, "B3 cancellation before/during real KDF rejects without mutating the live vault");
+  for (const action of ["cancel", "lock"]) {
+    let downloads = 0; const onDownload = () => { downloads++; };
+    page.on("download", onDownload);
+    await control(page, "configure", {pause: "after-export-wrap"});
+    await page.locator("#backup-export-password").fill(password); await page.locator("#backup-export").click();
+    await paused(page, "after-export-wrap");
+    await page.locator(`#${action}`).click(); await status(page, action === "lock" ? "locked" : "cancelled");
+    await waitForBrokerState(() => control(page, "state"), state => !state.busy, {label: "cancel backup export"});
+    check(downloads === 0 && await page.locator("#backup-export-password").inputValue() === "", "B3 lock/cancel after rewrap downloads nothing and clears credentials");
+    page.off("download", onDownload); await control(page, "configure", {pause: null});
+    if (action === "lock") await unlock(page);
+  }
   const later = await markName(page, "Bob Synthetic", status);
   await page.locator("#approve").click(); await status(page, "saved");
   const sourceState = await fingerprint(page);
@@ -90,6 +177,9 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   await page.locator("#backup-export").click(); await status(page, "locked");
   await page.locator("#unlock-method").selectOption("recovery");
   await page.locator("#password").fill(recoveryCode); await page.locator("#unlock").click(); await status(page, "unlocked");
+  const recoveryState = await fingerprint(page);
+  await page.locator("#backup-export").click(); await status(page, "invalid_credentials");
+  check(await fingerprint(page) === recoveryState, "B3 recovery unlock does not enable an export without the vault password");
   await restored(page, output, "restored");
   check(await page.locator("#recovery-created").inputValue() === "", "G1 unlocking does not reveal the recovery code again");
   await close();
@@ -101,6 +191,25 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
     await restored(page, output, "locked");
     await close(); page = await launch(`backup-${method}`);
     await unlock(page);
+    const recoveredRecall = await page.evaluate(async password => {
+      const {readRecords} = await import("./storage.js");
+      const {openVault} = await import("./vault.js");
+      const {init, Workspace} = await import("./vendor/package/index.js"); await init();
+      const {vault, workspace: record} = await readRecords();
+      const opened = await openVault(password, vault, record);
+      let workspace;
+      try {
+        workspace = Workspace.openBundle(opened.bundle);
+        const text = "👋 JANE\tSMITH", before = workspace.exportBundle();
+        const recall = workspace.recall(text);
+        const plan = workspace.prepare(text, recall.findings.map(span => span.finding), new Uint8Array(16).fill(212));
+        const result = {recall, restored: workspace.restore(plan.preview().text), unchanged: workspace.exportBundle().every((value, i) => value === before[i])};
+        plan.discard(); before.fill(0); return result;
+      } finally { workspace?.close(); opened.bundle.fill(0); }
+    }, password);
+    check(recoveredRecall.recall.findings.length === 1 && recoveredRecall.recall.findings[0].finding.source === "recall" && recoveredRecall.restored === "👋 Jane Smith" && recoveredRecall.unchanged,
+      "D5 committed recall survives encrypted backup, fresh recovery keys and browser restart without changing mappings");
+    check(await page.evaluate(async () => (await (await import("./storage.js")).readRecords()).vault.profile) === 2, "B3 restored v2 vault retains stronger KDF profile across restart");
     await restored(page, output, "restored");
     check((await page.locator("#restored").textContent()).includes("Jane Smith"), "G1 backup restores old full aliases");
     check(await prepare(page) === output, "G1 imported mapping is byte-identical");
@@ -124,6 +233,15 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   }
   console.log("PASS G1/G3 encrypted backup, both credentials, fresh storage and rollback-safe alias reuse");
 
+  for (const [method, credential] of [["password", password], ["recovery", recoveryCode]]) {
+    page = await launch(`legacy-backup-${method}`);
+    await review(page, legacyBackup, credential, method); await status(page, "backup_preview_ready");
+    await page.locator("#backup-approve").click(); await status(page, "backup_restored_locked");
+    await close(); page = await launch(`legacy-backup-${method}`); await unlock(page);
+    await restored(page, output, "restored");
+    check((await page.locator("#restored").textContent()).includes("Jane Smith"), "B3 legacy v1 backup still restores with either credential after restart");
+    await close();
+  }
   page = await launch("v1-vault-compat");
   const v1VaultWorks = await page.evaluate(async password => {
     const {openVault, randomId} = await import("./vault.js");
@@ -156,7 +274,7 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
       const derived = await new Promise((resolve, reject) => {
         worker.onmessage = ({data}) => { worker.terminate(); resolve(data.key); };
         worker.onerror = () => { worker.terminate(); reject(new Error("KDF failed")); };
-        worker.postMessage({password, salt: v1Vault.salt});
+        worker.postMessage({password, salt: v1Vault.salt, profile: 1});
       });
       try {
         v1Vault.wrappedRoot = await encrypt(await importKey(derived), v1Vault.rootNonce, passwordAAD(v1Vault), root);
@@ -186,6 +304,9 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
     [backup, recoveryCode + "=", "recovery", "invalid_credentials"],
     [backup.subarray(0, -1), password, "password", "invalid_backup"],
     [damaged(file => { file.payload.version = 255; }), password, "password", "invalid_backup"],
+    [damaged(file => { file.payload.vault.profile = 1; }), password, "password", "invalid_backup"],
+    [damaged(file => { file.payload.version = 1; }), password, "password", "invalid_backup"],
+    [damaged(file => { file.payload.vault.memlimit = 1; }), password, "password", "invalid_backup"],
     [damaged(file => { file.payload.vault.profile = 255; }), password, "password", "invalid_backup"],
     [damaged(file => { file.payload.exportedAt = "2020-01-01T00:00:00.000Z"; }), password, "password", "invalid_backup"],
     [damaged(file => { file.payload.vault.recovery.wrappedRoot = flip(file.payload.vault.recovery.wrappedRoot); }), password, "password", "invalid_backup"],
@@ -216,7 +337,7 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
         if (mismatch === "bundle") bundle[0] = 0;
         if (mismatch === "head") head.revision = "1";
         const created = await createVault(password, mismatch === "namespace" ? randomId() : namespace, bundle, head);
-        return Array.from(await exportBackup(created.vault, created.record, created.dataKey));
+        return Array.from(await exportBackup(created.vault, created.record, created.dataKey, password));
       } finally { workspace.close(); }
     }, {password, mismatch});
     await review(page, Buffer.from(authenticatedInvalid));

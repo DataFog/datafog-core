@@ -24,6 +24,23 @@ explicit setup; synchronous `scan()` remains rule-based. Follow the
 and [release checklist](https://github.com/DataFog/datafog-core/issues/132) for
 availability, exact APIs and provisional development-vault compatibility.
 
+## 0.5.0-beta.2 workspace policy draft
+
+The beta.2 draft adds `workspace.policy()` and
+`workspace.preparePolicyChanges({rules, choices}, operationId)`, with local
+before/after review through `change.policyPreview()`. Protected types default to
+hide and reject generic keep. An explicit exact-value `not_sensitive` correction
+can deliberately allow actual PII; it uses the existing normalized type/value
+identity and applies to preparation and recall. Source/needs-review flags grant
+no exception. Reset/removal preserves previously issued aliases.
+
+Before saving a change where `change.snapshotFormat()` reports version 1 to 2,
+explain that beta.1 cannot open the upgraded vault. Read/no-op/discard behavior
+preserves old bytes; only an approved saved real change or recovery upgrades.
+Use the same encrypted export, complete-head comparison and single activation
+flow. The [policy contract](../proposals/workspace-policy-choices.md) defines
+methods, bounds, errors, compatibility and the synthetic host/browser evidence.
+
 ## Operations
 
 ```typescript

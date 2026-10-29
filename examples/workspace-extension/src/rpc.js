@@ -15,13 +15,22 @@ export class HostError extends Error {
         ["kind", issue.kind], ...ranges.map(key => [key, {start: issue[key].start, end: issue[key].end}]),
       ]));
     }
+    if (location?.reviewConflicts !== undefined) {
+      const ranges=["byteRange","codepointRange","utf16Range"];
+      const valid=issue=>["protected_coverage","type_conflict"].includes(issue?.kind) && Number.isSafeInteger(issue.findingIndex) && issue.findingIndex>=0 && issue.findingIndex<10000 && ranges.every(key=>{
+        const range=issue[key];return Number.isSafeInteger(range?.start) && Number.isSafeInteger(range?.end) && range.start>=0 && range.end>range.start && range.end<=1024*1024;
+      });
+      if(!Array.isArray(location.reviewConflicts) || location.reviewConflicts.length>20000 || !location.reviewConflicts.every(valid)) {this.code="internal_error";this.message="internal_error";return;}
+      this.reviewConflicts=location.reviewConflicts.map(issue=>Object.fromEntries([["kind",issue.kind],["findingIndex",issue.findingIndex],...ranges.map(key=>[key,{start:issue[key].start,end:issue[key].end}])]));
+    }
+
   }
 }
 const known = new Set([
-  "closed_workspace", "inactive_plan", "workspace_conflict", "invalid_batch", "invalid_finding", "invalid_marker",
-  "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
+  "closed_workspace", "inactive_plan", "workspace_conflict", "invalid_batch", "invalid_finding", "invalid_marker", "review_conflict",
+  "invalid_policy", "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
   "storage_failure", "save_uncertain", "locked", "stale_approval", "cancelled", "already_exists", "not_found", "internal_error",
-  "invalid_backup", "recovery_unavailable",
+  "invalid_backup", "recovery_unavailable", "kdf_unavailable",
 ]);
 export function safeCode(error) { return known.has(error?.code) ? error.code : "internal_error"; }
 
@@ -67,7 +76,7 @@ export function serve(methods) {
       else self.postMessage({ id, result });
     } catch (error) {
       const safe = new HostError(safeCode(error), error);
-      self.postMessage({ id, error: safe.code, location: { inputIndex: safe.inputIndex, findingIndex: safe.findingIndex, markerIssues: safe.markerIssues } });
+      self.postMessage({ id, error: safe.code, location: { inputIndex: safe.inputIndex, findingIndex: safe.findingIndex, markerIssues: safe.markerIssues, reviewConflicts:safe.reviewConflicts } });
     }
   });
 }
