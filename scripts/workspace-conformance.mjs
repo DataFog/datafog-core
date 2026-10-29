@@ -301,6 +301,15 @@ export async function verifyWorkspaceOperations(api) {
   const recoverRecord = reopenedRecords.prepareRecoveryWithOperation({id: id(205), occurredAtMs: 1});
   reopenedRecords.activateSaved(recoverRecord, recoverRecord.heads().expectedHead, recoverRecord.heads().candidateHead);
   check(reopenedRecords.operations().at(-1).kind === "recovery" && reopenedRecords.counts().operations === 4, "timed recovery adds one content-free record");
+  for (const value of [202, 203, 204]) {
+    throws(() => records.prepare("", [], id(value)), "invalid_operation_id");
+    throws(() => records.prepareBatch([{text:"ordinary",findings:[]}], id(value)), "invalid_operation_id");
+    throws(() => records.prepareRecovery(id(value)), "invalid_operation_id");
+    throws(() => records.preparePolicyChanges({rules:[],choices:[]}, id(value)), "invalid_operation_id");
+    throws(() => records.prepareWithOperation("", [], {id:id(value),occurredAtMs:0}), "operation_reused");
+    throws(() => records.prepareRecoveryWithOperation({id:id(value),occurredAtMs:0}), "operation_reused");
+  }
+  check(equal(records.exportBundle(), recordsSaved), "all reused-ID failures preserve saved bytes and head");
   records.close(); candidateRecords.close(); reopenedRecords.close();
 
 }

@@ -6,8 +6,8 @@ preserving every operation record: no deletion, sampling or summary replacement.
 Lossless compression is separate postlaunch work in #165. Sid also approved
 recorded-history-only counts, explicit unknown pre-upgrade history and per-record
 numeric input/replacement deltas on October 29. He then approved the provisional
-100,000-row ceiling with the final 256 slots reserved for recovery. Legacy replay
-errors and the remaining accounting details below are still unapproved.
+100,000-row ceiling with the final 256 slots reserved for recovery. The legacy reused-ID error compatibility is now specified below; final conversation
+coordination and complete native/shared qualification remain open.
 
 ## Compatibility and transaction boundary
 
@@ -36,7 +36,7 @@ unchanged. The stronger password-reauthenticated 256 MiB backup envelope and bot
 password/recovery imports are preserved; inner-format changes do not restore the
 old weaker password wrapper.
 
-## Concrete choices still needing review
+## Approved bounds and technical contract
 
 ### Capacity and recovery
 
@@ -94,8 +94,9 @@ record unknown (`null`) time rather than inventing a historical clock. Legacy
 no-op bytes remain unchanged. A batch records one operation, its input-member
 count and replaced occurrences, including repeated values. Current policy saves
 also append a proposed `policy_change` row with zero input/span deltas and unknown
-time; combined review delegates to the same preparation path. These accounting
-details remain under technical compatibility review. A policy no-op stays byte-preserving.
+time; combined review delegates to the same preparation path. One row per explicitly saved batch and unknown time for older calls preserve the
+approved explicit-save boundary; compatibility tests cover their deltas and
+no-op behavior. A policy no-op stays byte-preserving.
 
 Counts describe **recorded covered history**, not all lifetime activity. Older
 vaults have unknown prior history, and successful legacy no-change preparations
@@ -110,12 +111,13 @@ transaction before that counter changes.
 
 ### Reused IDs
 
-Recommended: legacy APIs consistently retain `invalid_operation_id` for recognized
-reuses, while new explicit operation APIs return `operation_reused`. The existing
-candidate still has the older proposed split: legacy current-head/mapping/settings
-IDs return `invalid_operation_id`, but other retained historical IDs return
-`operation_reused`. That difference is not approved. Existing records are never
-silently forgotten. Older snapshots cannot reveal removed/unrecorded IDs; the
+Legacy APIs consistently retain `invalid_operation_id` for every recognized
+reuse, including current-head, mapping-issuance, settings and history-only IDs.
+New explicit operation APIs return `operation_reused` for those same IDs. This
+technical compatibility repair keeps the existing legacy error contract instead
+of leaking a new error merely because an ID now exists only in retained history.
+Every rejection preserves the complete saved bytes and head, including after
+reopening. Existing records are never silently forgotten. Older snapshots cannot reveal removed/unrecorded IDs; the
 runtime cannot reconstruct them or promise to detect unknowable replays.
 
 ## Proposed API and count definitions
@@ -269,8 +271,9 @@ All browser and allocation receipts report a clean source tree. A stale beta.1
 wheel initially prevented live-parity setup; preserving it separately and using
 the current built wheel passed without changing fixtures or product code.
 
-Before merge: review the remaining action/accounting and legacy reuse behavior;
-reconcile #148's final key9 format and G3's all-SDK contract. Native Python and
+Before merge: reconcile #148's final key9 format and G3's all-SDK contract.
+The recognized-ID error matrix, explicit saved-policy rows and batch deltas remain
+subject to ordinary technical review rather than a new retention/accounting decision. Native Python and
 Node operation/history/page implementations and their shared qualification are
 explicit prerequisites for complete X6/X7/X8 and C1/G3 claims. The approved
 capacity and full-record retention do not settle ordinary confirmation reservation
