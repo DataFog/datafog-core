@@ -184,6 +184,16 @@ impl Task for LifecycleTask {
 }
 #[napi]
 impl ModelSessionNative {
+    #[napi]
+    pub fn describe(&self) -> napi::Result<String> {
+        serde_json::to_string(&self.session.describe()).map_err(|_| {
+            Error::new(
+                Status::GenericFailure,
+                "model descriptor serialization failed",
+            )
+        })
+    }
+
     #[napi(ts_return_type = "Promise<ModelScanResult>")]
     pub fn scan<'env>(
         &self,

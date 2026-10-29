@@ -237,6 +237,25 @@ fn results_keep_scores_and_reindex_duplicate_evidence() {
 }
 
 #[test]
+fn session_descriptor_survives_close_without_probing_the_worker() {
+    let session = ModelSession {
+        descriptor: descriptor(),
+        inner: Mutex::new(SessionInner { worker: None }),
+        closing: AtomicBool::new(false),
+        state: AtomicU8::new(1),
+        cleanup_failed: Arc::new(AtomicBool::new(false)),
+        admitted: Arc::new(AtomicBool::new(false)),
+    };
+    let description = session.describe();
+    assert_eq!(description.backend, "datafog_native");
+    assert_eq!(description.model, "DataFog/pii-en-65m");
+    assert_eq!(description.labels["email"], "EMAIL");
+    assert_eq!(description.score_scale, "normalized_token_softmax_min");
+    session.close().unwrap();
+    assert_eq!(session.describe(), description);
+}
+
+#[test]
 fn explicit_engine_selection_preserves_legacy_configs_and_rejects_conflicts() {
     let datafog = serde_json::json!({
         "bundle": "/missing/bundle", "manifest_sha256": "a".repeat(64),

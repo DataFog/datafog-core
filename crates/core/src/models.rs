@@ -7,8 +7,8 @@ pub use gliner2::{Gliner2Config, Gliner2Label};
 mod tests;
 
 pub use crate::model_scan::{
-    BackendResult, CoordinateUnit, FindingEvidence, ModelError, ModelScanResult, NativeSpan,
-    RawScore, ResourceLimits, RoutedScanConfig, SourceEvidence,
+    BackendResult, CoordinateUnit, FindingEvidence, ModelDescriptor, ModelError, ModelScanResult,
+    NativeSpan, RawScore, ResourceLimits, RoutedScanConfig, SourceEvidence,
 };
 use crate::model_scan::{
     ModelScanContract as ModelSessionDescriptor, bounded_json, convert, rule_entries,
@@ -215,6 +215,11 @@ pub struct ModelSession {
 }
 
 impl ModelSession {
+    /// Configured identity and capabilities. Available even after the worker closes.
+    pub fn describe(&self) -> ModelDescriptor {
+        self.descriptor.describe()
+    }
+
     pub fn open(config: ModelSessionConfig) -> Result<Self, ModelError> {
         Self::open_started(config, Instant::now())
     }

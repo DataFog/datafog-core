@@ -31,6 +31,14 @@ export interface ModelFindingEvidence {
     calibrated_confidence: number | null;
   }>;
 }
+export interface ModelDescriptor {
+  readonly backend: string;
+  readonly model: string;
+  readonly adapter_version: string;
+  /** Native model label → configured canonical entity type. */
+  readonly labels: Readonly<Record<string, string>>;
+  readonly score_scale: string;
+}
 /** Rule scan options; `entities` may also name the session's model labels. */
 export interface ModelScanConfig extends Omit<ScanConfig, "entities"> {
   readonly entities?: readonly string[];
@@ -38,6 +46,8 @@ export interface ModelScanConfig extends Omit<ScanConfig, "entities"> {
 export declare class ModelSession {
   private constructor();
   static open(config: ModelSessionConfig): Promise<ModelSession>;
+  /** Configured metadata, available after close; does not probe runtime readiness. */
+  describe(): ModelDescriptor;
   /** Rule detectors handle the entity types they support and the model runs
    * only for requested types it alone provides; rule-only requests skip the
    * model. Omitting `config` equals `{}`: every enabled rule detector plus the
@@ -240,6 +250,7 @@ export declare class ModelCancellation {
 }
 
 export declare class ModelSessionNative {
+  describe(): string
   scan(text: string, cancellation?: ModelCancellation | undefined | null, config?: any | undefined | null): Promise<ModelScanResult>
   /** Raw model output: every model label, with no rule detectors. */
   scanModel(text: string, cancellation?: ModelCancellation | undefined | null): Promise<ModelScanResult>

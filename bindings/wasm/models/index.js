@@ -37,6 +37,7 @@ export class ModelSession {
   #runtime;
   #labels;
   #threshold;
+  #descriptor;
   #busy = false;
   #closed = false;
   #closing;
@@ -55,6 +56,8 @@ export class ModelSession {
     let contract;
     try {
       contract = new BrowserModelContract(labels);
+      // JSON.parse preserves custom labels such as __proto__ as own properties.
+      const descriptor = JSON.parse(contract.describe());
       const nativeLabels = contract.labels();
       // Validate prompts before fetching assets, then load the optional runtime.
       const { validateLabels } = await import("./model.mjs");
@@ -65,18 +68,24 @@ export class ModelSession {
         wasmPaths,
         numThreads,
       });
-      return new ModelSession(contract, runtime, nativeLabels, threshold);
+      return new ModelSession(contract, runtime, nativeLabels, threshold, descriptor);
     } catch (error) {
       contract?.free();
       throw modelError(error, "model_load_failed", "/bundle");
     }
   }
 
-  constructor(contract, runtime, labels, threshold) {
+  constructor(contract, runtime, labels, threshold, descriptor) {
     this.#contract = contract;
     this.#runtime = runtime;
     this.#labels = labels;
     this.#threshold = threshold;
+    this.#descriptor = descriptor;
+  }
+
+  /** Configured metadata; independent of runtime readiness or session state. */
+  describe() {
+    return structuredClone(this.#descriptor);
   }
 
   /** Rules own supported types; inference runs only when model-only types are requested. */

@@ -51,6 +51,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Documentation for GLiNER2 model integration in `docs/gliner2-model.md` (#112)
 
 - Native model sessions accept an explicit DataFog or GLiNER2 engine selector, with shared validation across Rust, Python and Node and compatibility for existing configurations.
+- Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
 

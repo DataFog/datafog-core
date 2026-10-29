@@ -31,10 +31,21 @@ export interface ModelScanResult {
   }[];
 }
 
+export interface ModelDescriptor {
+  readonly backend: string;
+  readonly model: string;
+  readonly adapter_version: string;
+  /** Native model label → configured canonical entity type. */
+  readonly labels: Readonly<Record<string, string>>;
+  readonly score_scale: string;
+}
+
 /** Experimental English-only model session; does not change the synchronous rule scan API. */
 export declare class ModelSession {
   private constructor();
   static open(options: ModelSessionOptions): Promise<ModelSession>;
+  /** Configured metadata, available after close; does not probe runtime readiness. */
+  describe(): ModelDescriptor;
   /** Routes rule-supported entities to Core rules and other configured entities to Small. */
   scan(text: string, config?: ScanConfig): Promise<ModelScanResult>;
   scanModel(text: string): Promise<ModelScanResult>;
