@@ -114,6 +114,10 @@ try {
   await call("openWorkspace", password);
   assert.equal(await call("seedStale", text, first.value.findings), 31);
   const prepared = await call("prepare", text);
+  assert(prepared.preview.transformations.length > 0);
+  assert(prepared.preview.transformations.every(span => span.source === "scanner" && span.needsReview === true));
+  report.reviewPreview = prepared.preview;
+  passed("scanner review metadata and input-local highlight ranges survive packed-SDK workspace preparation");
   assert(!prepared.preview.text.includes("John Smith"));
   assert.equal(await page.locator("#sink").textContent(), "");
   const uncommitted = await call("restoreReport", prepared.preview.text);
@@ -152,6 +156,64 @@ try {
   assert.equal(await call("hasModel"), false);
   await call("openWorkspace", password);
   assert.equal(await call("restore", approved.text), text);
+  const followup = "👋 JOHN\tSMITH says contact john.smith@example.com.";
+  const recalled = await call("prepareRecall", followup);
+  assert.equal(recalled.recall.findings.length, 2);
+  assert(recalled.recall.findings.every(span => span.finding.source === "recall" && span.finding.needsReview === true));
+  for (const span of recalled.recall.findings) {
+    assert.equal(Buffer.from(followup).subarray(span.byteRange.start, span.byteRange.end).toString(), span.finding.matchedText);
+    assert.equal([...followup].slice(span.codepointRange.start, span.codepointRange.end).join(""), span.finding.matchedText);
+    assert.equal(followup.slice(span.utf16Range.start, span.utf16Range.end), span.finding.matchedText);
+  }
+  assert.equal(await page.locator("#sink").textContent(), "");
+  const recalledApproved = await call("approve");
+  assert.equal(recalledApproved.restored, "👋 John Smith says contact john.smith@example.com.");
+  assert.equal(await page.locator("#sink").textContent(), recalledApproved.text);
+  report.recallFollowup = recalled;
+  passed("browser restart recalls committed model values without a model session and preserves approved-save-before-handoff");
+  report.recallMeasurements = await page.evaluate(async () => {
+    const api = await import("./vendor/package/index.js"); await api.init();
+    const id = value => new Uint8Array(16).fill(value);
+    function seed(values) {
+      const workspace = api.Workspace.create(id(80), id(81));
+      const source = values.join("|"); let offset = 0;
+      const findings = values.map(value => {
+        const start = offset; offset += value.length + 1;
+        return {entityType: "CUSTOM", matchedText: value, range: {unit: "utf8_bytes", start, end: start + value.length}};
+      });
+      const plan = workspace.prepare(source, findings, id(82));
+      const saved = plan.exportCandidateBundle(), heads = plan.heads();
+      workspace.activateSaved(plan, heads.expectedHead, heads.candidateHead); saved.fill(0);
+      return workspace;
+    }
+    const cases = [
+      {name: "1000 committed values, 128 KiB no-hit input", values: Array.from({length: 1000}, (_, i) => `Synthetic${String(i).padStart(4, "0")}`), text: "ordinary ".repeat(14_500), expected: 0},
+      {name: "1000 values, repeated boundary matches", values: Array.from({length: 1000}, (_, i) => `Synthetic${String(i).padStart(4, "0")}`), text: "Synthetic0999 ".repeat(500), expected: 500},
+      {name: "maximum source without matches", values: ["Synthetic"], text: "x".repeat(1024 * 1024), expected: 0},
+      {name: "result overflow rejects whole query", values: ["Ann"], text: "Ann ".repeat(10_001), error: "resource_limit"},
+      {name: "long-prefix work budget rejects whole query", values: ["*".repeat(4096) + "!"], text: "*".repeat(20_000), error: "resource_limit"},
+      {name: "index-node limit rejects whole query", values: ["z".repeat(262_144)], text: "plain", error: "resource_limit"},
+    ];
+    const results = [];
+    for (const item of cases) {
+      const workspace = seed(item.values), head = workspace.head(), times = [];
+      let count, error;
+      try {
+        for (let iteration = 0; iteration < 3; iteration++) {
+          const start = performance.now(); count = undefined; error = undefined;
+          try { count = workspace.recall(item.text).findings.length; }
+          catch (failure) { error = failure.code; }
+          times.push(performance.now() - start);
+          if (error !== item.error || count !== item.expected) throw new Error(`unexpected recall result: ${item.name}`);
+        }
+        if (JSON.stringify(workspace.head()) !== JSON.stringify(head)) throw new Error("recall changed head");
+        times.sort((a, b) => a - b);
+        results.push({name: item.name, entries: item.values.length, inputBytes: new TextEncoder().encode(item.text).length, samplesMs: times, medianMs: times[1], count, error});
+      } finally { workspace.close(); }
+    }
+    return {cases: results, note: "Three in-page calls per synthetic case; fresh index each call, existing browser/WASM warm. No latency or low-memory SLA."};
+  });
+  passed("actual MV3 recall measures representative Unicode-safe matcher bounds and rejects index/result/work exhaustion atomically");
   report.sourcePreflight = await call("sourcePreflight");
   await call("closeWorkspace");
   passed("browser process restart loses model session and rehydrates encrypted mappings");

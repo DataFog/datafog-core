@@ -729,11 +729,14 @@ mod browser_tests {
             assert!(routing.model_entities.contains("ACCOUNT_NUMBER"));
             assert!(!routing.model_entities.contains("EMAIL"));
             assert!(routing.rules.is_some());
-            for (text, model_value) in [
-                ("👋 account number: 12345678", "12345678"),
-                ("👋 12345678", "12345678"),
-                ("👋 XX-12345678", "XX-12345678"),
-                ("👋 account number: XX-12345678", "XX-12345678"),
+            for (text, model_value, expected_sources) in [
+                ("👋 account number: 12345678", "12345678", 2),
+                ("👋 12345678", "12345678", 1),
+                ("👋 XX-12345678", "XX-12345678", 1),
+                ("👋 account number: XX-12345678", "XX-12345678", 1),
+                ("👋 account number: XXXX1234", "XXXX1234", 2),
+                ("👋 account ending in 1234", "1234", 2),
+                ("👋 XXXX1234", "XXXX1234", 1),
             ] {
                 let start = text.find(model_value).unwrap();
                 let result = contract
@@ -754,14 +757,7 @@ mod browser_tests {
                         .iter()
                         .any(|source| source.native_label.as_deref() == Some("bank account"))
                 );
-                assert_eq!(
-                    sources.len(),
-                    if text.contains("account number:") && model_value == "12345678" {
-                        2
-                    } else {
-                        1
-                    }
-                );
+                assert_eq!(sources.len(), expected_sources);
                 let transformed = crate::transform(
                     text,
                     &result.findings,
