@@ -2,9 +2,9 @@
 use datafog_core::{
     TextRange,
     workspace::{
-        ChoiceDisposition, ErrorCode, OperationContext, OperationOutcome, OutcomeKind, PolicyEdits,
-        PreparedChange, TypeRule, TypeRuleEdit, ValueChoiceEdit, Workspace, WorkspaceFinding,
-        WorkspaceInput,
+        ChoiceDisposition, Conversation, ConversationInput, ErrorCode, OperationContext,
+        OperationOutcome, OutcomeKind, PolicyEdits, PreparedChange, ReviewInput, TypeRule,
+        TypeRuleEdit, ValueChoiceEdit, Workspace, WorkspaceFinding, WorkspaceInput,
     },
 };
 use minicbor::{Decoder, Encoder};
@@ -296,6 +296,120 @@ fn upgraded(root: &Path) -> Result<Value> {
     save(&mut workspace, &mut plan)?;
     snapshot(&workspace, json!([{"marker":marker,"value":value}]))
 }
+fn conversation_states(current: &Value) -> Result<(Value, Value)> {
+    let mut workspace = Workspace::open_bundle(&unhex(
+        current["bundleHex"].as_str().ok_or("current missing")?,
+    )?)?;
+    let logical_id = [122; 16];
+    let value = "Conversation Synthetic";
+    let text = format!(
+        "{} plus {value}",
+        current["aliases"][0]["marker"]
+            .as_str()
+            .ok_or("marker missing")?
+    );
+    let selections = [finding(&text, value, "PERSON")?];
+    let mut plan = workspace.prepare_conversation_send(
+        &[ConversationInput {
+            input: ReviewInput {
+                text: &text,
+                scanner_findings: &[],
+                user_selections: &selections,
+                corrections: &[],
+            },
+            conversation: Conversation {
+                id: logical_id,
+                surface: "synthetic_chat".into(),
+                site_id: None,
+                site_id_byte_budget: 128,
+            },
+        }],
+        context(120, 120),
+    )?;
+    let intent = plan.send_intents()?[0];
+    let preview = plan.preview()?;
+    let marker = preview
+        .text
+        .split(" plus ")
+        .nth(1)
+        .ok_or("new marker missing")?
+        .to_owned();
+    let mut aliases = current["aliases"]
+        .as_array()
+        .ok_or("aliases missing")?
+        .clone();
+    aliases.push(json!({"marker":marker,"value":value}));
+    save(&mut workspace, &mut plan)?;
+    let mut pending = snapshot(&workspace, json!(aliases))?;
+    pending["conversation"] = json!({"logicalId":logical_id,"intent":intent,"state":workspace.conversation(logical_id)?,"status":workspace.send_intent_status(intent)?});
+    let mut plan = workspace.prepare_observed_send(
+        intent,
+        logical_id,
+        "synthetic_chat",
+        "thread_a",
+        context(121, 121),
+    )?;
+    save(&mut workspace, &mut plan)?;
+    let mut resolved = snapshot(&workspace, json!(aliases))?;
+    resolved["conversation"] = json!({"logicalId":logical_id,"intent":intent,"state":workspace.conversation(logical_id)?,"status":workspace.send_intent_status(intent)?});
+    Ok((pending, resolved))
+}
+fn conversation_rejections(pending: &[u8], resolved: &[u8]) -> Result<Vec<Value>> {
+    let mut result = Vec::new();
+    let mut add = |id: &str, candidate: Vec<u8>| -> Result<()> {
+        let failure = Workspace::open_bundle(&candidate)
+            .err()
+            .ok_or("conversation negative unexpectedly accepted")?;
+        if failure.code != ErrorCode::InvalidSnapshot {
+            return Err("conversation negative category changed".into());
+        }
+        result.push(json!({"id":id,"bundleHex":hex(&candidate),"code":"invalid_snapshot","encryptedImport":true}));
+        Ok(())
+    };
+    add(
+        "missing_top_key_9",
+        map(&fields(pending)?
+            .into_iter()
+            .filter(|(key, _)| *key != 9)
+            .collect::<Vec<_>>())?,
+    )?;
+    add(
+        "conversation_wrong_type",
+        replace_field(pending, 9, uint(0)?)?,
+    )?;
+    let parts = members(&field(pending, 9)?)?;
+    for index in 0..4 {
+        let mut changed = parts.clone();
+        changed.remove(index);
+        add(
+            &format!("missing_conversation_member_{index}"),
+            replace_field(pending, 9, array(&changed)?)?,
+        )?;
+    }
+    let mut changed = parts.clone();
+    changed[0] = array(&[])?;
+    add(
+        "pending_context_missing",
+        replace_field(pending, 9, array(&changed)?)?,
+    )?;
+    let mut changed = parts.clone();
+    changed[1] = array(&[])?;
+    add(
+        "prepare_intent_missing",
+        replace_field(pending, 9, array(&changed)?)?,
+    )?;
+    let mut resolved_parts = members(&field(resolved, 9)?)?;
+    resolved_parts[3] = array(&[])?;
+    add(
+        "confirmed_membership_missing",
+        replace_field(resolved, 9, array(&resolved_parts)?)?,
+    )?;
+    add(
+        "confirmed_handoff_count_missing",
+        change_count(resolved, 3, 0)?,
+    )?;
+    Ok(result)
+}
 fn rejections(bytes: &[u8]) -> Result<Vec<Value>> {
     let mut result = Vec::new();
     let mut add = |id: &str, candidate: Vec<u8>, encrypted: bool| -> Result<()> {
@@ -400,7 +514,7 @@ fn rejections(bytes: &[u8]) -> Result<Vec<Value>> {
         (0, "operation_total_mismatch", 10),
         (1, "input_total_mismatch", 4),
         (2, "span_total_mismatch", 6),
-        (3, "unimplemented_handoff_total", 1),
+        (3, "unproven_handoff_total", 1),
         (4, "blocked_attempt_total_mismatch", 5),
     ] {
         add(name, change_count(bytes, index, value)?, index == 3)?;
@@ -452,10 +566,16 @@ fn main() -> Result<()> {
             .as_str()
             .ok_or("fixture encoding missing")?,
     )?;
+    let (pending, resolved) = conversation_states(&current)?;
+    let mut rejections = rejections(&bytes)?;
+    rejections.extend(conversation_rejections(
+        &unhex(pending["bundleHex"].as_str().ok_or("pending missing")?)?,
+        &unhex(resolved["bundleHex"].as_str().ok_or("resolved missing")?)?,
+    )?);
     let generator =
         std::fs::read(root.join("crates/core/examples/workspace_backup_operation_fields.rs"))?;
     let fixture = json!({"schemaVersion":1,"syntheticOnly":true,"source":{"commit":git(&root,&["rev-parse","HEAD"])? ,"coreRuntimeTree":git(&root,&["rev-parse","HEAD:crates/core/src"])? ,"generatorSha256":hex(&Sha256::digest(generator))},
-        "current":current,"legacyUpgraded":upgraded(&root)?,"rejections":rejections(&bytes)?});
+        "current":current,"legacyUpgraded":upgraded(&root)?,"conversationPending":pending,"conversationResolved":resolved,"rejections":rejections});
     println!("{}", serde_json::to_string_pretty(&fixture)?);
     Ok(())
 }

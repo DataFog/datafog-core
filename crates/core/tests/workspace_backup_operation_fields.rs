@@ -1,4 +1,6 @@
-use datafog_core::workspace::{ErrorCode, OperationContext, OperationKind, Workspace};
+use datafog_core::workspace::{
+    ErrorCode, OperationContext, OperationKind, SendIntentId, Workspace,
+};
 use minicbor::Decoder;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -56,7 +58,12 @@ fn current_v3_gold_is_actual_nonempty_history_with_derived_coverage_and_original
     .map(|byte| format!("{byte:02x}"))
     .collect();
     assert_eq!(fixture["source"]["generatorSha256"], hash);
-    for name in ["current", "legacyUpgraded"] {
+    for name in [
+        "current",
+        "legacyUpgraded",
+        "conversationPending",
+        "conversationResolved",
+    ] {
         let gold = &fixture[name];
         let raw = bytes(gold["bundleHex"].as_str().unwrap());
         let workspace = Workspace::open_bundle(&raw).unwrap();
@@ -68,8 +75,45 @@ fn current_v3_gold_is_actual_nonempty_history_with_derived_coverage_and_original
             serde_json::to_value(workspace.history_coverage().unwrap()).unwrap(),
             gold["historyCoverage"]
         );
+        if let Some(item) = gold.get("conversation") {
+            let logical_id: [u8; 16] = serde_json::from_value(item["logicalId"].clone()).unwrap();
+            let intent: SendIntentId = SendIntentId {
+                preparation_id: serde_json::from_value(item["intent"]["preparationId"].clone())
+                    .unwrap(),
+                input_index: item["intent"]["inputIndex"].as_u64().unwrap() as usize,
+            };
+            assert_eq!(
+                serde_json::to_value(workspace.conversation(logical_id).unwrap()).unwrap(),
+                item["state"]
+            );
+            assert_eq!(
+                serde_json::to_value(workspace.send_intent_status(intent).unwrap()).unwrap(),
+                item["status"]
+            );
+            if item["status"] == "pending" {
+                assert_eq!(
+                    workspace
+                        .restore_in_conversation("plain", logical_id)
+                        .unwrap_err()
+                        .code,
+                    ErrorCode::ConversationPending
+                );
+            } else {
+                for alias in [
+                    &gold["aliases"][0],
+                    gold["aliases"].as_array().unwrap().last().unwrap(),
+                ] {
+                    assert_eq!(
+                        workspace
+                            .restore_in_conversation(alias["marker"].as_str().unwrap(), logical_id)
+                            .unwrap(),
+                        alias["value"]
+                    );
+                }
+            }
+        }
         let mut decoder = Decoder::new(&raw);
-        assert_eq!(decoder.map().unwrap(), Some(10));
+        assert_eq!(decoder.map().unwrap(), Some(11));
         let mut keys = Vec::new();
         for span in gold["fields"].as_array().unwrap() {
             let key = decoder.u8().unwrap();
@@ -85,7 +129,7 @@ fn current_v3_gold_is_actual_nonempty_history_with_derived_coverage_and_original
                 span["valueEnd"].as_u64().unwrap()
             );
         }
-        assert_eq!(keys, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 10]);
+        assert_eq!(keys, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         assert_eq!(decoder.position(), raw.len());
         for alias in gold["aliases"].as_array().unwrap() {
             assert_eq!(
@@ -133,7 +177,12 @@ fn current_v3_gold_is_actual_nonempty_history_with_derived_coverage_and_original
 #[test]
 fn recovery_retains_every_row_delta_and_legacy_coverage_without_activating_preview() {
     let fixture = fixture();
-    for name in ["current", "legacyUpgraded"] {
+    for name in [
+        "current",
+        "legacyUpgraded",
+        "conversationPending",
+        "conversationResolved",
+    ] {
         let gold = &fixture[name];
         let raw = bytes(gold["bundleHex"].as_str().unwrap());
         let mut workspace = Workspace::open_bundle(&raw).unwrap();
@@ -172,7 +221,7 @@ fn recovery_retains_every_row_delta_and_legacy_coverage_without_activating_previ
         let recovered = workspace.export_bundle().unwrap();
         let before_fields = fields(&raw);
         let after_fields = fields(&recovered);
-        for key in [0, 1, 3, 4, 5, 6, 7] {
+        for key in [0, 1, 3, 4, 5, 6, 7, 9] {
             assert_eq!(
                 after_fields[&key], before_fields[&key],
                 "{name} retained field {key}"
@@ -264,12 +313,21 @@ fn missing_or_inconsistent_operation_fields_never_import_as_empty_success() {
         "missing_top_key_8",
         "missing_top_key_10",
         "duplicate_operation_id",
-        "unimplemented_handoff_total",
+        "unproven_handoff_total",
         "mapping_issuance_exceeds_recorded_spans",
         "operation_count_above_bound",
     ] {
         assert!(names.contains(required));
     }
-    assert_eq!(names.len(), 32);
+    assert_eq!(names.len(), 42);
+    for required in [
+        "missing_top_key_9",
+        "pending_context_missing",
+        "prepare_intent_missing",
+        "confirmed_membership_missing",
+        "confirmed_handoff_count_missing",
+    ] {
+        assert!(names.contains(required));
+    }
     assert_eq!(workspace.export_bundle().unwrap(), valid);
 }

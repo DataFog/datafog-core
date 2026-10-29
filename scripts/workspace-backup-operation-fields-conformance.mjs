@@ -7,7 +7,7 @@ const check=(value,label)=>{if(!value)throw new Error(label);};
 // Caller initializes browser WASM; native Node has no init requirement. No method skips.
 export function verifyWorkspaceBackupOperationFields(api,fixture) {
   check(fixture.schemaVersion===1&&fixture.syntheticOnly===true,"operation backup fixture schema");
-  for(const name of ["current","legacyUpgraded"]) {
+  for(const name of ["current","legacyUpgraded","conversationPending","conversationResolved"]) {
     const gold=fixture[name],original=bytes(gold.bundleHex),workspace=api.Workspace.openBundle(original);
     let candidate,recovered;
     try {
@@ -15,6 +15,12 @@ export function verifyWorkspaceBackupOperationFields(api,fixture) {
       check(equal(workspace.head(),gold.head)&&equal(workspace.operations(),gold.operations)&&equal(workspace.counts(),gold.counts),"operation fixture public views");
       check(equal(workspace.historyCoverage(),gold.historyCoverage),"operation fixture coverage");
       for(const alias of gold.aliases)check(workspace.restore(alias.marker)===alias.value,"operation fixture saved alias");
+      if(gold.conversation) {
+        const item=gold.conversation,id=Uint8Array.from(item.logicalId);
+        check(equal(workspace.conversation(id),item.state)&&workspace.sendIntentStatus(item.intent)===item.status,"conversation fixture public state");
+        if(item.status==="pending") { let failure;try{workspace.restoreInConversation("plain",id);}catch(error){failure=error;}check(failure?.code==="conversation_pending","saved pending fixture must pause scoped plain response"); }
+        else for(const alias of [gold.aliases[0],gold.aliases.at(-1)])check(workspace.restoreInConversation(alias.marker,id)===alias.value,"confirmed fixture saved issuance");
+      }
       const first=workspace.operationsPage(0,1000);check(equal(first.records,gold.operations)&&first.nextOffset===null,"operation fixture complete page");
       const abandoned=workspace.prepareRecovery(new Uint8Array(16).fill(111));abandoned.exportCandidateBundle().fill(0);abandoned.discard();
       check(equal([...workspace.exportBundle()],[...original]),"discard recovery changed operation history");
@@ -27,7 +33,7 @@ export function verifyWorkspaceBackupOperationFields(api,fixture) {
       check(failure?.code==="workspace_conflict"&&equal(workspace.counts(),gold.counts),"failed activation changed operation counts");
       workspace.activateSaved(plan,heads.expectedHead,heads.candidateHead);recovered=workspace.exportBundle();
       const before=fixtureFieldBytes(original),after=fixtureFieldBytes(recovered);
-      for(const key of [0,1,3,4,5,6,7])check(equal([...before.get(key)],[...after.get(key)]),"recovery changed retained field");
+      for(const key of [0,1,3,4,5,6,7,9])check(equal([...before.get(key)],[...after.get(key)]),"recovery changed retained field");
       const rows=workspace.operations(),last=rows.at(-1),counts=workspace.counts();
       check(equal(rows.slice(0,-1),gold.operations)&&last.kind==="recovery"&&last.occurredAtMs===null&&equal(last.id,heads.candidateHead.commitId),"recovery prefix or metadata changed");
       check(equal(counts,{...gold.counts,operations:gold.counts.operations+1}),"recovery changed recorded deltas");
@@ -47,5 +53,5 @@ export function verifyWorkspaceBackupOperationFields(api,fixture) {
     check(error instanceof api.DataFogError&&error.code===vector.code&&error.message===vector.code,"malformed operation fields accepted");
     check(!error.markerIssues?.length&&!error.reviewConflicts?.length,"snapshot failure exposed source diagnostics");
   }
-  return {profile:"workspace-operation-backup-fields-v1",states:2,rejections:fixture.rejections.length};
+  return {profile:"workspace-operation-backup-fields-v1",states:4,rejections:fixture.rejections.length};
 }
