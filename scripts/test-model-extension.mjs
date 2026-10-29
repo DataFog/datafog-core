@@ -171,10 +171,11 @@ try {
   assert.equal(report.sourcePreflight.code, "invalid_marker");
   assert.equal(report.sourcePreflight.markerIssues.length, 1);
   const issue = report.sourcePreflight.markerIssues[0];
-  assert.deepEqual(Object.keys(issue).sort(), ["byteRange", "kind", "utf16Range"]);
+  assert.deepEqual(Object.keys(issue).sort(), ["byteRange", "codepointRange", "kind", "utf16Range"]);
   assert.equal(issue.kind, "damaged");
   const source = "👋 e\u0301 literal [[my_note]]";
   assert.equal(Buffer.from(source).subarray(issue.byteRange.start, issue.byteRange.end).toString(), "[[my_note]]");
+  assert.equal([...source].slice(issue.codepointRange.start, issue.codepointRange.end).join(""), "[[my_note]]");
   assert.equal(source.slice(issue.utf16Range.start, issue.utf16Range.end), "[[my_note]]");
   assert(!JSON.stringify(report.sourcePreflight).includes("my_note"));
   assert.equal(report.planReclamation.accepted, true, "candidate retains stale plans after activation (#129)");

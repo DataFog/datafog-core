@@ -197,5 +197,7 @@ encrypted save-before-activation, failed-save non-release, strict restoration,
 model close/reopen and browser-process restart. Same-size corrupt assets and
 missing runtime files must fail with sanitized errors. Source marker preflight
 and stale-plan reclamation are required for a passing candidate report. This is
-synthetic integration evidence, not detection-accuracy or production vault
+synthetic integration evidence. Source-marker diagnostics must remain content-free
+and select the exact marker in byte, code-point and UTF-16 coordinates. It is not
+detection-accuracy or production vault
 qualification.
