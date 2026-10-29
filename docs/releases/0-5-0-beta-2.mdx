@@ -1,0 +1,59 @@
+---
+title: "0.5.0 beta.2"
+description: "Combined workspace review, recall, exact choices, stronger backups and scoped detector rules."
+icon: "tag"
+---
+
+`0.5.0-beta.2` is a developer integration prerelease for synthetic extension tests.
+Coordinated package versions are Cargo/npm `0.5.0-beta.2` and Python `0.5.0b2`.
+Publication and fresh-install verification must finish before treating the version
+as available. Pin the exact SDK and lockfile after publication:
+
+```bash
+npm install --save-exact @datafog/wasm@0.5.0-beta.2
+```
+
+The npm `beta` channel is separate from stable `latest`.
+
+## Changes for extension integration
+
+- Finding sources and review flags survive workspace previews. Read-only recall
+  recognizes committed values using the existing case/whitespace identity rules
+  and word boundaries, preserving original offsets and markers.
+- Combined Core review merges scanner, recall and manual findings. Unresolved
+  conflicts stop handoff with highlight ranges; every preparation path preserves
+  protected coverage. Generic transformations also fail closed on lost coverage.
+- Explicit saved rules and exact remembered choices apply consistently. Protected
+  types hide by default; only a specifically approved exact-value `not_sensitive`
+  correction can exempt them. Source/review metadata never authorizes disclosure.
+- Rules cover labelled account digits, explicitly account-labelled masked forms
+  and bounded labelled street lines while retaining broader configured model
+  coverage. Full addresses and street lines remain distinct types.
+- New reference-host password backups require fresh password verification and
+  Argon2id at 256 MiB/three passes. Legacy imports remain supported.
+
+Follow the [beta.2 integration guide](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.2.md)
+for current calls, stop-and-review behavior, lifecycle and limits. Host approval,
+encrypted durable save, complete-head comparison and activation are required
+before any handoff. An SDK upgrade does not implement Josh's extension UI.
+
+## Vault compatibility
+
+Policy snapshot v2 reads old v1 vaults without changing their bytes. A real saved
+mutation/recovery can upgrade them; read, no-op and discard do not. **Before
+approval/save, warn that beta.1 cannot open an upgraded vault.** Preserve existing
+aliases and use the normal save/activation transaction. Snapshot contracts remain
+provisional until the later freeze.
+
+## Verification and remaining scope
+
+The release requires exact-head CI, Rust/installed-SDK checks, live offset parity,
+the native model integration matrix, publication dry runs, registry verification
+and actual packed-SDK Chrome Small/workspace/encrypted-recovery tests. Release
+evidence must identify the tested source, packages and model assets; a draft or
+green subset does not establish a completed release.
+
+Native Python/Node workspace APIs, provenance/conversations, streaming and server
+qualification are active `0.5.0-beta.3` work. This release does not include those
+development branches. Product integration and a real-data pilot retain their own
+acceptance gates in the [Requirements tracker](https://docs.google.com/spreadsheets/d/1Z5bwpzXiyncgg4nC5tPehSoO3mvg6nTGh8gxI4Q-3y0/edit).
