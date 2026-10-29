@@ -1,0 +1,32 @@
+name: Workspace contract draft
+
+on:
+  pull_request:
+    paths:
+      - 'docs/contracts/**'
+      - 'bindings/wasm/index.d.ts'
+      - '.github/workflows/workspace-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/contracts/**'
+      - 'bindings/wasm/index.d.ts'
+      - '.github/workflows/workspace-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: bindings/wasm/package-lock.json
+      - run: npm ci --prefix bindings/wasm
+      - name: Compile current runtime and separate future contract examples
+        run: bindings/wasm/node_modules/.bin/tsc --project docs/contracts/tsconfig.json

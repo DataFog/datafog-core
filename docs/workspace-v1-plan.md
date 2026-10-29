@@ -34,7 +34,7 @@ key adds it to the decoder tests and the backup round-trip.
 
 | # | PR | What the extension gets | Size |
 |---|---|---|---|
-| 0 | Contract draft | TypeScript declarations for every call through PR 5, so the extension builds against stubs now | S |
+| 0 | Contract draft | [Versioned type-only proposal](contracts/launch-api-0.5.0-beta.2-beta.3.md) for the remaining launch calls; future methods stay separate from installed runtime exports | S |
 | 1 | Finding sources | Each finding tagged `scanner`, `recall` or `user`, plus `needs_review`; previews report each transformation's source | S |
 | 2 | Workspace recall | Every committed value found again in new text, by normalized identity at word boundaries | M |
 | 3 | Rules and remembered choices | Snapshot keys 6 and 7: a rule per type, and keep / not-sensitive choices per value; recall skips values remembered as keep or not sensitive | M |
