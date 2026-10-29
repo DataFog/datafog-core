@@ -109,3 +109,112 @@ all records and aliases through recovery; test ordinary and recovery-reserve bou
 with the final coordinated schema. No live provider calls or real PII are needed
 for these implementation fixtures; actual shipping-host security and G1 provider
 behavior qualification remain separate gates.
+
+## Concrete pending-send packet for review
+
+This packet extends the approved sequence; it does **not** ask whether copying or
+composer fill should count as sending. Neither counts. No conversation runtime is
+implemented by this proposal. Its operations base is committed `22fb7618`; the
+100,000/99,744/256 capacity implementation is still a draft under qualification.
+
+### Why the first save needs a pending intent
+
+Consider an existing conversation that already has issued marker A. A later
+approved input contains A and new marker B. The mapping save succeeds; the site
+accepts the send; saving the observed-send confirmation then fails or loses its
+acknowledgment. The app crashes.
+
+Without a durable pending record, reopening shows the old issued set containing
+A and no indication of uncertainty. Restoring A would appear safe even though the
+new send's confirmation was never reconciled. An in-memory flag cannot enforce the
+approved pause after a restart or backup import.
+
+**Recommendation:** the first explicit conversation-send preparation stages both
+the mappings and a content-free pending intent in the same candidate. The trusted
+host approves, durably saves and activates that candidate before attempting the
+external send. This is an intention to send, never successful issuance. Preview,
+ordinary preparation, a mapping-only save, copying and composer fill create no
+confirmed send or automatic conversation membership.
+
+An intent identifies the exact surface/conversation, the preparation operation and
+batch input member. Core derives its canonical marker references from the **whole
+approved output**, including already-committed follow-up markers, not just new
+transformations. The confirmation takes that intent rather than accepting a new
+caller-supplied marker-to-original mapping or an arbitrary replacement set.
+
+After an observed success for that same intent and conversation, a second prepared
+transaction records the observation, adds the intended issued references and
+resolves the pending state. Only its durable save and activation count as a
+confirmed handoff. A failed/discarded candidate leaves the saved pending state and
+counts unchanged. Retrying a confirmation transaction never calls the transport.
+
+### Bounded product question: how much does uncertainty pause?
+
+**Recommend conversation-wide blocking.** While any durable send intent for the
+selected conversation remains unresolved, all conversation-aware restore calls for
+that conversation stop with a content-free pending-state error. This includes
+older responses containing A, text containing only previously issued markers, and
+ordinary text with no markers. Other conversations remain usable. Existing
+unscoped compatibility methods keep their contract; the host must never silently
+switch to them to bypass the pause.
+
+The cost is explicit: a lost confirmation can pause earlier responses in that
+conversation until the host reconciles it. The narrower alternative would let old
+responses continue while blocking only the new response. That requires a trusted,
+persisted request/response association that is not part of the current contract;
+a provider field or model-generated identifier cannot establish that association.
+Do not implement that alternative implicitly.
+
+This is the remaining product effect to review, not a reopening of Sid's
+confirmed-send decision. The code/fixture names below are proposals, not frozen
+SDK exports.
+
+### Reopening, cancellation and batches
+
+- After a crash, failed confirmation save or uncertain acknowledgment, reopen the
+  authorized saved state and inspect the exact intent. If the confirmation is
+  already durably recorded, use that record. If it is still pending, scoped restore
+  remains paused. Never invent an observed success or automatically resend.
+- A trusted host that still has the actual matching observation may retry only the
+  metadata confirmation against a fresh head. Missing evidence stays unresolved;
+  there is no manual “I sent it” or copy-confirmation escape hatch.
+- A definite observation that transport never sent may resolve an intent without
+  increasing `confirmedHandoffs`. A generic network error or missing acknowledgment
+  does not prove non-delivery. The exact not-sent API remains technical review work.
+- Batch preparation must track intended input members separately. One member's
+  observed send cannot confirm other unsent members. With conversation-wide
+  blocking, another unresolved member for that conversation still pauses restore.
+- Recovery preserves pending intents, confirmed membership, aliases and all
+  operation records; it never marks an intent successful merely because it restored
+  a backup. Restored pending state remains pending.
+
+The pause applies to the current committed snapshot. Core cannot invalidate an
+independent host's older handle or serialize a database and a chat site. The host
+must load authorized current state, bind response context before restoration, and
+own concurrent request/admission behavior; existing close/head-change rules still
+apply to streams on a live handle. No distributed-lock or remote-receipt proof is
+claimed.
+
+### Wire and resource work before runtime
+
+Coordinate one authoritative, unreleased v3 map with #162: keys 0–8/10 retain their
+agreed meanings and key 9 receives the reviewed conversation payload. Do not ship
+an absent-key9 and a different required-key9 format under competing v3 meanings.
+Released v1/v2 read/export/no-op bytes remain unchanged. The current candidate
+recovery reserve is 7,699 bytes; unchanged conversation metadata contributes zero
+recovery growth, and a map10-to-map11 header stays one byte. A joint nonempty-key9
+boundary measurement must verify the final schema rather than assume it.
+
+The appendix must bound identity bytes, conversation count, pending intents and
+membership/reference counts, and count the complete candidate against the 16 MiB
+limit without eviction. Pending confirmation capacity also needs review: a first
+save near the ordinary-record or byte ceiling must not promise a guaranteed second
+save or consume the 256 recovery-only slots silently. An exhausted confirmation
+write leaves the intent pending and scoped restore paused; read/export and explicit
+compatibility behavior remain available under their existing contracts.
+
+The first executable contract data is
+[the existing-conversation crash fixture](../../fixtures/workspace/conversation-contract-draft.json).
+It specifies expected future behavior only. Current SDKs do not execute these
+commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualification
+before claiming acceptance or freezing the API.

@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 0,
+  "profile": "workspace-conversation-pending-proposal",
+  "status": "Review fixtures only; no current SDK conversation runtime or passing conformance claim.",
+  "recommendedBlocking": "conversation_wide",
+  "seed": {
+    "context": {
+      "surface": "synthetic_chat",
+      "conversationId": "thread_a"
+    },
+    "issuedMembers": [
+      "member_a"
+    ],
+    "workspaceMembers": [
+      "member_a",
+      "member_b"
+    ],
+    "confirmedHandoffs": 1,
+    "pendingIntents": []
+  },
+  "cases": [
+    {
+      "id": "existing-conversation-crash-after-confirmation-save-failure",
+      "steps": [
+        {
+          "op": "prepare_conversation_send",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "inputMember": 0,
+          "outputMembers": [
+            "member_a",
+            "member_b"
+          ],
+          "intent": "prepare_2/member_0",
+          "expect": {
+            "durablePending": 0,
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "approve_save_activate_first_candidate",
+          "expect": {
+            "durablePending": 1,
+            "issuedMembers": [
+              "member_a"
+            ],
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "host_observes_matching_successful_send",
+          "expect": {
+            "externalTransportCalls": 1,
+            "durablePending": 1,
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "prepare_observed_send_confirmation",
+          "expect": {
+            "candidatePending": 0,
+            "durablePending": 1,
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "fail_confirmation_save_and_discard",
+          "expect": {
+            "durablePending": 1,
+            "issuedMembers": [
+              "member_a"
+            ],
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "crash_and_reopen",
+          "expect": {
+            "durablePending": 1,
+            "issuedMembers": [
+              "member_a"
+            ],
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "ordinary text",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "👋 {member_a}",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "{member_b}",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        },
+        {
+          "op": "restore_unscoped_explicitly",
+          "text": "{member_a}",
+          "expect": {
+            "compatibilityContractUnchanged": true,
+            "noAutomaticFallback": true
+          }
+        },
+        {
+          "op": "retry_only_saved_matching_observation_metadata",
+          "expect": {
+            "externalTransportCalls": 1
+          }
+        },
+        {
+          "op": "approve_save_activate_confirmation",
+          "expect": {
+            "durablePending": 0,
+            "issuedMembers": [
+              "member_a",
+              "member_b"
+            ],
+            "confirmedHandoffs": 2,
+            "externalTransportCalls": 1
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "👋 {member_a} {member_b}",
+          "expect": {
+            "sameConversationMembersRestore": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "confirmation-acknowledgment-lost-but-commit-durable",
+      "steps": [
+        {
+          "op": "first_save_then_observed_send",
+          "intent": "prepare_3/member_0",
+          "expect": {
+            "durablePending": 1,
+            "externalTransportCalls": 1
+          }
+        },
+        {
+          "op": "confirmation_commit_succeeds_ack_lost",
+          "expect": {
+            "callerMustReopen": true
+          }
+        },
+        {
+          "op": "reopen_and_inspect_exact_confirmation",
+          "expect": {
+            "durablePending": 0,
+            "matchingSavedConfirmation": true,
+            "noResend": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "confirmation-acknowledgment-lost-without-durable-commit",
+      "steps": [
+        {
+          "op": "first_save_then_observed_send",
+          "intent": "prepare_4/member_0",
+          "expect": {
+            "durablePending": 1,
+            "externalTransportCalls": 1
+          }
+        },
+        {
+          "op": "confirmation_not_committed_ack_unknown",
+          "expect": {
+            "callerMustReopen": true
+          }
+        },
+        {
+          "op": "reopen_without_matching_trusted_observation",
+          "expect": {
+            "durablePending": 1,
+            "noManualConfirmation": true,
+            "noResend": true
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "{member_a}",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "one-batch-member-success-does-not-confirm-another",
+      "steps": [
+        {
+          "op": "save_two_pending_members_same_conversation",
+          "expect": {
+            "durablePending": 2,
+            "confirmedHandoffs": 1
+          }
+        },
+        {
+          "op": "observe_save_success_for_only_member_zero",
+          "expect": {
+            "durablePending": 1,
+            "confirmedHandoffs": 2
+          }
+        },
+        {
+          "op": "restore_scoped",
+          "context": {
+            "surface": "synthetic_chat",
+            "conversationId": "thread_a"
+          },
+          "text": "{member_a}",
+          "expectError": {
+            "codeCandidate": "conversation_pending",
+            "text": null
+          }
+        },
+        {
+          "op": "observe_definitely_not_sent_member_one_and_save",
+          "expect": {
+            "durablePending": 0,
+            "confirmedHandoffs": 2,
+            "noInventedSend": true
+          }
+        }
+      ]
+    }
+  ]
+}
