@@ -343,8 +343,32 @@ class HostTests(unittest.TestCase):
         self.assertEqual(error.core_delivered["bytes"],len("Ada Example"));self.assertEqual(len(attempted),1)
 
 
+def installed_wheel_sha256(archive_info):
+    digest = archive_info.get("hashes", {}).get("sha256")
+    legacy = archive_info.get("hash")
+    if legacy is not None:
+        algorithm, separator, legacy_digest = legacy.partition("=")
+        assert algorithm == "sha256" and separator
+        assert digest is None or digest == legacy_digest
+        digest = legacy_digest
+    assert isinstance(digest, str) and len(digest) == 64 and all(character in "0123456789abcdef" for character in digest)
+    return digest
+
+
+class ReceiptTests(unittest.TestCase):
+    def test_installed_wheel_hash_accepts_both_pip_metadata_forms(self):
+        digest = "a" * 64
+        for value in [{"hashes": {"sha256": digest}}, {"hash": "sha256=" + digest},
+                {"hashes": {"sha256": digest}, "hash": "sha256=" + digest}]:
+            self.assertEqual(installed_wheel_sha256(value), digest)
+        for value in [{}, {"hash": "md5=" + digest}, {"hash": "sha256=short"},
+                {"hashes": {"sha256": digest}, "hash": "sha256=" + "b" * 64}]:
+            with self.assertRaises(AssertionError):
+                installed_wheel_sha256(value)
+
+
 def main():
-    suite=unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(HostTests), unittest.defaultTestLoader.loadTestsFromTestCase(test_tool_envelope.ToolEnvelopeTests)])
+    suite=unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(HostTests), unittest.defaultTestLoader.loadTestsFromTestCase(test_tool_envelope.ToolEnvelopeTests), unittest.defaultTestLoader.loadTestsFromTestCase(ReceiptTests)])
     result=unittest.TextTestRunner(verbosity=2).run(suite)
     if not result.wasSuccessful(): raise SystemExit(1)
     # Receipt is metadata only; fixture text, keys, plaintext snapshots and tool
@@ -358,8 +382,7 @@ def main():
     receipt["sourceCommit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip()
     receipt["sourceDirty"]=bool(subprocess.check_output(["git","status","--porcelain"],cwd=root))
     installed=json.loads(distribution("datafog-core").read_text("direct_url.json"))
-    wheel_hash=installed["archive_info"]["hashes"]["sha256"]
-    assert len(wheel_hash)==64 and all(character in "0123456789abcdef" for character in wheel_hash)
+    wheel_hash=installed_wheel_sha256(installed["archive_info"])
     receipt["installedWheelSha256"]=wheel_hash
     receipt["toolEnvelope"]={"designatedTextSlotsOnly":True,"requestRouteCapabilities":True,"opaqueToolDataUnchanged":True,"strictNoPartialEnvelope":True,"strictCurrentWorkspaceCompatibility":True,"scopedIssuanceAuthorization":False,"progressiveHeadGuard":"test-only CheckedRestoreStore; plain restore_text_chunks does not check expected_head","sameCheckedWorkspace":True,"staleHeadRejectedBeforeInput":True,"providerTranslation":False}
     receipt["nativeSdkSha256"]=hashlib.sha256(Path(native_sdk.__file__).read_bytes()).hexdigest()
