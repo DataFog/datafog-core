@@ -28,6 +28,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes the shared workspace lifecycle, staged changes, policy,
+  recall, combined review, strict buffered and opt-in progressive restoration
+  without loading browser WASM. Streaming preserves Core error counts, encoding
+  validation and parent/head lifecycle cleanup.
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and
@@ -110,6 +114,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
+
+- Private snapshot encoding wipes replaced native buffers and failed serialized
+  prefixes. Successful bundle exports retain their existing caller-owned bytes.
 
 - Native SSN findings retain their type when a semantic PERSON finding covers
   exactly the same span, after entity selection and allowlists are applied.

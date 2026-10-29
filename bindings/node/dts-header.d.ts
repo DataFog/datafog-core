@@ -122,6 +122,9 @@ export interface ScanAndTransformConfig {
 }
 
 export type DataFogErrorCode =
+  | "closed_workspace" | "inactive_plan" | "workspace_conflict" | "invalid_batch"
+  | "invalid_encoding" | "inactive_stream"
+  | "invalid_marker" | "invalid_snapshot" | "invalid_operation_id" | "invalid_policy" | "resource_limit"
   | "invalid_configuration"
   | "invalid_finding"
   | "review_conflict"
@@ -147,7 +150,12 @@ export declare class DataFogError extends Error {
   readonly code: DataFogErrorCode;
   readonly reason?: string;
   readonly path?: string;
-  readonly findingIndex?: number;
+  readonly findingIndex?: number | null;
+  readonly inputIndex?: number | null;
+  readonly markerIssues?: readonly WorkspaceMarkerIssue[];
+  readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
+  readonly delivered?: WorkspaceRestoreProgress;
+  readonly complete?: false;
 }
 
 export interface KeyProviderRequest {
@@ -245,3 +253,187 @@ export declare function scanAndTransformStructured(data: JsonDocument, config: S
 
 export interface StructuredTransformResult { readonly data: JsonDocument; readonly transformations: StructuredTransformation[]; }
 export interface StructuredRestoreResult { readonly data: JsonDocument; readonly restorations: StructuredRestoration[]; }
+
+/** Caller-declared review origin, not an authorization or authenticity claim. */
+export type WorkspaceFindingSource = "scanner" | "recall" | "user";
+
+/** Provisional workspace input; exact values and type codes are never normalized. */
+export interface WorkspaceFinding {
+  readonly entityType: string;
+  readonly matchedText: string;
+  readonly range: TextRange & { readonly unit: "utf8_bytes" };
+  readonly confidence?: number | null;
+  readonly detectorName?: string | null;
+  readonly detectorVersion?: string | null;
+  /** Defaults to scanner for existing callers; not inferred from detectorName. */
+  readonly source?: WorkspaceFindingSource;
+  /** Defaults to true. False does not waive host approval/save/activation. */
+  readonly needsReview?: boolean;
+}
+/** One batch input; finding offsets are relative to this text only. */
+export interface WorkspaceInput {
+  readonly text: string;
+  readonly findings: readonly WorkspaceFinding[];
+}
+export interface WorkspaceHead { readonly revision: string; readonly commitId: readonly number[]; }
+export interface WorkspaceRecalledFinding {
+  readonly finding: WorkspaceFinding & {readonly source: "recall"; readonly needsReview: true};
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceRecallResult {
+  readonly head: WorkspaceHead;
+  /** All matches or an explicit failure. Empty is not a clean-text verdict. */
+  readonly complete: true;
+  readonly findings: readonly WorkspaceRecalledFinding[];
+}
+export interface WorkspacePreview {
+  readonly text: string;
+  readonly transformations: readonly {
+    readonly source: WorkspaceFindingSource;
+    readonly needsReview: boolean;
+    readonly sourceByteRange: TextRange;
+    readonly sourceCodepointRange: TextRange;
+    readonly sourceUtf16Range: TextRange;
+    readonly outputByteRange: TextRange;
+    readonly outputCodepointRange: TextRange;
+    readonly outputUtf16Range: TextRange;
+  }[];
+}
+export type WorkspaceTypeRule = "hide" | "keep";
+export type WorkspaceChoiceDisposition = "keep" | "not_sensitive";
+export interface WorkspacePolicyEdits {
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
+}
+export interface WorkspacePolicy {
+  readonly snapshotVersion: 1 | 2;
+  readonly defaultRule: "hide";
+  readonly protectedTypes: readonly string[];
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition}[];
+}
+export interface WorkspacePolicyPreview {
+  readonly rules: readonly {readonly entityType: string; readonly before: WorkspaceTypeRule | null; readonly after: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: WorkspaceChoiceDisposition | null; readonly after: WorkspaceChoiceDisposition | null}[];
+}
+export interface PreparedWorkspaceChange {
+  /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
+  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
+  /** Present only for settings edits; values are sensitive and remain local. */
+  policyPreview(): WorkspacePolicyPreview | null;
+  /** Requires a single-input plan. */
+  preview(): WorkspacePreview;
+  previews(): readonly WorkspacePreview[];
+  heads(): { readonly expectedHead: WorkspaceHead; readonly candidateHead: WorkspaceHead };
+  /** Sensitive plaintext for the trusted encrypting host only. */
+  exportCandidateBundle(): Uint8Array;
+  discard(): void;
+}
+/** Content-free source or output issue ranges; never contains a source or restored value. */
+export interface WorkspaceMarkerIssue {
+  /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets. */
+  readonly kind: "unknown" | "damaged" | "unbracketed";
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceRestoreReport {
+  /** Present only when every marker resolved and `issues` is empty. */
+  readonly text: string | null;
+  readonly restoredMarkers: number;
+  readonly issues: readonly WorkspaceMarkerIssue[];
+}
+export interface WorkspaceReviewInput {
+  readonly text: string;
+  /** Model/rule findings; caller source flags are ignored for channel attribution. */
+  readonly scannerFindings: readonly WorkspaceFinding[];
+  readonly userSelections: readonly WorkspaceFinding[];
+  readonly corrections?: readonly { readonly candidateKey: string; readonly replacement: WorkspaceFinding }[];
+}
+export interface WorkspaceReviewConflict {
+  readonly kind: "protected_coverage" | "type_conflict";
+  readonly findingIndex: number;
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceReviewCandidate {
+  /** Binds exact source/head/type/range; changes on source edits or saved-head changes. */
+  readonly key: string;
+  readonly finding: WorkspaceFinding;
+  readonly sources: readonly ("scanner" | "recall" | "user")[];
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+  /** Committed policy requires this candidate to be hidden. */
+  readonly eligible: boolean;
+  /** Conflict-free selection only; false for every candidate while conflicts remain. Never handoff permission. */
+  readonly selected: boolean;
+}
+export interface WorkspaceReviewResult {
+  readonly head: WorkspaceHead;
+  readonly candidates: readonly WorkspaceReviewCandidate[];
+  readonly conflicts: readonly WorkspaceReviewConflict[];
+}
+export type WorkspaceRestoreEncoding = "utf8" | "utf16";
+export interface WorkspaceRestoreProgress {
+  readonly bytes: number;
+  readonly codepoints: number;
+  readonly utf16: number;
+  readonly restoredMarkers: number;
+}
+export interface WorkspaceRestoreChunk {
+  readonly text: string;
+  readonly delivered: WorkspaceRestoreProgress;
+  /** Only successful finalization is complete; prior chunks cannot be retracted. */
+  readonly complete: boolean;
+}
+export interface WorkspaceBufferedRestore {
+  feed(bytes: Uint8Array): void;
+  feedUtf16(units: Uint16Array): void;
+  finalize(): WorkspaceRestoreReport;
+  reset(): void;
+  close(): void;
+}
+export interface WorkspaceProgressiveRestore {
+  feed(bytes: Uint8Array): WorkspaceRestoreChunk;
+  feedUtf16(units: Uint16Array): WorkspaceRestoreChunk;
+  finalize(): WorkspaceRestoreChunk;
+  reset(): void;
+  close(): void;
+}
+export class Workspace {
+  private constructor();
+  static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
+  static openBundle(bytes: Uint8Array): Workspace;
+  head(): WorkspaceHead;
+  namespace(): Uint8Array;
+  exportBundle(): Uint8Array;
+  /** Read committed values only, returning all overlaps in original coordinates. No aliases, plans or state changes. */
+  recall(text: string): WorkspaceRecallResult;
+  /** Combine supplied scanner/manual findings with committed recall, without plans or state mutation. */
+  review(input: WorkspaceReviewInput): WorkspaceReviewResult;
+  /** Recompute review for every input. Any unresolved overlap rejects the whole batch before a plan exists. Approval and durable save remain required. */
+  prepareReview(inputs: readonly WorkspaceReviewInput[], operationId: Uint8Array): PreparedWorkspaceChange;
+  policy(): WorkspacePolicy;
+  /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
+  preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
+  prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Supplied findings only: omissions are never proof of PII-free input; use prepareReview for combined recall. Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
+  prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
+  /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
+  prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
+  /** The trusted host must confirm atomic persistence first. Success consumes this plan and drops retained plans based on older heads; failure preserves current plans. */
+  activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
+  /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
+  bufferedRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceBufferedRestore;
+  progressiveRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
+  restore(text: string): string;
+  /** All-or-nothing restoration that locates every unknown, damaged or unbracketed marker. */
+  restoreReport(text: string): WorkspaceRestoreReport;
+  close(): void;
+}
+export function workspaceByteRangeFromUtf16(text: string, start: number, end: number): TextRange & { readonly unit: "utf8_bytes" };
