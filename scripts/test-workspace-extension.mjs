@@ -16,6 +16,7 @@ const harness = path.join(root, "examples/workspace-extension");
 const { chromium } = createRequire(path.join(harness, "package.json"))("playwright");
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
+const backupFieldFixture=JSON.parse(await readFile(path.join(root,"fixtures/workspace/backup-current-fields.json"),"utf8"));
 const backupKdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id-backup.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
 execFileSync(process.execPath, ["--test", path.join(root, "scripts/test-workspace-wait.mjs")], {stdio: "inherit"});
@@ -78,7 +79,7 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 try {
   await verifyOperationPersistence({launch, close:async()=>{await context.close();context=undefined;}, status, check});
   await verifyPolicyHost({fresh,status,close:async()=>{await context.close();context=undefined;},launch,unlock,restored,control,check,counters:counterFixtures});
-  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
+  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check, backupFields:backupFieldFixture});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
   await page.locator("#prepare").click(); await status(page, "invalid_marker");
