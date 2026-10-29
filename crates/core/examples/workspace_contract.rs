@@ -10,6 +10,8 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+#[path = "workspace_contract/conversation.rs"]
+mod conversation;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +94,7 @@ impl OwnedReview {
 }
 enum Failure {
     Workspace(WorkspaceError),
+    Stream(w::StreamFailure),
     Fixture,
 }
 impl From<WorkspaceError> for Failure {
@@ -198,6 +201,9 @@ struct Runtime {
     plan_texts: BTreeMap<String, Vec<String>>,
     bundles: BTreeMap<String, Vec<u8>>,
     reviews: BTreeMap<String, Value>,
+    plan_intents: BTreeMap<String, Vec<w::SendIntentId>>,
+    streams: BTreeMap<String, conversation::Stream>,
+    conversation_profile: bool,
 }
 impl Runtime {
     fn workspace(&self, command: &Value) -> Run<&Workspace> {
@@ -206,6 +212,14 @@ impl Runtime {
             .ok_or(Failure::Fixture)
     }
     fn review_input(&self, mut value: Value) -> Run<OwnedReview> {
+        if value.get("textFrom").is_some() {
+            let text = self.resolved_text(&value)?;
+            let object = value.as_object_mut().ok_or(Failure::Fixture)?;
+            for key in ["textFrom", "prefix", "suffix"] {
+                object.remove(key);
+            }
+            object.insert("text".into(), json!(text));
+        }
         if let Some(corrections) = value.get_mut("corrections").and_then(Value::as_array_mut) {
             for correction in corrections {
                 if let Some(selector) = correction.get("candidateFrom").cloned() {
@@ -260,6 +274,9 @@ impl Runtime {
     }
     fn execute(&mut self, command: &Value) -> Run<Value> {
         let call = name(command, "call")?;
+        if conversation::supported(call) {
+            return self.execute_conversation(command);
+        }
         match call {
             "create" | "createWithOperation" => {
                 let workspace = if call == "createWithOperation" {
@@ -328,11 +345,17 @@ impl Runtime {
                     .close();
                 Ok(Value::Null)
             }
-            "inspectPlan" => inspect(
-                self.plans
+            "inspectPlan" => {
+                let plan = self
+                    .plans
                     .get(name(command, "plan")?)
-                    .ok_or(Failure::Fixture)?,
-            ),
+                    .ok_or(Failure::Fixture)?;
+                let mut value = inspect(plan)?;
+                if self.conversation_profile {
+                    value["sendIntents"] = json!(plan.send_intents()?);
+                }
+                Ok(value)
+            }
             "discard" => {
                 let plan = self
                     .plans
@@ -498,18 +521,7 @@ impl Runtime {
                     }
                     _ => return Err(Failure::Fixture),
                 };
-                let value = inspect(&plan)?;
-                let texts = plan
-                    .previews()?
-                    .iter()
-                    .map(|preview| preview.text.clone())
-                    .collect();
-                let key: String = field(command, "plan")?;
-                self.plan_owners
-                    .insert(key.clone(), field(command, "workspace")?);
-                self.plans.insert(key.clone(), plan);
-                self.plan_texts.insert(key, texts);
-                Ok(value)
+                self.remember_plan(command, plan)
             }
             _ => Err(Failure::Fixture),
         }
@@ -557,6 +569,17 @@ fn run(fixture: Value) -> Run<Value> {
                     | "plan.discard"
                     | "plan.snapshotFormat"
                     | "plan.policyPreview"
+                    | "plan.sendIntents"
+                    | "prepareConversationSend"
+                    | "prepareObservedSend"
+                    | "prepareDefinitelyNotSent"
+                    | "conversation"
+                    | "conversationForSite"
+                    | "sendIntentStatus"
+                    | "restoreInConversation"
+                    | "restoreReportInConversation"
+                    | "bufferedRestoreInConversation"
+                    | "progressiveRestoreInConversation"
             )
         ) {
             return Err(Failure::Fixture);
@@ -568,7 +591,14 @@ fn run(fixture: Value) -> Run<Value> {
         .ok_or(Failure::Fixture)?;
     let mut cases = Vec::new();
     for scenario in scenarios {
-        let mut runtime = Runtime::default();
+        let mut runtime = Runtime {
+            conversation_profile: fixture["requiredMethods"]
+                .as_array()
+                .ok_or(Failure::Fixture)?
+                .iter()
+                .any(|value| value == "prepareConversationSend"),
+            ..Runtime::default()
+        };
         let mut steps = Vec::new();
         let commands = scenario["commands"]
             .as_array()
@@ -588,7 +618,18 @@ fn run(fixture: Value) -> Run<Value> {
                     if expected != Some(error.code.as_str()) {
                         return Err(Failure::Fixture);
                     }
-                    json!({"call":call,"ok":false,"error":failure(error)})
+                    let mut value = failure(error);
+                    if runtime.conversation_profile {
+                        value["delivered"] = Value::Null;
+                        value["complete"] = Value::Null;
+                    }
+                    json!({"call":call,"ok":false,"error":value})
+                }
+                Err(Failure::Stream(error)) => {
+                    if expected != Some(error.error.code.as_str()) {
+                        return Err(Failure::Fixture);
+                    }
+                    json!({"call":call,"ok":false,"error":conversation::stream_failure(error)})
                 }
                 Err(Failure::Fixture) => return Err(Failure::Fixture),
             };
