@@ -152,7 +152,11 @@ Real text goes into a workspace only when all of these hold:
 - The model marker tests pass and the snapshot and WASM contract are frozen.
 - G2 meets the ADR 004 detection bar.
 - The backup round-trip covers every snapshot key.
-- The vault encryption review is done. **Open question for the review:** exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB, t=3). Whether exports should use a stronger (slower) KDF profile is an open item.
+- The independent shipping-host vault/backup encryption review (G4) is done.
+  [B3 / #142](https://github.com/DataFog/datafog-core/issues/142) fixes new backup
+  exports at Argon2id v1.3, 256 MiB, three passes and one lane, rewrapping the root
+  without the old 64 MiB password wrapper. The KDF decision is recorded in
+  [ADR 005](adr/005-backup-export-kdf.md); it does not complete the G4 review.
 
 Before that, real-data testing uses a throwaway browser profile or a build that
 saves no mappings. The critical path is the review screen (Core PRs 1–4) and
