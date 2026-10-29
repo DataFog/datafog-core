@@ -1,7 +1,9 @@
 # R4 restoration delivery contracts (draft)
 
 Target: 0.5.0-beta.3; [#169](https://github.com/DataFog/datafog-core/issues/169).
-This is a review proposal. **R4 is not complete from a finalize-only adapter.**
+This is an active implementation draft. **R4 is not complete from a finalize-only adapter.**
+Sid has explicitly approved both delivery and EOF/oversized-prefix decisions in
+the thread; #169 records the decisions. The technical API remains under review.
 Provider events, SSE framing, tool schemas and network callbacks belong outside Core.
 
 ## Implemented draft: atomic buffered responses
@@ -32,7 +34,7 @@ that R2 does not recognize is not newly reclassified by this adapter. That
 compatibility is distinct from the progressive EOF decision below. No streaming
 method is currently claimed in a published Python/Node/WASM package.
 
-## Proposed separate opt-in progressive delivery (not exported)
+## Approved separate opt-in progressive delivery (implementation pending)
 
 Use a separate `progressive_restore` operation with explicit host opt-in, rather
 than weakening R2 or pretending already emitted text can be retracted. The host
@@ -43,7 +45,7 @@ provider delivered a delta. A complete committed marker can be emitted immediate
 Source offsets in terminal issues refer to the complete original provider text,
 not chunk-local positions or restored output.
 
-**Review recommendation:** make an unknown/damaged marker, a committed bare code,
+**Approved behavior:** make an unknown/damaged marker, a committed bare code,
 invalid encoding, a held marker-like prefix at EOF, a bound violation, cancellation,
 workspace close or stale head terminal for that response. Stop returning new text,
 clear carry, and return `complete: false`, a content-free cause/ranges and exact
@@ -52,24 +54,24 @@ visible; never return it again as a successful complete response. A caller must
 present a failed/incomplete answer and explicitly restart or fall back to a newly
 buffered response. A reset is a new response, not rollback of earlier delivery.
 
-Progressive finalization of an unfinished `[[PERSON_...` prefix is deliberately
-proposed to fail rather than flush a possible pseudonym. This is stricter EOF
-handling than some current R2 literals and needs explicit review, especially for
-meaningful bracket/code syntax. Likewise, oversized potential prefixes should
-fail explicitly rather than silently turn into an ordinary literal. These
-choices are **not approved runtime behavior** in this draft.
+Sid explicitly approved that an unfinished possible pseudonym at EOF or an
+oversized held prefix must stop and mark the response incomplete, rather than
+flush a possible marker as ordinary text. The accepted tradeoff includes code and
+literal false positives. Existing nonstreaming R2 behavior remains unchanged.
+The current buffered adapter's exact-R2 EOF compatibility described above is an
+implementation baseline, not completion of the newly approved streaming guard.
 
-## Concrete human review decisions
+## Decisions and remaining technical review
 
-1. Approve opt-in irreversible partial delivery for beta.3, or ship only buffered
-   responses and leave R4 realtime support open. Recommendation: opt-in progressive
-   mode with terminal-failure semantics above, strict buffering remaining default.
-2. Approve fail-closed EOF/oversized marker-like prefixes for progressive mode,
-   including possible literal/code false positives. Recommendation: do not flush a
-   held possible marker as successful text; preserve ordinary R2 nonstreaming syntax.
-3. Review the explicit mode/encoding/reset/result surface. UTF-16 code-unit input
-   must not silently replace half-surrogates. Do not publish declarations for
-   progressive methods until their runtime and cross-SDK parity exist.
+1. **Approved:** strict all-or-nothing default plus separate opt-in progressive
+   delivery. Earlier delivered chunks are irreversible; a late bad marker is
+   terminal/incomplete. Do not automatically retry or claim a complete response.
+2. **Approved:** unfinished/oversized possible marker prefixes stop incomplete,
+   including the known literal/code false-positive tradeoff. Nonstreaming R2 is
+   unchanged. This is no longer a pending product question.
+3. Mode/encoding/reset/result shapes remain routine implementation/API review.
+   UTF-16 input must not silently replace half-surrogates. Progressive declarations
+   must not be published before runtime and cross-SDK parity exist.
 
 ## Evidence and remaining work
 

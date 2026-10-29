@@ -67,11 +67,23 @@ impl BufferedRestore {
         error(code)
     }
     fn append_bytes(&mut self, bytes: &[u8]) -> Result<()> {
-        if self.buffer.len().saturating_add(bytes.len()) > MAX_BUNDLE_BYTES {
+        let needed = self.buffer.len().saturating_add(bytes.len());
+        if needed > MAX_BUNDLE_BYTES {
             return Err(self.fail(ErrorCode::ResourceLimit));
         }
-        if self.buffer.try_reserve(bytes.len()).is_err() {
-            return Err(self.fail(ErrorCode::ResourceLimit));
+        if needed > self.buffer.capacity() {
+            // Vec reallocation may free a copied plaintext backing without wiping
+            // it. Grow into fresh storage, then let the old zeroizing owner drop.
+            let capacity = needed
+                .max(self.buffer.capacity().saturating_mul(2))
+                .min(MAX_BUNDLE_BYTES);
+            let mut replacement = Zeroizing::new(Vec::new());
+            if replacement.try_reserve_exact(capacity).is_err() {
+                return Err(self.fail(ErrorCode::ResourceLimit));
+            }
+            replacement.extend_from_slice(&self.buffer);
+            let previous = std::mem::replace(&mut self.buffer, replacement);
+            drop(previous);
         }
         self.buffer.extend_from_slice(bytes);
         Ok(())
@@ -156,5 +168,152 @@ impl BufferedRestore {
 impl Drop for BufferedRestore {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    #[derive(Clone, Copy)]
+    struct Watch {
+        pointer: usize,
+        length: usize,
+        observed: bool,
+        wiped: bool,
+        reallocated: bool,
+        fail_next: bool,
+        injected: bool,
+    }
+    impl Watch {
+        const EMPTY: Self = Self {
+            pointer: 0,
+            length: 0,
+            observed: false,
+            wiped: false,
+            reallocated: false,
+            fail_next: false,
+            injected: false,
+        };
+    }
+    thread_local! { static WATCH:Cell<Watch>=const {Cell::new(Watch::EMPTY)}; }
+    struct WatchingAllocator;
+    fn should_fail() -> bool {
+        WATCH
+            .try_with(|cell| {
+                let mut watch = cell.get();
+                if watch.fail_next {
+                    watch.fail_next = false;
+                    watch.injected = true;
+                    cell.set(watch);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
+    }
+    fn inspect(pointer: *mut u8, layout: Layout, reallocated: bool) {
+        // Allocator hooks must also work after a test thread's TLS is torn down.
+        WATCH
+            .try_with(|cell| {
+                let mut watch = cell.get();
+                if watch.pointer != 0 && watch.pointer == pointer as usize {
+                    watch.pointer = 0;
+                    watch.observed = true;
+                    watch.reallocated = reallocated;
+                    // This hook runs before System frees/reallocates this live backing.
+                    let bytes = unsafe {
+                        std::slice::from_raw_parts(pointer, watch.length.min(layout.size()))
+                    };
+                    watch.wiped = bytes.iter().all(|byte| *byte == 0);
+                    cell.set(watch);
+                }
+            })
+            .unwrap_or_default();
+    }
+    unsafe impl GlobalAlloc for WatchingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            if should_fail() {
+                std::ptr::null_mut()
+            } else {
+                unsafe { System.alloc(layout) }
+            }
+        }
+        unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+            inspect(pointer, layout, false);
+            unsafe { System.dealloc(pointer, layout) }
+        }
+        unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+            if should_fail() {
+                return std::ptr::null_mut();
+            }
+            inspect(pointer, layout, true);
+            unsafe { System.realloc(pointer, layout, size) }
+        }
+    }
+    #[global_allocator]
+    static ALLOCATOR: WatchingAllocator = WatchingAllocator;
+
+    fn arm(response: &BufferedRestore, fail_next: bool) {
+        WATCH.with(|cell| {
+            cell.set(Watch {
+                pointer: response.buffer.as_ptr() as usize,
+                length: response.buffer.len(),
+                fail_next,
+                ..Watch::EMPTY
+            })
+        });
+    }
+    #[test]
+    fn actual_capacity_growth_wipes_old_plaintext_before_deallocation() {
+        let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+        let mut response = workspace.buffered_restore(RestoreEncoding::Utf8).unwrap();
+        response.feed(b"synthetic private chunk").unwrap();
+        let previous = response.buffer.as_ptr();
+        let capacity = response.buffer.capacity();
+        let next = vec![b'x'; capacity + 1];
+        arm(&response, false);
+        response.feed(&next).unwrap();
+        let observed = WATCH.with(Cell::get);
+        assert!(response.buffer.capacity() > capacity);
+        assert_ne!(response.buffer.as_ptr(), previous);
+        assert!(
+            observed.observed && observed.wiped && !observed.reallocated,
+            "live plaintext must never be handed to allocator realloc or freed unwiped"
+        );
+    }
+    #[test]
+    fn failed_fresh_allocation_discards_the_entire_response_and_clears_its_backing() {
+        let workspace = Workspace::create([3; 16], [4; 16]).unwrap();
+        let mut response = workspace.buffered_restore(RestoreEncoding::Utf8).unwrap();
+        response.feed(b"synthetic private chunk").unwrap();
+        let next = vec![b'x'; response.buffer.capacity() + 1];
+        arm(&response, true);
+        let failed = response.feed(&next);
+        let injected = WATCH.with(|cell| {
+            let mut watch = cell.get();
+            let injected = watch.injected;
+            watch.fail_next = false;
+            cell.set(watch);
+            injected
+        });
+        assert!(injected);
+        assert_eq!(failed.err().unwrap().code, ErrorCode::ResourceLimit);
+        assert_eq!(
+            response.finalize().err().unwrap().code,
+            ErrorCode::InactiveStream
+        );
+        drop(response);
+        let observed = WATCH.with(Cell::get);
+        assert!(observed.observed && observed.wiped);
+        let mut fresh = workspace.buffered_restore(RestoreEncoding::Utf8).unwrap();
+        fresh.feed(b"fresh response").unwrap();
+        assert_eq!(
+            fresh.finalize().unwrap().text.as_deref(),
+            Some("fresh response")
+        );
     }
 }
