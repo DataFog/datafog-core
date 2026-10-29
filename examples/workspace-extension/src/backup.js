@@ -1,5 +1,5 @@
 import {HostError} from "./rpc.js";
-import {validateVault, validateRecord, openVault, randomId, toBase64url, fromBase64url} from "./vault.js";
+import {validateVault, validateRecord, openVault, rewrapBackupVault, randomId, toBase64url, fromBase64url} from "./vault.js";
 
 export const MAX_BACKUP_BYTES = 24 * 1024 * 1024;
 const encoder = new TextEncoder();
@@ -8,8 +8,8 @@ const recordFields = ["vaultId", "workspaceId", "keyId", "keyNonce", "wrappedKey
 function fields(value, expected) {
   if (!value || typeof value !== "object" || Object.keys(value).sort().join(",") !== [...expected].sort().join(",")) throw new HostError("invalid_backup");
 }
-function payload(vault, record, exportedAt) {
-  return {format: "datafog-workspace-backup", version: 1, exportedAt,
+function payload(vault, record, exportedAt, version = 2) {
+  return {format: "datafog-workspace-backup", version, exportedAt,
     vault: {version: vault.version, profile: vault.profile, ...Object.fromEntries(vaultFields.map(key => [key, toBase64url(vault[key])])),
       recovery: {version: vault.recovery.version, salt: toBase64url(vault.recovery.salt), nonce: toBase64url(vault.recovery.nonce), wrappedRoot: toBase64url(vault.recovery.wrappedRoot)}},
     workspace: {version: record.version, head: {revision: record.head.revision, commitId: toBase64url(new Uint8Array(record.head.commitId))},
@@ -17,14 +17,15 @@ function payload(vault, record, exportedAt) {
 }
 function authentication(body, nonce) {
   return {name: "AES-GCM", iv: nonce, tagLength: 128,
-    additionalData: encoder.encode(`DFGB1:AUTH:${JSON.stringify(body)}`)};
+    additionalData: encoder.encode(`DFGB${body.version}:AUTH:${JSON.stringify(body)}`)};
 }
 
-/** Export committed ciphertext and credential wrappers; no credentials or runtime keys. */
-export async function exportBackup(vault, record, dataKey) {
+/** Export committed ciphertext with a fresh, stronger password wrapper. */
+export async function exportBackup(vault, record, dataKey, password, signal) {
   validateVault(vault); validateRecord(record, vault);
   if (vault.version !== 2) throw new HostError("recovery_unavailable");
-  const body = payload(vault, record, new Date().toISOString());
+  const exported = await rewrapBackupVault(vault, password, signal);
+  const body = payload(exported, record, new Date().toISOString());
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const tag = new Uint8Array(await crypto.subtle.encrypt(authentication(body, nonce), dataKey, new Uint8Array()));
   const result = encoder.encode(JSON.stringify({payload: body, nonce: toBase64url(nonce), tag: toBase64url(tag)}));
@@ -41,12 +42,12 @@ function decodeBackup(bytes) {
     fields(file, ["payload", "nonce", "tag"]);
     const body = file.payload;
     fields(body, ["format", "version", "exportedAt", "vault", "workspace"]);
-    if (body.format !== "datafog-workspace-backup" || body.version !== 1 || typeof body.exportedAt !== "string" || body.exportedAt.length !== 24 || new Date(body.exportedAt).toISOString() !== body.exportedAt) throw new HostError("invalid_backup");
+    if (body.format !== "datafog-workspace-backup" || ![1, 2].includes(body.version) || typeof body.exportedAt !== "string" || body.exportedAt.length !== 24 || new Date(body.exportedAt).toISOString() !== body.exportedAt) throw new HostError("invalid_backup");
     const v = body.vault, r = body.workspace;
     fields(v, ["version", "profile", ...vaultFields, "recovery"]);
     fields(v.recovery, ["version", "salt", "nonce", "wrappedRoot"]);
     fields(r, ["version", "head", ...recordFields]); fields(r.head, ["revision", "commitId"]);
-    if (v.version !== 2) throw new HostError("invalid_backup");
+    if (v.version !== 2 || v.profile !== body.version) throw new HostError("invalid_backup");
     const vaultSizes = {vaultId: 16, vaultKeyId: 16, workspaceId: 16, salt: 16, rootNonce: 12, wrappedRoot: 48};
     const recordSizes = {vaultId: 16, workspaceId: 16, keyId: 16, keyNonce: 12, wrappedKey: 48, nonce: 12, ciphertext: 16 * 1024 * 1024 + 16};
     const vault = {version: v.version, profile: v.profile, accessGeneration: randomId(),
@@ -56,7 +57,7 @@ function decodeBackup(bytes) {
       ...Object.fromEntries(recordFields.map(key => [key, fromBase64url(r[key], recordSizes[key])]))};
     validateVault(vault); validateRecord(record, vault);
     const nonce = fromBase64url(file.nonce, 12), tag = fromBase64url(file.tag, 16);
-    if (nonce.length !== 12 || tag.length !== 16 || JSON.stringify({payload: payload(vault, record, body.exportedAt), nonce: toBase64url(nonce), tag: toBase64url(tag)}) !== source) throw new HostError("invalid_backup");
+    if (nonce.length !== 12 || tag.length !== 16 || JSON.stringify({payload: payload(vault, record, body.exportedAt, body.version), nonce: toBase64url(nonce), tag: toBase64url(tag)}) !== source) throw new HostError("invalid_backup");
     return {vault, record, exportedAt: body.exportedAt, body, nonce, tag};
   } catch { throw new HostError("invalid_backup"); }
 }

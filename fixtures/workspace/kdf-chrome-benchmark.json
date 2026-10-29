@@ -1,0 +1,146 @@
+{
+  "sourceCommit": "a0f34c0eb192aa8026935f12994572e55deb8723",
+  "sourceDirty": false,
+  "syntheticOnly": true,
+  "hardware": {
+    "cpu": "Apple M5 Pro",
+    "totalMemoryBytes": 51539607552,
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "browser": "Chrome/156.0.8078.49",
+  "profiles": [
+    {
+      "memoryMiB": 64,
+      "passes": 3,
+      "parallelism": 1,
+      "records": [
+        {
+          "ok": true,
+          "deriveMs": 98.60000002384186,
+          "moduleReadyMs": 3.299999952316284,
+          "wasmMemoryBytes": 67371008,
+          "sodium": "1.0.22",
+          "digest": "4797075a8cdd4c359d72c494a673ab8ef145bcba690a433123532549547bcb08",
+          "requestMs": 111,
+          "mainThreadMaxGapMs": 9.100000023841858,
+          "mainThreadTimerTicks": 13
+        },
+        {
+          "ok": true,
+          "deriveMs": 96.80000007152557,
+          "moduleReadyMs": 3.1999999284744263,
+          "wasmMemoryBytes": 67371008,
+          "sodium": "1.0.22",
+          "digest": "4797075a8cdd4c359d72c494a673ab8ef145bcba690a433123532549547bcb08",
+          "requestMs": 109.80000007152557,
+          "mainThreadMaxGapMs": 9,
+          "mainThreadTimerTicks": 13
+        },
+        {
+          "ok": true,
+          "deriveMs": 94.5,
+          "moduleReadyMs": 3.399999976158142,
+          "wasmMemoryBytes": 67371008,
+          "sodium": "1.0.22",
+          "digest": "4797075a8cdd4c359d72c494a673ab8ef145bcba690a433123532549547bcb08",
+          "requestMs": 103.80000007152557,
+          "mainThreadMaxGapMs": 9.200000047683716,
+          "mainThreadTimerTicks": 12
+        },
+        {
+          "ok": true,
+          "deriveMs": 93.40000009536743,
+          "moduleReadyMs": 2.899999976158142,
+          "wasmMemoryBytes": 67371008,
+          "sodium": "1.0.22",
+          "digest": "4797075a8cdd4c359d72c494a673ab8ef145bcba690a433123532549547bcb08",
+          "requestMs": 102.60000002384186,
+          "mainThreadMaxGapMs": 9.200000047683716,
+          "mainThreadTimerTicks": 12
+        },
+        {
+          "ok": true,
+          "deriveMs": 108.60000002384186,
+          "moduleReadyMs": 3,
+          "wasmMemoryBytes": 67371008,
+          "sodium": "1.0.22",
+          "digest": "4797075a8cdd4c359d72c494a673ab8ef145bcba690a433123532549547bcb08",
+          "requestMs": 118.10000002384186,
+          "mainThreadMaxGapMs": 9.100000023841858,
+          "mainThreadTimerTicks": 14
+        }
+      ]
+    },
+    {
+      "memoryMiB": 256,
+      "passes": 3,
+      "parallelism": 1,
+      "records": [
+        {
+          "ok": true,
+          "deriveMs": 376,
+          "moduleReadyMs": 3.1999999284744263,
+          "wasmMemoryBytes": 269090816,
+          "sodium": "1.0.22",
+          "digest": "a9791ed9f068a01d26e461d67dd4952ed080994325f21a4141dc0ae9b453cb5b",
+          "requestMs": 385.60000002384186,
+          "mainThreadMaxGapMs": 9.100000023841858,
+          "mainThreadTimerTicks": 48
+        },
+        {
+          "ok": true,
+          "deriveMs": 374.7999999523163,
+          "moduleReadyMs": 2.8000000715255737,
+          "wasmMemoryBytes": 269090816,
+          "sodium": "1.0.22",
+          "digest": "a9791ed9f068a01d26e461d67dd4952ed080994325f21a4141dc0ae9b453cb5b",
+          "requestMs": 385.09999990463257,
+          "mainThreadMaxGapMs": 9.400000095367432,
+          "mainThreadTimerTicks": 48
+        },
+        {
+          "ok": true,
+          "deriveMs": 390.09999990463257,
+          "moduleReadyMs": 2.899999976158142,
+          "wasmMemoryBytes": 269090816,
+          "sodium": "1.0.22",
+          "digest": "a9791ed9f068a01d26e461d67dd4952ed080994325f21a4141dc0ae9b453cb5b",
+          "requestMs": 399.60000002384186,
+          "mainThreadMaxGapMs": 9.200000047683716,
+          "mainThreadTimerTicks": 49
+        },
+        {
+          "ok": true,
+          "deriveMs": 405.8000000715256,
+          "moduleReadyMs": 3.100000023841858,
+          "wasmMemoryBytes": 269090816,
+          "sodium": "1.0.22",
+          "digest": "a9791ed9f068a01d26e461d67dd4952ed080994325f21a4141dc0ae9b453cb5b",
+          "requestMs": 415.2999999523163,
+          "mainThreadMaxGapMs": 9.200000047683716,
+          "mainThreadTimerTicks": 51
+        },
+        {
+          "ok": true,
+          "deriveMs": 390.2000000476837,
+          "moduleReadyMs": 3,
+          "wasmMemoryBytes": 269090816,
+          "sodium": "1.0.22",
+          "digest": "a9791ed9f068a01d26e461d67dd4952ed080994325f21a4141dc0ae9b453cb5b",
+          "requestMs": 400.2999999523163,
+          "mainThreadMaxGapMs": 9.100000023841858,
+          "mainThreadTimerTicks": 49
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Five fresh workers per 64MiB and 256MiB profile; no 2GiB attempt.",
+    "Explicit Argon2id13, 32-byte output, 16-byte salt, libsodium p=1; heap bytes include linear-memory overhead, not whole-browser RSS.",
+    "These workstation observations do not qualify low-memory hardware or model+KDF simultaneous use."
+  ],
+  "date": "2026-10-28",
+  "launch": "Installed branded Chrome, headless=new, fresh disposable profile, security defaults; localhost page with restrictive CSP and a dedicated module worker.",
+  "sourceNote": "Synthetic worker invokes pinned libsodium-wrappers-sumo 0.8.4 crypto_pwhash directly; no production password, vault, model or browser profile used."
+}
