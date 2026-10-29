@@ -14,6 +14,7 @@ import tempfile
 import unittest
 import cryptography
 from importlib.metadata import distribution
+from urllib.parse import unquote, urlsplit
 import test_tool_envelope
 from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, TextRange, DataFogWorkspaceError
 from host import EncryptedStore, Scope, RequestContext, HostError, prepare_and_handoff, restore_response, restore_text_chunks, HostStreamFailure
@@ -343,7 +344,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(error.core_delivered["bytes"],len("Ada Example"));self.assertEqual(len(attempted),1)
 
 
-def installed_wheel_sha256(archive_info):
+def installed_wheel_sha256(archive_info, archive_url=None):
     digest = archive_info.get("hashes", {}).get("sha256")
     legacy = archive_info.get("hash")
     if legacy is not None:
@@ -351,6 +352,12 @@ def installed_wheel_sha256(archive_info):
         assert algorithm == "sha256" and separator
         assert digest is None or digest == legacy_digest
         digest = legacy_digest
+    if digest is None and archive_url is not None:
+        # Older pip can omit all hashes for a local wheel. Hash the retained
+        # installed archive itself; never fetch a URL or invent a receipt value.
+        source = urlsplit(archive_url)
+        assert source.scheme == "file" and source.netloc in ("", "localhost")
+        digest = hashlib.sha256(Path(unquote(source.path)).read_bytes()).hexdigest()
     assert isinstance(digest, str) and len(digest) == 64 and all(character in "0123456789abcdef" for character in digest)
     return digest
 
@@ -365,6 +372,12 @@ class ReceiptTests(unittest.TestCase):
                 {"hashes": {"sha256": digest}, "hash": "sha256=" + "b" * 64}]:
             with self.assertRaises(AssertionError):
                 installed_wheel_sha256(value)
+        with tempfile.TemporaryDirectory() as directory:
+            wheel = Path(directory) / "synthetic wheel.whl"
+            wheel.write_bytes(b"synthetic local archive")
+            self.assertEqual(installed_wheel_sha256({}, wheel.as_uri()), hashlib.sha256(wheel.read_bytes()).hexdigest())
+        with self.assertRaises(AssertionError):
+            installed_wheel_sha256({}, "https://example.invalid/package.whl")
 
 
 def main():
@@ -382,7 +395,7 @@ def main():
     receipt["sourceCommit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip()
     receipt["sourceDirty"]=bool(subprocess.check_output(["git","status","--porcelain"],cwd=root))
     installed=json.loads(distribution("datafog-core").read_text("direct_url.json"))
-    wheel_hash=installed_wheel_sha256(installed["archive_info"])
+    wheel_hash=installed_wheel_sha256(installed["archive_info"], installed["url"])
     receipt["installedWheelSha256"]=wheel_hash
     receipt["toolEnvelope"]={"designatedTextSlotsOnly":True,"requestRouteCapabilities":True,"opaqueToolDataUnchanged":True,"strictNoPartialEnvelope":True,"strictCurrentWorkspaceCompatibility":True,"scopedIssuanceAuthorization":False,"progressiveHeadGuard":"test-only CheckedRestoreStore; plain restore_text_chunks does not check expected_head","sameCheckedWorkspace":True,"staleHeadRejectedBeforeInput":True,"providerTranslation":False}
     receipt["nativeSdkSha256"]=hashlib.sha256(Path(native_sdk.__file__).read_bytes()).hexdigest()
