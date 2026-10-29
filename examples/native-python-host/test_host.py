@@ -13,6 +13,8 @@ import datafog_core.datafog_core as native_sdk
 import tempfile
 import unittest
 import cryptography
+from importlib.metadata import distribution
+import test_tool_envelope
 from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, TextRange, DataFogWorkspaceError
 from host import EncryptedStore, Scope, RequestContext, HostError, prepare_and_handoff, restore_response, restore_text_chunks, HostStreamFailure
 
@@ -342,7 +344,8 @@ class HostTests(unittest.TestCase):
 
 
 def main():
-    result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(HostTests))
+    suite=unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(HostTests), unittest.defaultTestLoader.loadTestsFromTestCase(test_tool_envelope.ToolEnvelopeTests)])
+    result=unittest.TextTestRunner(verbosity=2).run(suite)
     if not result.wasSuccessful(): raise SystemExit(1)
     # Receipt is metadata only; fixture text, keys, plaintext snapshots and tool
     # contents never enter the on-disk qualification report.
@@ -354,8 +357,13 @@ def main():
     root=Path(__file__).resolve().parents[2]
     receipt["sourceCommit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip()
     receipt["sourceDirty"]=bool(subprocess.check_output(["git","status","--porcelain"],cwd=root))
+    installed=json.loads(distribution("datafog-core").read_text("direct_url.json"))
+    wheel_hash=installed["archive_info"]["hashes"]["sha256"]
+    assert len(wheel_hash)==64 and all(character in "0123456789abcdef" for character in wheel_hash)
+    receipt["installedWheelSha256"]=wheel_hash
+    receipt["toolEnvelope"]={"designatedTextSlotsOnly":True,"requestRouteCapabilities":True,"opaqueToolDataUnchanged":True,"strictNoPartialEnvelope":True,"strictCurrentWorkspaceCompatibility":True,"scopedIssuanceAuthorization":False,"progressiveHeadGuard":"test-only CheckedRestoreStore; plain restore_text_chunks does not check expected_head","sameCheckedWorkspace":True,"staleHeadRejectedBeforeInput":True,"providerTranslation":False}
     receipt["nativeSdkSha256"]=hashlib.sha256(Path(native_sdk.__file__).read_bytes()).hexdigest()
-    receipt["inputs"]={name:hashlib.sha256((root/"examples/native-python-host"/name).read_bytes()).hexdigest() for name in ["host.py","test_host.py","requirements.txt"]}
+    receipt["inputs"]={name:hashlib.sha256((root/"examples/native-python-host"/name).read_bytes()).hexdigest() for name in ["host.py","test_host.py","test_tool_envelope.py","requirements.txt","README.md"]}
     path=root/"target/python-host-proof.json"
     path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(receipt,indent=2)+"\n")
     print("Native Python encrypted-host proof passed.")

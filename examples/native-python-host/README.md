@@ -103,3 +103,49 @@ partial acceptance/before final acknowledgment, request isolation and uncertain
 transport writes. Response restoration never changes the encrypted snapshot.
 These observations qualify this host seam only; they do not approve a production
 transport, deployment rollback policy or provider integration.
+
+## Tool-envelope and trusted-route qualification
+
+The installed test suite also runs `test_tool_envelope.py`. Its synthetic envelope
+has one explicitly designated text slot. Tool schemas, IDs, structured inputs,
+tool-result contents and raw argument strings (including their whitespace and
+Unicode) remain unchanged on both outbound and restored responses. Opaque tool
+values never enter Core detection or the workspace alias store. This is not a
+provider envelope parser, SSE adapter or LiteLLM integration.
+
+A test-only registry pairs opaque channel/capability objects with trusted server
+request/tenant/workspace contexts. It never takes authorization from the
+provider's IDs or metadata. Equal values across workspaces and equal aliases in
+concurrent same-workspace requests still require separate request routes; swapped,
+fabricated and wrong-workspace capabilities reject before restoration. The
+concurrent requests reuse a committed alias and perform acknowledged no-op saves;
+this does not claim multiple winners for state-changing CAS updates. Strict
+failure returns no partially restored envelope and does not alter the input.
+
+**Current compatibility limit:** `restore_response` opens the current authorized
+workspace. A valid old request route can therefore restore an alias saved later
+in that same workspace; a passing request-correlation check does not establish
+that the alias was issued in that request or conversation. The fixture explicitly
+asserts this behavior. Conversation-scoped issuance/send confirmation remains a
+separate Core/host implementation and acceptance gate. There is no scoped-to-
+unscoped fallback or automatic resend implemented by this qualification.
+
+**Progressive head guard is test-only:** the fixture's `CheckedRestoreStore`
+adapter authenticates/opens the real encrypted snapshot, compares both revision
+and commit ID against its trusted route's registered head, and gives that same
+checked native workspace to `restore_text_chunks` for the entire stream. A stale
+head fails before input iteration or delivery; there is no check-then-reopen gap.
+The unwrapped `restore_text_chunks` helper itself has **no** `expected_head`
+parameter or saved-head guard. The adapter is qualification scaffolding, not an
+added host/SDK API. A production host/API still needs to provide and review this
+trusted boundary; these tests do not make the plain Python helper equivalent to
+Node's head-bound helper.
+
+The actual installed Core handles split UTF-8/Unicode, complete progressive
+restoration, late invalid-marker failure and cancellation after partial callback
+acceptance. Already accepted chunks remain observable; terminal failure has
+`complete=False`, content-free status and numeric acceptance metadata. Restoration
+performs no hidden snapshot writes. The metadata-only receipt records the exact
+installed wheel/archive and native binary hashes, input hashes, and this limited
+applicability. It does not certify production routing, provider integration,
+conversation authorization or a shipping security review.
