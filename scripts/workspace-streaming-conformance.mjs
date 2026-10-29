@@ -96,3 +96,45 @@ export async function verifyWorkspaceStreaming(api,fixture) {
   workspace.close();
   return results;
 }
+
+// Cross-SDK capture deliberately includes both modes. A strict replay may succeed
+// at a step where the progressive fixture correctly failed (e.g. literal EOF).
+export async function runWorkspaceStreamingContract(api,fixture) {
+  await verifyWorkspaceStreaming(api,fixture);
+  const cases=[];
+  for(const scenario of fixture.cases) {
+    const modes={};
+    for(const mode of ["buffered","progressive"]) {
+      const {workspace,marker}=seed(api);
+      const stream=mode==="buffered"?workspace.bufferedRestore(scenario.encoding):workspace.progressiveRestore(scenario.encoding);
+      const steps=[];
+      try {
+        for(const step of scenario.steps) {
+          let value;
+          try {
+            switch(step.op) {
+              case "feed":value=stream.feed(step.bytes?new Uint8Array(step.bytes):new TextEncoder().encode(step.text.replaceAll("{marker}",marker).replaceAll("{bareMarker}",marker.slice(2,-2)).replaceAll("{oversizedPrefix}",`[[PERSON_${"A".repeat(100)}`)));break;
+              case "feedUtf16":value=stream.feedUtf16(new Uint16Array(step.units));break;
+              case "finalize":value=stream.finalize();break;
+              case "reset":stream.reset();break;
+              case "closeStream":stream.close();break;
+              case "closeWorkspace":workspace.close();break;
+              case "advanceWorkspace": {
+                const plan=workspace.prepare("Bob",[{entityType:"PERSON",matchedText:"Bob",range:{unit:"utf8_bytes",start:0,end:3}}],id(4));
+                workspace.activateSaved(plan,plan.heads().expectedHead,plan.heads().candidateHead);break;
+              }
+              default:throw new Error("unsupported streaming command");
+            }
+            steps.push({op:step.op,ok:true,value:value??null});
+          } catch(error) {
+            if(!(error instanceof api.DataFogError) || error.message!==error.code) throw new Error("streaming SDK returned an unstructured error");
+            steps.push({op:step.op,ok:false,error:{code:error.code,findingIndex:error.findingIndex??null,inputIndex:error.inputIndex??null,markerIssues:error.markerIssues??[],reviewConflicts:error.reviewConflicts??[],delivered:error.delivered??null,complete:error.complete??null}});
+          }
+        }
+      } finally {stream.close();workspace.close();}
+      modes[mode]={steps};
+    }
+    cases.push({id:scenario.id,modes});
+  }
+  return {schemaVersion:1,profile:fixture.profile,cases};
+}
