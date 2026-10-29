@@ -13,6 +13,9 @@ import datafog_core.datafog_core as native_sdk
 import tempfile
 import unittest
 import cryptography
+from importlib.metadata import distribution
+from urllib.parse import unquote, urlsplit
+import test_tool_envelope
 from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, TextRange, DataFogWorkspaceError
 from host import EncryptedStore, Scope, RequestContext, HostError, prepare_and_handoff, restore_response, restore_text_chunks, HostStreamFailure
 
@@ -341,8 +344,45 @@ class HostTests(unittest.TestCase):
         self.assertEqual(error.core_delivered["bytes"],len("Ada Example"));self.assertEqual(len(attempted),1)
 
 
+def installed_wheel_sha256(archive_info, archive_url=None):
+    digest = archive_info.get("hashes", {}).get("sha256")
+    legacy = archive_info.get("hash")
+    if legacy is not None:
+        algorithm, separator, legacy_digest = legacy.partition("=")
+        assert algorithm == "sha256" and separator
+        assert digest is None or digest == legacy_digest
+        digest = legacy_digest
+    if digest is None and archive_url is not None:
+        # Older pip can omit all hashes for a local wheel. Hash the retained
+        # installed archive itself; never fetch a URL or invent a receipt value.
+        source = urlsplit(archive_url)
+        assert source.scheme == "file" and source.netloc in ("", "localhost")
+        digest = hashlib.sha256(Path(unquote(source.path)).read_bytes()).hexdigest()
+    assert isinstance(digest, str) and len(digest) == 64 and all(character in "0123456789abcdef" for character in digest)
+    return digest
+
+
+class ReceiptTests(unittest.TestCase):
+    def test_installed_wheel_hash_accepts_both_pip_metadata_forms(self):
+        digest = "a" * 64
+        for value in [{"hashes": {"sha256": digest}}, {"hash": "sha256=" + digest},
+                {"hashes": {"sha256": digest}, "hash": "sha256=" + digest}]:
+            self.assertEqual(installed_wheel_sha256(value), digest)
+        for value in [{}, {"hash": "md5=" + digest}, {"hash": "sha256=short"},
+                {"hashes": {"sha256": digest}, "hash": "sha256=" + "b" * 64}]:
+            with self.assertRaises(AssertionError):
+                installed_wheel_sha256(value)
+        with tempfile.TemporaryDirectory() as directory:
+            wheel = Path(directory) / "synthetic wheel.whl"
+            wheel.write_bytes(b"synthetic local archive")
+            self.assertEqual(installed_wheel_sha256({}, wheel.as_uri()), hashlib.sha256(wheel.read_bytes()).hexdigest())
+        with self.assertRaises(AssertionError):
+            installed_wheel_sha256({}, "https://example.invalid/package.whl")
+
+
 def main():
-    result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(HostTests))
+    suite=unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(HostTests), unittest.defaultTestLoader.loadTestsFromTestCase(test_tool_envelope.ToolEnvelopeTests), unittest.defaultTestLoader.loadTestsFromTestCase(ReceiptTests)])
+    result=unittest.TextTestRunner(verbosity=2).run(suite)
     if not result.wasSuccessful(): raise SystemExit(1)
     # Receipt is metadata only; fixture text, keys, plaintext snapshots and tool
     # contents never enter the on-disk qualification report.
@@ -354,8 +394,12 @@ def main():
     root=Path(__file__).resolve().parents[2]
     receipt["sourceCommit"]=subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip()
     receipt["sourceDirty"]=bool(subprocess.check_output(["git","status","--porcelain"],cwd=root))
+    installed=json.loads(distribution("datafog-core").read_text("direct_url.json"))
+    wheel_hash=installed_wheel_sha256(installed["archive_info"], installed["url"])
+    receipt["installedWheelSha256"]=wheel_hash
+    receipt["toolEnvelope"]={"designatedTextSlotsOnly":True,"requestRouteCapabilities":True,"opaqueToolDataUnchanged":True,"strictNoPartialEnvelope":True,"strictCurrentWorkspaceCompatibility":True,"scopedIssuanceAuthorization":False,"progressiveHeadGuard":"test-only CheckedRestoreStore; plain restore_text_chunks does not check expected_head","sameCheckedWorkspace":True,"staleHeadRejectedBeforeInput":True,"providerTranslation":False}
     receipt["nativeSdkSha256"]=hashlib.sha256(Path(native_sdk.__file__).read_bytes()).hexdigest()
-    receipt["inputs"]={name:hashlib.sha256((root/"examples/native-python-host"/name).read_bytes()).hexdigest() for name in ["host.py","test_host.py","requirements.txt"]}
+    receipt["inputs"]={name:hashlib.sha256((root/"examples/native-python-host"/name).read_bytes()).hexdigest() for name in ["host.py","test_host.py","test_tool_envelope.py","requirements.txt","README.md"]}
     path=root/"target/python-host-proof.json"
     path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(receipt,indent=2)+"\n")
     print("Native Python encrypted-host proof passed.")

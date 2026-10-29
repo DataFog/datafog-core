@@ -28,6 +28,7 @@ let context;
 let origin;
 let operationCapacity;
 let conversationQualification;
+let operationBackupQualification;
 const password = "synthetic-test-password-only";
 const observed = { externalRequests: 0, consoleMessages: 0, pageErrors: 0 };
 function check(condition, label) { if (!condition) throw new Error(label); }
@@ -86,7 +87,7 @@ try {
   await verifyOperationPersistence({launch, close:async()=>{await context.close();context=undefined;}, status, check});
   operationCapacity=await verifyOperationCapacity({launch,close:async()=>{await context.close();context=undefined;},status,check});
   await verifyPolicyHost({fresh,status,close:async()=>{await context.close();context=undefined;},launch,unlock,restored,control,check,counters:counterFixtures});
-  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check, backupFields:backupFieldFixture});
+  operationBackupQualification = await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check, backupFields:backupFieldFixture, operationBackupFields:JSON.parse(await readFile(path.join(root,"fixtures/workspace/backup-operation-fields.json"),"utf8"))});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
   await page.locator("#prepare").click(); await status(page, "invalid_marker");
@@ -417,6 +418,7 @@ try {
     reviewQualification,
     operationCapacity,
     conversationQualification,
+    operationBackupQualification,
     streamingQualification,
     checks: ["D8", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,

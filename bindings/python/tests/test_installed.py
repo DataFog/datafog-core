@@ -20,6 +20,7 @@ import npi_conformance
 import workspace_conformance
 import workspace_streaming_conformance
 import workspace_operation_conformance
+import workspace_backup_operation_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -649,6 +650,7 @@ if __name__ == "__main__":
     workspace_conformance.verify_workspace()
     workspace_streaming_conformance.verify_streaming()
     workspace_operation_conformance.verify_operations()
+    workspace_backup_operation_conformance.verify_backup_operation_fields()
     verify_model_engine_selection()
     verify_ssn_person_priority()
     main()
