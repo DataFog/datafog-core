@@ -82,7 +82,10 @@ function derive(password, salt, signal, profile = 1) {
   const valid = typeof password === "string" && password.isWellFormed() && passwordBytes.length > 0 && passwordBytes.length <= 1024;
   passwordBytes.fill(0);
   if (!valid) return Promise.reject(new HostError("invalid_credentials"));
-  const worker = new Worker(new URL("./kdf-worker.js", import.meta.url), { type: "module" });
+  if (signal?.aborted) return Promise.reject(new HostError("cancelled"));
+  let worker;
+  try { worker = new Worker(new URL("./kdf-worker.js", import.meta.url), { type: "module" }); }
+  catch { return Promise.reject(new HostError("kdf_unavailable")); }
   return new Promise((resolve, reject) => {
     const stop = () => { worker.terminate(); signal?.removeEventListener("abort", cancel); };
     const cancel = () => { stop(); reject(new HostError("cancelled")); };

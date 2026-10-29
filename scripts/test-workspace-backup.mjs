@@ -56,6 +56,35 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   await page.locator("#approve").click(); await status(page, "saved");
   const unsaved = await markName(page, "Unsaved Synthetic", status);
   const beforeExport = await fingerprint(page);
+  const workerStartFailures = await page.evaluate(async password => {
+    const {readRecords} = await import("./storage.js");
+    const {openVault} = await import("./vault.js");
+    const {exportBackup} = await import("./backup.js");
+    const {vault, workspace} = await readRecords();
+    const opened = await openVault(password, vault, workspace);
+    const OriginalWorker = globalThis.Worker;
+    let attempts = 0;
+    try {
+      globalThis.Worker = class {
+        constructor() { attempts++; throw new DOMException("synthetic worker startup denied", "SecurityError"); }
+      };
+      const aborted = new AbortController(); aborted.abort();
+      const errors = [];
+      for (const attempt of [
+        () => exportBackup(vault, workspace, opened.dataKey, ""),
+        () => exportBackup(vault, workspace, opened.dataKey, password, aborted.signal),
+        () => exportBackup(vault, workspace, opened.dataKey, password),
+        () => openVault(password, vault, workspace),
+      ]) {
+        try { await attempt(); errors.push("unexpected_success"); }
+        catch (error) { errors.push(error.code); }
+      }
+      return {attempts, errors};
+    } finally { globalThis.Worker = OriginalWorker; opened.bundle.fill(0); }
+  }, password);
+  check(workerStartFailures.attempts === 2 && workerStartFailures.errors.join() === "invalid_credentials,cancelled,kdf_unavailable,kdf_unavailable",
+    "B3 worker construction failure is unavailable while invalid credentials and cancellation retain their codes");
+  check(await fingerprint(page) === beforeExport, "B3 worker startup failure changes no encrypted records");
   await page.locator("#backup-export-password").fill("incorrect-synthetic-password");
   await page.locator("#backup-export").click(); await status(page, "invalid_credentials");
   check(await fingerprint(page) === beforeExport && await page.locator("#backup-export-password").inputValue() === "", "B3 failed export reauthentication changes no records and clears the password");
