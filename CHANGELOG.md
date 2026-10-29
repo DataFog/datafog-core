@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- New browser workspace backups require password reauthentication and use
+  Argon2id with 256 MiB and three passes, replacing the older password wrapper.
+  Legacy backups remain importable; restored new backups retain the stronger
+  profile for password unlock.
+
 - Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults
@@ -71,6 +76,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
+
+- Native SSN findings retain their type when a semantic PERSON finding covers
+  exactly the same span, after entity selection and allowlists are applied.
 
 - Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 

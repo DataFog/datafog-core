@@ -1,6 +1,6 @@
 import {setTimeout as delay} from "node:timers/promises";
 
-const checkpoints = new Set(["before-save", "after-save", "after-import-open", "before-import-save", "after-import-save"]);
+const checkpoints = new Set(["before-save", "after-save", "after-export-wrap", "after-import-open", "before-import-save", "after-import-save"]);
 function diagnostics(state) {
   if (!state) return {};
   return {

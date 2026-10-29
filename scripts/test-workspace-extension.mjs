@@ -14,6 +14,7 @@ const harness = path.join(root, "examples/workspace-extension");
 const { chromium } = createRequire(path.join(harness, "package.json"))("playwright");
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
+const backupKdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id-backup.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
 execFileSync(process.execPath, ["--test", path.join(root, "scripts/test-workspace-wait.mjs")], {stdio: "inherit"});
 execFileSync("npm", ["run", "build", "--prefix", harness], { stdio: "inherit" });
@@ -332,6 +333,7 @@ try {
   }, counterFixtures);
   console.log("PASS A3/A7/A8 installed WASM inputs, lifecycle, canonical CBOR and uint64 parity");
 
+  for (const kdfCase of [kdfFixture, backupKdfFixture]) {
   const vector = await browserPage.evaluate(async fixture => {
     const worker = new Worker("./kdf-worker.js", { type: "module" });
     try {
@@ -343,11 +345,27 @@ try {
           data.key.fill(0); resolve(same);
         };
         worker.onerror = () => reject(new Error("KDF fixture failed"));
-        worker.postMessage({ password: fixture.password, salt: Uint8Array.from(fixture.saltHex.match(/../g), v => Number.parseInt(v, 16)) });
+        worker.postMessage({ password: fixture.password, profile: fixture.profile ?? 1, salt: Uint8Array.from(fixture.saltHex.match(/../g), v => Number.parseInt(v, 16)) });
       });
     } finally { worker.terminate(); }
-  }, kdfFixture);
-  check(vector, "A9 browser Argon2id matches independent native profile fixture");
+  }, kdfCase);
+  check(vector, "A9/B3 browser Argon2id matches independent native profile fixture");
+  }
+  const rejectedKdfInputs = await browserPage.evaluate(async () => {
+    for (const overrides of [{profile: undefined}, {profile: 0}, {profile: 3}, {profile: null}, {profile: "2"}, {memlimit: 67108864}, {opslimit: 1}, {salt: new Uint8Array(15)}, {password: ""}, {password: "x".repeat(1025)}, {password: String.fromCharCode(0xd800)}]) {
+      const worker = new Worker("./kdf-worker.js", {type: "module"});
+      try {
+        const result = await new Promise((resolve, reject) => {
+          worker.onmessage = ({data}) => resolve(data);
+          worker.onerror = () => reject(new Error("KDF rejection failed"));
+          worker.postMessage({password: "synthetic-only", salt: new Uint8Array(16), profile: 2, ...overrides});
+        });
+        if (result.error !== "invalid_credentials" || result.key !== undefined) return false;
+      } finally { worker.terminate(); }
+    }
+    return true;
+  });
+  check(rejectedKdfInputs, "B3 unknown profiles, arbitrary parameters and invalid credentials never derive a cheaper key");
   const nonextractable = await browserPage.evaluate(async password => {
     const api = await import("./vendor/package/index.js");
     const {createVault} = await import("./vault.js");
