@@ -11,6 +11,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Add native Python conversation send-intent, confirmed issuance and scoped
   strict/streaming restore methods backed by the shared Core decisions.
 
+- WASM TypeScript workspace errors include `invalid_policy` and nullable absent
+  finding/input indices, matching actual Core failures and native Node.
+
 - Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
   combined protected review, scoped detector rules and stronger backup passwords.
   Old vaults retain v1 bytes until a real approved saved upgrade; beta.1 cannot
