@@ -124,3 +124,80 @@ English is the supported language. Prompt acceptance does not establish accuracy
 for a type: the checkpoint can miss entities, return partial addresses, and
 produce false positives. For example, it can label “quarterly report” as a
 person. This integration does not claim production PII qualification.
+
+## Manifest V3 setup and verification
+
+Host the session in an extension-owned page or tab. The service worker can open
+that page; it does not own the model or workspace state. Closing the page loses
+the in-memory model session. Reopen the session explicitly and rehydrate workspace
+mappings from encrypted durable storage. Cross-tab sharing is not provided.
+
+The repository's synthetic fixture builds a fresh npm tarball, installs it in a
+clean consumer project and bundles the public SDK imports with esbuild. It
+copies Core's `dist/datafog_wasm_bg.wasm` alongside the emitted bundle tree and
+serves the pinned model files and ONNX Runtime Web 1.31.1's
+`ort-wasm-simd-threaded.mjs`/`.wasm` from the extension itself. Bundlers do not
+automatically copy the assets addressed through `import.meta.url`; preserve the
+tested relative layout or configure the corresponding asset handling.
+
+The tested manifest policy is:
+
+```json
+{
+  "manifest_version": 3,
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"
+  }
+}
+```
+
+Use explicit local URLs and one thread for this setup:
+
+```js
+const session = await ModelSession.open({
+  modelBaseUrl: chrome.runtime.getURL("models/"),
+  wasmPaths: chrome.runtime.getURL("ort/"),
+  numThreads: 1,
+});
+```
+
+Run the fixture from the repository root:
+
+```sh
+npm ci --prefix bindings/wasm
+npm ci --prefix examples/workspace-extension
+npm run download-model --prefix spike/gliner2-browser
+npx --prefix examples/workspace-extension playwright install chromium
+npm run test:model-extension --prefix examples/workspace-extension
+```
+
+`DATAFOG_BROWSER_MODEL_DIR` can point at an existing directory containing the
+three model assets; the build still verifies every pinned size and SHA-256.
+`DATAFOG_HEADED=1` shows the isolated test browser. The fixture never uses a
+personal browser profile or the production extension repository.
+
+This test runs an unpacked extension at a real `chrome-extension://` origin in
+Playwright's bundled Chromium. Retail Chrome/Edge no longer expose the command-line
+sideloading flags used by the automated test; see the [Playwright extension
+instructions](https://playwright.dev/docs/chrome-extensions). An acceptance run
+in the shipping extension and intended retail Chrome environment remains separate.
+
+Reports under `examples/workspace-extension/output/playwright/` identify the
+candidate tarball hash, Core commit, model and runtime assets, manifest/CSP,
+browser and hardware. They record first-profile and same-page reopen times,
+inference timings, page timer gaps, JS heap and sampled browser process RSS.
+RSS sums can count shared pages more than once; JS heap omits most WASM/ONNX
+memory. Results on a high-memory developer machine do not establish lower-end
+Chrome performance. Loading and inference run in the extension page's context
+and can visibly block it; the session currently offers no inference cancellation
+or deadline.
+
+The fixture checks model findings and offsets through workspace preparation,
+encrypted save-before-activation, failed-save non-release, strict restoration,
+model close/reopen and browser-process restart. Same-size corrupt assets and
+missing runtime files must fail with sanitized errors. Source marker preflight
+and stale-plan reclamation are required for a passing candidate report. This is
+synthetic integration evidence. Source-marker diagnostics must remain content-free
+and select the exact marker in byte, code-point and UTF-16 coordinates. It is not
+detection-accuracy or production vault
+qualification.
