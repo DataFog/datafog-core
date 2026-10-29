@@ -1,113 +1,171 @@
-/** Compile-only examples. Future types do not manufacture runtime methods. */
-import type {PreparedWorkspaceChange, Workspace, WorkspaceFinding, WorkspaceHead, WorkspacePreview, WorkspaceReviewInput} from "../../bindings/wasm/index.js";
+/** Compile-only actual candidate consumers. No provider, storage or future API runs. */
 import type {
-  BackupHostDraft, LaunchWorkspaceDraft, OperationContextDraft,
+  Workspace as BrowserWorkspace, DataFogError as BrowserError,
+} from "../../bindings/wasm/index.js";
+import type {
+  Workspace as NodeWorkspace, DataFogError as NodeError,
+} from "../../bindings/node/index.js";
+import type {
+  CandidateWorkspace, CandidatePlan, WorkspaceFinding, WorkspaceInput,
+  WorkspaceHead, WorkspacePreview, WorkspaceReviewInput, WorkspaceOperation,
+  WorkspaceOperationRecord, WorkspaceOperationPage, WorkspaceRestoreProgress,
 } from "./launch-api-proposal.js";
 
-// This is a trusted-host boundary, not a Core promise of encryption/durability.
+// Trusted host obligation, not an SDK promise of approval/encryption/durability.
 type SaveCandidate = (bytes: Uint8Array, expected: WorkspaceHead, candidate: WorkspaceHead) => Promise<WorkspaceHead>;
+type Approve = (previews: readonly WorkspacePreview[], oldReaderWarning: string | null) => Promise<boolean>;
 
-// Main now includes policy-format metadata; this is not a beta.2 release claim.
-type VersionedPlan = PreparedWorkspaceChange;
-function upgradeWarning(plan: VersionedPlan): string | null {
-  const format = plan.snapshotFormat();
-  return format?.currentVersion === 1 && format.candidateVersion === 2
-    ? "Saving upgrades this vault. 0.5.0-beta.1 cannot open the upgraded vault." : null;
+function upgradeWarning(plan: CandidatePlan): string | null {
+  const {currentVersion, candidateVersion} = plan.snapshotFormat();
+  if (currentVersion < 3 && candidateVersion === 3)
+    return "Saving upgrades this vault. 0.5.0-beta.1 and 0.5.0-beta.2 cannot open v3.";
+  if (currentVersion === 1 && candidateVersion === 2)
+    return "Saving upgrades this vault. 0.5.0-beta.1 cannot open v2.";
+  return null;
 }
 
-// Existing lifecycle shape, compiled against this checkout (not a beta.2 release claim).
-export async function currentRuntime(workspace: Workspace, save: SaveCandidate, approve: (preview: WorkspacePreview, oldReaderWarning: string | null) => Promise<boolean>) {
-  const plan: VersionedPlan = workspace.prepare("Jane", [{
-    entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4},
-  }], crypto.getRandomValues(new Uint8Array(16)));
-  const preview = plan.preview();
-  if (!(await approve(preview, upgradeWarning(plan)))) { plan.discard(); return; }
-  const heads = plan.heads();
-  const candidate = plan.exportCandidateBundle();
+function discardPending(plan: CandidatePlan): void {
+  try { plan.discard(); }
+  catch (error) {
+    // Already invalidated/closed plans have no retained candidate to release.
+    // Do not suppress an unexpected cleanup failure.
+    const field = error && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code") : undefined;
+    if (field?.value !== "inactive_plan" && field?.value !== "closed_workspace") throw error;
+  }
+}
+
+async function approveAndSave(workspace: CandidateWorkspace, plan: CandidatePlan, save: SaveCandidate, approve: Approve) {
+  let consumed = false;
   try {
-    const savedHead = await save(candidate, heads.expectedHead, heads.candidateHead);
-    workspace.activateSaved(plan, heads.expectedHead, savedHead);
-    return preview.text;
-  } finally { candidate.fill(0); }
+    const previews = plan.previews();
+    if (!(await approve(previews, upgradeWarning(plan)))) return {kind: "cancelled" as const};
+    const {expectedHead, candidateHead} = plan.heads();
+    const bytes = plan.exportCandidateBundle();
+    try {
+      // The save callback must perform authorized complete-head CAS and resolve
+      // only after the durable saved head is confirmed. Lost acknowledgment rejects.
+      const saved = await save(bytes, expectedHead, candidateHead);
+      workspace.activateSaved(plan, expectedHead, saved);
+      consumed = true;
+      return {kind: "approved_text" as const, previews};
+    } finally { bytes.fill(0); }
+  } finally { if (!consumed) discardPending(plan); }
 }
 
-async function activateDraft(workspace: Pick<Workspace, "activateSaved">, plan: PreparedWorkspaceChange, save: SaveCandidate) {
-  const heads = plan.heads(), candidate = plan.exportCandidateBundle();
-  try {
-    const savedHead = await save(candidate, heads.expectedHead, heads.candidateHead);
-    workspace.activateSaved(plan, heads.expectedHead, savedHead);
-  } finally { candidate.fill(0); }
-}
-
-// Combined review is implemented on main; approval and durable save are still required.
+/** Combined review is the launch path; source flags do not authorize disclosure. */
 export async function currentReview(
-  workspace: Workspace, input: WorkspaceReviewInput,
-  operationId: Uint8Array, save: SaveCandidate,
-  approve: (previews: ReturnType<PreparedWorkspaceChange["previews"]>, oldReaderWarning: string | null) => Promise<boolean>,
+  workspace: CandidateWorkspace, input: WorkspaceReviewInput, operationId: Uint8Array,
+  save: SaveCandidate, approve: Approve,
 ) {
   const review = workspace.review(input);
   if (review.conflicts.length) return {kind: "edit_required" as const, review};
-  const plan = workspace.prepareReview([input], operationId); // Revalidates policy/head and recomputes recall.
-  const previews = plan.previews();
-  if (!(await approve(previews, upgradeWarning(plan)))) { plan.discard(); return {kind: "cancelled" as const}; }
-  await activateDraft(workspace, plan, save);
-  return {kind: "approved_text" as const, text: previews[0].text};
+  // Core recomputes recall/policy/head; the previous list is not an authority.
+  return approveAndSave(workspace, workspace.prepareReview([input], operationId), save, approve);
 }
 
-export async function proposedHandoffRecord(
-  workspace: LaunchWorkspaceDraft, releasedText: string,
-  operation: OperationContextDraft, save: SaveCandidate,
-  insertAndAcknowledge: (text: string) => Promise<{siteConversationId: string}>,
+/** Explicit supplied-finding recording is a separate actual API, without auto-recall. */
+export function recordedPreparation(
+  workspace: CandidateWorkspace, inputs: readonly WorkspaceInput[], operation: WorkspaceOperation,
+  save: SaveCandidate, approve: Approve,
 ) {
-  // Called only with approved text after its mappings were durably saved and activated.
-  const receipt = await insertAndAcknowledge(releasedText);
-  // The insertion happened first. A crash/save failure here leaves an unrecorded handoff.
-  const record = workspace.prepareHandoffRecord({
-    conversation: {surface: "chatgpt", siteConversationId: receipt.siteConversationId},
-    action: "insert", releasedText,
-  }, operation);
-  await activateDraft(workspace, record, save);
+  return approveAndSave(workspace, workspace.prepareBatchWithOperation(inputs, operation), save, approve);
 }
 
-export function currentRecall(workspace: Workspace, text: string): readonly WorkspaceFinding[] {
+/** No init() is needed for the native factory; this bootstrap still needs persistence. */
+export function nativeFactory(Workspace: typeof NodeWorkspace, namespace: Uint8Array, operation: WorkspaceOperation): NodeWorkspace {
+  return Workspace.createWithOperation(namespace, operation);
+}
+/** Only browser WASM needs awaited initialization. No bootstrap is implicitly saved. */
+export async function browserFactory(
+  Workspace: typeof BrowserWorkspace, init: () => Promise<unknown>, namespace: Uint8Array, operation: WorkspaceOperation,
+): Promise<BrowserWorkspace> {
+  await init();
+  return Workspace.createWithOperation(namespace, operation);
+}
+
+export function typedInventory(browser: BrowserWorkspace, node: NodeWorkspace, operation: WorkspaceOperation) {
+  // These assignments compare all declared public instance calls in both directions.
+  const shared: readonly CandidateWorkspace[] = [browser, node];
+  for (const workspace of shared) {
+    const rows: readonly WorkspaceOperationRecord[] = workspace.operations();
+    const page: WorkspaceOperationPage = workspace.operationsPage(0, 1000);
+    const unknownTime: number | null = rows[0]?.occurredAtMs ?? null;
+    const next: number | null = page.nextOffset;
+    const covered: true = workspace.historyCoverage().recordedHistoryOnly;
+    const prior: "unknown" | "not_applicable" = workspace.historyCoverage().preUpgradeHistory;
+    const reservedHandoffs: number = workspace.counts().confirmedHandoffs; // Runtime remains zero.
+    // Outcomes/recovery have no text previews or external-delivery authority.
+    workspace.prepareOutcome({kind: "user_cancelled", issueCount: 0}, operation).discard();
+    workspace.prepareRecoveryWithOperation(operation).discard();
+    void unknownTime; void next; void covered; void prior; void reservedHandoffs;
+  }
+}
+
+/** Explicit pages are complete only relative to the unchanged head the host owns. */
+export function visitPages(workspace: CandidateWorkspace, consume: (page: WorkspaceOperationPage) => void): void {
+  let offset = 0;
+  while (true) {
+    const page = workspace.operationsPage(offset, 1000);
+    consume(page); // Process one page; retaining every page defeats bounded host memory.
+    if (page.nextOffset === null) return;
+    offset = page.nextOffset;
+  }
+}
+
+/** Strict default returns no feed text and never exposes a failed response prefix. */
+export function strictResponse(workspace: CandidateWorkspace, chunks: Iterable<Uint8Array>): string | null {
+  const response = workspace.bufferedRestore();
+  try {
+    for (const chunk of chunks) response.feed(chunk);
+    return response.finalize().text; // Null means review required, never empty success.
+  } finally { response.close(); }
+}
+
+/** The caller explicitly accepts irretractable output; host callback errors propagate incomplete. */
+export function progressiveResponse(
+  workspace: CandidateWorkspace, chunks: Iterable<Uint8Array>, release: (text: string) => void,
+): WorkspaceRestoreProgress {
+  const response = workspace.progressiveRestore();
+  try {
+    for (const chunk of chunks) release(response.feed(chunk).text);
+    const final = response.finalize();
+    release(final.text);
+    return final.delivered;
+  } finally { response.close(); }
+  // A typed SDK terminal error carries prior delivered counts + complete:false.
+  // Never retry this whole function or claim previously released text was retracted.
+}
+
+/** Call only after narrowing an actual SDK error; never forward provider error messages. */
+export function typedFailure(error: BrowserError | NodeError) {
+  const policyFailure: boolean = error.code === "invalid_policy";
+  const index: number | null | undefined = error.inputIndex;
+  const incomplete: false | undefined = error.complete;
+  const priorBytes: number | undefined = error.delivered?.bytes;
+  return {code: error.code, policyFailure, index, incomplete, priorBytes};
+}
+
+export function currentRecall(workspace: CandidateWorkspace, text: string): readonly WorkspaceFinding[] {
   return workspace.recall(text).findings.map(span => span.finding);
 }
 
-// Host must explain the irreversible old-reader incompatibility before saving v1 -> v2.
-export async function currentPolicy(
-  workspace: Workspace, save: SaveCandidate,
-  approve: (details: {policy: ReturnType<ReturnType<Workspace["preparePolicyChanges"]>["policyPreview"]>; oldReaderWarning: string | null}) => Promise<boolean>,
-) {
-  const plan = workspace.preparePolicyChanges({rules: [], choices: [{
-    entityType: "PERSON", value: "Synthetic Example", disposition: "not_sensitive",
-  }]}, crypto.getRandomValues(new Uint8Array(16)));
-  const oldReaderWarning = upgradeWarning(plan);
-  if (!(await approve({policy: plan.policyPreview(), oldReaderWarning}))) { plan.discard(); return; }
-  const heads = plan.heads(), candidate = plan.exportCandidateBundle();
-  try {
-    const savedHead = await save(candidate, heads.expectedHead, heads.candidateHead);
-    workspace.activateSaved(plan, heads.expectedHead, savedHead);
-  } finally { candidate.fill(0); }
-}
-
-export function proposedBackup(host: BackupHostDraft, workspaceId: Uint8Array, newlyEnteredPassword: string) {
-  return host.exportBackup({workspaceId, freshPassword: newlyEnteredPassword, includeRecoveryCode: true});
-}
-
-// Negative assertions stop a proposal from being mistaken for installed runtime support.
-export function typeBoundaries(current: Workspace, future: LaunchWorkspaceDraft, backup: BackupHostDraft) {
-  // @ts-expect-error conversation-aware restore remains future-only in this checkout.
-  current.restoreInConversation("text", {surface: "chatgpt", siteConversationId: "synthetic"});
-  // @ts-expect-error closed source names are required in the proposal.
-  const unsupportedSource: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, source: "trusted"};
-  // @ts-expect-error future interfaces are not an implementation of the current Workspace class.
-  const cannotSubstitute: LaunchWorkspaceDraft = current;
-  // @ts-expect-error explicit fresh password input is required for host export.
-  backup.exportBackup({workspaceId: new Uint8Array(16), includeRecoveryCode: false});
-  // @ts-expect-error the committed review API uses candidateKey, not target.
-  const obsoleteCorrection: WorkspaceReviewInput = {text: "Jane", scannerFindings: [], userSelections: [], corrections: [{target: "old", replacement: {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}}]};
-  void obsoleteCorrection;
-  // @ts-expect-error choice values remain a closed set.
-  future.preparePolicyChanges({rules: [], choices: [{entityType: "CUSTOM", value: "synthetic", disposition: "allow_everything"}]}, new Uint8Array(16));
-  void unsupportedSource; void cannotSubstitute;
+// Negative checks describe unsupported calls, not promises of their future names.
+export function typeBoundaries(workspace: CandidateWorkspace, operation: WorkspaceOperation) {
+  // @ts-expect-error Conversation APIs are absent from this committed seam.
+  workspace.conversations();
+  // @ts-expect-error Scoped restore is absent; no signature is invented here.
+  workspace.restoreInConversation("synthetic", {});
+  // @ts-expect-error No timed combined-review method exists.
+  workspace.prepareReviewWithOperation([], operation);
+  // @ts-expect-error Page inputs are numbers; runtime also enforces integer bounds.
+  workspace.operationsPage("0", 1000);
+  // @ts-expect-error Existing explicit outcomes do not include observed-send records.
+  workspace.prepareOutcome({kind: "handoff_confirmed", issueCount: 0}, operation);
+  // @ts-expect-error Contexts cannot acquire free-form content.
+  workspace.prepareWithOperation("", [], {...operation, text: "forbidden"});
+  // @ts-expect-error Sources are closed display metadata, never trusted precedence.
+  const source: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, source: "trusted"};
+  // @ts-expect-error Corrections use candidateKey, not the old target field.
+  const correction: WorkspaceReviewInput = {text: "Jane", scannerFindings: [], userSelections: [], corrections: [{target: "old", replacement: {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}}]};
+  void source; void correction;
 }
