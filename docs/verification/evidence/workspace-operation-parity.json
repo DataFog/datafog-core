@@ -1,0 +1,87 @@
+{
+  "qualifiedCommit": "5c0dbbb3109171aa89382379667dbf6b6695a6ba",
+  "sourceDirty": false,
+  "scope": "Synthetic deterministic operation/history parity only; conversation/server and full G3 remain open",
+  "pass": true,
+  "profiles": {
+    "operations": {
+      "profile": "workspace-operations-v1",
+      "cases": 7,
+      "steps": 185
+    },
+    "foundation": {
+      "profile": "launch-workspace-current",
+      "cases": 17,
+      "steps": 156
+    },
+    "streaming": {
+      "profile": "workspace-streaming-v1",
+      "cases": 13,
+      "modes": [
+        "buffered",
+        "progressive"
+      ],
+      "steps": 80
+    }
+  },
+  "cases": 37,
+  "steps": 421,
+  "runtime": {
+    "node": "v24.18.0",
+    "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "python": "Python 3.14.6",
+    "chromium": "151.0.7922.34"
+  },
+  "fixtureSha256": "8a0b43c4d66f933a04042ac29e9386b7d957f68f044a0a32f49931b2cd74ed81",
+  "sourceSha256": {
+    "fixtures/workspace/operation-contract-v1.json": "8a0b43c4d66f933a04042ac29e9386b7d957f68f044a0a32f49931b2cd74ed81",
+    "crates/core/examples/workspace_contract.rs": "f490fc531079f66201b33bbde34465915514cb9bd51b9e798ef3a9d35d1c365d",
+    "scripts/workspace-parity-python.py": "fe70c032c826a2ab32fbf443a1f438b39a7629bedb305bea19678bc2e9e95c28",
+    "scripts/workspace-parity-runner.mjs": "f10cc02db6093d639a759279010160a3d1a1dbdaa1affbf67c340091b5bbcf69",
+    "scripts/test-workspace-parity.mjs": "79ae7ca59c60b9d3cb7f1590c83e7edda47e80c870e21923586522d8a3830786",
+    "crates/xtask/src/workspace_parity.rs": "7f405dbf6c9ef18ae8c67b3f1f4a69b6b559ed712833b45c06f9a67790549c90"
+  },
+  "packages": {
+    "node": {
+      "sha256": "09f334e93496d9d73d70c06ab9e2fc45af4a1abd5becc2cc5975126447ea5bb1",
+      "bytes": 1939266
+    },
+    "wasm": {
+      "sha256": "3fbc7c9f554096564106ebacbfcde01e336a232e47aec771b929ac970d4c88a7",
+      "bytes": 964382
+    },
+    "python": {
+      "sha256": "1d332dc75aaaec892914d73b54c77cebe684eea1c1c218f9eb0fa89c246c1bc7",
+      "bytes": 2160290,
+      "version": "0.5.0b2"
+    }
+  },
+  "foundationStreamingBaselineCommit": "d5584e9bd874babb1c3ea3260f052c2738021f61",
+  "foundationStreamingByteIdentical": true,
+  "preservedCanonicalSha256": {
+    "rust.json": "a6f4d1c486910a09becc1552b6898182ce47468ffbca648fba1aac6c838119c2",
+    "rust-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "python.json": "a6f4d1c486910a09becc1552b6898182ce47468ffbca648fba1aac6c838119c2",
+    "python-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "node.json": "a6f4d1c486910a09becc1552b6898182ce47468ffbca648fba1aac6c838119c2",
+    "node-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "wasm.json": "a6f4d1c486910a09becc1552b6898182ce47468ffbca648fba1aac6c838119c2",
+    "wasm-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d"
+  },
+  "operationCanonicalSha256": {
+    "rust-operations.json": "bb59af80acc3f41c1a55f56cca77df06842998383856f86f41b7ff7e6c7ad131",
+    "python-operations.json": "bb59af80acc3f41c1a55f56cca77df06842998383856f86f41b7ff7e6c7ad131",
+    "node-operations.json": "bb59af80acc3f41c1a55f56cca77df06842998383856f86f41b7ff7e6c7ad131",
+    "wasm-operations.json": "bb59af80acc3f41c1a55f56cca77df06842998383856f86f41b7ff7e6c7ad131"
+  },
+  "retainedRun": "target/dfv/runs/20261029T104731Z/workspace-parity",
+  "protocolTests": 8,
+  "validation": [
+    "Rustfmt",
+    "Clippy workspace/all-targets/all-features -D warnings",
+    "cargo test workspace/all-features",
+    "actual installed four-SDK matrix",
+    "missing-method/malformed-output/unknown-time/page/canonical-byte protocol negatives"
+  ],
+  "syntheticOnly": true
+}

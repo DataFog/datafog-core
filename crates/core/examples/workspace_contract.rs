@@ -153,6 +153,18 @@ fn issue(value: &w::MarkerIssue) -> Value {
 fn failure(value: WorkspaceError) -> Value {
     json!({"code":value.code.as_str(),"findingIndex":value.finding_index,"inputIndex":value.input_index,"markerIssues":value.marker_issues.iter().map(issue).collect::<Vec<_>>(),"reviewConflicts":value.review_conflicts})
 }
+fn crate_operation(command: &Value) -> Run<w::OperationContext> {
+    Ok(w::OperationContext {
+        id: id(command, "operationByte")?,
+        occurred_at_ms: field(command, "occurredAtMs")?,
+    })
+}
+fn operation_value(record: &w::OperationRecord) -> Value {
+    json!({"id":record.id,"kind":record.kind.as_str(),"occurredAtMs":record.occurred_at_ms,"preparedInputs":record.prepared_inputs,"transformedSpans":record.transformed_spans})
+}
+fn counts(value: w::OperationCounts) -> Value {
+    json!({"operations":value.operations,"preparedInputs":value.prepared_inputs,"transformedSpans":value.transformed_spans,"confirmedHandoffs":value.confirmed_handoffs,"reportedBlockedAttempts":value.reported_blocked_attempts})
+}
 fn preview(value: &w::Preview) -> Value {
     json!({"text":value.text,"transformations":value.transformations.iter().map(|t|json!({"source":t.source.as_str(),"needsReview":t.needs_review,"sourceByteRange":t.source_byte_range,"sourceCodepointRange":t.source_codepoint_range,"sourceUtf16Range":t.source_utf16_range,"outputByteRange":t.output_byte_range,"outputCodepointRange":t.output_codepoint_range,"outputUtf16Range":t.output_utf16_range})).collect::<Vec<_>>()})
 }
@@ -182,6 +194,7 @@ fn inspect(value: &PreparedChange) -> Run<Value> {
 struct Runtime {
     workspaces: BTreeMap<String, Workspace>,
     plans: BTreeMap<String, PreparedChange>,
+    plan_owners: BTreeMap<String, String>,
     plan_texts: BTreeMap<String, Vec<String>>,
     bundles: BTreeMap<String, Vec<u8>>,
     reviews: BTreeMap<String, Value>,
@@ -248,11 +261,15 @@ impl Runtime {
     fn execute(&mut self, command: &Value) -> Run<Value> {
         let call = name(command, "call")?;
         match call {
-            "create" => {
-                let workspace = Workspace::create(
-                    id(command, "namespaceByte")?,
-                    id(command, "operationByte")?,
-                )?;
+            "create" | "createWithOperation" => {
+                let workspace = if call == "createWithOperation" {
+                    Workspace::create_with_operation(
+                        id(command, "namespaceByte")?,
+                        crate_operation(command)?,
+                    )?
+                } else {
+                    Workspace::create(id(command, "namespaceByte")?, id(command, "operationByte")?)?
+                };
                 let value = snapshot(&workspace)?;
                 self.workspaces
                     .insert(field(command, "workspace")?, workspace);
@@ -274,6 +291,23 @@ impl Runtime {
                 Ok(value)
             }
             "head" => Ok(head(self.workspace(command)?.head()?)),
+            "operations" => Ok(json!(
+                self.workspace(command)?
+                    .operations()?
+                    .iter()
+                    .map(operation_value)
+                    .collect::<Vec<_>>()
+            )),
+            "counts" => Ok(counts(self.workspace(command)?.counts()?)),
+            "historyCoverage" => Ok(json!(self.workspace(command)?.history_coverage()?)),
+            "operationsPage" => {
+                let page = self
+                    .workspace(command)?
+                    .operations_page(field(command, "offset")?, field(command, "limit")?)?;
+                Ok(
+                    json!({"records":page.records.iter().map(operation_value).collect::<Vec<_>>(),"total":page.total,"offset":page.offset,"nextOffset":page.next_offset}),
+                )
+            }
             "export" => {
                 let workspace = self.workspace(command)?;
                 let bytes = workspace.export_bundle()?;
@@ -322,7 +356,22 @@ impl Runtime {
                         plan.candidate_head()?
                     };
                 workspace.activate_saved(plan, parent, saved)?;
-                snapshot(workspace)
+                let value = snapshot(workspace)?;
+                if parent != saved {
+                    // Match the public opaque SDK registry: a saved new head
+                    // invalidates every sibling plan owned by this workspace.
+                    let owner = name(command, "workspace")?;
+                    for (key, plan) in &mut self.plans {
+                        if self
+                            .plan_owners
+                            .get(key)
+                            .is_some_and(|value| value == owner)
+                        {
+                            plan.discard();
+                        }
+                    }
+                }
+                Ok(value)
             }
             "recall" => Ok(recall(
                 self.workspace(command)?.recall(&text_value(command)?)?,
@@ -359,18 +408,30 @@ impl Runtime {
             | "prepareBatch"
             | "prepareReview"
             | "preparePolicyChanges"
-            | "prepareRecovery" => {
+            | "prepareRecovery"
+            | "prepareWithOperation"
+            | "prepareBatchWithOperation"
+            | "prepareRecoveryWithOperation"
+            | "prepareOutcome" => {
                 let workspace = self.workspace(command)?;
                 let operation = id(command, "operationByte")?;
                 let plan = match call {
-                    "prepare" => {
+                    "prepare" | "prepareWithOperation" => {
                         let findings = field::<Vec<RawFinding>>(command, "findings")?
                             .into_iter()
                             .map(RawFinding::finding)
                             .collect::<Run<Vec<_>>>()?;
-                        workspace.prepare(&text_value(command)?, &findings, operation)?
+                        if call == "prepareWithOperation" {
+                            workspace.prepare_with_operation(
+                                &text_value(command)?,
+                                &findings,
+                                crate_operation(command)?,
+                            )?
+                        } else {
+                            workspace.prepare(&text_value(command)?, &findings, operation)?
+                        }
                     }
-                    "prepareBatch" => {
+                    "prepareBatch" | "prepareBatchWithOperation" => {
                         let inputs = field::<Vec<RawInput>>(command, "inputs")?
                             .into_iter()
                             .map(|input| {
@@ -388,7 +449,14 @@ impl Runtime {
                             .iter()
                             .map(|(text, findings)| WorkspaceInput { text, findings })
                             .collect();
-                        workspace.prepare_batch(&borrowed, operation)?
+                        if call == "prepareBatchWithOperation" {
+                            workspace.prepare_batch_with_operation(
+                                &borrowed,
+                                crate_operation(command)?,
+                            )?
+                        } else {
+                            workspace.prepare_batch(&borrowed, operation)?
+                        }
                     }
                     "prepareReview" => {
                         let inputs = field::<Vec<Value>>(command, "inputs")?
@@ -402,6 +470,26 @@ impl Runtime {
                         workspace.prepare_policy_changes(&field(command, "edits")?, operation)?
                     }
                     "prepareRecovery" => workspace.prepare_recovery(operation)?,
+                    "prepareRecoveryWithOperation" => {
+                        workspace.prepare_recovery_with_operation(crate_operation(command)?)?
+                    }
+                    "prepareOutcome" => {
+                        let input = command.get("outcome").ok_or(Failure::Fixture)?;
+                        let kind = match name(input, "kind")? {
+                            "copy_confirmed" => w::OutcomeKind::CopyConfirmed,
+                            "user_cancelled" => w::OutcomeKind::UserCancelled,
+                            "blocked_input" => w::OutcomeKind::BlockedInput,
+                            "restore_blocked" => w::OutcomeKind::RestoreBlocked,
+                            _ => return Err(Failure::Fixture),
+                        };
+                        workspace.prepare_outcome(
+                            w::OperationOutcome {
+                                kind,
+                                issue_count: field(input, "issueCount")?,
+                            },
+                            crate_operation(command)?,
+                        )?
+                    }
                     _ => return Err(Failure::Fixture),
                 };
                 let value = inspect(&plan)?;
@@ -411,6 +499,8 @@ impl Runtime {
                     .map(|preview| preview.text.clone())
                     .collect();
                 let key: String = field(command, "plan")?;
+                self.plan_owners
+                    .insert(key.clone(), field(command, "workspace")?);
                 self.plans.insert(key.clone(), plan);
                 self.plan_texts.insert(key, texts);
                 Ok(value)
@@ -431,6 +521,15 @@ fn run(fixture: Value) -> Run<Value> {
             method.as_str(),
             Some(
                 "create"
+                    | "createWithOperation"
+                    | "prepareWithOperation"
+                    | "prepareBatchWithOperation"
+                    | "prepareRecoveryWithOperation"
+                    | "prepareOutcome"
+                    | "operations"
+                    | "operationsPage"
+                    | "counts"
+                    | "historyCoverage"
                     | "openBundle"
                     | "head"
                     | "namespace"
