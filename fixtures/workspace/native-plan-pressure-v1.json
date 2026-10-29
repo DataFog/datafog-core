@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "native-plan-pressure-v1",
+  "sdks": [
+    "python",
+    "node"
+  ],
+  "workers": 2,
+  "handlesPerWorker": 2,
+  "plansPerHandle": 32,
+  "cycles": 16,
+  "sourceBytes": 262144,
+  "sourceSha256": "d80fab57a67b4da5bc6cf5cb075c3776902e795de773ffe02105a50f62ede75a",
+  "sourceEncoding": "concatenated SHA256 hex of native-plan-pressure:0 through4095",
+  "scope": "Synthetic fixture dimensions only; per-handle SDK admission, not a Core/process/host global budget or capacity SLA."
+}

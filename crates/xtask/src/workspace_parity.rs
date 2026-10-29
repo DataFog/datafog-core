@@ -104,6 +104,10 @@ fn complete_workspace_report(report: &Value) -> bool {
         && report["profiles"]["nativeServer"]["profile"] == "native-server-cas-v1"
         && report["profiles"]["nativeServer"]["sdks"] == json!(["python", "node"])
         && report["profiles"]["nativeServer"]["oracleSdk"] == "rust"
+        && report["profiles"]["nativeServer"]["planPressure"]["pass"] == true
+        && report["profiles"]["nativeServer"]["planPressure"]["profile"]
+            == "native-plan-pressure-v1"
+        && report["profiles"]["nativeServer"]["planPressure"]["sdks"] == json!(["python", "node"])
         && ["foundation", "streaming", "operations"]
             .iter()
             .all(|profile| {
@@ -142,7 +146,7 @@ mod tests {
             "foundation":{"sdks":["rust","python","node","wasm"],"profile":"launch-workspace-current","cases":17,"steps":156},
             "streaming":{"sdks":["rust","python","node","wasm"],"profile":"workspace-streaming-v1","modes":["buffered","progressive"],"cases":13,"steps":80},
             "operations":{"sdks":["rust","python","node","wasm"],"profile":"workspace-operations-v1","cases":7,"steps":185},
-            "nativeServer":{"profile":"native-server-cas-v1","sdks":["python","node"],"oracleSdk":"rust","cases":9,"steps":28}},
+            "nativeServer":{"profile":"native-server-cas-v1","sdks":["python","node"],"oracleSdk":"rust","planPressure":{"pass":true,"profile":"native-plan-pressure-v1","sdks":["python","node"]},"cases":9,"steps":28}},
             "cases":37,"steps":421,"errors":[]});
         assert!(complete_workspace_report(&report));
         let mut folded = report.clone();

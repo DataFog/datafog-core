@@ -94,3 +94,13 @@ not written to receipts, and real-user input is never used.
 Conversation/send-confirmation behavior and its capacity reservation are outside
 this profile. Passing these checks does not publish a release or grant shipping
 host security approval.
+
+## Prepared-plan ownership under load
+
+The mandatory [plan-pressure subproof](native-plan-pressure-0.5.0-beta.3.md)
+qualifies the existing per-handle 32-plan bound across paired handles/workers,
+discard and changed-head cleanup, independently stale CAS, retained wrappers and
+worker exit. Its counts are separate from both SDK scenarios and native CAS
+checkpoints. Exact shared-Core requested allocations and observed SDK RSS/heaps
+are reported separately; the Node resident-memory trend is unresolved and no
+aggregate admission budget is selected.
