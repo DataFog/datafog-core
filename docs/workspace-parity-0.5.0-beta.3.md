@@ -16,12 +16,12 @@ or harness failure. Result keys normalize only representation (Python's exact
 revision integer to its decimal wire string, copied bytes to lowercase hex),
 without discarding offsets, choices, flags or errors.
 
-Operation/conversation provenance and actual W6 CAS/retry cases remain
-required additions before X8 can close. Strict and opt-in progressive restoration
+Conversation provenance and actual W6 CAS/retry cases remain required additions
+before X8 can close. Operation/history access now runs as its own mandatory profile. Strict and opt-in progressive restoration
 now run as a second mandatory four-SDK profile, alongside the launch foundation. This foundation profile must never be
-presented as full 0.5.0-beta.3 or real-data security certification. The actual
-native wrappers are draft PRs #174 and #175; this branch integrates their committed
-code solely for qualification, not into the beta.2 release branch.
+presented as full 0.5.0-beta.3 or real-data security certification. The foundation native wrappers are committed. This focused stack consumes the
+committed Python/Node operation wrappers from #186/#187 for actual qualification;
+it does not change the published beta.2 release.
 
 ## Run and inspect
 
@@ -52,8 +52,7 @@ comparison and returns nonzero without retaining arbitrary child diagnostics.
 The launch foundation retains 17 scenarios and 156 real operation steps, including every
 current workspace error code, Unicode/source metadata, correction conflicts,
 failed activation receipts, protected policy, repeated operation IDs, atomic batch
-failure, strict marker reports, canonical reopen/recovery, v1→v2 upgrade and a
-revision above JavaScript's exact numeric range. Only representation defaults
+failure, strict marker reports, canonical reopen/recovery, legacy saved-format upgrade and a revision above JavaScript's exact numeric range. Only representation defaults
 normalize: absent nullable finding metadata becomes null and revision integers
 become lossless decimal strings. Matched text, offsets, flags and choices are kept.
 
@@ -95,3 +94,50 @@ a falsely complete progressive feed or a strict report with text alongside issue
 cannot qualify. CLI success additionally requires both named profiles and modes.
 This is streaming parity for the committed surface, not operation/conversation,
 real server delivery, distributed admission or overall beta.3 freeze certification.
+
+## Mandatory operation/history profile
+
+`fixtures/workspace/operation-contract-v1.json` adds seven scenarios and 185 real
+steps. The complete gate now executes 37 scenarios / 421 steps across Rust,
+installed native Python/Node and Chromium WASM. Foundation remains 17/156 and
+streaming 13/80; their eight canonical runtime outputs remain byte-identical to
+the qualified `d5584e9` baseline. No runtime can omit the new profile or substitute
+a declaration, mock or skipped method. `cargo dfv parity --workspace` also rejects
+a receipt without an executed operation profile.
+
+The shared commands exercise timed creation, Unicode atomic batches, candidate
+export and rejected activation, exact canonical saved bundles, reopened records,
+full and explicit-window reads, recorded-only counts/unknown prior history,
+nullable legacy timestamps, policy rows, explicit outcomes and finite recovery.
+Every recognized current/mapping/settings/history-only ID has both legacy and
+explicit replay-error checks. Save failures, cancellation/discard, ordinary reads
+and strict/report restoration must leave saved bytes unchanged. A no-op activation
+preserves sibling plans, while an activated changed head invalidates them. Closed
+handles reject operation access.
+
+Independent fixture expectations assert complete numeric totals, null unknown
+times, complete ordered pages and terminal cursors, unchanged saved bundles,
+input/finding indices and exact byte/codepoint/UTF-16 coordinates after emoji.
+The basic strict `restore` returns its existing sanitized error code; the separate
+`restoreReport` call supplies the full issue ranges. Neither is normalized into
+the other. Records reject extra content fields, missing deltas or invented times
+in protocol validation. Raw per-SDK `*-operations.json`, the fixture hash and
+package/source receipts remain beside the foundation and streaming results.
+
+The Rust reference still executes actual Core methods for every state change,
+count, snapshot and error. Its test-only plan-owner registry mirrors the already
+public opaque SDK lifecycle: discard owned siblings only after a successful
+activation changes the head; preserve them on same-head/no-op or failed activation.
+It does not add that handle-registry policy to the lower-level Core runtime or
+replace Core state with expected fixture values.
+
+This qualifies deterministic operation semantics and saved-head receipts, not
+real durable server CAS, send confirmation, a conversation format/reservation,
+all-device capacity or overall C1/G3 completion. Actual encrypted capacity and
+32-pending-plan memory measurements remain in #162's separate qualification.
+
+[Committed operation-profile receipt](verification/evidence/workspace-operation-parity.json)
+records the clean qualified commit, source/package/fixture hashes and canonical
+per-runtime hashes. The CLI retains the corresponding full outputs and installed
+packages under its run directory; the same command reproduces them without a
+single-SDK bypass.

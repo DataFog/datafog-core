@@ -1,0 +1,2395 @@
+{
+  "schemaVersion": 1,
+  "profile": "workspace-operations-v1",
+  "requiredMethods": [
+    "create",
+    "createWithOperation",
+    "openBundle",
+    "head",
+    "namespace",
+    "exportBundle",
+    "prepare",
+    "prepareBatch",
+    "prepareWithOperation",
+    "prepareBatchWithOperation",
+    "prepareRecovery",
+    "prepareRecoveryWithOperation",
+    "preparePolicyChanges",
+    "prepareOutcome",
+    "operations",
+    "operationsPage",
+    "counts",
+    "historyCoverage",
+    "restore",
+    "restoreReport",
+    "activateSaved",
+    "close",
+    "plan.heads",
+    "plan.previews",
+    "plan.exportCandidateBundle",
+    "plan.discard",
+    "plan.snapshotFormat",
+    "plan.policyPreview"
+  ],
+  "scope": "Mandatory actual four-SDK operation/history/count/page/replay and explicit-save lifecycle qualification. Conversation/server provenance profiles remain separate; this is not full beta.3 certification. Host timestamps are assertions, not authority.",
+  "cases": [
+    {
+      "id": "timed-unicode-batch-atomic-save-pages-reopen",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "not_applicable"
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "w",
+          "plan": "batch",
+          "operationByte": 3,
+          "occurredAtMs": 253402300799999,
+          "inputs": [
+            {
+              "text": "👋 Jane Jane",
+              "findings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 9
+                  },
+                  "source": "scanner",
+                  "needsReview": true,
+                  "confidence": 0.5,
+                  "detectorName": "synthetic/operations",
+                  "detectorVersion": "v1"
+                },
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Jane",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 10,
+                    "end": 14
+                  },
+                  "source": "user",
+                  "needsReview": true,
+                  "confidence": 0.5,
+                  "detectorName": "synthetic/operations",
+                  "detectorVersion": "v1"
+                }
+              ]
+            },
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "unsaved",
+          "sameBundleAs": "before"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "batch",
+          "savedHeadMode": "parent",
+          "expectCode": "workspace_conflict"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "failed",
+          "sameBundleAs": "before"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "batch"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 2,
+            "preparedInputs": 2,
+            "transformedSpans": 2,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2
+              ],
+              "kind": "create",
+              "occurredAtMs": 0,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "kind": "prepare",
+              "occurredAtMs": 253402300799999,
+              "preparedInputs": 2,
+              "transformedSpans": 2
+            }
+          ]
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "offset": 0,
+          "limit": 1,
+          "expectValue": {
+            "records": [
+              {
+                "id": [
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2
+                ],
+                "kind": "create",
+                "occurredAtMs": 0,
+                "preparedInputs": 0,
+                "transformedSpans": 0
+              }
+            ],
+            "total": 2,
+            "offset": 0,
+            "nextOffset": 1
+          }
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "offset": 1,
+          "limit": 1000,
+          "expectValue": {
+            "records": [
+              {
+                "id": [
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3,
+                  3
+                ],
+                "kind": "prepare",
+                "occurredAtMs": 253402300799999,
+                "preparedInputs": 2,
+                "transformedSpans": 2
+              }
+            ],
+            "total": 2,
+            "offset": 1,
+            "nextOffset": null
+          }
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "offset": 2,
+          "limit": 1,
+          "expectValue": {
+            "records": [],
+            "total": 2,
+            "offset": 2,
+            "nextOffset": null
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "saved"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "reopened",
+          "bundle": "saved"
+        },
+        {
+          "call": "counts",
+          "workspace": "reopened",
+          "expectValue": {
+            "operations": 2,
+            "preparedInputs": 2,
+            "transformedSpans": 2,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "restorePlanText",
+          "workspace": "reopened",
+          "plan": "batch",
+          "inputIndex": 0
+        },
+        {
+          "call": "restoreReportPlanText",
+          "workspace": "reopened",
+          "plan": "batch",
+          "inputIndex": 0,
+          "suffix": " [[PERSON_BAD]]"
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "after-reads",
+          "sameBundleAs": "saved"
+        }
+      ]
+    },
+    {
+      "id": "v1-unknown-history-noop-discard-and-timed-upgrade",
+      "commands": [
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "inlineBundleHex": "a7000101500101010101010101010101010101010102821b0020000000000001500303030303030303030303030303030303818566504552534f4e644a616e6566374b51345a4d50030303030303030303030303030303031b002000000000000104818266504552534f4e1b0020000000000001058006a2006c73796e7468657469635f76310180"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "legacy"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 0,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": []
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 151
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "noop-exact",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "discarded",
+          "text": "",
+          "findings": [],
+          "operationByte": 152,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "discard",
+          "plan": "discarded"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "discarded-exact",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "upgrade",
+          "text": "",
+          "findings": [],
+          "operationByte": 153,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 0,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "upgrade"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 1,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153
+              ],
+              "kind": "prepare",
+              "occurredAtMs": 0,
+              "preparedInputs": 1,
+              "transformedSpans": 0
+            }
+          ]
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "again",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "again",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "again",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 1,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "v2-unknown-history-noop-discard-and-timed-upgrade",
+      "commands": [
+        {
+          "call": "openBundle",
+          "workspace": "w",
+          "inlineBundleHex": "a80002015001010101010101010101010101010101028202500404040404040404040404040404040403818566504552534f4e644a616e656651464a38323850030303030303030303030303030303030104818266504552534f4e01058006a2006c70726f7465637465645f7631018007818466504552534f4e634d6179015004040404040404040404040404040404"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "legacy"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 0,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": []
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 151
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "noop-exact",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "discarded",
+          "text": "",
+          "findings": [],
+          "operationByte": 152,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "discard",
+          "plan": "discarded"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "discarded-exact",
+          "sameBundleAs": "legacy"
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "upgrade",
+          "text": "",
+          "findings": [],
+          "operationByte": 153,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 0,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "upgrade"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 1,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153,
+                153
+              ],
+              "kind": "prepare",
+              "occurredAtMs": 0,
+              "preparedInputs": 1,
+              "transformedSpans": 0
+            }
+          ]
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "again",
+          "bundle": "upgraded"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "again",
+          "expectValue": {
+            "recordedHistoryOnly": true,
+            "preUpgradeHistory": "unknown"
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "again",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 1,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "legacy-unknown-times-explicit-outcomes-policy-and-recovery",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "legacy",
+          "operationByte": 3,
+          "text": "Jane",
+          "findings": [
+            {
+              "entityType": "PERSON",
+              "matchedText": "Jane",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 4
+              },
+              "source": "scanner",
+              "needsReview": true,
+              "confidence": 0.5,
+              "detectorName": "synthetic/operations",
+              "detectorVersion": "v1"
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "legacy"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "settings",
+          "operationByte": 4,
+          "edits": {
+            "rules": [
+              {
+                "entityType": "PROJECT_CODE",
+                "rule": "keep"
+              }
+            ],
+            "choices": []
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "settings"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "outcome5",
+          "outcome": {
+            "kind": "copy_confirmed",
+            "issueCount": 0
+          },
+          "operationByte": 5,
+          "occurredAtMs": 5
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "outcome5"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "outcome6",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          },
+          "operationByte": 6,
+          "occurredAtMs": 6
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "outcome6"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "outcome7",
+          "outcome": {
+            "kind": "blocked_input",
+            "issueCount": 2
+          },
+          "operationByte": 7,
+          "occurredAtMs": 7
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "outcome7"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "outcome8",
+          "outcome": {
+            "kind": "restore_blocked",
+            "issueCount": 1
+          },
+          "operationByte": 8,
+          "occurredAtMs": 8
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "outcome8"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 7,
+            "preparedInputs": 1,
+            "transformedSpans": 1,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 2
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2
+              ],
+              "kind": "create",
+              "occurredAtMs": 0,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "kind": "prepare",
+              "occurredAtMs": null,
+              "preparedInputs": 1,
+              "transformedSpans": 1
+            },
+            {
+              "id": [
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4
+              ],
+              "kind": "policy_change",
+              "occurredAtMs": null,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5
+              ],
+              "kind": "copy_confirmed",
+              "occurredAtMs": 5,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6
+              ],
+              "kind": "user_cancelled",
+              "occurredAtMs": 6,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7
+              ],
+              "kind": "blocked_input",
+              "occurredAtMs": 7,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ],
+              "kind": "restore_blocked",
+              "occurredAtMs": 8,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            }
+          ]
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "outcomes"
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "w",
+          "plan": "recovery",
+          "operationByte": 9,
+          "occurredAtMs": 1
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "recovery"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 8,
+            "preparedInputs": 1,
+            "transformedSpans": 1,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 2
+          }
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2
+              ],
+              "kind": "create",
+              "occurredAtMs": 0,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "kind": "prepare",
+              "occurredAtMs": null,
+              "preparedInputs": 1,
+              "transformedSpans": 1
+            },
+            {
+              "id": [
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4
+              ],
+              "kind": "policy_change",
+              "occurredAtMs": null,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5
+              ],
+              "kind": "copy_confirmed",
+              "occurredAtMs": 5,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6
+              ],
+              "kind": "user_cancelled",
+              "occurredAtMs": 6,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7
+              ],
+              "kind": "blocked_input",
+              "occurredAtMs": 7,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ],
+              "kind": "restore_blocked",
+              "occurredAtMs": 8,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9
+              ],
+              "kind": "recovery",
+              "occurredAtMs": 1,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            }
+          ]
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "policy-noop",
+          "operationByte": 10,
+          "edits": {
+            "rules": [
+              {
+                "entityType": "PROJECT_CODE",
+                "rule": "keep"
+              }
+            ],
+            "choices": []
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "policy-noop"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "post-noop"
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectValue": [
+            {
+              "id": [
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                2
+              ],
+              "kind": "create",
+              "occurredAtMs": 0,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3,
+                3
+              ],
+              "kind": "prepare",
+              "occurredAtMs": null,
+              "preparedInputs": 1,
+              "transformedSpans": 1
+            },
+            {
+              "id": [
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4
+              ],
+              "kind": "policy_change",
+              "occurredAtMs": null,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5,
+                5
+              ],
+              "kind": "copy_confirmed",
+              "occurredAtMs": 5,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6,
+                6
+              ],
+              "kind": "user_cancelled",
+              "occurredAtMs": 6,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                7
+              ],
+              "kind": "blocked_input",
+              "occurredAtMs": 7,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ],
+              "kind": "restore_blocked",
+              "occurredAtMs": 8,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            },
+            {
+              "id": [
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9,
+                9
+              ],
+              "kind": "recovery",
+              "occurredAtMs": 1,
+              "preparedInputs": 0,
+              "transformedSpans": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legacy-versus-explicit-current-mapping-settings-history-replay",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "mapping",
+          "operationByte": 3,
+          "text": "Jane",
+          "findings": [
+            {
+              "entityType": "PERSON",
+              "matchedText": "Jane",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 4
+              },
+              "source": "scanner",
+              "needsReview": true,
+              "confidence": 0.5,
+              "detectorName": "synthetic/operations",
+              "detectorVersion": "v1"
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "mapping"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "w",
+          "plan": "settings",
+          "operationByte": 4,
+          "edits": {
+            "rules": [
+              {
+                "entityType": "PROJECT_CODE",
+                "rule": "keep"
+              }
+            ],
+            "choices": []
+          }
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "settings"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "history-only",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          },
+          "operationByte": 5,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "history-only"
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "w",
+          "plan": "head",
+          "operationByte": 6
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "head"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "saved"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "reopened",
+          "bundle": "saved"
+        },
+        {
+          "call": "prepare",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "expectCode": "invalid_operation_id",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "expectCode": "invalid_operation_id",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "expectCode": "invalid_operation_id"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "expectCode": "invalid_operation_id",
+          "edits": {
+            "rules": [],
+            "choices": []
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 6,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "unchanged6",
+          "sameBundleAs": "saved"
+        },
+        {
+          "call": "prepare",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "expectCode": "invalid_operation_id",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "expectCode": "invalid_operation_id",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "expectCode": "invalid_operation_id"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "expectCode": "invalid_operation_id",
+          "edits": {
+            "rules": [],
+            "choices": []
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "unchanged3",
+          "sameBundleAs": "saved"
+        },
+        {
+          "call": "prepare",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "expectCode": "invalid_operation_id",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "expectCode": "invalid_operation_id",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "expectCode": "invalid_operation_id"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "expectCode": "invalid_operation_id",
+          "edits": {
+            "rules": [],
+            "choices": []
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 4,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "unchanged4",
+          "sameBundleAs": "saved"
+        },
+        {
+          "call": "prepare",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "expectCode": "invalid_operation_id",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "expectCode": "invalid_operation_id",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "expectCode": "invalid_operation_id"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "expectCode": "invalid_operation_id",
+          "edits": {
+            "rules": [],
+            "choices": []
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 2,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "unchanged2",
+          "sameBundleAs": "saved"
+        },
+        {
+          "call": "prepare",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "expectCode": "invalid_operation_id",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatch",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "expectCode": "invalid_operation_id",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecovery",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "expectCode": "invalid_operation_id"
+        },
+        {
+          "call": "preparePolicyChanges",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "expectCode": "invalid_operation_id",
+          "edits": {
+            "rules": [],
+            "choices": []
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "text": "",
+          "findings": []
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            }
+          ]
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "reopened",
+          "plan": "rejected",
+          "operationByte": 5,
+          "occurredAtMs": 0,
+          "expectCode": "operation_reused",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "unchanged5",
+          "sameBundleAs": "saved"
+        }
+      ]
+    },
+    {
+      "id": "discard-stale-siblings-close-and-no-automatic-history",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "start"
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "a",
+          "text": "",
+          "findings": [],
+          "operationByte": 3,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "b",
+          "outcome": {
+            "kind": "user_cancelled",
+            "issueCount": 0
+          },
+          "operationByte": 4,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "noop",
+          "text": "ordinary",
+          "findings": [],
+          "operationByte": 9
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "noop"
+        },
+        {
+          "call": "inspectPlan",
+          "plan": "a"
+        },
+        {
+          "call": "inspectPlan",
+          "plan": "b"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after-same-head",
+          "sameBundleAs": "start"
+        },
+        {
+          "call": "discard",
+          "plan": "a"
+        },
+        {
+          "call": "inspectPlan",
+          "plan": "a",
+          "expectCode": "inactive_plan"
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after-discard",
+          "sameBundleAs": "start"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "b"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 2,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "after-save"
+        },
+        {
+          "call": "prepareRecoveryWithOperation",
+          "workspace": "w",
+          "plan": "c",
+          "operationByte": 5,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "d",
+          "outcome": {
+            "kind": "copy_confirmed",
+            "issueCount": 0
+          },
+          "operationByte": 6,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "c"
+        },
+        {
+          "call": "inspectPlan",
+          "plan": "d",
+          "expectCode": "inactive_plan"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 3,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "close",
+          "workspace": "w"
+        },
+        {
+          "call": "operations",
+          "workspace": "w",
+          "expectCode": "closed_workspace"
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectCode": "closed_workspace"
+        },
+        {
+          "call": "historyCoverage",
+          "workspace": "w",
+          "expectCode": "closed_workspace"
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "offset": 0,
+          "limit": 1,
+          "expectCode": "closed_workspace"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "closed",
+          "outcome": {
+            "kind": "copy_confirmed",
+            "issueCount": 0
+          },
+          "operationByte": 7,
+          "occurredAtMs": 0,
+          "expectCode": "closed_workspace"
+        }
+      ]
+    },
+    {
+      "id": "bounded-reads-errors-ranges-and-failures-never-write",
+      "commands": [
+        {
+          "call": "createWithOperation",
+          "workspace": "w",
+          "namespaceByte": 1,
+          "operationByte": 2,
+          "occurredAtMs": 0
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "before"
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "expectCode": "resource_limit",
+          "offset": 2,
+          "limit": 1
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "expectCode": "resource_limit",
+          "offset": 0,
+          "limit": 0
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "expectCode": "resource_limit",
+          "offset": 0,
+          "limit": 100001
+        },
+        {
+          "call": "operationsPage",
+          "workspace": "w",
+          "expectCode": "resource_limit",
+          "offset": 100001,
+          "limit": 1
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "invalid-time",
+          "text": "",
+          "findings": [],
+          "operationByte": 3,
+          "occurredAtMs": 253402300800000,
+          "expectCode": "invalid_operation"
+        },
+        {
+          "call": "prepareOutcome",
+          "workspace": "w",
+          "plan": "invalid-outcome",
+          "outcome": {
+            "kind": "blocked_input",
+            "issueCount": 0
+          },
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "invalid_operation"
+        },
+        {
+          "call": "prepareBatchWithOperation",
+          "workspace": "w",
+          "plan": "bad-range",
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "inputs": [
+            {
+              "text": "ordinary",
+              "findings": []
+            },
+            {
+              "text": "👋 Jane",
+              "findings": [
+                {
+                  "entityType": "PERSON",
+                  "matchedText": "Wrong",
+                  "range": {
+                    "unit": "utf8_bytes",
+                    "start": 5,
+                    "end": 10
+                  },
+                  "source": "scanner",
+                  "needsReview": true,
+                  "confidence": 0.5,
+                  "detectorName": "synthetic/operations",
+                  "detectorVersion": "v1"
+                }
+              ]
+            }
+          ],
+          "expectCode": "invalid_finding",
+          "expectError": {
+            "inputIndex": 1,
+            "findingIndex": 0
+          }
+        },
+        {
+          "call": "prepareWithOperation",
+          "workspace": "w",
+          "plan": "marker",
+          "text": "👋 [[PERSON_BAD]]",
+          "findings": [],
+          "operationByte": 3,
+          "occurredAtMs": 0,
+          "expectCode": "invalid_marker",
+          "expectError": {
+            "markerIssues": [
+              {
+                "kind": "damaged",
+                "byteRange": {
+                  "start": 5,
+                  "end": 19
+                },
+                "codepointRange": {
+                  "start": 2,
+                  "end": 16
+                },
+                "utf16Range": {
+                  "start": 3,
+                  "end": 17
+                }
+              }
+            ],
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "restore",
+          "workspace": "w",
+          "text": "👋 [[PERSON_BAD]]",
+          "expectCode": "invalid_marker",
+          "expectError": {
+            "markerIssues": []
+          }
+        },
+        {
+          "call": "restoreReport",
+          "workspace": "w",
+          "text": "👋 [[PERSON_BAD]]",
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 0,
+            "issues": [
+              {
+                "kind": "damaged",
+                "byteRange": {
+                  "start": 5,
+                  "end": 19
+                },
+                "codepointRange": {
+                  "start": 2,
+                  "end": 16
+                },
+                "utf16Range": {
+                  "start": 3,
+                  "end": 17
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "counts",
+          "workspace": "w",
+          "expectValue": {
+            "operations": 1,
+            "preparedInputs": 0,
+            "transformedSpans": 0,
+            "confirmedHandoffs": 0,
+            "reportedBlockedAttempts": 0
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "failed-exact",
+          "sameBundleAs": "before"
+        }
+      ]
+    }
+  ]
+}
