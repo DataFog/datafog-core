@@ -175,7 +175,7 @@ upgrade on a real mutation/recovery. Before approval/save the host must explain
 that beta.1 cannot open an upgraded vault. Discard and failed saves do not upgrade;
 old backup files stay unchanged. New workspaces bootstrap version 2.
 
-The [policy/choice candidate](https://github.com/DataFog/datafog-core/blob/d6c9bedf2de643470a8f94705028e4c39cb94992/docs/proposals/workspace-policy-choices.md) defines that
+The [policy/choice proposal](../proposals/workspace-policy-choices.md) defines that
 candidate layout. The separate #162 operation draft must rebase/version coherently
 rather than ship a second meaning of version 2. Keys 8–10 below are future target
 contents, not implemented policy-v2 fields. Snapshot freeze remains the pilot gate.
@@ -189,8 +189,8 @@ Target contents:
 | 3 | Entries: type, display, code, issuing operation, counter | Workspace PR |
 | 4 | Per-label counters | Workspace PR |
 | 5 | Merges: from code, to code, operation | Merges (after V1) |
-| 6 | Policy: rule per type | Rules and remembered choices |
-| 7 | Remembered choices: type, display, disposition, operation | Rules and remembered choices |
+| 6 | Policy profile and explicit type rules | Beta.2 policy draft |
+| 7 | Remembered choices: type, display, disposition, operation | Beta.2 policy draft |
 | 8 | Operations: ID, kind, time | Provenance |
 | 9 | Conversations: surface, the site's own ID, created operation, issued codes | Provenance |
 | 10 | Content-free counts | Provenance |

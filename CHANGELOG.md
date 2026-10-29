@@ -23,6 +23,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Core-owned workspace rules and exact remembered choices, including explicit
+  protected-type false-positive corrections, with staged approval/save, recall
+  enforcement and a warned, byte-preserving legacy-to-policy-v2 upgrade.
+
+- Rust and WASM workspaces can recall committed values in new text, with source
+  metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
+  or an explicit limit failure and never change saved mappings or bypass approval.
+
 - Workspace findings and preview transformations carry scanner/recall/user source
   and review metadata in Rust and WASM. Existing callers default to scanner and
   review required; these display flags never bypass approval or persistence.
@@ -68,6 +76,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
+
+- Native SSN findings retain their type when a semantic PERSON finding covers
+  exactly the same span, after entity selection and allowlists are applied.
 
 - Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 

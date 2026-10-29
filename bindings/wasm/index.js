@@ -262,8 +262,44 @@ function workspaceFindingsJson(findings) {
   try { return structuredJson(findings, true); }
   catch { throw workspaceFailure("invalid_finding"); }
 }
+function workspacePolicyJson(edits) {
+  const maximum = 16 * 1024 * 1024;
+  let budget = 2;
+  function object(value, fields) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw workspaceFailure("invalid_policy");
+    const properties = Object.getOwnPropertyDescriptors(value);
+    if (Reflect.ownKeys(properties).length !== fields.length) throw workspaceFailure("invalid_policy");
+    for (const field of fields) if (!properties[field]?.enumerable || !("value" in properties[field])) throw workspaceFailure("invalid_policy");
+    return Object.fromEntries(fields.map(field => [field,properties[field].value]));
+  }
+  function string(value) {
+    if (typeof value !== "string" || !value.isWellFormed()) throw workspaceFailure("invalid_policy");
+    if (value.length > 1024 * 1024) throw workspaceFailure("resource_limit");
+    budget += new TextEncoder().encode(value).length * 6 + 128;
+    if (budget > maximum) throw workspaceFailure("resource_limit");
+  }
+  const request = object(edits,["rules","choices"]);
+  if (!Array.isArray(request.rules) || !Array.isArray(request.choices)) throw workspaceFailure("invalid_policy");
+  if (request.rules.length + request.choices.length > 10000) throw workspaceFailure("resource_limit");
+  for (const [name,fields] of [["rules",["entityType","rule"]],["choices",["entityType","value","disposition"]]]) {
+    const values=request[name];
+    if (Reflect.ownKeys(values).length !== values.length+1) throw workspaceFailure("invalid_policy");
+    for (let i=0;i<values.length;i++) {
+      const property=Object.getOwnPropertyDescriptor(values,String(i));
+      if (!property?.enumerable || !("value" in property)) throw workspaceFailure("invalid_policy");
+      const row=object(property.value,fields);
+      string(row.entityType);
+      if (name === "choices") string(row.value);
+      const action = name === "rules" ? row.rule : row.disposition;
+      if (action !== null) string(action);
+    }
+  }
+  try { return structuredJson(edits,true); } catch { throw workspaceFailure("invalid_policy"); }
+}
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); Object.freeze(this); }
+  snapshotFormat() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state,"snapshot_format",handle)); }
+  policyPreview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "policy_preview", handle)); }
   previews() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "previews", handle)); }
   preview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "preview", handle)); }
   heads() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "plan_heads", handle)); }
@@ -292,6 +328,15 @@ export class Workspace {
   head() { return JSON.parse(workspaceCall(this.#state, "head")); }
   namespace() { return workspaceCall(this.#state, "namespace"); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }
+  policy() { return JSON.parse(workspaceCall(this.#state,"policy")); }
+  preparePolicyChanges(edits, operationId) {
+    workspaceBytes(operationId,16,true);
+    let json;
+    try { json=workspacePolicyJson(edits); }
+    catch (error) { if (error instanceof DataFogError) throw error; throw workspaceFailure("invalid_policy"); }
+    return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_policy_changes",json,operationId));
+  }
+  recall(text) { workspaceText(text, 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "recall", text)); }
   prepareRecovery(operationId) {
     workspaceBytes(operationId, 16, true);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operationId));

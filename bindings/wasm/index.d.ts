@@ -219,6 +219,18 @@ export interface WorkspaceInput {
   readonly findings: readonly WorkspaceFinding[];
 }
 export interface WorkspaceHead { readonly revision: string; readonly commitId: readonly number[]; }
+export interface WorkspaceRecalledFinding {
+  readonly finding: WorkspaceFinding & {readonly source: "recall"; readonly needsReview: true};
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceRecallResult {
+  readonly head: WorkspaceHead;
+  /** All matches or an explicit failure. Empty is not a clean-text verdict. */
+  readonly complete: true;
+  readonly findings: readonly WorkspaceRecalledFinding[];
+}
 export interface WorkspacePreview {
   readonly text: string;
   readonly transformations: readonly {
@@ -232,7 +244,28 @@ export interface WorkspacePreview {
     readonly outputUtf16Range: TextRange;
   }[];
 }
+export type WorkspaceTypeRule = "hide" | "keep";
+export type WorkspaceChoiceDisposition = "keep" | "not_sensitive";
+export interface WorkspacePolicyEdits {
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
+}
+export interface WorkspacePolicy {
+  readonly snapshotVersion: 1 | 2;
+  readonly defaultRule: "hide";
+  readonly protectedTypes: readonly string[];
+  readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition}[];
+}
+export interface WorkspacePolicyPreview {
+  readonly rules: readonly {readonly entityType: string; readonly before: WorkspaceTypeRule | null; readonly after: WorkspaceTypeRule | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: WorkspaceChoiceDisposition | null; readonly after: WorkspaceChoiceDisposition | null}[];
+}
 export interface PreparedWorkspaceChange {
+  /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
+  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
+  /** Present only for settings edits; values are sensitive and remain local. */
+  policyPreview(): WorkspacePolicyPreview | null;
   /** Requires a single-input plan. */
   preview(): WorkspacePreview;
   previews(): readonly WorkspacePreview[];
@@ -262,6 +295,11 @@ export class Workspace {
   head(): WorkspaceHead;
   namespace(): Uint8Array;
   exportBundle(): Uint8Array;
+  /** Read committed values only, returning all overlaps in original coordinates. No aliases, plans or state changes. */
+  recall(text: string): WorkspaceRecallResult;
+  policy(): WorkspacePolicy;
+  /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
+  preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
   /** Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
