@@ -1,6 +1,7 @@
 /**
  * REVIEW DRAFT for #143, targeting 0.5.0-beta.2 / 0.5.0-beta.3.
- * Types only: not part of @datafog/wasm exports and no implementation exists here.
+ * Docs-only: not part of @datafog/wasm exports. Candidate shapes have PR implementations;
+ * later review/provenance shapes remain proposals. Neither adds runtime exports here.
  * See launch-api-0.5.0-beta.2-beta.3.md before implementing any proposal.
  */
 import type {
@@ -8,7 +9,7 @@ import type {
   WorkspaceMarkerIssue, WorkspacePreview,
 } from "../../bindings/wasm/index.js";
 
-// #140 / draft PR #156; released beta.1 does not support these fields.
+// #140 / merged PR #156; released beta.1 does not support these fields.
 export type FindingSourceDraft = "scanner" | "recall" | "user";
 export interface FindingDraft extends WorkspaceFinding {
   readonly source?: FindingSourceDraft;
@@ -21,7 +22,7 @@ export interface ReviewSpanDraft {
 export interface PreviewDraft extends Omit<WorkspacePreview, "transformations"> {
   readonly transformations: readonly (WorkspacePreview["transformations"][number] & ReviewSpanDraft)[];
 }
-export interface PreparedChangeDraft extends Omit<PreparedWorkspaceChange, "preview" | "previews"> {
+export interface PreparedChangeDraft extends Omit<PreparedPolicyChangeCandidate, "preview" | "previews"> {
   preview(): PreviewDraft;
   previews(): readonly PreviewDraft[];
 }
@@ -31,29 +32,50 @@ export interface LocatedFindingDraft {
   readonly codepointRange: TextRange;
   readonly utf16Range: TextRange;
 }
-export interface RecallResultDraft {
+export interface RecallResultCandidate {
   readonly head: WorkspaceHead;
-  readonly findings: readonly LocatedFindingDraft[];
+  readonly findings: readonly (Omit<LocatedFindingDraft, "finding"> & {
+    readonly finding: WorkspaceFinding & {readonly source: "recall"; readonly needsReview: true};
+  })[];
   /** Empty results are not a statement that input contains no PII. */
   readonly complete: true;
 }
 
 export type TypeRuleDraft = "hide" | "keep";
 export type ChoiceDispositionDraft = "keep" | "not_sensitive";
-export type PolicyCommandDraft =
-  | {readonly kind: "set_type_rule"; readonly entityType: string; readonly rule: TypeRuleDraft}
-  | {readonly kind: "remember_choice"; readonly entityType: string; readonly value: string; readonly disposition: ChoiceDispositionDraft}
-  | {readonly kind: "forget_choice"; readonly entityType: string; readonly value: string};
 export interface ChoiceDraft {
   readonly entityType: string;
   /** Sensitive display value, for a trusted local review surface only. */
   readonly value: string;
   readonly disposition: ChoiceDispositionDraft;
 }
-export interface PolicyDraft {
+/** Mirrors runtime candidate #166, not a claim of a main/released export. */
+export interface PolicyCandidate {
+  readonly snapshotVersion: 1 | 2;
+  readonly defaultRule: "hide";
   readonly protectedTypes: readonly string[];
   readonly rules: readonly {readonly entityType: string; readonly rule: TypeRuleDraft}[];
   readonly choices: readonly ChoiceDraft[];
+}
+export interface PolicyEditsCandidate {
+  readonly rules: readonly {readonly entityType: string; readonly rule: TypeRuleDraft | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: ChoiceDispositionDraft | null}[];
+}
+export interface PolicyPreviewCandidate {
+  readonly rules: readonly {readonly entityType: string; readonly before: TypeRuleDraft | null; readonly after: TypeRuleDraft | null}[];
+  readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: ChoiceDispositionDraft | null; readonly after: ChoiceDispositionDraft | null}[];
+}
+export interface PreparedPolicyChangeCandidate extends PreparedWorkspaceChange {
+  policyPreview(): PolicyPreviewCandidate | null;
+  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
+}
+/** Obtain from a real #164/#166 candidate build, never by casting beta.1/main. */
+export interface WorkspaceCandidate {
+  head(): WorkspaceHead;
+  recall(text: string): RecallResultCandidate;
+  policy(): PolicyCandidate;
+  preparePolicyChanges(edits: PolicyEditsCandidate, operationId: Uint8Array): PreparedPolicyChangeCandidate;
+  activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
 }
 
 /** Review-local key; invalid after the source/head changes, never persisted. */
@@ -136,14 +158,14 @@ export interface ConversationRestoreReportDraft {
 /** Proposed capabilities only. Never cast a released Workspace to this interface. */
 export interface LaunchWorkspaceDraft {
   head(): WorkspaceHead;
-  recall(text: string): RecallResultDraft;
+  recall(text: string): RecallResultCandidate;
   review(input: ReviewInputDraft): ReviewResultDraft;
-  policy(): PolicyDraft;
+  policy(): PolicyCandidate;
   operations(): readonly OperationRecordDraft[];
   counts(): CountsDraft;
   conversations(): readonly ConversationRecordDraft[];
-  prepareReview(inputs: readonly ReviewInputDraft[], operation: OperationContextDraft): PreparedChangeDraft;
-  preparePolicyChange(commands: readonly PolicyCommandDraft[], operation: OperationContextDraft): PreparedChangeDraft;
+  prepareReview(inputs: readonly ReviewInputDraft[], operationId: Uint8Array): PreparedChangeDraft;
+  preparePolicyChanges(edits: PolicyEditsCandidate, operationId: Uint8Array): PreparedPolicyChangeCandidate;
   prepareOutcome(outcome: OutcomeDraft, operation: OperationContextDraft): PreparedChangeDraft;
   prepareHandoffRecord(handoff: HandoffDraft, operation: OperationContextDraft): PreparedChangeDraft;
   activateSaved(change: PreparedChangeDraft, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
@@ -160,4 +182,4 @@ export interface BackupHostDraft {
 }
 export type AdditionalErrorCodeDraft =
   | "invalid_conversation" | "invalid_operation" | "operation_reused"
-  | "protected_type" | "review_conflict";
+  | "review_conflict";

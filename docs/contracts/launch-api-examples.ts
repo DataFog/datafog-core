@@ -1,19 +1,28 @@
 /** Compile-only examples. Future types do not manufacture runtime methods. */
-import type {Workspace, WorkspaceHead, WorkspacePreview} from "../../bindings/wasm/index.js";
+import type {PreparedWorkspaceChange, Workspace, WorkspaceHead, WorkspacePreview} from "../../bindings/wasm/index.js";
 import type {
   BackupHostDraft, FindingDraft, LaunchWorkspaceDraft, OperationContextDraft,
-  PreparedChangeDraft, ReviewInputDraft,
+  PreparedChangeDraft, PreparedPolicyChangeCandidate, ReviewInputDraft, WorkspaceCandidate,
 } from "./launch-api-proposal.js";
 
 // This is a trusted-host boundary, not a Core promise of encryption/durability.
 type SaveCandidate = (bytes: Uint8Array, expected: WorkspaceHead, candidate: WorkspaceHead) => Promise<WorkspaceHead>;
 
-export async function currentBeta1(workspace: Workspace, save: SaveCandidate, approve: (preview: WorkspacePreview) => Promise<boolean>) {
-  const plan = workspace.prepare("Jane", [{
+// The optional method keeps the released lifecycle example compatible with main and #166.
+type VersionedPlan = PreparedWorkspaceChange & Partial<Pick<PreparedPolicyChangeCandidate, "snapshotFormat">>;
+function upgradeWarning(plan: VersionedPlan): string | null {
+  const format = plan.snapshotFormat?.();
+  return format?.currentVersion === 1 && format.candidateVersion === 2
+    ? "Saving upgrades this vault. 0.5.0-beta.1 cannot open the upgraded vault." : null;
+}
+
+// Existing lifecycle shape, compiled against this checkout (not a beta.2 release claim).
+export async function currentRuntime(workspace: Workspace, save: SaveCandidate, approve: (preview: WorkspacePreview, oldReaderWarning: string | null) => Promise<boolean>) {
+  const plan: VersionedPlan = workspace.prepare("Jane", [{
     entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4},
   }], crypto.getRandomValues(new Uint8Array(16)));
   const preview = plan.preview();
-  if (!(await approve(preview))) { plan.discard(); return; }
+  if (!(await approve(preview, upgradeWarning(plan)))) { plan.discard(); return; }
   const heads = plan.heads();
   const candidate = plan.exportCandidateBundle();
   try {
@@ -34,14 +43,14 @@ async function activateDraft(workspace: LaunchWorkspaceDraft, plan: PreparedChan
 // The future host must obtain this object from a reviewed future build, never by casting beta.1.
 export async function proposedReview(
   workspace: LaunchWorkspaceDraft, input: ReviewInputDraft,
-  operation: OperationContextDraft, save: SaveCandidate,
-  approve: (previews: ReturnType<PreparedChangeDraft["previews"]>) => Promise<boolean>,
+  operationId: Uint8Array, save: SaveCandidate,
+  approve: (previews: ReturnType<PreparedChangeDraft["previews"]>, oldReaderWarning: string | null) => Promise<boolean>,
 ) {
   const review = workspace.review(input);
   if (review.conflicts.length) return {kind: "edit_required" as const, review};
-  const plan = workspace.prepareReview([input], operation); // Revalidates policy/head and recomputes recall.
+  const plan = workspace.prepareReview([input], operationId); // Revalidates policy/head and recomputes recall.
   const previews = plan.previews();
-  if (!(await approve(previews))) { plan.discard(); return {kind: "cancelled" as const}; }
+  if (!(await approve(previews, upgradeWarning(plan)))) { plan.discard(); return {kind: "cancelled" as const}; }
   await activateDraft(workspace, plan, save);
   return {kind: "approved_text" as const, text: previews[0].text};
 }
@@ -61,8 +70,25 @@ export async function proposedHandoffRecord(
   await activateDraft(workspace, record, save);
 }
 
-export function proposedRecall(workspace: LaunchWorkspaceDraft, text: string): readonly FindingDraft[] {
+export function candidateRecall(workspace: WorkspaceCandidate, text: string): readonly FindingDraft[] {
   return workspace.recall(text).findings.map(span => span.finding);
+}
+
+// Host must explain the irreversible old-reader incompatibility before saving v1 -> v2.
+export async function candidatePolicy(
+  workspace: WorkspaceCandidate, save: SaveCandidate,
+  approve: (details: {policy: ReturnType<ReturnType<WorkspaceCandidate["preparePolicyChanges"]>["policyPreview"]>; oldReaderWarning: string | null}) => Promise<boolean>,
+) {
+  const plan = workspace.preparePolicyChanges({rules: [], choices: [{
+    entityType: "PERSON", value: "Synthetic Example", disposition: "not_sensitive",
+  }]}, crypto.getRandomValues(new Uint8Array(16)));
+  const oldReaderWarning = upgradeWarning(plan);
+  if (!(await approve({policy: plan.policyPreview(), oldReaderWarning}))) { plan.discard(); return; }
+  const heads = plan.heads(), candidate = plan.exportCandidateBundle();
+  try {
+    const savedHead = await save(candidate, heads.expectedHead, heads.candidateHead);
+    workspace.activateSaved(plan, heads.expectedHead, savedHead);
+  } finally { candidate.fill(0); }
 }
 
 export function proposedBackup(host: BackupHostDraft, workspaceId: Uint8Array, newlyEnteredPassword: string) {
@@ -71,9 +97,7 @@ export function proposedBackup(host: BackupHostDraft, workspaceId: Uint8Array, n
 
 // Negative assertions stop a proposal from being mistaken for installed runtime support.
 export function typeBoundaries(current: Workspace, future: LaunchWorkspaceDraft, backup: BackupHostDraft) {
-  // @ts-expect-error beta.1 has no recall method.
-  current.recall("Jane");
-  // @ts-expect-error beta.1 has no conversation-aware restore method.
+  // @ts-expect-error conversation-aware restore remains future-only in this checkout.
   current.restoreInConversation("text", {surface: "chatgpt", siteConversationId: "synthetic"});
   // @ts-expect-error closed source names are required in the proposal.
   const unsupportedSource: FindingDraft = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, source: "trusted"};
@@ -82,6 +106,6 @@ export function typeBoundaries(current: Workspace, future: LaunchWorkspaceDraft,
   // @ts-expect-error explicit fresh password input is required for host export.
   backup.exportBackup({workspaceId: new Uint8Array(16), includeRecoveryCode: false});
   // @ts-expect-error choice values remain a closed set.
-  future.preparePolicyChange([{kind: "remember_choice", entityType: "CUSTOM", value: "synthetic", disposition: "allow_everything"}], {id: new Uint8Array(16), occurredAtMs: 0});
+  future.preparePolicyChanges({rules: [], choices: [{entityType: "CUSTOM", value: "synthetic", disposition: "allow_everything"}]}, new Uint8Array(16));
   void unsupportedSource; void cannotSubstitute;
 }
