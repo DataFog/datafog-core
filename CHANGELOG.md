@@ -29,8 +29,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 ### Added
 
 - Native Python workspace handles expose Core preparation, combined review,
-  recall, protected choices and recovery with typed errors, explicit saved-state
-  activation and bounded pending-plan lifetimes.
+  recall, protected choices, recovery and strict/opt-in progressive restoration
+  with typed errors, exact delivery counts, explicit saved-state activation and
+  bounded pending-plan lifetimes.
 - Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
   head, with strict buffered finalization by default and a separate opt-in
   progressive adapter. Late marker/encoding errors stop progressive output with

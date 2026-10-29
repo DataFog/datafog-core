@@ -3,6 +3,7 @@ use super::*;
 use ::datafog_core::workspace as w;
 use pyo3::types::PyBytes;
 use serde_json::{Value, json};
+mod stream;
 
 create_exception!(datafog_core, DataFogWorkspaceError, PyValueError);
 
@@ -50,7 +51,13 @@ fn issue_value(issue: &w::MarkerIssue) -> Value {
         "codepointRange":issue.codepoint_range,"utf16Range":issue.utf16_range})
 }
 fn workspace_error(py: Python<'_>, error: w::WorkspaceError) -> PyErr {
-    let exception = PyErr::new::<DataFogWorkspaceError, _>(error.code.as_str());
+    workspace_exception(
+        py,
+        PyErr::new::<DataFogWorkspaceError, _>(error.code.as_str()),
+        error,
+    )
+}
+fn workspace_exception(py: Python<'_>, exception: PyErr, error: w::WorkspaceError) -> PyErr {
     let attach = || -> PyResult<()> {
         let value = exception.value(py);
         value.setattr("code", error.code.as_str())?;
@@ -538,6 +545,7 @@ impl WorkspacePreparedChange {
 pub(super) struct Workspace {
     inner: w::Workspace,
     plans: std::sync::Mutex<Vec<WeakPlan>>,
+    streams: std::sync::Mutex<stream::Registry>,
     closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 #[pymethods]
@@ -548,6 +556,7 @@ impl Workspace {
             .map(|inner| Self {
                 inner,
                 plans: std::sync::Mutex::new(Vec::new()),
+                streams: std::sync::Mutex::new(stream::Registry::default()),
                 closed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             })
             .map_err(|e| workspace_error(py, e))
@@ -558,6 +567,7 @@ impl Workspace {
             .map(|inner| Self {
                 inner,
                 plans: std::sync::Mutex::new(Vec::new()),
+                streams: std::sync::Mutex::new(stream::Registry::default()),
                 closed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             })
             .map_err(|e| workspace_error(py, e))
@@ -586,6 +596,7 @@ impl Workspace {
             self.closed
                 .store(true, std::sync::atomic::Ordering::Release);
             self.inner.close();
+            lock(&self.streams)?.close()?;
             for cell in lock(&self.plans)?.drain(..).filter_map(|p| p.upgrade()) {
                 lock(&cell)?.discard();
             }
@@ -734,11 +745,24 @@ impl Workspace {
                     Err(error) => return Err(error.into()),
                 });
             }
+            let changed_head = self.inner.head()? != saved_head.inner;
+            let mut streams = lock(&self.streams)?;
+            let stream_cells = streams.live();
+            let mut stream_guards = stream_cells
+                .iter()
+                .map(|cell| lock(cell))
+                .collect::<NativeResult<Vec<_>>>()?;
             self.inner.activate_saved(
                 &mut plans[position],
                 expected_head.inner,
                 saved_head.inner,
             )?;
+            if changed_head {
+                for stream in &mut stream_guards {
+                    stream.close();
+                }
+                streams.clear();
+            }
             registry.clear();
             for (index, (plan, parent)) in plans.iter_mut().zip(parents).enumerate() {
                 if index != position && parent == Some(saved_head.inner) {
@@ -752,6 +776,32 @@ impl Workspace {
         result.map_err(|error| error.into_python(py))
     }
 
+    #[pyo3(signature = (encoding="utf8"))]
+    fn buffered_restore(
+        &self,
+        py: Python<'_>,
+        encoding: &str,
+    ) -> PyResult<stream::WorkspaceBufferedRestore> {
+        let encoding = stream::encoding(py, encoding)?;
+        let result = (|| -> NativeResult<_> {
+            let inner = self.inner.buffered_restore(encoding)?;
+            lock(&self.streams)?.buffered(inner, encoding)
+        })();
+        result.map_err(|error| error.into_python(py))
+    }
+    #[pyo3(signature = (encoding="utf8"))]
+    fn progressive_restore(
+        &self,
+        py: Python<'_>,
+        encoding: &str,
+    ) -> PyResult<stream::WorkspaceProgressiveRestore> {
+        let encoding = stream::encoding(py, encoding)?;
+        let result = (|| -> NativeResult<_> {
+            let inner = self.inner.progressive_restore(encoding)?;
+            lock(&self.streams)?.progressive(inner, encoding)
+        })();
+        result.map_err(|error| error.into_python(py))
+    }
     fn restore(&self, py: Python<'_>, text: &str) -> PyResult<String> {
         self.inner.restore(text).map_err(|e| workspace_error(py, e))
     }
@@ -797,6 +847,7 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "DataFogWorkspaceError",
         module.py().get_type::<DataFogWorkspaceError>(),
     )?;
+    stream::register(module)?;
     module.add_class::<Workspace>()?;
     module.add_class::<WorkspaceHead>()?;
     module.add_class::<WorkspaceFinding>()?;
@@ -894,6 +945,11 @@ impl Drop for Workspace {
         self.closed
             .store(true, std::sync::atomic::Ordering::Release);
         self.inner.close();
+        let streams = match self.streams.get_mut() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        streams.close_on_drop();
         let registry = match self.plans.get_mut() {
             Ok(value) => value,
             Err(poisoned) => poisoned.into_inner(),
