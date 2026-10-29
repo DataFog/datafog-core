@@ -7,12 +7,13 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {isDeepStrictEqual} from "node:util";
-import {canonicalWorkspaceValue} from "./workspace-parity-runner.mjs";
+import {canonicalWorkspaceValue,assertJavaScriptWorkspaceHeads} from "./workspace-parity-runner.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const fixturePath=path.join(root,"fixtures/workspace/sdk-contract-v1.json");
 const streamingFixturePath=path.join(root,"fixtures/workspace/streaming-contract-v1.json");
 const operationFixturePath=path.join(root,"fixtures/workspace/operation-contract-v1.json");
+const conversationFixturePath=path.join(root,"fixtures/workspace/conversation-contract-v1.json");
 const arguments_=process.argv.slice(2);
 const outputIndex=arguments_.indexOf("--output");
 const output=path.resolve(outputIndex>=0?arguments_[outputIndex+1]:path.join(root,"target/workspace-parity",new Date().toISOString().replaceAll(/[:.]/g,"-")));
@@ -115,6 +116,83 @@ export function validateOperationOutput(value,fixture) {
   return normalized;
 }
 
+// Run against retained outputs from each actual JavaScript SDK, rather than a
+// fabricated head. A numeric revision must fail before representation helpers.
+export function verifyActualJavaScriptHeadRejection(value) {
+  const heads=assertJavaScriptWorkspaceHeads(value);
+  if(!heads)throw new Error("workspace JavaScript head proof has no actual heads");
+  const changed=structuredClone(value);
+  const visit=item=>{
+    if(!item || typeof item!=="object")return;
+    if(!Array.isArray(item) && Object.hasOwn(item,"revision") && Object.hasOwn(item,"commitId"))item.revision=Number(item.revision);
+    for(const child of Object.values(item))visit(child);
+  };
+  visit(changed);let rejected=false;
+  try{assertJavaScriptWorkspaceHeads(changed);}catch{rejected=true;}
+  if(!rejected)throw new Error("workspace JavaScript numeric head mutation qualified");
+  return {actualHeads:heads,numericRevisionRejected:true};
+}
+
+export function validateConversationOutput(value,fixture) {
+  const bad=()=>{throw new Error("workspace conversation parity output schema mismatch");};
+  const required=["prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","plan.sendIntents"];
+  if(fixture?.profile!=="workspace-conversations-v1" || !Array.isArray(fixture.requiredMethods) || required.some(method=>!fixture.requiredMethods.includes(method)))bad();
+  // Drivers emit canonical decimal heads before JSON transport. Do not let the
+  // shared representation helper conceal a malformed numeric wire revision.
+  for(const scenario of Array.isArray(value?.cases)?value.cases:[])for(const step of Array.isArray(scenario?.steps)?scenario.steps:[]) {
+    for(const header of [step.value?.head,step.value?.heads?.expectedHead,step.value?.heads?.candidateHead])if(header!==undefined&&typeof header?.revision!=="string")bad();
+  }
+  const normalized=validateWorkspaceOutput(value,fixture);
+  const exact=(value,keys)=>value && typeof value==="object" && !Array.isArray(value) && Object.keys(value).sort().join(",")===[...keys].sort().join(",");
+  const integer=value=>Number.isSafeInteger(value)&&value>=0;
+  const publicId=value=>Array.isArray(value)&&value.length===16&&value.every(byte=>Number.isInteger(byte)&&byte>=0&&byte<=255);
+  const intents=value=>Array.isArray(value)&&value.length<=32&&value.every(item=>exact(item,["preparationId","inputIndex"])&&publicId(item.preparationId)&&integer(item.inputIndex)&&item.inputIndex<32);
+  const issues=value=>Array.isArray(value)&&value.every(item=>exact(item,["kind","byteRange","codepointRange","utf16Range"])&&["unknown","damaged","unbracketed","not_issued_in_conversation"].includes(item?.kind)&&["byteRange","codepointRange","utf16Range"].every(key=>exact(item[key],["start","end"])&&integer(item[key].start)&&integer(item[key].end)&&item[key].end>=item[key].start));
+  const progress=value=>exact(value,["bytes","codepoints","utf16","restoredMarkers"])&&Object.values(value).every(integer);
+  const report=value=>exact(value,["text","restoredMarkers","issues"])&&(value.text===null||typeof value.text==="string")&&integer(value.restoredMarkers)&&issues(value.issues)&&(value.issues.length>0)===(value.text===null);
+
+  const head=value=>exact(value,["revision","commitId"])&&typeof value.revision==="string"&&/^(0|[1-9][0-9]*)$/.test(value.revision)&&BigInt(value.revision)<=18446744073709551615n&&publicId(value.commitId);
+  const bundle=value=>typeof value==="string"&&/^(?:[0-9a-f]{2})+$/.test(value);
+  const snapshot=value=>exact(value,["head","namespaceHex","bundleHex","policy"])&&head(value.head)&&typeof value.namespaceHex==="string"&&/^[0-9a-f]{32}$/.test(value.namespaceHex)&&bundle(value.bundleHex);
+  const planCalls=new Set(["inspectPlan","prepare","prepareRecoveryWithOperation","prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent"]);
+  for(let caseIndex=0;caseIndex<fixture.cases.length;caseIndex++) {
+    const scenario=fixture.cases[caseIndex],actual=normalized.cases[caseIndex],modes=new Map();
+    for(let index=0;index<scenario.commands.length;index++) {
+      const command=scenario.commands[index],step=actual.steps[index],result=step.value;
+      if(!step.ok) {
+        const error=step.error;
+        if(!exact(error,["code","findingIndex","inputIndex","markerIssues","reviewConflicts","delivered","complete"])||!issues(error.markerIssues))bad();
+        if(command.call.startsWith("stream")&&modes.get(command.stream)==="progressive") {if(error.complete!==false||!progress(error.delivered))bad();}
+        else if(error.complete!==null||error.delivered!==null)bad();
+        continue;
+      }
+      if(command.expectFields && Object.entries(command.expectFields).some(([key,value])=>!isDeepStrictEqual(result?.[key],canonicalWorkspaceValue(value))))bad();
+      if(planCalls.has(command.call)&&(!intents(result?.sendIntents)||!head(result?.heads?.expectedHead)||!head(result?.heads?.candidateHead)||!bundle(result?.candidateBundleHex)||!Array.isArray(result?.previews)||!exact(result?.snapshotFormat,["currentVersion","candidateVersion"])||![1,2,3].includes(result.snapshotFormat.currentVersion)||![1,2,3].includes(result.snapshotFormat.candidateVersion)))bad();
+      if(["create","createWithOperation","openBundle","export","activateSaved"].includes(command.call)&&!snapshot(result))bad();
+      if(command.call==="sendIntents"&&!intents(result))bad();
+      if(command.call==="sendIntentStatus"&&!["pending","observed_sent","definitely_not_sent"].includes(result))bad();
+      if(command.call==="conversationForSite"&&!publicId(result))bad();
+      if(command.call==="conversation") {
+        if(!exact(result,["conversation","pendingIntents","issuedMarkers"])||!integer(result.pendingIntents)||!integer(result.issuedMarkers))bad();
+        const context=result.conversation;
+        if(!exact(context,["id","surface","siteId","siteIdByteBudget"])||!publicId(context.id)||typeof context.surface!=="string"||!context.surface.length||!(context.siteId===null||typeof context.siteId==="string")||!integer(context.siteIdByteBudget)||context.siteIdByteBudget<1)bad();
+      }
+      if(["restoreReportInConversation","restoreReport","restoreReportPlanText"].includes(command.call)&&!report(result))bad();
+      if(command.call==="restoreInConversation"&&typeof result!=="string")bad();
+      if(command.call==="counts"&&(!exact(result,["operations","preparedInputs","transformedSpans","confirmedHandoffs","reportedBlockedAttempts"])||!Object.values(result).every(integer)))bad();
+      if(command.call==="operations"&&(!Array.isArray(result)||result.some(row=>!exact(row,["id","kind","occurredAtMs","preparedInputs","transformedSpans"])||!publicId(row.id)||!["create","prepare","policy_change","recovery","conversation_prepare","send_confirmed","send_not_sent","copy_confirmed","user_cancelled","blocked_input","restore_blocked"].includes(row.kind)||!(row.occurredAtMs===null||integer(row.occurredAtMs))||!integer(row.preparedInputs)||!integer(row.transformedSpans))))bad();
+      if(command.call==="bufferedRestoreInConversation"||command.call==="progressiveRestoreInConversation") {if(result!==null)bad();modes.set(command.stream,command.call.startsWith("buffered")?"buffered":"progressive");}
+      if(command.call.startsWith("stream")) {
+        const mode=modes.get(command.stream);if(!mode)bad();
+        if(["streamReset","streamClose"].includes(command.call)||mode==="buffered"&&command.call!=="streamFinalize") {if(result!==null)bad();}
+        else if(mode==="buffered") {if(!report(result))bad();}
+        else if(!exact(result,["text","delivered","complete"])||typeof result.text!=="string"||!progress(result.delivered)||result.complete!==(command.call==="streamFinalize"))bad();
+      }
+    }
+  }
+  return normalized;
+}
+
 // Retained wheels from earlier releases are valid artifacts, not current inputs.
 // Require the exact repository pin rather than deleting them or guessing newest.
 export function selectWorkspaceWheel(names,projectToml) {
@@ -136,6 +214,8 @@ try {
   const fixtureBytes=await readFile(fixturePath),fixture=parsed(fixtureBytes.toString("utf8"));
   const streamingBytes=await readFile(streamingFixturePath),streamingFixture=parsed(streamingBytes.toString("utf8"));
   const operationBytes=await readFile(operationFixturePath),operationFixture=parsed(operationBytes.toString("utf8"));
+  const conversationBytes=await readFile(conversationFixturePath),conversationFixture=parsed(conversationBytes.toString("utf8"));
+  report.conversationFixtureSha256=sha(conversationBytes);
   report.operationFixtureSha256=sha(operationBytes);
   report.profile=fixture.profile;report.fixtureSha256=sha(fixtureBytes);report.streamingFixtureSha256=sha(streamingBytes);
   report.sourceCommit=command("git",["rev-parse","HEAD"]).trim();report.sourceDirty=command("git",["status","--porcelain"]).length>0;
@@ -143,6 +223,7 @@ try {
   await copyFile(fixturePath,path.join(output,"fixture.json"));
   await copyFile(streamingFixturePath,path.join(output,"streaming-fixture.json"));
   await copyFile(operationFixturePath,path.join(output,"operation-fixture.json"));
+  await copyFile(conversationFixturePath,path.join(output,"conversation-fixture.json"));
   temporary=await mkdtemp(path.join(os.tmpdir(),"datafog-workspace-parity-"));
   const packages=path.join(output,"packages");await mkdir(packages,{recursive:true});
   await writeFile(path.join(temporary,"package.json"),JSON.stringify({private:true,type:"module"}));
@@ -162,22 +243,28 @@ try {
   command(python,["-m","pip","install","--no-deps","--disable-pip-version-check",wheel]);
   report.runtime.python=command(python,["--version"]).trim();
   if(command(python,["-c","from importlib.metadata import version; print(version('datafog-core'))"]).trim()!==selected.version) throw new Error("workspace parity installed Python package version differs from its pin");
-  const results={},streaming={},operations={};
+  const results={},streaming={},operations={},conversations={};
+  async function conversationResult(sdk,raw){await writeFile(path.join(output,`${sdk}-conversations.raw.json`),JSON.stringify(raw,null,2));if(["node","wasm"].includes(sdk)){report.javaScriptHeadMutationProof??={};report.javaScriptHeadMutationProof[sdk]=verifyActualJavaScriptHeadRejection(raw);}return validateConversationOutput(raw,conversationFixture);}
   results.rust=validateWorkspaceOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",fixturePath])),fixture);
   streaming.rust=validateStreamingOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_streaming_contract","--",streamingFixturePath])),streamingFixture);
   operations.rust=validateOperationOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",operationFixturePath])),operationFixture);
+  conversations.rust=await conversationResult("rust",parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",conversationFixturePath])));
   results.python=validateWorkspaceOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-python.py"),fixturePath])),fixture);
   streaming.python=validateStreamingOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-streaming-python.py"),streamingFixturePath])),streamingFixture);
   operations.python=validateOperationOutput(parsed(command(python,[path.join(root,"scripts/workspace-parity-python.py"),operationFixturePath])),operationFixture);
+  conversations.python=await conversationResult("python",parsed(command(python,[path.join(root,"scripts/workspace-parity-python.py"),conversationFixturePath])));
   await copyFile(path.join(root,"scripts/workspace-parity-runner.mjs"),path.join(temporary,"runner.mjs"));
   await copyFile(path.join(root,"scripts/workspace-streaming-conformance.mjs"),path.join(temporary,"streaming-runner.mjs"));
   await copyFile(streamingFixturePath,path.join(temporary,"streaming-fixture.json"));
   await copyFile(fixturePath,path.join(temporary,"fixture.json"));
   await copyFile(operationFixturePath,path.join(temporary,"operation-fixture.json"));
+  await copyFile(conversationFixturePath,path.join(temporary,"conversation-fixture.json"));
   await writeFile(path.join(temporary,"node.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceContract} from "./runner.mjs";process.stdout.write(JSON.stringify(runWorkspaceContract(api,JSON.parse(fs.readFileSync("fixture.json","utf8")))));');
   results.node=validateWorkspaceOutput(parsed(command(process.execPath,["node.mjs"],temporary)),fixture);
   await writeFile(path.join(temporary,"node-operations.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceContract} from "./runner.mjs";process.stdout.write(JSON.stringify(runWorkspaceContract(api,JSON.parse(fs.readFileSync("operation-fixture.json","utf8")))));');
   operations.node=validateOperationOutput(parsed(command(process.execPath,["node-operations.mjs"],temporary)),operationFixture);
+  await writeFile(path.join(temporary,"node-conversations.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceContract} from "./runner.mjs";process.stdout.write(JSON.stringify(runWorkspaceContract(api,JSON.parse(fs.readFileSync("conversation-fixture.json","utf8")))));');
+  conversations.node=await conversationResult("node",parsed(command(process.execPath,["node-conversations.mjs"],temporary)));
   await writeFile(path.join(temporary,"node-streaming.mjs"),'import fs from "node:fs";import * as api from "@datafog/node";import {runWorkspaceStreamingContract} from "./streaming-runner.mjs";process.stdout.write(JSON.stringify(await runWorkspaceStreamingContract(api,JSON.parse(fs.readFileSync("streaming-fixture.json","utf8")))));');
   streaming.node=validateStreamingOutput(parsed(command(process.execPath,["node-streaming.mjs"],temporary)),streamingFixture);
   await writeFile(path.join(temporary,"index.html"),"<!doctype html><title>Workspace SDK parity</title>");
@@ -206,22 +293,26 @@ try {
   const wasmOperations=await page.evaluate(async()=>{const api=await import("/node_modules/@datafog/wasm/index.js");const {runWorkspaceContract}=await import("/runner.mjs");return runWorkspaceContract(api,await fetch("/operation-fixture.json").then(response=>response.json()));});
   if(browserErrors || externalRequests)throw new Error("workspace operation parity browser runtime failed");
   operations.wasm=validateOperationOutput(wasmOperations,operationFixture);
+  const wasmConversations=await page.evaluate(async()=>{const api=await import("/node_modules/@datafog/wasm/index.js");const {runWorkspaceContract}=await import("/runner.mjs");return runWorkspaceContract(api,await fetch("/conversation-fixture.json").then(response=>response.json()));});
+  if(browserErrors || externalRequests)throw new Error("workspace conversation parity browser runtime failed");
+  conversations.wasm=await conversationResult("wasm",wasmConversations);
   for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}.json`),JSON.stringify(results[sdk],null,2));if(!isDeepStrictEqual(results.rust,results[sdk]))report.errors.push({sdk,category:"workspace contract mismatch"});}
   for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}-streaming.json`),JSON.stringify(streaming[sdk],null,2));if(!isDeepStrictEqual(streaming.rust,streaming[sdk]))report.errors.push({sdk,category:"workspace streaming contract mismatch"});}
   for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}-operations.json`),JSON.stringify(operations[sdk],null,2));if(!isDeepStrictEqual(operations.rust,operations[sdk]))report.errors.push({sdk,category:"workspace operation contract mismatch"});}
-  report.profiles={operations:{profile:operationFixture.profile,cases:operationFixture.cases.length,steps:operationFixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},foundation:{profile:fixture.profile,cases:fixture.cases.length,steps:fixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},streaming:{profile:streamingFixture.profile,cases:streamingFixture.cases.length,modes:["buffered","progressive"],steps:2*streamingFixture.cases.reduce((sum,item)=>sum+item.steps.length,0)}};
+  for(const sdk of sdkNames){await writeFile(path.join(output,`${sdk}-conversations.json`),JSON.stringify(conversations[sdk],null,2));if(!isDeepStrictEqual(conversations.rust,conversations[sdk]))report.errors.push({sdk,category:"workspace conversation contract mismatch"});}
+  report.profiles={conversations:{profile:conversationFixture.profile,cases:conversationFixture.cases.length,steps:conversationFixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},operations:{profile:operationFixture.profile,cases:operationFixture.cases.length,steps:operationFixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},foundation:{profile:fixture.profile,cases:fixture.cases.length,steps:fixture.cases.reduce((sum,item)=>sum+item.commands.length,0)},streaming:{profile:streamingFixture.profile,cases:streamingFixture.cases.length,modes:["buffered","progressive"],steps:2*streamingFixture.cases.reduce((sum,item)=>sum+item.steps.length,0)}};
   for(const profile of Object.values(report.profiles))profile.sdks=[...sdkNames];
   const {runNativeServerProfile}=await import("./native-server-parity.mjs");
   report.profiles.nativeServer=await runNativeServerProfile({root,temporary,python,output,command,validateWorkspaceOutput,planMemoryDiagnostic:arguments_.includes("--plan-memory-diagnostic")});
-  report.countsScope="cases/steps cover four-SDK profiles only; nativeServer counts apply separately to Python/Node hosts";
-  report.cases=report.profiles.foundation.cases+report.profiles.streaming.cases+report.profiles.operations.cases;report.steps=report.profiles.foundation.steps+report.profiles.streaming.steps+report.profiles.operations.steps;report.pass=report.errors.length===0;
+  report.countsScope="cases/steps cover four-SDK foundation/streaming/operations/conversations only; nativeServer CAS, conversationHost and planPressure observations apply separately to Python/Node encrypted hosts";
+  report.cases=report.profiles.foundation.cases+report.profiles.streaming.cases+report.profiles.operations.cases+report.profiles.conversations.cases;report.steps=report.profiles.foundation.steps+report.profiles.streaming.steps+report.profiles.operations.steps+report.profiles.conversations.steps;report.pass=report.errors.length===0;
 } catch {
   report.errors.push({category:"workspace parity failed before complete four-SDK comparison"});
 } finally {
   await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));if(temporary)await rm(temporary,{recursive:true,force:true});
   await mkdir(output,{recursive:true});await writeFile(path.join(output,"workspace-parity.json"),JSON.stringify(report,null,2));
 }
-if(!report.pass){console.error("Workspace SDK parity failed; see the retained content-safe report.");process.exitCode=1;}else{console.log(`Four-SDK workspace parity passed: ${report.cases} cases, ${report.steps} steps. Native server profile passed separately: ${report.profiles.nativeServer.cases} cases, ${report.profiles.nativeServer.steps} checkpoints, Python/Node encrypted hosts only.`);}
+if(!report.pass){console.error("Workspace SDK parity failed; see the retained content-safe report.");process.exitCode=1;}else{console.log(`Four-SDK workspace parity passed: ${report.cases} cases, ${report.steps} steps. Native server profile passed separately: ${report.profiles.nativeServer.cases} cases, ${report.profiles.nativeServer.steps} checkpoints; conversation host: ${report.profiles.nativeServer.conversationHost.cases} cases, ${report.profiles.nativeServer.conversationHost.steps} checkpoints. Native host counts apply to Python/Node only.`);}
 
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)await main();

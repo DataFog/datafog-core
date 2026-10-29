@@ -11,8 +11,12 @@ fn issue(issue: &w::MarkerIssue) -> Value {
 fn progress(value: w::RestoreProgress) -> Value {
     json!({"bytes":value.bytes,"codepoints":value.codepoints,"utf16":value.utf16,"restoredMarkers":value.restored_markers})
 }
-fn error(error: &w::WorkspaceError, delivered: Option<w::RestoreProgress>) -> Value {
-    json!({"code":error.code.as_str(),"findingIndex":error.finding_index,"inputIndex":error.input_index,"markerIssues":error.marker_issues.iter().map(issue).collect::<Vec<_>>(),"reviewConflicts":error.review_conflicts,"delivered":delivered.map(progress),"complete":delivered.map(|_|false)})
+fn error(
+    error: &w::WorkspaceError,
+    delivered: Option<w::RestoreProgress>,
+    complete: Option<bool>,
+) -> Value {
+    json!({"code":error.code.as_str(),"findingIndex":error.finding_index,"inputIndex":error.input_index,"markerIssues":error.marker_issues.iter().map(issue).collect::<Vec<_>>(),"reviewConflicts":error.review_conflicts,"delivered":delivered.map(progress),"complete":complete})
 }
 fn chunk(chunk: w::RestoreChunk) -> Value {
     json!({"text":chunk.text,"delivered":progress(chunk.delivered),"complete":chunk.complete})
@@ -65,7 +69,7 @@ enum Stream {
 impl Stream {
     fn call(&mut self, step: &Value, marker: &str) -> Run<Value> {
         let op = field(step, "op")?;
-        let (result, delivered) = match self {
+        let (result, delivered, complete) = match self {
             Self::Buffered(stream) => {
                 let result = match op {
                     "feed" => stream.feed(&bytes(step, marker)?).map(|()| Value::Null),
@@ -83,7 +87,7 @@ impl Stream {
                     }
                     _ => return Err(()),
                 };
-                (result, None)
+                (result, None, None)
             }
             Self::Progressive(stream) => {
                 let result = match op {
@@ -103,14 +107,18 @@ impl Stream {
                     _ => return Err(()),
                 };
                 match result {
-                    Ok(value) => (Ok(value), None),
-                    Err(failure) => (Err(*failure.error), Some(failure.delivered)),
+                    Ok(value) => (Ok(value), None, None),
+                    Err(failure) => (
+                        Err(*failure.error),
+                        Some(failure.delivered),
+                        Some(failure.complete),
+                    ),
                 }
             }
         };
         Ok(match result {
             Ok(value) => json!({"op":op,"ok":true,"value":value}),
-            Err(failure) => json!({"op":op,"ok":false,"error":error(&failure,delivered)}),
+            Err(failure) => json!({"op":op,"ok":false,"error":error(&failure,delivered,complete)}),
         })
     }
     fn close(&mut self) {
@@ -203,6 +211,40 @@ fn main() {
         Err(()) => {
             eprintln!("Rust streaming parity reference failed");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_error_keeps_public_completion_flag() {
+        for complete in [false, true] {
+            let failure = w::StreamFailure {
+                error: Box::new(w::WorkspaceError {
+                    code: w::ErrorCode::InvalidMarker,
+                    finding_index: None,
+                    input_index: None,
+                    marker_issues: vec![],
+                    review_conflicts: vec![],
+                }),
+                delivered: w::RestoreProgress {
+                    bytes: 3,
+                    codepoints: 3,
+                    utf16: 3,
+                    restored_markers: 1,
+                },
+                complete,
+            };
+            let value = error(
+                &failure.error,
+                Some(failure.delivered),
+                Some(failure.complete),
+            );
+            assert_eq!(value["complete"], failure.complete);
+            assert_eq!(value["delivered"]["restoredMarkers"], 1);
         }
     }
 }
