@@ -1,8 +1,7 @@
 # First-chat identity — later decision packet
 
-For [#148](https://github.com/DataFog/datafog-core/issues/148). **Not approved or
-implemented. Do not ask this question while the ordinary confirmation-capacity
-decision is still pending.** Confirmed-send and whole-conversation pending pause
+For [#148](https://github.com/DataFog/datafog-core/issues/148). **Approved October 29: private immutable logical identity, then one-time
+matching site-ID binding. Not implemented.** Confirmed-send and whole-conversation pending pause
 are already approved; this packet does not reopen either decision.
 
 ## The integration gap and inspected evidence
@@ -32,7 +31,7 @@ acquisition and a trusted matching send observation need a separate real host
 implementation/qualification; neither can be inferred from a changed URL, an
 empty composer, a click, a model reply field or a tab ID alone.
 
-## Recommended option: immutable logical context, one-time site binding
+## Approved: immutable logical context, one-time site binding
 
 Use a workspace-local host-generated logical context as the immutable identity of
 the intent. A new conversation starts with an unbound site ID. After a trusted
@@ -77,7 +76,7 @@ integration are a distinct identity source, not proof of a browser site's ID.
 This would change the proposed key9 context tuple to a logical ID plus surface and
 nullable exact site ID, and add strict binding cross-checks. The
 [current wire packet](conversation-wire-api.md) still describes the earlier
-exact-site-ID pair and must be revised **only after approval**. There is no shipped
+exact-site-ID pair and will be revised in the reviewed implementation plan. There is no shipped
 conversation format to migrate, but final #162/#148 version coordination remains
 mandatory. No competing v3 layout may be published under the same version.
 
@@ -98,9 +97,9 @@ trustworthy association, the first chat can remain paused/unknown after a crash.
 That is the existing fail-closed uncertainty guarantee, not invented remote proof.
 Recovery/backup preserves both unbound and bound identity state without binding,
 resolving or resending anything. First-save confirmation capacity remains the
-separate pending decision; a logical ID does not solve row/byte/revision limits.
+separately approved reservation contract; a logical ID does not itself solve row/byte/revision limits.
 
-## Bounded alternative: scoped first sends unsupported
+## Alternative considered: scoped first sends unsupported
 
 Keep the exact-site-ID-before-save contract and support scoped sending only where
 the trusted host already has an established conversation ID. A new-chat first
@@ -109,8 +108,8 @@ and do not silently use a different restore mode, guess an ID or manufacture an
 empty/manual/copied send to obtain one. This is smaller Core/host work but excludes
 the normal first-message workflow until a later reviewed design.
 
-Recommendation for later human review: approve the immutable logical-context and
-one-time binding design, conditional on actual extension evidence for acquiring a
+Sid approved the immutable logical-context and one-time binding design,
+conditional on actual extension evidence for acquiring a
 matching accepted-send/site-ID association. If that evidence cannot be established,
 ship the explicit unsupported-first-send boundary rather than claiming support.
 No new human question, wrapper API, binding mutation or provider call is introduced

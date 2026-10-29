@@ -3,7 +3,7 @@
 Technical proposal for [#148](https://github.com/DataFog/datafog-core/issues/148),
 stacked on committed operations `d5584e9`. The [send/pause decision](workspace-conversation-context.md)
 is approved. [Ordinary confirmation reservation](conversation-confirmation-capacity.md)
-is still awaiting a separate decision. No reservation ledger, send admission,
+was approved October 29. No reservation ledger, send admission,
 conversation SDK export or passing conversation conformance is implemented here.
 
 ## One coordinated unreleased wire
@@ -94,7 +94,7 @@ multiply maximum contexts by maximum aliases to preallocate a Cartesian product.
 Shorter practical host limits can be documented by that host; Core must not silently
 introduce them as a universal conversation policy. The final implementation still
 needs measured heap/CPU evidence before these structural bounds are called qualified.
-If reservation is approved, derive any stronger outstanding-intent/index budget
+Use the approved reservation accounting to derive any stronger outstanding-intent/index budget
 from its funded ordinary resources rather than adding an arbitrary quota. A wire
 cap is not proof of bounded practical heap usage or acceptable processing time.
 
@@ -110,7 +110,7 @@ key9 identities, pending intents, terminal events and memberships byte-for-byte;
 it never resolves uncertainty. Consequently unchanged key9 contributes zero
 recovery growth. The 7,699-byte recovery reserve still requires joint final-encoder
 boundary tests. Confirmation-byte credits and recovery interleaving are in the
-separate pending decision; nothing here promises capacity for the second save.
+approved capacity contract; nothing here promises capacity for the second save.
 
 ## Proposed thin SDK surface
 

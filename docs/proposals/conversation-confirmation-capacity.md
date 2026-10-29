@@ -2,7 +2,7 @@
 
 Review proposal for [#148](https://github.com/DataFog/datafog-core/issues/148),
 coordinated with [#147/#162](https://github.com/DataFog/datafog-core/pull/162).
-**Unapproved; no capacity reservation is implemented here.** The confirmed-send
+**Approved October 29: reserve ordinary confirmation space before sending. No capacity reservation is implemented yet.** The confirmed-send
 sequence and conversation-wide pending pause are already approved. Do not ask for
 those decisions again.
 
@@ -18,7 +18,7 @@ capacity. The durable intent correctly remains pending, so scoped restoration is
 paused; without a separate capacity design, that pause can be permanent. A similar
 gap occurs when the first save consumes the available encoded-byte budget.
 
-## Recommendation: reserve ordinary resolution capacity before sending
+## Approved: reserve ordinary resolution capacity before sending
 
 Before accepting the first saved intent, allocate one **ordinary** resolution-row
 credit per intended send member, plus encoder-derived worst-case bytes to resolve
@@ -33,7 +33,7 @@ fund the intent and its eventual resolution, reject before external handoff.
 This protects against resource exhaustion, not storage failure, uncertain
 acknowledgments or missing trusted observations; those still pause scoped restore.
 
-The alternative is **no reservation guarantee**: retain today's hard admission
+The rejected alternative was **no reservation guarantee**: retain today's hard admission
 rules and clearly tell the host that a successful send can become permanently
 unconfirmable at the lifetime limit. Compatibility reads/export remain available,
 but no silent unscoped fallback or manual success assertion may remove the pause.
@@ -51,9 +51,9 @@ recovery can append while an intent is pending. The existing physical row-count
 threshold alone cannot express an ordinary credit funded before those recoveries.
 A candidate logical-credit interpretation would preserve `T + P <= 100,000`, keep
 unfunded ordinary activity below its existing ceiling, and protect all remaining
-recovery capacity. It is **not an approved exception** to the current code.
+recovery capacity. The direction is approved; the precise ledger and decoder must be implemented and verified before changing the current code.
 
-| Proposed boundary | Expected behavior if reservations are approved |
+| Proposed boundary | Approved behavior to implement |
 | --- | --- |
 | `T=99,743`, no credits; one new send needs preparation + resolution | Reject the first save; no external send. |
 | `T=99,742`, no credits; one new send | Save preparation at `T=99,743, P=1`; unrelated ordinary work cannot consume its credit. |
@@ -73,7 +73,7 @@ legacy snapshot can have revision `u64::MAX - 1` despite few retained rows. Its
 first state-changing save consumes the last revision; the second save must fail,
 never wrap. Existing read/export/no-op/discard bytes remain unchanged at that head.
 
-If reservations are approved, include checked available revision increments in
+Implement the approved reservations with checked available revision increments in
 the same proof. Let `A = u64::MAX - currentRevision`, `M` be actual increments for
 the candidate, and `P` be still-funded later resolution increments. Every saved
 mutation, including recovery, must preserve `A >= M + P` using checked arithmetic;
@@ -84,7 +84,7 @@ the 256 row slots alone do not create 256 available revision increments in an
 already exhausted imported vault. Do not promise that they do.
 
 The technical admission design must handle recovery/resolution interleavings and
-state what future increments it preserves. No unapproved ledger or head-budget
+state what future increments it preserves. No ledger or head-budget
 exception is implemented here. Required boundary cases include imported heads at
 `MAX`, `MAX-1` and the exact admitted two-save boundary, pending resolutions across
 recovery, unchanged no-op reads, and failure before external send where the funded

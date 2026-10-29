@@ -49,9 +49,10 @@ an atomic transaction across a vault database and an external chat site.
 
 ## Conversation identity and private metadata
 
-Propose a workspace-local pair of a host-defined surface identifier and the site's
-opaque conversation ID. Compare both exactly; do not lowercase, trim, fuzzy-match
-or derive identity from model text. The host supplies these through its trusted
+The approved identity is a private immutable workspace-local logical ID plus
+a host-defined surface and initially nullable site ID. A matching observed-send
+confirmation binds the site ID once. Compare known surface/site strings exactly;
+do not lowercase, trim, fuzzy-match or derive identity from model text. The host supplies these through its trusted
 request/tab registry, not provider-generated fields, arbitrary URLs or chat text.
 
 The conversation record should retain its creating confirmation operation and the
@@ -167,7 +168,8 @@ a provider field or model-generated identifier cannot establish that association
 Do not implement that alternative implicitly.
 
 This settles the pause scope as well as the earlier confirmed-send sequence.
-Confirmation-capacity reservation remains a separate unapproved choice; the wire,
+Confirmation-capacity reservation and immutable logical identity with one-time
+site binding were also approved October 29; the wire,
 resource and API details still need review before runtime implementation. The
 code/fixture names below are proposals, not frozen SDK exports.
 
@@ -209,11 +211,11 @@ boundary measurement must verify the final schema rather than assume it.
 
 The appendix must bound identity bytes, conversation count, pending intents and
 membership/reference counts, and count the complete candidate against the 16 MiB
-limit without eviction. Pending confirmation capacity also needs review: a first
-save near the ordinary-record or byte ceiling must not promise a guaranteed second
-save or consume the 256 recovery-only slots silently. An exhausted confirmation
-write leaves the intent pending and scoped restore paused; read/export and explicit
-compatibility behavior remain available under their existing contracts.
+limit without eviction. Approved pre-send reservation must fund confirmation rows, encoder-derived bytes
+and checked revision increments while preserving all 256 recovery-only allowances.
+Reject before the first handoff if both saves cannot fit; storage failure or missing
+trusted observation can still leave an intent pending and scoped restore paused.
+Read/export and explicit compatibility behavior retain their existing contracts.
 
 The first executable contract data is
 [the existing-conversation crash fixture](../../fixtures/workspace/conversation-contract-draft.json).
@@ -221,14 +223,14 @@ It specifies expected future behavior only. Current SDKs do not execute these
 commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualification
 before claiming acceptance or freezing the API.
 
-The separate [ordinary confirmation-capacity decision packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and the proposed reservation alternative. It is not approved or implemented.
+The [approved ordinary confirmation-capacity packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and required pre-send reservations. Implementation and verification are still pending.
 
 The [technical wire/API packet](conversation-wire-api.md) proposes the coordinated
 key9 shape, derived resource bounds, native SDK matrix and encoder-only experiment.
-It does not implement conversation runtime or the pending capacity choice.
+It does not implement conversation runtime or the approved capacity contract.
 
 The later [first-chat identity packet](conversation-first-chat-identity.md) records
 the inspected extension's missing send/site-ID correlation and compares immutable
 logical contexts with one-time binding against an explicit unsupported-first-send
-boundary. Neither option is approved; keep this later question behind the pending
-ordinary confirmation-capacity question.
+boundary. Sid approved the logical-identity/one-time-binding direction October 29; actual
+host observation/identity qualification and the reviewed implementation remain necessary.
