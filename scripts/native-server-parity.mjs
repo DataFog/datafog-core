@@ -94,6 +94,9 @@ export async function runNativeServerProfile({root,temporary,python,output,comma
  if(!suite || fixture.requiredExistingNodeChecks.some(name=>suite[name]!==true) || Object.values(suite).some(value=>value!==true&&!Number.isSafeInteger(value)) || suite.stateChangingRaceWinners!==1 || suite.stateChangingRaceLosers!==1 || suite.noOpReleases!==2)bad();
  const {runNativePlanPressure}=await import("./native-plan-pressure.mjs");
  const planPressure=await runNativePlanPressure({root,temporary,python,output,command,planMemoryDiagnostic});
+ const existingSuites={python:{tests:pythonSuite.tests,passed:true},node:{checks:Object.keys(suite).length,passed:true}};
+ const {runNativeConversationHostProfile}=await import("./native-conversation-host-profile.mjs");
+ const conversationHost=await runNativeConversationHostProfile({root,temporary,python,output,command,validateWorkspaceOutput,existingSuites});
  const requirements=await readFile(path.join(root,"examples/native-python-host/requirements.txt"));
- return {profile:fixture.profile,sdks:["python","node"],oracleSdk:"rust",cases:fixture.cases.length,steps:fixture.cases.reduce((sum,value)=>sum+value.steps.length,0),fixtureSha256:sha(fixtureBytes),requirementsSha256:sha(requirements),planPressure,existingSuites:{python:{tests:pythonSuite.tests,passed:true},node:{checks:Object.keys(suite).length,passed:true}},scope:"actual existing Python/Node encrypted SQLite hosts only; not four SQL hosts, provider/KMS/admission policy or conversation confirmation"};
+ return {profile:fixture.profile,sdks:["python","node"],oracleSdk:"rust",cases:fixture.cases.length,steps:fixture.cases.reduce((sum,value)=>sum+value.steps.length,0),fixtureSha256:sha(fixtureBytes),requirementsSha256:sha(requirements),planPressure,conversationHost,existingSuites,scope:"actual existing Python/Node encrypted SQLite hosts only; not four SQL hosts, provider/KMS/admission policy or real provider confirmation; controlled C2 qualification is counted in conversationHost"};
 }

@@ -1,0 +1,1147 @@
+{
+  "schemaVersion": 1,
+  "profile": "native-conversation-host-v1",
+  "sdks": [
+    "python",
+    "node"
+  ],
+  "scope": "Actual existing native Python/Node encrypted SQLite stores plus controlled synthetic transport/site verification; no actual provider, shipping extension identity acquisition, production host API/security or aggregate admission claim. Separate from four-SDK cases.",
+  "namespaceByte": 1,
+  "bootstrapOperationByte": 2,
+  "surface": "synthetic_chat",
+  "siteA": "thread_a",
+  "siteB": "thread_b",
+  "contextA": {
+    "id": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+    ],
+    "surface": "synthetic_chat",
+    "siteId": null,
+    "siteIdByteBudget": 128
+  },
+  "contextB": {
+    "id": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+    ],
+    "surface": "synthetic_chat",
+    "siteId": null,
+    "siteIdByteBudget": 128
+  },
+  "inputs": {
+    "a": {
+      "input": {
+        "text": "👋 Synthetic Alpha",
+        "scannerFindings": [],
+        "userSelections": [
+          {
+            "entityType": "PERSON",
+            "matchedText": "👋 Synthetic Alpha",
+            "range": {
+              "unit": "utf8_bytes",
+              "start": 0,
+              "end": 20
+            },
+            "source": "user",
+            "needsReview": true
+          }
+        ],
+        "corrections": []
+      },
+      "conversation": {
+        "id": [
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10
+        ],
+        "surface": "synthetic_chat",
+        "siteId": null,
+        "siteIdByteBudget": 128
+      }
+    },
+    "b": {
+      "input": {
+        "text": "👋 Synthetic Beta",
+        "scannerFindings": [],
+        "userSelections": [
+          {
+            "entityType": "PERSON",
+            "matchedText": "👋 Synthetic Beta",
+            "range": {
+              "unit": "utf8_bytes",
+              "start": 0,
+              "end": 19
+            },
+            "source": "user",
+            "needsReview": true
+          }
+        ],
+        "corrections": []
+      },
+      "conversation": {
+        "id": [
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10
+        ],
+        "surface": "synthetic_chat",
+        "siteId": null,
+        "siteIdByteBudget": 128
+      }
+    },
+    "other": {
+      "input": {
+        "text": "👋 Synthetic Beta",
+        "scannerFindings": [],
+        "userSelections": [
+          {
+            "entityType": "PERSON",
+            "matchedText": "👋 Synthetic Beta",
+            "range": {
+              "unit": "utf8_bytes",
+              "start": 0,
+              "end": 19
+            },
+            "source": "user",
+            "needsReview": true
+          }
+        ],
+        "corrections": []
+      },
+      "conversation": {
+        "id": [
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11,
+          11
+        ],
+        "surface": "synthetic_chat",
+        "siteId": null,
+        "siteIdByteBudget": 128
+      }
+    },
+    "followup": {
+      "input": {
+        "text": "👋 Synthetic Alpha / 👋 Synthetic Beta",
+        "scannerFindings": [],
+        "userSelections": [
+          {
+            "entityType": "PERSON",
+            "matchedText": "👋 Synthetic Alpha",
+            "range": {
+              "unit": "utf8_bytes",
+              "start": 0,
+              "end": 20
+            },
+            "source": "user",
+            "needsReview": true
+          },
+          {
+            "entityType": "PERSON",
+            "matchedText": "👋 Synthetic Beta",
+            "range": {
+              "unit": "utf8_bytes",
+              "start": 23,
+              "end": 42
+            },
+            "source": "user",
+            "needsReview": true
+          }
+        ],
+        "corrections": []
+      },
+      "conversation": {
+        "id": [
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10
+        ],
+        "surface": "synthetic_chat",
+        "siteId": "thread_a",
+        "siteIdByteBudget": 128
+      }
+    }
+  },
+  "hostScopes": {
+    "node": {
+      "tenantId": "synthetic_tenant",
+      "workspaceId": "synthetic_workspace"
+    },
+    "python": {
+      "tenant": [
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11,
+        11
+      ],
+      "workspace": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "key_id": [
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12
+      ]
+    }
+  },
+  "hostErrors": {
+    "conflict": {
+      "python": [
+        "workspace_conflict"
+      ],
+      "node": [
+        "workspace_conflict",
+        "storage_busy"
+      ]
+    },
+    "rollback": {
+      "python": [
+        "storage_failure"
+      ],
+      "node": [
+        "storage_failure"
+      ]
+    },
+    "lostAck": {
+      "python": [
+        "save_uncertain"
+      ],
+      "node": [
+        "save_ack_unknown"
+      ]
+    },
+    "otherTenant": {
+      "python": [
+        "state_unavailable"
+      ],
+      "node": [
+        "workspace_unavailable"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "observed-success",
+      "steps": [
+        "pending-saved",
+        "transport-observed",
+        "confirmation-saved",
+        "reopen-confirmed"
+      ]
+    },
+    {
+      "id": "pending-save-rollback",
+      "steps": [
+        "save-failed",
+        "no-dispatch",
+        "reopen-original"
+      ]
+    },
+    {
+      "id": "callback-mismatch",
+      "steps": [
+        "pending-saved",
+        "callbacks-received",
+        "no-confirmation",
+        "reopen-pending"
+      ]
+    },
+    {
+      "id": "definitely-not-sent",
+      "steps": [
+        "pending-saved",
+        "transport-not-sent",
+        "resolution-saved",
+        "reopen-not-sent"
+      ]
+    },
+    {
+      "id": "uncertain-transport",
+      "steps": [
+        "pending-saved",
+        "transport-uncertain",
+        "reopen-pending"
+      ]
+    },
+    {
+      "id": "confirmation-save-rollback",
+      "steps": [
+        "pending-saved",
+        "transport-observed",
+        "confirmation-failed",
+        "reopen-pending",
+        "retry-metadata-only",
+        "reopen-confirmed"
+      ]
+    },
+    {
+      "id": "confirmation-lost-ack",
+      "steps": [
+        "pending-saved",
+        "transport-observed",
+        "confirmation-uncertain",
+        "reopen-confirmed",
+        "replay-rejected"
+      ]
+    },
+    {
+      "id": "existing-chat-pause",
+      "steps": [
+        "two-confirmed",
+        "followup-saved",
+        "reopen-paused",
+        "recovery-saved",
+        "still-paused",
+        "not-sent-saved",
+        "reopen-resumed"
+      ]
+    },
+    {
+      "id": "full-parent-conflict",
+      "steps": [
+        "pending-saved",
+        "transport-observed",
+        "wrong-revision",
+        "wrong-commit-id",
+        "unchanged-pending"
+      ]
+    },
+    {
+      "id": "process-pending-race",
+      "steps": [
+        "two-processes-ready",
+        "race",
+        "reopen-exact-winner"
+      ]
+    },
+    {
+      "id": "process-confirmation-race",
+      "steps": [
+        "pending-saved",
+        "transport-observed",
+        "two-processes-ready",
+        "race",
+        "reopen-exact-winner"
+      ]
+    },
+    {
+      "id": "crash-pending-before",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-original"
+      ]
+    },
+    {
+      "id": "crash-pending-after",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-pending"
+      ]
+    },
+    {
+      "id": "crash-confirmation-before",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-pending"
+      ]
+    },
+    {
+      "id": "crash-confirmation-after",
+      "steps": [
+        "child-at-boundary",
+        "killed",
+        "reopen-confirmed"
+      ]
+    },
+    {
+      "id": "context-and-tenant-isolation",
+      "steps": [
+        "pending-saved",
+        "foreign-callbacks",
+        "foreign-store-unchanged",
+        "scoped-unknown",
+        "unchanged-pending"
+      ]
+    }
+  ],
+  "oracle": {
+    "schemaVersion": 1,
+    "profile": "workspace-conversations-v1",
+    "requiredMethods": [
+      "createWithOperation",
+      "openBundle",
+      "prepareConversationSend",
+      "prepareObservedSend",
+      "prepareDefinitelyNotSent",
+      "prepareRecoveryWithOperation",
+      "plan.sendIntents",
+      "plan.heads",
+      "plan.previews",
+      "plan.snapshotFormat",
+      "plan.policyPreview",
+      "plan.exportCandidateBundle",
+      "activateSaved",
+      "exportBundle",
+      "counts",
+      "operations",
+      "historyCoverage"
+    ],
+    "cases": [
+      {
+        "id": "native-conversation-host-oracle",
+        "commands": [
+          {
+            "call": "createWithOperation",
+            "workspace": "seed",
+            "namespaceByte": 1,
+            "operationByte": 2,
+            "occurredAtMs": 0
+          },
+          {
+            "call": "counts",
+            "workspace": "seed"
+          },
+          {
+            "call": "operations",
+            "workspace": "seed"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "seed"
+          },
+          {
+            "call": "export",
+            "workspace": "seed",
+            "bundle": "seed"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "pendingA",
+            "bundle": "seed"
+          },
+          {
+            "call": "prepareConversationSend",
+            "workspace": "pendingA",
+            "plan": "sendA",
+            "operationByte": 3,
+            "occurredAtMs": 3,
+            "inputs": [
+              {
+                "input": {
+                  "text": "👋 Synthetic Alpha",
+                  "scannerFindings": [],
+                  "userSelections": [
+                    {
+                      "entityType": "PERSON",
+                      "matchedText": "👋 Synthetic Alpha",
+                      "range": {
+                        "unit": "utf8_bytes",
+                        "start": 0,
+                        "end": 20
+                      },
+                      "source": "user",
+                      "needsReview": true
+                    }
+                  ],
+                  "corrections": []
+                },
+                "conversation": {
+                  "id": [
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10
+                  ],
+                  "surface": "synthetic_chat",
+                  "siteId": null,
+                  "siteIdByteBudget": 128
+                }
+              }
+            ]
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "pendingA",
+            "plan": "sendA"
+          },
+          {
+            "call": "counts",
+            "workspace": "pendingA"
+          },
+          {
+            "call": "operations",
+            "workspace": "pendingA"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "pendingA"
+          },
+          {
+            "call": "export",
+            "workspace": "pendingA",
+            "bundle": "pendingA"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "confirmedA",
+            "bundle": "pendingA"
+          },
+          {
+            "call": "prepareObservedSend",
+            "workspace": "confirmedA",
+            "plan": "confirmA",
+            "operationByte": 4,
+            "occurredAtMs": 4,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            },
+            "surface": "synthetic_chat",
+            "siteId": "thread_a"
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "confirmedA",
+            "plan": "confirmA"
+          },
+          {
+            "call": "counts",
+            "workspace": "confirmedA"
+          },
+          {
+            "call": "operations",
+            "workspace": "confirmedA"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "confirmedA"
+          },
+          {
+            "call": "export",
+            "workspace": "confirmedA",
+            "bundle": "confirmedA"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "pendingB",
+            "bundle": "seed"
+          },
+          {
+            "call": "prepareConversationSend",
+            "workspace": "pendingB",
+            "plan": "sendB",
+            "operationByte": 5,
+            "occurredAtMs": 5,
+            "inputs": [
+              {
+                "input": {
+                  "text": "👋 Synthetic Beta",
+                  "scannerFindings": [],
+                  "userSelections": [
+                    {
+                      "entityType": "PERSON",
+                      "matchedText": "👋 Synthetic Beta",
+                      "range": {
+                        "unit": "utf8_bytes",
+                        "start": 0,
+                        "end": 19
+                      },
+                      "source": "user",
+                      "needsReview": true
+                    }
+                  ],
+                  "corrections": []
+                },
+                "conversation": {
+                  "id": [
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10
+                  ],
+                  "surface": "synthetic_chat",
+                  "siteId": null,
+                  "siteIdByteBudget": 128
+                }
+              }
+            ]
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "pendingB",
+            "plan": "sendB"
+          },
+          {
+            "call": "counts",
+            "workspace": "pendingB"
+          },
+          {
+            "call": "operations",
+            "workspace": "pendingB"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "pendingB"
+          },
+          {
+            "call": "export",
+            "workspace": "pendingB",
+            "bundle": "pendingB"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "confirmedB",
+            "bundle": "pendingB"
+          },
+          {
+            "call": "prepareObservedSend",
+            "workspace": "confirmedB",
+            "plan": "confirmB",
+            "operationByte": 6,
+            "occurredAtMs": 6,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "sendB",
+              "inputIndex": 0
+            },
+            "surface": "synthetic_chat",
+            "siteId": "thread_a"
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "confirmedB",
+            "plan": "confirmB"
+          },
+          {
+            "call": "counts",
+            "workspace": "confirmedB"
+          },
+          {
+            "call": "operations",
+            "workspace": "confirmedB"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "confirmedB"
+          },
+          {
+            "call": "export",
+            "workspace": "confirmedB",
+            "bundle": "confirmedB"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "notSentA",
+            "bundle": "pendingA"
+          },
+          {
+            "call": "prepareDefinitelyNotSent",
+            "workspace": "notSentA",
+            "plan": "notSentA",
+            "operationByte": 7,
+            "occurredAtMs": 7,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            }
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "notSentA",
+            "plan": "notSentA"
+          },
+          {
+            "call": "counts",
+            "workspace": "notSentA"
+          },
+          {
+            "call": "operations",
+            "workspace": "notSentA"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "notSentA"
+          },
+          {
+            "call": "export",
+            "workspace": "notSentA",
+            "bundle": "notSentA"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "alternateConfirmation",
+            "bundle": "pendingA"
+          },
+          {
+            "call": "prepareObservedSend",
+            "workspace": "alternateConfirmation",
+            "plan": "alternateConfirmation",
+            "operationByte": 8,
+            "occurredAtMs": 8,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "sendA",
+              "inputIndex": 0
+            },
+            "surface": "synthetic_chat",
+            "siteId": "thread_a"
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "alternateConfirmation",
+            "plan": "alternateConfirmation"
+          },
+          {
+            "call": "counts",
+            "workspace": "alternateConfirmation"
+          },
+          {
+            "call": "operations",
+            "workspace": "alternateConfirmation"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "alternateConfirmation"
+          },
+          {
+            "call": "export",
+            "workspace": "alternateConfirmation",
+            "bundle": "alternateConfirmation"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "otherPending",
+            "bundle": "confirmedA"
+          },
+          {
+            "call": "prepareConversationSend",
+            "workspace": "otherPending",
+            "plan": "otherSend",
+            "operationByte": 9,
+            "occurredAtMs": 9,
+            "inputs": [
+              {
+                "input": {
+                  "text": "👋 Synthetic Beta",
+                  "scannerFindings": [],
+                  "userSelections": [
+                    {
+                      "entityType": "PERSON",
+                      "matchedText": "👋 Synthetic Beta",
+                      "range": {
+                        "unit": "utf8_bytes",
+                        "start": 0,
+                        "end": 19
+                      },
+                      "source": "user",
+                      "needsReview": true
+                    }
+                  ],
+                  "corrections": []
+                },
+                "conversation": {
+                  "id": [
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11,
+                    11
+                  ],
+                  "surface": "synthetic_chat",
+                  "siteId": null,
+                  "siteIdByteBudget": 128
+                }
+              }
+            ]
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "otherPending",
+            "plan": "otherSend"
+          },
+          {
+            "call": "counts",
+            "workspace": "otherPending"
+          },
+          {
+            "call": "operations",
+            "workspace": "otherPending"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "otherPending"
+          },
+          {
+            "call": "export",
+            "workspace": "otherPending",
+            "bundle": "otherPending"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "twoConfirmed",
+            "bundle": "otherPending"
+          },
+          {
+            "call": "prepareObservedSend",
+            "workspace": "twoConfirmed",
+            "plan": "otherConfirmation",
+            "operationByte": 10,
+            "occurredAtMs": 10,
+            "logicalIdByte": 11,
+            "intentFrom": {
+              "plan": "otherSend",
+              "inputIndex": 0
+            },
+            "surface": "synthetic_chat",
+            "siteId": "thread_b"
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "twoConfirmed",
+            "plan": "otherConfirmation"
+          },
+          {
+            "call": "counts",
+            "workspace": "twoConfirmed"
+          },
+          {
+            "call": "operations",
+            "workspace": "twoConfirmed"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "twoConfirmed"
+          },
+          {
+            "call": "export",
+            "workspace": "twoConfirmed",
+            "bundle": "twoConfirmed"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "followup",
+            "bundle": "twoConfirmed"
+          },
+          {
+            "call": "prepareConversationSend",
+            "workspace": "followup",
+            "plan": "followup",
+            "operationByte": 11,
+            "occurredAtMs": 11,
+            "inputs": [
+              {
+                "input": {
+                  "text": "👋 Synthetic Alpha / 👋 Synthetic Beta",
+                  "scannerFindings": [],
+                  "userSelections": [
+                    {
+                      "entityType": "PERSON",
+                      "matchedText": "👋 Synthetic Alpha",
+                      "range": {
+                        "unit": "utf8_bytes",
+                        "start": 0,
+                        "end": 20
+                      },
+                      "source": "user",
+                      "needsReview": true
+                    },
+                    {
+                      "entityType": "PERSON",
+                      "matchedText": "👋 Synthetic Beta",
+                      "range": {
+                        "unit": "utf8_bytes",
+                        "start": 23,
+                        "end": 42
+                      },
+                      "source": "user",
+                      "needsReview": true
+                    }
+                  ],
+                  "corrections": []
+                },
+                "conversation": {
+                  "id": [
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10,
+                    10
+                  ],
+                  "surface": "synthetic_chat",
+                  "siteId": "thread_a",
+                  "siteIdByteBudget": 128
+                }
+              }
+            ]
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "followup",
+            "plan": "followup"
+          },
+          {
+            "call": "counts",
+            "workspace": "followup"
+          },
+          {
+            "call": "operations",
+            "workspace": "followup"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "followup"
+          },
+          {
+            "call": "export",
+            "workspace": "followup",
+            "bundle": "followup"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "recoveredFollowup",
+            "bundle": "followup"
+          },
+          {
+            "call": "prepareRecoveryWithOperation",
+            "workspace": "recoveredFollowup",
+            "plan": "recover",
+            "operationByte": 13,
+            "occurredAtMs": 13
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "recoveredFollowup",
+            "plan": "recover"
+          },
+          {
+            "call": "counts",
+            "workspace": "recoveredFollowup"
+          },
+          {
+            "call": "operations",
+            "workspace": "recoveredFollowup"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "recoveredFollowup"
+          },
+          {
+            "call": "export",
+            "workspace": "recoveredFollowup",
+            "bundle": "recoveredFollowup"
+          },
+          {
+            "call": "openBundle",
+            "workspace": "cancelledFollowup",
+            "bundle": "recoveredFollowup"
+          },
+          {
+            "call": "prepareDefinitelyNotSent",
+            "workspace": "cancelledFollowup",
+            "plan": "cancelFollowup",
+            "operationByte": 14,
+            "occurredAtMs": 14,
+            "logicalIdByte": 10,
+            "intentFrom": {
+              "plan": "followup",
+              "inputIndex": 0
+            }
+          },
+          {
+            "call": "activateSaved",
+            "workspace": "cancelledFollowup",
+            "plan": "cancelFollowup"
+          },
+          {
+            "call": "counts",
+            "workspace": "cancelledFollowup"
+          },
+          {
+            "call": "operations",
+            "workspace": "cancelledFollowup"
+          },
+          {
+            "call": "historyCoverage",
+            "workspace": "cancelledFollowup"
+          },
+          {
+            "call": "export",
+            "workspace": "cancelledFollowup",
+            "bundle": "cancelledFollowup"
+          }
+        ]
+      }
+    ]
+  }
+}

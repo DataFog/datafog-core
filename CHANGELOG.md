@@ -37,11 +37,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Workspace parity exercises saved conversation state and scoped restoration
   through all four SDKs, with separately qualified native conversation hosts.
 
+- Native encrypted-host qualification verifies saved conversation intents, trusted
+  callback association and confirmation across crashes, CAS races and lost acknowledgments.
+
 - Native Node exposes saved conversation send intents, one-time site binding and
   scoped strict/buffered/progressive restoration through the shared Core.
 
 - Core and browser WASM support saved conversation send intents, funded confirmation
   capacity, one-time site binding and explicit conversation-scoped restoration.
+
 
 - Native workspace qualification now exercises 32-plan admission and cleanup
   across independently opened handles/workers, retaining allocator and RSS/heap
