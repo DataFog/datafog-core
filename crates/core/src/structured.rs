@@ -351,7 +351,7 @@ fn selected_leaves<'a>(
     config: &TransformationConfig,
 ) -> Result<Vec<SelectedLeaf<'a>>, PrivacyError> {
     let all = leaves(data)?;
-    let mut grouped: BTreeMap<&str, Vec<Finding>> = BTreeMap::new();
+    let mut grouped: BTreeMap<&str, Vec<(usize, Finding)>> = BTreeMap::new();
     let mut offsets = BTreeMap::new();
     for (index, located) in findings.iter().enumerate() {
         let text = validate_pointer(&located.path, "")
@@ -384,16 +384,33 @@ fn selected_leaves<'a>(
         grouped
             .entry(&located.path)
             .or_default()
-            .push(located.finding.clone());
+            .push((index, located.finding.clone()));
     }
     all.into_iter()
         .filter_map(|leaf| {
-            grouped.remove(leaf.path.as_str()).map(|findings| {
-                select_findings(leaf.text, &findings, config).map(|findings| SelectedLeaf {
-                    path: leaf.path,
-                    text: leaf.text,
-                    findings,
-                })
+            grouped.remove(leaf.path.as_str()).map(|original| {
+                let findings: Vec<_> = original
+                    .iter()
+                    .map(|(_, finding)| finding.clone())
+                    .collect();
+                select_findings(leaf.text, &findings, config)
+                    .map_err(|mut error| {
+                        if error.code == PrivacyErrorCode::ReviewConflict {
+                            if let Some(index) = error
+                                .finding_index
+                                .and_then(|index| original.get(index).map(|item| item.0))
+                            {
+                                error.finding_index = Some(index);
+                                error.path = Some(format!("/findings/{index}/finding"));
+                            }
+                        }
+                        error
+                    })
+                    .map(|findings| SelectedLeaf {
+                        path: leaf.path,
+                        text: leaf.text,
+                        findings,
+                    })
             })
         })
         .collect()

@@ -270,6 +270,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
@@ -332,6 +333,8 @@ try {
     } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
+    const {verifyCoverageConflicts} = await import("/coverage-conformance.mjs");
+    verifyCoverageConflicts(germanApi);
     const {verifyGerman} = await import("/german-conformance.mjs");
     const {verifyCredentialOverlaps} = await import("/credential-overlap-conformance.mjs");
     const {verifyJwt} = await import("/jwt-conformance.mjs");
@@ -501,6 +504,21 @@ for (const strategy of [{strategy:"pseudonymize",key_ref:"names"},{strategy:"tok
 let restoreRejected = false;
 try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
 if (!restoreRejected) throw new Error("structured restore accepted in WASM");
+
+    const overlapText = "👋 José: 123-45-6789";
+    const nativeSsn = scan(overlapText).find(finding => finding.entityType === "SSN");
+    if (!nativeSsn) throw new Error("SSN overlap fixture was not detected");
+    const semanticPerson = {...nativeSsn, entityType: "PERSON", detectorName: "semantic-person", confidence: 1};
+    for (const findings of [[nativeSsn, semanticPerson], [semanticPerson, nativeSsn]]) {
+      const protectedCopy = transform(overlapText, findings, {default: {strategy: "redact"}});
+      if (protectedCopy.text !== "👋 José: [SSN]" || protectedCopy.transformations[0].entityType !== "SSN") {
+        throw new Error("Native SSN lost equal-span PERSON precedence");
+      }
+      const allowedCopy = transform(overlapText, findings, {
+        default: {strategy: "redact"}, allow: {exact: {SSN: [nativeSsn.matchedText]}}
+      });
+      if (allowedCopy.text !== "👋 José: [PERSON]") throw new Error("SSN allowlist suppressed PERSON protection");
+    }
 
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});

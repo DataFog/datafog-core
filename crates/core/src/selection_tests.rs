@@ -72,6 +72,154 @@ fn supplied_finding(text: &str, start: usize, end: usize, confidence: Option<f32
 }
 
 #[test]
+fn native_ssn_keeps_its_type_when_a_person_finding_covers_the_same_value() {
+    let config = TransformationConfig::new(TransformationStrategy::Redact);
+    for prefix in ["", "👋 José: "] {
+        let text = format!("{prefix}123-45-6789");
+        let ssn = scan(&text)
+            .into_iter()
+            .find(|finding| finding.entity_type == "SSN")
+            .unwrap();
+        let mut person = ssn.clone();
+        person.entity_type = "PERSON".to_owned();
+        person.detector_name = "semantic-person".to_owned();
+        person.confidence = Some(1.0);
+        for findings in [
+            vec![ssn.clone(), person.clone()],
+            vec![person.clone(), ssn.clone()],
+        ] {
+            let result = transform(&text, &findings, &config).unwrap();
+            assert_eq!(result.text, format!("{prefix}[SSN]"));
+            assert_eq!(result.transformations.len(), 1);
+            assert_eq!(result.transformations[0].entity_type, "SSN");
+            assert_eq!(result.transformations[0].source_byte_range, ssn.byte_range);
+            assert_eq!(
+                result.transformations[0].source_codepoint_range,
+                ssn.codepoint_range
+            );
+        }
+    }
+}
+
+#[test]
+fn ssn_person_priority_obeys_entity_selection_and_allowlists() {
+    let text = "123-45-6789";
+    let ssn = scan(text).remove(0);
+    let mut person = ssn.clone();
+    person.entity_type = "PERSON".to_owned();
+    person.detector_name = "semantic-person".to_owned();
+    person.confidence = Some(1.0);
+    let redact = TransformationConfig::new(TransformationStrategy::Redact);
+    for (config, expected) in [
+        (
+            redact
+                .clone()
+                .with_entities(vec!["PERSON".to_owned()])
+                .unwrap(),
+            "[PERSON]",
+        ),
+        (
+            redact
+                .clone()
+                .with_exact_allowlist("SSN", vec![text.to_owned()])
+                .unwrap(),
+            "[PERSON]",
+        ),
+        (
+            redact
+                .clone()
+                .with_regex_allowlist("SSN", vec![RegexAllowRule::new(r"\d{3}-\d{2}-\d{4}", true)])
+                .unwrap(),
+            "[PERSON]",
+        ),
+        (
+            redact
+                .with_exact_allowlist("PERSON", vec![text.to_owned()])
+                .unwrap(),
+            "[SSN]",
+        ),
+    ] {
+        for findings in [
+            vec![ssn.clone(), person.clone()],
+            vec![person.clone(), ssn.clone()],
+        ] {
+            assert_eq!(transform(text, &findings, &config).unwrap().text, expected);
+        }
+    }
+}
+
+#[test]
+fn native_ssn_priority_is_limited_to_equal_span_person_findings() {
+    let text = "123-45-6789";
+    let ssn = scan(text).remove(0);
+    let mut person = ssn.clone();
+    person.entity_type = "PERSON".to_owned();
+    person.detector_name = "semantic-person".to_owned();
+    person.confidence = Some(1.0);
+    let config = TransformationConfig::new(TransformationStrategy::Redact);
+    let mut semantic_ssn = ssn.clone();
+    semantic_ssn.detector_name = "semantic-ssn".to_owned();
+    assert_eq!(
+        transform(text, &[semantic_ssn, person], &config)
+            .unwrap()
+            .text,
+        "[PERSON]"
+    );
+    let mut organization = ssn.clone();
+    organization.entity_type = "ORGANIZATION".to_owned();
+    organization.detector_name = "semantic-organization".to_owned();
+    assert_eq!(
+        transform(text, &[ssn, organization], &config).unwrap().text,
+        "[ORGANIZATION]"
+    );
+}
+
+#[test]
+fn ssn_person_priority_keeps_nonoverlapping_person_findings() {
+    let text = "👋 José: 123-45-6789";
+    let ssn = scan(text).remove(0);
+    let name = supplied_finding(text, 2, 6, Some(0.9));
+    let mut person = ssn.clone();
+    person.entity_type = "PERSON".to_owned();
+    person.detector_name = "semantic-person".to_owned();
+    let config = TransformationConfig::new(TransformationStrategy::Redact);
+    for findings in [
+        vec![name.clone(), person.clone(), ssn.clone()],
+        vec![ssn.clone(), person.clone(), name.clone()],
+    ] {
+        let result = transform(text, &findings, &config).unwrap();
+        assert_eq!(result.text, "👋 [PERSON]: [SSN]");
+        assert_eq!(result.transformations[0].source_byte_range, name.byte_range);
+        assert_eq!(result.transformations[1].source_byte_range, ssn.byte_range);
+    }
+}
+
+#[test]
+fn different_span_ssn_person_overlaps_preserve_coverage_or_require_review() {
+    let text = "AB 123-45-6789 CD";
+    let ssn = scan(text).remove(0);
+    let config = TransformationConfig::new(TransformationStrategy::Redact);
+    for (start, end, expected) in [
+        (0, text.len(), "[PERSON]"),
+        (5, 10, "AB [SSN] CD"),
+        (0, 8, "AB [SSN] CD"),
+    ] {
+        let person = supplied_finding(text, start, end, Some(1.0));
+        for findings in [
+            vec![ssn.clone(), person.clone()],
+            vec![person.clone(), ssn.clone()],
+        ] {
+            let result = transform(text, &findings, &config);
+            if (start, end) == (0, 8) {
+                assert_eq!(result.unwrap_err().code(), PrivacyErrorCode::ReviewConflict);
+            } else {
+                assert_eq!(result.unwrap().text, expected);
+            }
+        }
+    }
+}
+
+#[test]
 fn cyclic_overlap_preferences_preserve_pairwise_winner() {
     let text = "abcdef";
     let findings = vec![
@@ -84,12 +232,12 @@ fn cyclic_overlap_preferences_preserve_pairwise_winner() {
     assert!(overlap_preference(&findings[2], &findings[0]).is_lt());
     let config = TransformationConfig::new(TransformationStrategy::Redact);
     assert_eq!(
-        select_findings(text, &findings, &config).unwrap(),
+        select_validated_findings(&findings, &config),
         vec![findings[2].clone()]
     );
     assert_eq!(
-        transform(text, &findings, &config).unwrap().text,
-        "ab[PERSON]"
+        transform(text, &findings, &config).unwrap_err().code(),
+        PrivacyErrorCode::ReviewConflict
     );
 }
 
@@ -149,6 +297,33 @@ fn validation_still_precedes_filtering_and_duplicate_collapse() {
 
 struct Random(u64);
 
+fn assert_public_selection_is_covered(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) {
+    let expected = reference_selection(findings, config);
+    assert_eq!(select_validated_findings(findings, config), expected);
+    // Independent byte-wise proof, rather than repeating the interval guard.
+    let lost = findings.iter().enumerate().find(|(_, finding)| {
+        config.includes(finding)
+            && !config.allows(finding)
+            && (finding.byte_range.start..finding.byte_range.end).any(|byte| {
+                !expected.iter().any(|selected| {
+                    selected.byte_range.start <= byte && byte < selected.byte_range.end
+                })
+            })
+    });
+    if let Some((index, _)) = lost {
+        assert_eq!(
+            select_findings(text, findings, config),
+            Err(PrivacyError::review_conflict(index))
+        );
+    } else {
+        assert_eq!(select_findings(text, findings, config), Ok(expected));
+    }
+}
+
 impl Random {
     fn below(&mut self, limit: usize) -> usize {
         self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
@@ -207,11 +382,8 @@ fn selection_matches_reference_across_unicode_ranges_policies_and_input_orders()
         for permutation in 0..3 {
             random.shuffle(&mut findings);
             let config = &configs[trial % configs.len()];
-            assert_eq!(
-                select_findings(&text, &findings, config).unwrap(),
-                reference_selection(&findings, config),
-                "trial {trial}, permutation {permutation}",
-            );
+            let _ = permutation;
+            assert_public_selection_is_covered(&text, &findings, config);
         }
     }
 }
@@ -234,10 +406,7 @@ fn ordered_interval_selection_handles_touching_nested_and_partial_spans() {
                 .collect();
             for _ in 0..20 {
                 random.shuffle(&mut findings);
-                assert_eq!(
-                    select_findings(&text, &findings, &config).unwrap(),
-                    reference_selection(&findings, &config)
-                );
+                assert_public_selection_is_covered(&text, &findings, &config);
             }
         }
     }
