@@ -172,9 +172,10 @@ Content-free metadata is still private vault data, not public telemetry, and is
 never automatically logged. The reconciliation adds an actual native-policy-v2 export fixture and tests exact
 v1/v2 read/no-op/discard/failed-save behavior before a staged v3 upgrade, preserving
 choices and permanent aliases. Existing Core policy, recall, protected coverage
-and operations suites pass on this integration work. All-SDK build/check, packed
-WASM/TypeScript and the full encrypted MV3 regression suite pass before commit.
-The clean committed-head receipts and Small qualification remain to be refreshed.
+and operations suites pass on this integration work. All-feature workspace Rust tests, fmt/Clippy, all-SDK build/check/smoke, packed
+WASM/TypeScript and live 100-fixture SDK parity pass on the committed integration.
+The full encrypted MV3 regression suite passes before commit; its clean
+committed-head receipt and Small qualification remain to be refreshed.
 
 Before merge: approve capacity/recovery behavior, numeric accounting and legacy
 reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
