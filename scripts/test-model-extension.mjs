@@ -146,8 +146,8 @@ try {
   assert.equal(closed, "model_session_closed");
   report.warmLoad = await call("openModel");
   assert((await call("scan", text)).value.findings.length > 0);
-  await call("closeModel");
   passed("idempotent close, closed-session rejection and explicit warm reopen");
+  // Terminate the browser with the reopened model still live, as when its owner tab disappears.
   await launch("positive");
   assert.equal(await call("hasModel"), false);
   await call("openWorkspace", password);
