@@ -1,5 +1,5 @@
 // Shared browser/native Node contract runner. Every operation calls the real public SDK.
-const workspaceErrors=new Set(["closed_workspace","inactive_plan","workspace_conflict","invalid_finding","review_conflict","invalid_batch","invalid_marker","invalid_snapshot","invalid_operation_id","invalid_policy","resource_limit"]);
+const workspaceErrors=new Set(["closed_workspace","inactive_plan","workspace_conflict","invalid_finding","review_conflict","invalid_batch","invalid_marker","invalid_snapshot","invalid_operation_id","invalid_policy","resource_limit","invalid_operation","operation_reused"]);
 const bad=()=>{throw new Error("workspace parity harness contract failed");};
 const unhex=value=>{if(typeof value!=="string" || !/^(?:[a-f0-9]{2})*$/.test(value))bad();return Uint8Array.from(value.match(/../g)??[],item=>Number.parseInt(item,16));};
 const textValue=command=>{if(command.textRepeat){const {value,count}=command.textRepeat;if(typeof value!=="string" || !Number.isSafeInteger(count) || count<0 || count>2*1024*1024)bad();return value.repeat(count);}return command.text;};
@@ -21,7 +21,7 @@ export function runWorkspaceContract(api,fixture) {
   if(typeof api.Workspace?.create!=="function" || typeof api.Workspace?.openBundle!=="function" || !Array.isArray(fixture.requiredMethods))bad();
   for(const method of fixture.requiredMethods) {
     if(method.startsWith("plan."))continue;
-    if(!["create","openBundle"].includes(method) && typeof api.Workspace.prototype[method]!=="function")bad();
+    if(["create","createWithOperation","openBundle"].includes(method) ? typeof api.Workspace[method]!=="function" : typeof api.Workspace.prototype[method]!=="function")bad();
   }
   const output=[];
   for(const scenario of fixture.cases) {
@@ -41,16 +41,21 @@ export function runWorkspaceContract(api,fixture) {
       });
       return input;
     };
-    const supported=new Set(["create","head","prepare","prepareBatch","prepareReview","preparePolicyChanges","prepareRecovery","inspectPlan","activateSaved","discard","recall","review","restore","restoreReport","restorePlanText","restoreReportPlanText","export","openBundle","close"]);
+    const supported=new Set(["createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create","head","prepare","prepareBatch","prepareReview","preparePolicyChanges","prepareRecovery","inspectPlan","activateSaved","discard","recall","review","restore","restoreReport","restorePlanText","restoreReportPlanText","export","openBundle","close"]);
     if(!Array.isArray(scenario.commands) || scenario.commands.length===0)bad();
     for(const command of scenario.commands) {
       if(!supported.has(command.call))bad();
       let entry;
       try {
         let value;const id=()=>{if(!Number.isInteger(command.operationByte) || command.operationByte<0 || command.operationByte>255)bad();return new Uint8Array(16).fill(command.operationByte);};
-        if(command.call==="create") {if(!Number.isInteger(command.namespaceByte) || command.namespaceByte<0 || command.namespaceByte>255)bad();const w=api.Workspace.create(new Uint8Array(16).fill(command.namespaceByte),id());workspaces.set(command.workspace,w);value=snapshot(w);}
+        const operation=()=>({id:id(),occurredAtMs:command.occurredAtMs});
+        if(["create","createWithOperation"].includes(command.call)) {if(!Number.isInteger(command.namespaceByte) || command.namespaceByte<0 || command.namespaceByte>255)bad();const namespace=new Uint8Array(16).fill(command.namespaceByte);const w=command.call==="create"?api.Workspace.create(namespace,id()):api.Workspace.createWithOperation(namespace,operation());workspaces.set(command.workspace,w);value=snapshot(w);}
         else if(command.call==="openBundle") {const w=api.Workspace.openBundle(command.inlineBundleHex!==undefined?unhex(command.inlineBundleHex):get(bundles,command.bundle));workspaces.set(command.workspace,w);value=snapshot(w);}
         else if(command.call==="head")value=get(workspaces,command.workspace).head();
+        else if(command.call==="operations")value=get(workspaces,command.workspace).operations();
+        else if(command.call==="counts")value=get(workspaces,command.workspace).counts();
+        else if(command.call==="historyCoverage")value=get(workspaces,command.workspace).historyCoverage();
+        else if(command.call==="operationsPage")value=get(workspaces,command.workspace).operationsPage(command.offset,command.limit);
         else if(command.call==="export") {const w=get(workspaces,command.workspace);bundles.set(command.bundle,w.exportBundle());value=snapshot(w);}
         else if(command.call==="close"){get(workspaces,command.workspace).close();value=null;}
         else if(command.call==="inspectPlan")value=inspect(get(plans,command.plan));
@@ -66,6 +71,10 @@ export function runWorkspaceContract(api,fixture) {
         } else {
           const w=get(workspaces,command.workspace);let p;
           if(command.call==="prepare")p=w.prepare(textValue(command),command.findings,id());
+          else if(command.call==="prepareWithOperation")p=w.prepareWithOperation(textValue(command),command.findings,operation());
+          else if(command.call==="prepareBatchWithOperation")p=w.prepareBatchWithOperation(command.inputs,operation());
+          else if(command.call==="prepareRecoveryWithOperation")p=w.prepareRecoveryWithOperation(operation());
+          else if(command.call==="prepareOutcome")p=w.prepareOutcome(command.outcome,operation());
           else if(command.call==="prepareBatch")p=w.prepareBatch(command.inputs,id());
           else if(command.call==="prepareReview")p=w.prepareReview(command.inputs.map(resolvedInput),id());
           else if(command.call==="preparePolicyChanges")p=w.preparePolicyChanges(command.edits,id());

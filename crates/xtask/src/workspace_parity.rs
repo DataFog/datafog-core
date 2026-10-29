@@ -72,23 +72,12 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
             json_output,
         );
     };
-    let pass = status.status.success()
-        && report["pass"] == true
-        && report["sdks"] == json!(["rust", "python", "node", "wasm"])
-        && report["profiles"]["foundation"]["profile"] == "launch-workspace-current"
-        && report["profiles"]["streaming"]["profile"] == "workspace-streaming-v1"
-        && report["profiles"]["streaming"]["modes"] == json!(["buffered", "progressive"])
-        && report["profiles"]["streaming"]["steps"]
-            .as_u64()
-            .is_some_and(|value| value > 0)
-        && report["cases"].as_u64().is_some_and(|value| value > 0)
-        && report["steps"].as_u64().is_some_and(|value| value > 0)
-        && report["errors"].as_array().is_some_and(Vec::is_empty);
+    let pass = status.status.success() && complete_workspace_report(&report);
     if json_output {
         println!("{report}");
     } else if pass {
         println!(
-            "Workspace parity passed for Rust, installed Python/Node and browser WASM.\nReport: {}",
+            "Workspace SDK parity passed for Rust, installed Python/Node and browser WASM.\nNative server profile passed separately for Python/Node encrypted SQLite hosts only.\nReport: {}",
             run.display()
         );
     } else {
@@ -98,5 +87,82 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn complete_workspace_report(report: &Value) -> bool {
+    let four_sdk_total = |field: &str| {
+        ["foundation", "streaming", "operations"]
+            .iter()
+            .try_fold(0_u64, |sum, profile| {
+                sum.checked_add(report["profiles"][profile][field].as_u64()?)
+            })
+    };
+    report["pass"] == true
+        && report["sdks"] == json!(["rust", "python", "node", "wasm"])
+        && report["profiles"]["foundation"]["profile"] == "launch-workspace-current"
+        && report["profiles"]["nativeServer"]["profile"] == "native-server-cas-v1"
+        && report["profiles"]["nativeServer"]["sdks"] == json!(["python", "node"])
+        && report["profiles"]["nativeServer"]["oracleSdk"] == "rust"
+        && ["foundation", "streaming", "operations"]
+            .iter()
+            .all(|profile| {
+                report["profiles"][profile]["sdks"] == json!(["rust", "python", "node", "wasm"])
+            })
+        && ["foundation", "streaming", "operations", "nativeServer"]
+            .iter()
+            .all(|profile| {
+                ["cases", "steps"].iter().all(|field| {
+                    report["profiles"][profile][field]
+                        .as_u64()
+                        .is_some_and(|value| value > 0)
+                })
+            })
+        && report["profiles"]["operations"]["profile"] == "workspace-operations-v1"
+        && report["profiles"]["streaming"]["profile"] == "workspace-streaming-v1"
+        && report["profiles"]["streaming"]["modes"] == json!(["buffered", "progressive"])
+        && report["profiles"]["streaming"]["steps"]
+            .as_u64()
+            .is_some_and(|value| value > 0)
+        && report["cases"]
+            .as_u64()
+            .is_some_and(|value| Some(value) == four_sdk_total("cases"))
+        && report["steps"]
+            .as_u64()
+            .is_some_and(|value| Some(value) == four_sdk_total("steps"))
+        && report["errors"].as_array().is_some_and(Vec::is_empty)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_mandatory_profile_must_be_present_and_executed() {
+        let report = json!({"pass":true,"sdks":["rust","python","node","wasm"],"profiles":{
+            "foundation":{"sdks":["rust","python","node","wasm"],"profile":"launch-workspace-current","cases":17,"steps":156},
+            "streaming":{"sdks":["rust","python","node","wasm"],"profile":"workspace-streaming-v1","modes":["buffered","progressive"],"cases":13,"steps":80},
+            "operations":{"sdks":["rust","python","node","wasm"],"profile":"workspace-operations-v1","cases":7,"steps":185},
+            "nativeServer":{"profile":"native-server-cas-v1","sdks":["python","node"],"oracleSdk":"rust","cases":9,"steps":28}},
+            "cases":37,"steps":421,"errors":[]});
+        assert!(complete_workspace_report(&report));
+        let mut folded = report.clone();
+        folded["cases"] = json!(46);
+        folded["steps"] = json!(449);
+        assert!(!complete_workspace_report(&folded));
+        let mut wrong_scope = report.clone();
+        wrong_scope["profiles"]["nativeServer"]["sdks"] = json!(["rust", "python", "node", "wasm"]);
+        assert!(!complete_workspace_report(&wrong_scope));
+        for profile in ["foundation", "streaming", "operations", "nativeServer"] {
+            let mut missing = report.clone();
+            missing["profiles"].as_object_mut().unwrap().remove(profile);
+            assert!(!complete_workspace_report(&missing));
+        }
+        for profile in ["foundation", "streaming", "operations", "nativeServer"] {
+            for field in ["cases", "steps"] {
+                let mut empty = report.clone();
+                empty["profiles"][profile][field] = json!(0);
+                assert!(!complete_workspace_report(&empty));
+            }
+        }
     }
 }
