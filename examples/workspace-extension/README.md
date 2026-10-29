@@ -85,7 +85,8 @@ are unchanged.
 Every well-formed marker in input text must be committed in the workspace's
 snapshot. Unknown, foreign-workspace and uncommitted markers reject the entire
 input/batch with `invalid_marker`. Damaged marker-like spans such as
-`[[PERSON_7KQ]]` are ordinary text in new input, though they fail restoration. A new marker allocated by an
+`[[PERSON_7KQ]]` and bare committed codes are rejected before approval with safe
+issue ranges, so an unchanged round trip cannot fail later on those spans. A new marker allocated by an
 earlier member of the same pending batch is still uncommitted and cannot be used
 as an input reference. Short display labels remain ordinary text, not marker keys.
 Any supplied finding overlapping a marker, including a partial or enclosing span,
@@ -218,3 +219,9 @@ The harness exports narrow test fault controls for explicit transaction barriers
 Once this workflow is on the default branch, configure **Workspace integration (ubuntu-latest)** and **Workspace integration (macos-latest)** as required checks in GitHub's branch rules. YAML alone does not enforce branch protection. Do not enable missing checks against other PRs before the workflow lands. Remote branch rules are not changed by this implementation.
 
 File intake, real ChatGPT handoff, merges/separation, credential rotation, multi-workspace import, the fuller session cache, remembered unlock and new Python/Node workspace bindings are deferred as specified in the design. The local sink stands in for an approved downstream handoff; it makes no claim about delivery to an external service.
+
+Source marker preflight blocks preparation before approval when literal marker-like
+text would fail an unchanged round trip. The harness highlights source issue ranges;
+correct the input and prepare a fresh preview. Remove and re-add a queued input to
+correct it. Ordinary text such as `[[my note]]` remains ordinary text; full committed
+markers pass through, while bare committed codes require their brackets.

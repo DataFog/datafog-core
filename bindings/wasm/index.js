@@ -33,7 +33,7 @@ export function init() {
 }
 
 export class DataFogError extends Error {
-  constructor({ code, reason, message, path, findingIndex, inputIndex }) {
+  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues }) {
     super(message);
     this.name = "DataFogError";
     this.code = code;
@@ -41,6 +41,7 @@ export class DataFogError extends Error {
     this.path = path;
     this.findingIndex = findingIndex;
     this.inputIndex = inputIndex;
+    this.markerIssues = markerIssues;
   }
 }
 

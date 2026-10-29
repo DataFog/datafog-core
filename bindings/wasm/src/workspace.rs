@@ -12,10 +12,20 @@ fn failure(code: ErrorCode) -> JsValue {
         code,
         finding_index: None,
         input_index: None,
+        marker_issues: Vec::new(),
+    })
+}
+fn marker_issue_value(issue: &workspace::MarkerIssue) -> serde_json::Value {
+    json!({
+        "kind": issue.kind.as_str(),
+        "byteRange": super::TextRange::from(issue.byte_range),
+        "codepointRange": super::TextRange::from(issue.codepoint_range),
+        "utf16Range": super::TextRange::from(issue.utf16_range),
     })
 }
 fn from_error(error: WorkspaceError) -> JsValue {
-    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index, "inputIndex": error.input_index }).to_string())
+    let issues: Vec<_> = error.marker_issues.iter().map(marker_issue_value).collect();
+    JsValue::from_str(&json!({ "code": error.code.as_str(), "message": error.code.as_str(), "findingIndex": error.finding_index, "inputIndex": error.input_index, "markerIssues": issues }).to_string())
 }
 fn id(bytes: &[u8]) -> Result<workspace::PublicId, JsValue> {
     bytes.try_into().map_err(|_| failure(ErrorCode::InvalidId))
@@ -84,6 +94,7 @@ fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, Wo
                     code: ErrorCode::InvalidFinding,
                     finding_index: Some(index),
                     input_index: None,
+                    marker_issues: Vec::new(),
                 });
             }
             Ok(WorkspaceFinding {
@@ -217,6 +228,7 @@ impl WasmWorkspace {
                 return Err(from_error(WorkspaceError {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
+                    marker_issues: Vec::new(),
                     finding_index: None,
                 }));
             }
@@ -300,17 +312,7 @@ impl WasmWorkspace {
     }
     pub fn restore_report(&self, text: &str) -> Result<String, JsValue> {
         let report = self.inner.restore_report(text).map_err(from_error)?;
-        let issues: Vec<_> = report
-            .issues
-            .iter()
-            .map(|issue| {
-                json!({
-                    "kind": issue.kind.as_str(),
-                    "byteRange": super::TextRange::from(issue.byte_range),
-                    "utf16Range": super::TextRange::from(issue.utf16_range),
-                })
-            })
-            .collect();
+        let issues: Vec<_> = report.issues.iter().map(marker_issue_value).collect();
         Ok(json!({
             "text": report.text,
             "restoredMarkers": report.restored_markers,

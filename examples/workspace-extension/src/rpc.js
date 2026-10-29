@@ -2,6 +2,19 @@ export class HostError extends Error {
   constructor(code, location = {}) {
     super(code); this.name = "HostError"; this.code = code;
     for (const key of ["inputIndex", "findingIndex"]) if (Number.isSafeInteger(location?.[key]) && location[key] >= 0) this[key] = location[key];
+    if (location?.markerIssues !== undefined) {
+      const ranges = ["byteRange", "codepointRange", "utf16Range"];
+      const valid = issue => ["unknown", "damaged", "unbracketed"].includes(issue?.kind) && ranges.every(key => {
+        const range = issue[key];
+        return Number.isSafeInteger(range?.start) && Number.isSafeInteger(range?.end) && range.start >= 0 && range.end > range.start && range.end <= 16 * 1024 * 1024;
+      });
+      if (!Array.isArray(location.markerIssues) || location.markerIssues.length > 10000 || !location.markerIssues.every(valid)) {
+        this.code = "internal_error"; this.message = "internal_error"; return;
+      }
+      this.markerIssues = location.markerIssues.map(issue => Object.fromEntries([
+        ["kind", issue.kind], ...ranges.map(key => [key, {start: issue[key].start, end: issue[key].end}]),
+      ]));
+    }
   }
 }
 const known = new Set([
@@ -54,7 +67,7 @@ export function serve(methods) {
       else self.postMessage({ id, result });
     } catch (error) {
       const safe = new HostError(safeCode(error), error);
-      self.postMessage({ id, error: safe.code, location: { inputIndex: safe.inputIndex, findingIndex: safe.findingIndex } });
+      self.postMessage({ id, error: safe.code, location: { inputIndex: safe.inputIndex, findingIndex: safe.findingIndex, markerIssues: safe.markerIssues } });
     }
   });
 }

@@ -11,9 +11,47 @@ let generation = 0;
 let restorationGeneration = 0;
 let operations = 0;
 const status = text => { element("status").textContent = text; };
+function clearMarkerIssues() {
+  element("source-issues").hidden = true;
+  element("source-issue-preview").replaceChildren();
+  element("select-source-issue").hidden = true;
+  element("select-source-issue").onclick = null;
+}
+function draftInputs() {
+  const inputs = queued.map(input => ({text: input.text, findings: input.findings}));
+  const text = element("source").value;
+  if (text.length || findings.length || inputs.length === 0) inputs.push({text, findings});
+  return inputs;
+}
+function showMarkerIssues(error) {
+  clearMarkerIssues();
+  if (error.code !== "invalid_marker" || !error.markerIssues?.length) return;
+  const index = error.inputIndex ?? 0, text = draftInputs()[index]?.text;
+  if (text === undefined) return;
+  const preview = element("source-issue-preview");
+  let cursor = 0;
+  for (const issue of error.markerIssues) {
+    const {start, end} = issue.utf16Range;
+    if (start < cursor || end > text.length) { clearMarkerIssues(); return; }
+    preview.append(document.createTextNode(text.slice(cursor, start)));
+    const marked = document.createElement("mark");
+    marked.textContent = text.slice(start, end); marked.dataset.kind = issue.kind;
+    preview.append(marked); cursor = end;
+  }
+  preview.append(document.createTextNode(text.slice(cursor)));
+  element("source-issues").hidden = false;
+  if (index === queued.length) {
+    element("select-source-issue").hidden = false;
+    element("select-source-issue").onclick = () => {
+      const source = element("source"); source.focus();
+      const range = error.markerIssues[0].utf16Range;
+      source.setSelectionRange(range.start, range.end);
+    };
+  }
+}
 function clearPreview() { plan = undefined; element("preview").textContent = ""; element("approve").disabled = true; }
 function clearCurrent() { element("source").value = ""; findings = []; element("selection-count").textContent = "0 selections"; }
-function clearDraft() { clearCurrent(); queued = []; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
+function clearDraft() { clearMarkerIssues(); clearCurrent(); queued = []; renderInputs(); clearPreview(); element("batch-error").textContent = ""; }
 function renderInputs() {
   element("inputs").replaceChildren();
   queued.forEach((input, index) => {
@@ -22,7 +60,7 @@ function renderInputs() {
     const remove = document.createElement("button");
     remove.textContent = `Remove input ${index + 1}`;
     remove.addEventListener("click", () => {
-      generation++; queued = queued.filter(value => value !== input);
+      generation++; queued = queued.filter(value => value !== input); clearMarkerIssues();
       clearPreview(); element("batch-error").textContent = ""; renderInputs();
       void perform(async g => { await broker.call("cancel"); if (g === generation) status("input_removed"); });
     });
@@ -43,7 +81,8 @@ async function perform(task) {
   try { await task(g); } catch (error) {
     if (g === generation) {
       status(safeCode(error));
-      const guidance = error.code === "invalid_marker" ? " Use the exact pseudonym from this unlocked workspace. Unknown, foreign and unsaved markers are blocked." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
+      showMarkerIssues(error);
+      const guidance = error.code === "invalid_marker" ? " Edit the highlighted source markers or use the exact pseudonym from this unlocked workspace before retrying." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
@@ -56,6 +95,7 @@ function renderBusy() {
   element("backup-approve").disabled = operations > 0 || importPlan === undefined;
 }
 function invalidateDraft() {
+  clearMarkerIssues();
   generation++; findings = []; clearPreview(); clearImportPreview(); element("selection-count").textContent = "0 selections"; element("batch-error").textContent = "";
   void broker.call("cancel").catch(error => status(safeCode(error)));
 }
@@ -123,6 +163,7 @@ element("mark").addEventListener("click", () => perform(async g => {
 }));
 element("add-input").addEventListener("click", () => {
   if (queued.length >= 32) { status("resource_limit"); return; }
+  clearMarkerIssues();
   const input = { text: element("source").value, findings };
   generation++; clearPreview();
   void perform(async g => {
@@ -132,10 +173,8 @@ element("add-input").addEventListener("click", () => {
   });
 });
 element("prepare").addEventListener("click", () => perform(async g => {
-  clearPreview(); element("batch-error").textContent = "";
-  const inputs = queued.map(input => ({text: input.text, findings: input.findings}));
-  const text = element("source").value;
-  if (text.length || findings.length || inputs.length === 0) inputs.push({text, findings});
+  clearPreview(); clearMarkerIssues(); element("batch-error").textContent = "";
+  const inputs = draftInputs();
   const result = await broker.call("prepare", [inputs]);
   if (g !== generation) return;
   plan = result.id; element("preview").textContent = showInputs(result.previews.map(preview => preview.text)); element("approve").disabled = false; status("preview_ready");

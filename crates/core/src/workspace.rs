@@ -62,11 +62,13 @@ impl ErrorCode {
 }
 
 /// Content-free failure. Input indexes identify batch members; finding indexes are input-local.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceError {
     pub code: ErrorCode,
     pub finding_index: Option<usize>,
     pub input_index: Option<usize>,
+    /// Content-free source spans that block preparation.
+    pub marker_issues: Vec<MarkerIssue>,
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -80,6 +82,7 @@ fn error(code: ErrorCode) -> WorkspaceError {
         code,
         finding_index: None,
         input_index: None,
+        marker_issues: Vec::new(),
     }
 }
 type Result<T> = std::result::Result<T, WorkspaceError>;
@@ -161,11 +164,12 @@ impl MarkerIssueKind {
     }
 }
 
-/// A span of the supplied text. It holds only pseudonym text, never a restored value.
+/// Content-free offsets of a source or output marker issue; no source or restored value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MarkerIssue {
     pub kind: MarkerIssueKind,
     pub byte_range: TextRange,
+    pub codepoint_range: TextRange,
     pub utf16_range: TextRange,
 }
 
@@ -407,6 +411,7 @@ impl Workspace {
                 return Err(WorkspaceError {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
+                    marker_issues: Vec::new(),
                     finding_index: None,
                 });
             }
@@ -440,6 +445,7 @@ impl Workspace {
                 return Err(WorkspaceError {
                     code: ErrorCode::ResourceLimit,
                     input_index: Some(input_index),
+                    marker_issues: Vec::new(),
                     finding_index: None,
                 });
             }
@@ -486,6 +492,7 @@ impl Workspace {
                 code: ErrorCode::InvalidFinding,
                 finding_index: Some(finding_index),
                 input_index: None,
+                marker_issues: Vec::new(),
             };
             if !valid_type(&finding.entity_type)
                 || finding.byte_range.start >= finding.byte_range.end
@@ -530,6 +537,7 @@ impl Workspace {
                 code: ErrorCode::InvalidFinding,
                 finding_index: e.finding_index(),
                 input_index: None,
+                marker_issues: Vec::new(),
             })?;
         let mut output = String::new();
         let mut transformations = Vec::with_capacity(selected.len());
@@ -659,57 +667,37 @@ impl Workspace {
         }
         let lookup = marker_lookup(state);
         let spans = marker_spans(text)?;
-        let mut problems: Vec<(MarkerIssueKind, TextRange)> = Vec::new();
-        let mut push = |kind, range| {
-            problems
-                .try_reserve(1)
-                .map_err(|_| error(ErrorCode::ResourceLimit))?;
-            problems.push((kind, range));
-            Ok::<(), WorkspaceError>(())
-        };
+        let issues = marker_issues(text, &spans, &lookup)?;
+        let restored_markers = spans
+            .iter()
+            .filter(|span| {
+                span.canonical
+                    .as_ref()
+                    .is_some_and(|canonical| lookup.contains_key(canonical))
+            })
+            .count();
+        if !issues.is_empty() {
+            return Ok(RestoreReport {
+                text: None,
+                restored_markers,
+                issues,
+            });
+        }
         let mut output = String::new();
         let mut cursor = 0;
-        let mut restored_markers = 0usize;
-        for span in &spans {
-            unbracketed_markers(&text[cursor..span.range.start], cursor, &lookup, &mut push)?;
-            match span
+        for span in spans {
+            let display = span
                 .canonical
                 .as_ref()
-                .map(|canonical| lookup.get(canonical))
-            {
-                Some(Some(display)) => {
-                    append(&mut output, &text[cursor..span.range.start])?;
-                    append(&mut output, display)?;
-                    restored_markers += 1;
-                }
-                Some(None) => push(MarkerIssueKind::Unknown, span.range)?,
-                None => push(MarkerIssueKind::Damaged, span.range)?,
-            }
+                .and_then(|canonical| lookup.get(canonical))
+                .ok_or_else(|| error(ErrorCode::InvalidMarker))?;
+            append(&mut output, &text[cursor..span.range.start])?;
+            append(&mut output, display)?;
             cursor = span.range.end;
         }
-        unbracketed_markers(&text[cursor..], cursor, &lookup, &mut push)?;
-        if problems.is_empty() {
-            append(&mut output, &text[cursor..])?;
-            return Ok(RestoreReport {
-                text: Some(output),
-                restored_markers,
-                issues: Vec::new(),
-            });
-        }
-        output.zeroize();
-        let mut index = TextIndex::new(text);
-        let mut issues = Vec::with_capacity(problems.len());
-        for (kind, byte_range) in problems {
-            issues.push(MarkerIssue {
-                kind,
-                byte_range,
-                utf16_range: index
-                    .utf16_range(byte_range)
-                    .map_err(|_| error(ErrorCode::InvalidMarker))?,
-            });
-        }
+        append(&mut output, &text[cursor..])?;
         Ok(RestoreReport {
-            text: None,
+            text: Some(output),
             restored_markers,
             issues,
         })
@@ -823,23 +811,66 @@ fn marker_spans(text: &str) -> Result<Vec<MarkerSpan>> {
     Ok(spans)
 }
 
-/// Ranges of committed markers in source text. Well-formed markers that are not
-/// committed are rejected; damaged marker-like spans are ordinary text there.
+/// Classify spans identically for source validation and strict restoration.
+fn marker_issues(
+    text: &str,
+    spans: &[MarkerSpan],
+    lookup: &BTreeMap<String, &str>,
+) -> Result<Vec<MarkerIssue>> {
+    let mut problems = Vec::new();
+    let mut push = |kind, range| {
+        problems
+            .try_reserve(1)
+            .map_err(|_| error(ErrorCode::ResourceLimit))?;
+        problems.push((kind, range));
+        Ok(())
+    };
+    let mut cursor = 0;
+    for span in spans {
+        unbracketed_markers(&text[cursor..span.range.start], cursor, lookup, &mut push)?;
+        match span.canonical.as_ref() {
+            Some(canonical) if lookup.contains_key(canonical) => {}
+            Some(_) => push(MarkerIssueKind::Unknown, span.range)?,
+            None => push(MarkerIssueKind::Damaged, span.range)?,
+        }
+        cursor = span.range.end;
+    }
+    unbracketed_markers(&text[cursor..], cursor, lookup, &mut push)?;
+    let mut index = TextIndex::new(text);
+    problems
+        .into_iter()
+        .map(|(kind, byte_range)| {
+            Ok(MarkerIssue {
+                kind,
+                byte_range,
+                codepoint_range: TextRange {
+                    start: index.codepoint_offset(byte_range.start),
+                    end: index.codepoint_offset(byte_range.end),
+                },
+                utf16_range: index
+                    .utf16_range(byte_range)
+                    .map_err(|_| error(ErrorCode::InvalidMarker))?,
+            })
+        })
+        .collect()
+}
+
+/// Full committed markers pass through; every unrestorable source span blocks preparation.
 fn committed_marker_ranges(
     text: &str,
     committed: &BTreeMap<String, &str>,
 ) -> Result<Vec<TextRange>> {
-    let mut ranges = Vec::new();
-    for span in marker_spans(text)? {
-        let Some(canonical) = span.canonical else {
-            continue;
-        };
-        if !committed.contains_key(&canonical) {
-            return Err(error(ErrorCode::InvalidMarker));
-        }
-        ranges.push(span.range);
+    let spans = marker_spans(text)?;
+    let issues = marker_issues(text, &spans, committed)?;
+    if issues.len() > MAX_FINDINGS {
+        return Err(error(ErrorCode::ResourceLimit));
     }
-    Ok(ranges)
+    if !issues.is_empty() {
+        let mut failure = error(ErrorCode::InvalidMarker);
+        failure.marker_issues = issues;
+        return Err(failure);
+    }
+    Ok(spans.into_iter().map(|span| span.range).collect())
 }
 
 fn canonical_marker(interior: &str) -> Option<String> {
