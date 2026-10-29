@@ -40,7 +40,7 @@
     "dtsHeaderFile": "dts-header.d.ts"
   },
   "scripts": {
-    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts",
+    "build": "napi build --manifest-path Cargo.toml --release --platform --esm --js native.js --dts index.d.ts && node finalize-types.mjs",
     "test:package": "node ../../scripts/test-node-package.mjs",
     "prepublishOnly": "napi prepublish -t npm --no-gh-release"
   },
