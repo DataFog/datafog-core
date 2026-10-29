@@ -297,6 +297,14 @@ impl WasmWorkspace {
     ) -> Result<(), JsValue> {
         let expected = parse_head(expected_json)?;
         let saved = parse_head(saved_json)?;
+        // Check every retained parent before activation, so cleanup cannot fail
+        // after the confirmed saved state has been adopted.
+        let parents: BTreeMap<u32, Head> = self
+            .plans
+            .iter()
+            .map(|(handle, plan)| plan.expected_head().map(|parent| (*handle, parent)))
+            .collect::<Result<_, _>>()
+            .map_err(from_error)?;
         let plan = self
             .plans
             .get_mut(&handle)
@@ -304,7 +312,8 @@ impl WasmWorkspace {
         self.inner
             .activate_saved(plan, expected, saved)
             .map_err(from_error)?;
-        self.plans.remove(&handle);
+        self.plans
+            .retain(|retained, _| *retained != handle && parents.get(retained) == Some(&saved));
         Ok(())
     }
     pub fn restore(&self, text: &str) -> Result<String, JsValue> {

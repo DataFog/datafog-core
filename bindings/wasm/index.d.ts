@@ -259,7 +259,7 @@ export class Workspace {
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
-  /** The trusted host must confirm atomic persistence before calling this method. */
+  /** The trusted host must confirm atomic persistence first. Success consumes this plan and drops retained plans based on older heads; failure preserves current plans. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
   /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
   restore(text: string): string;
