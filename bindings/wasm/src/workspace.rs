@@ -177,6 +177,37 @@ impl WasmWorkspace {
     pub fn export_bundle(&self) -> Result<Vec<u8>, JsValue> {
         self.inner.export_bundle().map_err(from_error)
     }
+    pub fn policy(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.inner.policy().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
+    pub fn prepare_policy_changes(
+        &mut self,
+        edits_json: &str,
+        operation: &[u8],
+    ) -> Result<u32, JsValue> {
+        if edits_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let edits: workspace::PolicyEdits =
+            serde_json::from_str(edits_json).map_err(|_| failure(ErrorCode::InvalidPolicy))?;
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_policy_changes(&edits, id(operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
+    pub fn policy_preview(&self, handle: u32) -> Result<String, JsValue> {
+        serde_json::to_string(&self.plan(handle)?.policy_preview().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::InvalidPolicy))
+    }
     pub fn recall(&self, text: &str) -> Result<String, JsValue> {
         let result = self.inner.recall(text).map_err(from_error)?;
         let findings: Vec<_> = result.findings.iter().map(|span| {

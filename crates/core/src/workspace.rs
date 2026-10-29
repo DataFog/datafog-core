@@ -3,6 +3,12 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod policy;
+pub use policy::{
+    ChoiceDisposition, ChoiceEditPreview, ChoiceView, MAX_POLICY_EDITS, MAX_POLICY_ITEMS,
+    PolicyEdits, PolicyPreview, PolicyView, RuleEditPreview, RuleView, TypeRule, TypeRuleEdit,
+    ValueChoiceEdit, protected_type,
+};
 mod recall;
 
 pub use recall::{RecallFinding, RecallResult};
@@ -45,6 +51,7 @@ pub enum ErrorCode {
     InvalidMarker,
     InvalidSnapshot,
     InvalidId,
+    InvalidPolicy,
     ResourceLimit,
 }
 
@@ -59,6 +66,7 @@ impl ErrorCode {
             Self::InvalidMarker => "invalid_marker",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidId => "invalid_operation_id",
+            Self::InvalidPolicy => "invalid_policy",
             Self::ResourceLimit => "resource_limit",
         }
     }
@@ -269,6 +277,9 @@ fn identity_key(value: &str) -> String {
 }
 #[derive(Clone)]
 struct State {
+    snapshot_version: u8,
+    rules: BTreeMap<String, policy::RuleRecord>,
+    choices: BTreeMap<Identity, policy::ChoiceRecord>,
     namespace: PublicId,
     head: Head,
     entries: BTreeMap<Identity, Entry>,
@@ -281,6 +292,7 @@ struct Pending {
     candidate: State,
     bundle: Zeroizing<Vec<u8>>,
     previews: Vec<Preview>,
+    policy_preview: Option<PolicyPreview>,
 }
 
 /// An immutable pending change. Preview/export do not consume it; activation or discard do.
@@ -304,6 +316,9 @@ impl PreparedChange {
             [preview] => Ok(preview),
             _ => Err(error(ErrorCode::InvalidBatch)),
         }
+    }
+    pub fn policy_preview(&self) -> Result<Option<&PolicyPreview>> {
+        Ok(self.pending()?.policy_preview.as_ref())
     }
     pub fn previews(&self) -> Result<&[Preview]> {
         Ok(&self.pending()?.previews)
@@ -348,6 +363,9 @@ impl Workspace {
     /// IDs must come from the host OS CSPRNG. Shape checks cannot prove entropy.
     pub fn create(namespace: PublicId, operation_id: PublicId) -> Result<Self> {
         Self::from_state(State {
+            snapshot_version: 2,
+            rules: BTreeMap::new(),
+            choices: BTreeMap::new(),
             namespace,
             head: Head {
                 revision: 0,
@@ -386,15 +404,9 @@ impl Workspace {
     /// Recovery has no text previews and grants no permission to release content.
     pub fn prepare_recovery(&self, operation_id: PublicId) -> Result<PreparedChange> {
         let state = self.state()?;
-        if state.head.commit_id == operation_id
-            || state
-                .entries
-                .values()
-                .any(|entry| entry.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        ensure_fresh_operation(state, operation_id)?;
         let mut candidate = state.clone();
+        candidate.snapshot_version = 2;
         candidate.head = Head {
             revision: state
                 .head
@@ -411,6 +423,7 @@ impl Workspace {
                 candidate,
                 bundle,
                 previews: Vec::new(),
+                policy_preview: None,
             }),
         })
     }
@@ -454,11 +467,7 @@ impl Workspace {
                 });
             }
         }
-        if state.head.commit_id == operation_id
-            || state.entries.values().any(|e| e.issuance == operation_id)
-        {
-            return Err(error(ErrorCode::InvalidId));
-        }
+        ensure_fresh_operation(state, operation_id)?;
         let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
@@ -490,6 +499,7 @@ impl Workspace {
             previews.push(preview);
         }
         if candidate.entries.len() != state.entries.len() {
+            candidate.snapshot_version = 2;
             candidate.head = Head {
                 revision: state
                     .head
@@ -507,6 +517,7 @@ impl Workspace {
                 candidate,
                 bundle,
                 previews,
+                policy_preview: None,
             }),
         })
     }
@@ -569,9 +580,30 @@ impl Workspace {
                 detector_version: finding.detector_version.clone(),
             });
         }
+        // Every finding must validate before any remembered choice can waive it.
+        for (finding_index, finding) in adapted.iter().enumerate() {
+            crate::validate_finding_with_index(text, finding, &mut index).map_err(|_| {
+                WorkspaceError {
+                    code: ErrorCode::InvalidFinding,
+                    finding_index: Some(finding_index),
+                    input_index: None,
+                    marker_issues: Vec::new(),
+                }
+            })?;
+        }
+        let eligible: Vec<_> = adapted
+            .iter()
+            .filter(|finding| {
+                candidate.hides(&Identity {
+                    entity_type: finding.entity_type.clone(),
+                    key: identity_key(&finding.matched_text),
+                })
+            })
+            .cloned()
+            .collect();
         let config = TransformationConfig::new(TransformationStrategy::Redact);
         let selected =
-            crate::select_findings(text, &adapted, &config).map_err(|e| WorkspaceError {
+            crate::select_findings(text, &eligible, &config).map_err(|e| WorkspaceError {
                 code: ErrorCode::InvalidFinding,
                 finding_index: e.finding_index(),
                 input_index: None,
@@ -1102,4 +1134,24 @@ mod tests {
         let fallback = issue_code(namespace, operation, "PERSON", 2, &mut partial).unwrap();
         assert_eq!(fallback, all_codes.iter().next().unwrap().clone());
     }
+}
+
+fn ensure_fresh_operation(state: &State, operation: PublicId) -> Result<()> {
+    if state.head.commit_id == operation
+        || state
+            .entries
+            .values()
+            .any(|record| record.issuance == operation)
+        || state
+            .rules
+            .values()
+            .any(|record| record.operation == operation)
+        || state
+            .choices
+            .values()
+            .any(|record| record.operation == operation)
+    {
+        return Err(error(ErrorCode::InvalidId));
+    }
+    Ok(())
 }

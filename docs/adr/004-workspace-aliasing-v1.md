@@ -92,8 +92,17 @@ this is their shape, and undoing a merge deletes the record.
 | `ACCOUNT_NUMBER`, `CREDIT_CARD`, `SSN`, `US_ROUTING_NUMBER` | Always hidden |
 | Credentials (`API_KEY`, `BEARER_TOKEN`, `JWT`, `PRIVATE_KEY`, `CREDENTIAL_URI`) | Always hidden |
 
-Per-value choices are remembered in the encrypted workspace: keep (send as is)
-or not sensitive (a scanner false positive). Type rules, remembered choices and
+Protected types stay hidden by default. Sid approved one narrow exception on
+2026-10-28: an explicit per-value `not_sensitive` false-positive correction may
+leave the exact existing normalized `(entity type, value)` visible. Core cannot
+verify that the correction is truthful, so the person can deliberately override
+actual PII. Generic `keep` remains forbidden for protected types. Finding source
+and needs-review flags do not grant an exception; no field/reference disclosure
+authorization is introduced. Narrower or differently typed corrections do not
+waive a wider protected span. Previously issued aliases stay permanent.
+
+Per-value choices are remembered in the encrypted workspace: permitted keep
+(send as is) or explicit not sensitive (a scanner false-positive correction). Type rules, remembered choices and
 finding sources (`scanner`, `recall`, `user`, plus a needs-review flag) live in
 Core. Hosts only display them, so every surface hides the same things. Nothing
 sensitive is kept in browser extension storage.
@@ -155,6 +164,11 @@ measure:
 - Every previously approved value caught by recall in later text.
 
 ### Workspace snapshot
+
+The implemented snapshot currently uses version 1, with keys 0–6 only and a
+fixed `synthetic_v1` placeholder at key 6; the table below is the target layout,
+not proof that policy/choice persistence is implemented. #145 coordinates that
+upgrade with the separate #162 version-2 operation proposal.
 
 The snapshot keeps schema version 1 as a draft that each V1 task extends. It is
 frozen at the pilot gate. Until then, development snapshots fail closed rather
