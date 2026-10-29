@@ -3,6 +3,9 @@ from __future__ import annotations
 import gc
 import json
 import unittest
+import subprocess
+import sys
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datafog_core import (
@@ -66,11 +69,11 @@ class WorkspaceTests(unittest.TestCase):
     def test_close_drop_discard_and_context_lifetimes(self):
         w = self.workspace
         p = w.prepare("Jane", [finding("Jane")], public_id(3))
-        p.discard(); p.discard(); self.error("inactive_plan", p.preview)
+        p.discard(); self.error("inactive_plan", p.discard); self.error("inactive_plan", p.preview)
         with w.prepare("Jane", [finding("Jane")], public_id(3)) as p: self.assertTrue(p.preview())
         self.error("inactive_plan", p.export_candidate_bundle)
         p = w.prepare("Jane", [finding("Jane")], public_id(3))
-        w.close(); self.error("closed_workspace", p.preview); self.error("closed_workspace", w.export_bundle)
+        w.close(); self.error("closed_workspace", p.preview); self.error("closed_workspace", p.discard); self.error("closed_workspace", w.export_bundle)
         other = Workspace.create(public_id(8), public_id(9))
         p = other.prepare("Jane", [finding("Jane")], public_id(10))
         del other; gc.collect(); self.error("closed_workspace", p.preview)
@@ -187,6 +190,79 @@ class WorkspaceTests(unittest.TestCase):
         item=WorkspaceInput(text,[large])
         self.error("resource_limit",lambda:w.prepare_batch([item]*9,public_id(3)))
         self.assertEqual(w.export_bundle(),before)
+
+    def test_error_normalization_allows_reentry_without_native_locks(self):
+        # Each regression gets a killable subprocess: a held non-reentrant native
+        # mutex must fail this test rather than hang the CI process forever.
+        cases={
+            "plan": """
+                p=w.prepare("Jane",[f],public_id(3));p.discard()
+                def reenter():
+                    try:p.expected_head()
+                    except DataFogWorkspaceError as error:assert error.code=="inactive_plan"
+                def trigger():p.preview()
+                expected="inactive_plan"
+            """,
+            "stage": """
+                wrong=WorkspaceFinding("PERSON","wrong",TextRange(0,4))
+                def reenter():w.prepare("ordinary",[],public_id(4)).discard()
+                def trigger():w.prepare("Jane",[wrong],public_id(3))
+                expected="invalid_finding"
+            """,
+            "capacity": """
+                plans=[w.prepare("Jane",[f],public_id(3)) for _ in range(32)]
+                def reenter():
+                    plans.pop().discard()
+                    w.prepare("ordinary",[],public_id(4)).discard()
+                def trigger():w.prepare("Jane",[f],public_id(4))
+                expected="resource_limit"
+            """,
+            "activation": """
+                p=w.prepare("Jane",[f],public_id(3));parent=p.expected_head()
+                def reenter():assert p.expected_head()==parent
+                def trigger():w.activate_saved(p,parent,parent)
+                expected="workspace_conflict"
+            """,
+        }
+        prelude="""
+import json
+from datafog_core import Workspace,WorkspaceFinding,TextRange,DataFogWorkspaceError
+public_id=lambda value:bytes([value])*16
+w=Workspace.create(public_id(1),public_id(2))
+f=WorkspaceFinding("PERSON","Jane",TextRange(0,4))
+before=w.export_bundle()
+"""
+        tail="""
+original_init=DataFogWorkspaceError.__init__
+original_loads=json.loads
+entered=False
+def hooked_init(self,*args,**kwargs):
+    global entered
+    if not entered:
+        entered=True
+        reenter()
+    original_init(self,*args,**kwargs)
+def decoder_must_not_run(*args,**kwargs):
+    raise AssertionError("workspace views must not call a mutable Python JSON decoder")
+DataFogWorkspaceError.__init__=hooked_init
+json.loads=decoder_must_not_run
+try:
+    try:trigger()
+    except DataFogWorkspaceError as error:assert error.code==expected
+    else:raise AssertionError("missing canonical workspace error")
+finally:
+    DataFogWorkspaceError.__init__=original_init
+    json.loads=original_loads
+assert entered
+assert w.export_bundle()==before
+w.close()
+print("reentry passed")
+"""
+        for name,case in cases.items():
+            with self.subTest(name=name):
+                result=subprocess.run([sys.executable,"-c",prelude+textwrap.dedent(case)+tail],capture_output=True,text=True,timeout=10)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertIn("reentry passed",result.stdout)
 
     def test_threads_are_serialized_and_independent_workers_reopen(self):
         w=self.workspace;p=w.prepare("Jane",[finding("Jane")],public_id(3));marker=p.preview()["text"];raw=save(w,p)
