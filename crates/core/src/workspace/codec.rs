@@ -30,6 +30,15 @@ pub(super) fn encode(state: &State) -> Result<Vec<u8>> {
 
 /// Reserve applies only to new ordinary records, never reads or byte-preserving no-ops.
 pub(super) fn encode_for_record(state: &State, recovery: bool) -> Result<Vec<u8>> {
+    if !state.conversations.is_empty() {
+        let budget = conversation::budget(state)?;
+        return encode_with_limit(
+            state,
+            MAX_BUNDLE_BYTES
+                .checked_sub(budget)
+                .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
+        );
+    }
     let limit = if recovery {
         MAX_BUNDLE_BYTES
     } else {
@@ -38,7 +47,7 @@ pub(super) fn encode_for_record(state: &State, recovery: bool) -> Result<Vec<u8>
     encode_with_limit(state, limit)
 }
 
-fn encode_operation<W: minicbor::encode::Write>(
+pub(super) fn encode_operation<W: minicbor::encode::Write>(
     operation: &OperationRecord,
     e: &mut Encoder<W>,
 ) -> std::result::Result<(), minicbor::encode::Error<W::Error>> {
@@ -90,7 +99,7 @@ fn encode_into(
     e.map(match state.snapshot_version {
         1 => 7,
         2 => 8,
-        _ => 10,
+        _ => 11,
     })?
     .u8(0)?
     .u8(state.snapshot_version)?
@@ -142,6 +151,8 @@ fn encode_into(
             encode_operation(operation, e)?;
         }
         let counts = state.operation_counts;
+        e.u8(9)?;
+        state.conversations.encode(e)?;
         e.u8(10)?
             .array(5)?
             .u64(counts.operations)?
@@ -158,20 +169,20 @@ impl From<minicbor::decode::Error> for WorkspaceError {
         error(ErrorCode::InvalidSnapshot)
     }
 }
-fn require(condition: bool) -> Result<()> {
+pub(super) fn require(condition: bool) -> Result<()> {
     if condition {
         Ok(())
     } else {
         Err(error(ErrorCode::InvalidSnapshot))
     }
 }
-fn array(d: &mut Decoder<'_>, size: u64) -> Result<()> {
+pub(super) fn array(d: &mut Decoder<'_>, size: u64) -> Result<()> {
     require(d.array()? == Some(size))
 }
 fn key(d: &mut Decoder<'_>, value: u8) -> Result<()> {
     require(d.u8()? == value)
 }
-fn id(d: &mut Decoder<'_>) -> Result<PublicId> {
+pub(super) fn id(d: &mut Decoder<'_>) -> Result<PublicId> {
     d.bytes()?
         .try_into()
         .map_err(|_| error(ErrorCode::InvalidSnapshot))
@@ -187,7 +198,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     let snapshot_version = d.u8()?;
     require(matches!(
         (snapshot_version, fields),
-        (1, Some(7)) | (2, Some(8)) | (3, Some(10))
+        (1, Some(7)) | (2, Some(8)) | (3, Some(11))
     ))?;
     key(&mut d, 1)?;
     let namespace = id(&mut d)?;
@@ -333,6 +344,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     }
     let mut operations = Vec::new();
     let mut operation_counts = OperationCounts::default();
+    let mut conversations = conversation::Conversations::default();
     if snapshot_version == 3 {
         key(&mut d, 8)?;
         let count = d
@@ -360,6 +372,8 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
                 transformed_spans: d.u64()?,
             });
         }
+        key(&mut d, 9)?;
+        conversations = conversation::Conversations::decode(&mut d, bytes.len())?;
         key(&mut d, 10)?;
         array(&mut d, 5)?;
         operation_counts = OperationCounts {
@@ -392,7 +406,10 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         let mut issued = BTreeMap::<PublicId, u64>::new();
         for entry in entries.values() {
             if let Some(record) = by_id.get(&entry.issuance) {
-                require(record.kind == OperationKind::Prepare)?;
+                require(matches!(
+                    record.kind,
+                    OperationKind::Prepare | OperationKind::ConversationPrepare
+                ))?;
             } else {
                 require(!complete)?;
             }
@@ -417,6 +434,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     }
     require(d.position() == bytes.len())?;
     let state = State {
+        conversations,
         snapshot_version,
         operations,
         operation_counts,
@@ -427,6 +445,17 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         entries,
         counters,
     };
+    state.conversations.validate(&state)?;
+    if !state.conversations.is_empty() {
+        require(
+            bytes
+                .len()
+                .checked_add(
+                    conversation::budget(&state).map_err(|_| error(ErrorCode::InvalidSnapshot))?,
+                )
+                .is_some_and(|size| size <= MAX_BUNDLE_BYTES),
+        )?;
+    }
     let canonical = Zeroizing::new(encode(&state)?);
     require(canonical.as_slice() == bytes)?;
     Ok(state)

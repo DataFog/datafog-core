@@ -1,19 +1,20 @@
-# Conversation wire/API packet — not runtime
+# Conversation wire/API — Core/WASM implementation draft
 
 Technical proposal for [#148](https://github.com/DataFog/datafog-core/issues/148),
-stacked on committed operations `d5584e9`. The [send/pause decision](workspace-conversation-context.md)
+built on the merged operation-history contract. The [send/pause decision](workspace-conversation-context.md)
 is approved. [Ordinary confirmation reservation](conversation-confirmation-capacity.md)
-was approved October 29. No reservation ledger, send admission,
-conversation SDK export or passing conversation conformance is implemented here.
+was approved October 29. Core and WASM now implement the reviewed reservation/identity contract in this
+draft. Native Node/Python conversation wrappers, final encrypted/MV3 qualification,
+resource measurements, independent review and API freeze remain pending.
 
 ## One coordinated unreleased wire
 
-Propose one final v3 map with **11** keys: existing keys 0–8 and 10 keep their
+The candidate canonical v3 map has **11** keys: existing keys 0–8 and 10 keep their
 operations/policy meanings; key 9 becomes a mandatory four-element array:
 
 | Position | Rows, exact tuple order | Meaning |
 | --- | --- | --- |
-| 0 | `[surface, conversationId]` | Workspace-local conversation identities, stable append-order indices. |
+| 0 | `[logicalId16, surface, siteIdOrNull, siteIdByteBudget]` | Immutable private logical identity and site-ID UTF-8 budget; nullable site ID binds exactly once after trusted observed send. |
 | 1 | `[prepareOperationId, inputIndex, contextIndex, markerRefs]` | Active saved intents; `markerRefs` is a sorted unique array of `[label, code]`. |
 | 2 | `[resolutionOperationId, prepareOperationId, inputIndex, contextIndex, outcome, markerRefs]` | Retained terminal resolutions and exact original intended references; proposed outcome `0=observed_sent`, `1=definitely_not_sent`. |
 | 3 | `[contextIndex, label, code, firstConfirmationOperationId]` | Unique issued membership and the first saved confirmation establishing it. |
@@ -22,10 +23,12 @@ IDs are existing 16-byte operation IDs. Labels and six-character codes use exist
 canonical marker grammar. Neither a caller-supplied replacement set nor arbitrary
 original values enter confirmation. Context identity compares exact valid UTF-8
 strings: no trimming, case folding, URL interpretation or Unicode normalization.
-An identity must contain two nonempty strings; no site-specific ASCII grammar is
-invented. The host obtains immutable identity before review from its trusted
-request/tab state. New chats whose stable ID is unavailable before send remain a
-shipping-host integration gap; provisional IDs or post-send rebinding need review.
+A surface and any bound site ID must be nonempty; no site-specific ASCII grammar
+is invented. The host supplies the immutable 16-byte logical ID before review and
+substantiates the persisted site-ID byte budget before claiming first-chat support.
+A matching successful-send confirmation may fill a previously null site ID once;
+a changed/oversized ID or duplicate exact surface/site binding rejects atomically.
+Core cannot prove a host observation or its declared acquisition/length contract.
 
 Context rows are created only with a saved intent and never removed/reindexed.
 Intent identity is `(prepareOperationId,inputIndex)`; one batch member has one
@@ -54,8 +57,12 @@ not change the first confirmation. No membership can be justified by a not-sent
 terminal, unrelated operation, arbitrary counter or only an active intent. These
 are structural saved-history checks; they cannot prove a host observation truthful.
 
-New operation-kind codes must be allocated jointly with #162 before runtime; no
-wire number is assigned by this packet. Recompute counts from retained operation
+Existing operation-kind codes 0–7 are unchanged. Candidate codes are
+`8=send_confirmed`, `9=send_not_sent`, `10=conversation_prepare`. Every prepared
+batch member has exactly one active-or-terminal intent; the decoder checks
+`conversation_prepare.preparedInputs` against those members. Each confirmation
+transaction resolves exactly one member and contributes one confirmed handoff,
+independent of alias count. Not-sent/pending/preview/recovery contribute none. Recompute counts from retained operation
 rows plus corresponding terminal tuples; reject claimed success totals without
 matching saved success. No active intent, duplicate terminal event, forged
 membership or resolution replay may be accepted simply because counters match.
@@ -63,7 +70,7 @@ membership or resolution replay may be accepted simply because counters match.
 This map is a **candidate**, not a second competing meaning of v3. Before freeze,
 #162 must incorporate the final key9 layout and use it consistently for every
 new/saved v3. Current map10 experiments are development fixtures, not published
-vaults. Existing released v1/v2 read/export/no-op/discard remain byte-exact. A real
+vaults; this candidate decoder accepts only canonical map11 for v3. Existing released v1/v2 read/export/no-op/discard remain byte-exact. A real
 saved upgrade uses the approved prior warning that beta.1/beta.2 cannot open it.
 If map10 v3 ships first, the conversation layout needs a subsequent version rather
 than changing the meaning of an already released v3.
@@ -109,23 +116,24 @@ Recovery changes only its existing head/row/count fields. It preserves **all**
 key9 identities, pending intents, terminal events and memberships byte-for-byte;
 it never resolves uncertainty. Consequently unchanged key9 contributes zero
 recovery growth. The 7,699-byte recovery reserve still requires joint final-encoder
-boundary tests. Confirmation-byte credits and recovery interleaving are in the
-approved capacity contract; nothing here promises capacity for the second save.
+boundary tests. Confirmation-byte credits and recovery interleaving follow the
+approved capacity contract and are recomputed from active intentions and history.
 
-## Proposed thin SDK surface
+## Thin Core/WASM surface
 
-These names belong only in proposal examples until implemented. Rust/Python use
-snake_case; Node/WASM use the camelCase forms below. Shared Core owns semantics.
+Rust uses snake_case; current WASM uses the camelCase methods below. Native
+Python/Node conversation wrappers must follow shared Core in separate slices. No
+new method is implied to be frozen or present in the released beta.2 packages.
 
-| Proposed Node/WASM call | Inputs / result | Ownership and failure |
+| Current WASM call (native follow-on pending) | Inputs / result | Ownership and failure |
 | --- | --- | --- |
-| `prepareConversationSend(inputs, operation)` | Current review input plus immutable conversation identity per member; opaque prepared change with intent handles. | Existing prepare/save/activate; no transport call or success count. No new implicit alias allocation beyond current reviewed input. |
+| `prepareConversationSend([{input,conversation}], operation)` | Current review input plus immutable conversation identity per member; opaque prepared change with intent handles. | Existing prepare/save/activate; no transport call or success count. No new implicit alias allocation beyond current reviewed input. |
 | `sendIntentStatus(intent)` | Exact preparation ID/member; pending or retained terminal event. | Read-only, owned content-free result; unknown intent rejects. Useful after lost acknowledgment; never sends. |
-| `conversationState(identity)` | Known context and pending/issued counts. | Read-only; unknown context rejects even for plain text. No full private membership dump required by restoration. |
-| `prepareObservedSend(intent, identity, operation)` | Exact active intent and trusted host's matching successful-send observation; prepared change. | Metadata-only; caller cannot replace intended marker set. Replay/conflict rejects; persistence required before issuance. |
-| `prepareDefinitelyNotSent(intent, identity, operation)` | Exact active intent plus trusted definite non-delivery; prepared change. | Technical proposal: generic network error/missing acknowledgment/manual assertion is insufficient. Root review must settle host evidence contract before exposure. |
-| `restoreInConversation(text, identity)` / `restoreReportInConversation(...)` | Existing strict restore shape with fixed context. | All-or-nothing; no automatic unscoped fallback. |
-| `bufferedRestoreInConversation(identity, encoding)` / `progressiveRestoreInConversation(...)` | Existing strict/progressive child lifecycle and encoding contracts. | Owned child pins head/context; parent close or changed head invalidates it; same-head no-op preserves it. |
+| `conversation(logicalId)` / `conversationForSite(surface,siteId)` | Known context and pending/issued counts. | Read-only; unknown context rejects even for plain text. No full private membership dump required by restoration. |
+| `prepareObservedSend(intent,logicalId,surface,siteId,operation)` | Exact active intent and trusted host's matching successful-send observation; prepared change. | Metadata-only; caller cannot replace intended marker set. Replay/conflict rejects; persistence required before issuance. |
+| `prepareDefinitelyNotSent(intent,logicalId,operation)` | Exact active intent plus trusted definite non-delivery; prepared change. | Only trusted definite non-delivery; generic network error, missing acknowledgment or manual assertion is insufficient. Core cannot prove host evidence. |
+| `restoreInConversation(text,logicalId)` / `restoreReportInConversation(...)` | Existing strict restore shape with fixed context. | All-or-nothing; no automatic unscoped fallback. |
+| `bufferedRestoreInConversation(logicalId,encoding)` / `progressiveRestoreInConversation(...)` | Existing strict/progressive child lifecycle and encoding contracts. | Owned child pins head/context; parent close or changed head invalidates it; same-head no-op preserves it. |
 
 Opaque intent references are owned copies of IDs/member index, not pointers into a
 plan; they survive committed reopen but confer no authority without current Core
@@ -145,29 +153,36 @@ switch, provider-controlled identity, independent-handle invalidation or distrib
 admission guarantee. Current-state loading/CAS and transport observation remain host
 responsibilities.
 
-## Evidence and remaining implementation gates
+## Reservation accounting and remaining qualification
 
-Run the encoder-only experiment with:
+The Core admission proof derives `P`, one outstanding ordinary row/revision credit
+per active intent. Unfunded ordinary writes must fit `T + P <= 99744`; recovery
+and exact funded resolution fit `T + P <= 100000`. Only a matching active intent
+can spend its credit. A funded resolution does not reset the recovery pool.
 
-```sh
-cargo run --release -p datafog-core --example workspace_operation_capacity -- target/conversation-wire-growth/capacity
-cargo run --release -p datafog-core --example conversation_wire_growth -- target/conversation-wire-growth/capacity
-```
+An unfunded ordinary save funds the existing derived 7,699-byte/256-record recovery
+pool. Later recovery rows consume their actual encoded row and numeric-header
+growth; unused residual is freed after all 256 allowances are used. Separate
+confirmation credits conservatively cover the whole retained terminal, maximum
+timed operation, worst new membership/binding and header growth, without assuming
+a removed pending row will pay for anything. Every save preserves remaining credits
+and recovery pool in the complete 16 MiB snapshot. The decoder derives/revalidates
+these pools and checked available u64 increments; it trusts no claimed credit totals.
+A valid legacy head near MAX still reads/exports/no-ops unchanged, but a new send
+rejects before transport unless both saves and promised increments fit.
 
-It wraps **actual Core** before/after recovery exports in the proposed map11 with
-an unchanged synthetic nonempty key9. It explicitly checks that current Core
-rejects map11. Equal measured growth proves only the unchanged-field byte equation;
-it does not prove decoder validity, send behavior, reservation admission, encrypted
-reopen, or capacity after conversation implementation. No mock SDK pass is claimed.
-Adding key9 to a map10 bundle near the byte ceiling can itself exceed admission;
-equal recovery growth does not make such a candidate admissible. The entire final
-map11 must fit the existing ordinary byte limit before any saved send preparation.
+Current actual Core tests cover partial batch/reopen/recovery/scoped offsets,
+100,000 retained rows with all 256 recoveries and a later funded confirmation,
+MAX/MAX-1/MAX-256 rejection and the exact MAX-258 two-save/recovery sequence.
+The installed WASM/Chromium suite executes the new public methods and TypeScript
+consumers. The exact 16 MiB edge test rejects one extra byte before sending, then
+completes all 256 recoveries and the funded maximum-site-ID confirmation.
+Worst-case heap/CPU and encrypted-host qualification are still in progress.
 
-The [clean-commit receipt](evidence/conversation-wire-growth.json) at `ffa59ba`
-measured a 66-byte synthetic payload (67 bytes including key9). At 99,744 and
-99,999 existing rows, real Core recovery added 30 bytes; the carried map11 also
-added 30 bytes in each case. The extra recovery growth was zero. These snapshots
-were approximately 3.3 MB, **not** a final 16 MiB conversation admission test.
+The earlier [encoder-only receipt](evidence/conversation-wire-growth.json) at
+`ffa59ba` remains historical evidence for unchanged-field growth only. It did not
+qualify a conversation decoder or final admission; current real Core tests replace
+the prototype map-carry experiment. No provider acceptance is inferred.
 
 The [draft adversarial fixtures](../../fixtures/workspace/conversation-contract-draft.json)
 describe same-chat partial batches, uncertain sends, wrong context, malformed

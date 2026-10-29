@@ -3,6 +3,10 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod conversation;
+pub use conversation::{
+    Conversation, ConversationInput, ConversationState, SendIntentId, SendStatus,
+};
 mod operations;
 pub use operations::{
     MAX_OPERATION_TIME_MS, MAX_OPERATIONS, MAX_ORDINARY_OPERATIONS, OperationContext,
@@ -74,6 +78,10 @@ pub enum ErrorCode {
     ResourceLimit,
     InvalidOperation,
     OperationReused,
+    InvalidConversation,
+    ConversationUnknown,
+    ConversationPending,
+    InvalidSendIntent,
 }
 
 impl ErrorCode {
@@ -94,6 +102,10 @@ impl ErrorCode {
             Self::ResourceLimit => "resource_limit",
             Self::InvalidOperation => "invalid_operation",
             Self::OperationReused => "operation_reused",
+            Self::InvalidConversation => "invalid_conversation",
+            Self::ConversationUnknown => "conversation_unknown",
+            Self::ConversationPending => "conversation_pending",
+            Self::InvalidSendIntent => "invalid_send_intent",
         }
     }
 }
@@ -221,6 +233,7 @@ pub enum MarkerIssueKind {
     Damaged,
     /// A committed `LABEL_CODE` whose surrounding brackets were dropped.
     Unbracketed,
+    NotIssuedInConversation,
 }
 impl MarkerIssueKind {
     pub fn as_str(self) -> &'static str {
@@ -228,6 +241,7 @@ impl MarkerIssueKind {
             Self::Unknown => "unknown",
             Self::Damaged => "damaged",
             Self::Unbracketed => "unbracketed",
+            Self::NotIssuedInConversation => "not_issued_in_conversation",
         }
     }
 }
@@ -305,6 +319,7 @@ fn identity_key(value: &str) -> String {
 }
 #[derive(Clone)]
 struct State {
+    conversations: conversation::Conversations,
     snapshot_version: u8,
     operations: Vec<OperationRecord>,
     operation_counts: OperationCounts,
@@ -417,6 +432,7 @@ impl Workspace {
             transformed_spans: 0,
         }];
         Self::from_state(State {
+            conversations: conversation::Conversations::default(),
             snapshot_version: 3,
             operation_counts: operations::summarize(&operations)?,
             operations,
@@ -460,6 +476,7 @@ impl Workspace {
             Arc::clone(&self.lifetime),
             Arc::clone(&self.read_epoch),
             encoding,
+            None,
         ))
     }
 
@@ -475,6 +492,7 @@ impl Workspace {
             Arc::clone(&self.lifetime),
             Arc::clone(&self.read_epoch),
             encoding,
+            None,
         )
     }
 
@@ -496,6 +514,15 @@ impl Workspace {
         &self,
         inputs: &[ReviewInput<'_>],
         operation_id: PublicId,
+    ) -> Result<PreparedChange> {
+        self.prepare_review_internal(inputs, operation_id, None, false)
+    }
+    fn prepare_review_internal(
+        &self,
+        inputs: &[ReviewInput<'_>],
+        operation_id: PublicId,
+        occurred_at_ms: Option<u64>,
+        explicit: bool,
     ) -> Result<PreparedChange> {
         if inputs.is_empty() {
             return Err(error(ErrorCode::InvalidBatch));
@@ -558,7 +585,7 @@ impl Workspace {
                 findings,
             })
             .collect();
-        self.prepare_batch(&borrowed, operation_id)
+        self.prepare_batch_internal(&borrowed, operation_id, occurred_at_ms, explicit)
     }
 
     /// Stage recovery of this validated bundle under a fresh commit head.
@@ -908,12 +935,40 @@ impl Workspace {
 }
 
 fn restore_report(state: &State, text: &str) -> Result<RestoreReport> {
+    restore_report_scoped(state, text, None)
+}
+fn restore_report_scoped(
+    state: &State,
+    text: &str,
+    context: Option<usize>,
+) -> Result<RestoreReport> {
     if text.len() > MAX_BUNDLE_BYTES {
         return Err(error(ErrorCode::ResourceLimit));
     }
     let lookup = marker_lookup(state);
     let spans = marker_spans(text)?;
-    let issues = marker_issues(text, &spans, &lookup)?;
+    let mut issues = marker_issues(text, &spans, &lookup)?;
+    if let Some(context) = context {
+        let mut index = TextIndex::new(text);
+        for span in &spans {
+            if span.canonical.as_ref().is_some_and(|canonical| {
+                lookup.contains_key(canonical) && !conversation::eligible(state, context, canonical)
+            }) {
+                issues.push(MarkerIssue {
+                    kind: MarkerIssueKind::NotIssuedInConversation,
+                    byte_range: span.range,
+                    codepoint_range: TextRange {
+                        start: index.codepoint_offset(span.range.start),
+                        end: index.codepoint_offset(span.range.end),
+                    },
+                    utf16_range: index
+                        .utf16_range(span.range)
+                        .map_err(|_| error(ErrorCode::InvalidEncoding))?,
+                });
+            }
+        }
+        issues.sort_by_key(|issue| issue.byte_range.start);
+    }
     let restored_markers = spans
         .iter()
         .filter(|span| {

@@ -18,6 +18,7 @@ pub struct BufferedRestore {
     lifetime: Arc<AtomicBool>,
     epoch: Arc<AtomicBool>,
     encoding: RestoreEncoding,
+    context: Option<usize>,
     buffer: Zeroizing<Vec<u8>>,
     high_surrogate: Option<u16>,
     active: bool,
@@ -28,12 +29,14 @@ impl BufferedRestore {
         lifetime: Arc<AtomicBool>,
         epoch: Arc<AtomicBool>,
         encoding: RestoreEncoding,
+        context: Option<usize>,
     ) -> Self {
         Self {
             state: Some(state),
             lifetime,
             epoch,
             encoding,
+            context,
             buffer: Zeroizing::new(Vec::new()),
             high_surrogate: None,
             active: true,
@@ -119,11 +122,12 @@ impl BufferedRestore {
         let result = (|| {
             let text =
                 std::str::from_utf8(&self.buffer).map_err(|_| error(ErrorCode::InvalidEncoding))?;
-            restore_report(
+            restore_report_scoped(
                 self.state
                     .as_deref()
                     .ok_or_else(|| error(ErrorCode::InactiveStream))?,
                 text,
+                self.context,
             )
         })();
         self.buffer.zeroize();

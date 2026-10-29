@@ -25,6 +25,29 @@ impl Adapter {
     }
 }
 impl Registry {
+    pub(super) fn scoped(
+        &mut self,
+        owner: &Workspace,
+        context: workspace::PublicId,
+        encoding: &str,
+        progressive: bool,
+    ) -> Result<NativeRestoreStream, JsValue> {
+        let encoding = parse_encoding(encoding)?;
+        let implementation = if progressive {
+            Implementation::Progressive(
+                owner
+                    .progressive_restore_in_conversation(context, encoding)
+                    .map_err(from_error)?,
+            )
+        } else {
+            Implementation::Buffered(
+                owner
+                    .buffered_restore_in_conversation(context, encoding)
+                    .map_err(from_error)?,
+            )
+        };
+        self.track(implementation, encoding)
+    }
     fn track(
         &mut self,
         inner: Implementation,

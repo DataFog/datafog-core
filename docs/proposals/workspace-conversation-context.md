@@ -1,7 +1,8 @@
 # C2/R3 conversation context — review proposal
 
 Target: `0.5.0-beta.3`; [#148](https://github.com/DataFog/datafog-core/issues/148).
-This is a proposal, not an implemented API or an approved snapshot layout.
+This records the approved contract and current Core/WASM implementation draft.
+The candidate snapshot/API remains provisional until final review and qualification.
 Operations/counts [#147](https://github.com/DataFog/datafog-core/issues/147),
 all-SDK parity [#171](https://github.com/DataFog/datafog-core/issues/171) and
 contract freeze [#154](https://github.com/DataFog/datafog-core/issues/154) remain open.
@@ -25,8 +26,8 @@ Core cannot observe a browser or provider. The host's observation is an assertio
 not proof that a remote person/model received the text. The exact host event acquisition (for example, the sent message in the selected
 conversation) still needs site-specific technical and shipping-host verification. An attempted click, an unacknowledged write and successful copying
 are not equivalent observations. The confirmed-send/second-save sequence is
-approved; manual confirmation, storage bounds and final wire/API details remain
-separate review work.
+approved; manual confirmation is not inferred; final wire/API and shipping-host verification
+remain separate qualification work.
 
 ## Recommended two-transaction flow
 
@@ -71,7 +72,7 @@ conversation storage or weakened to make a new schema fit.
 
 ## Conversation-aware restoration
 
-Propose an explicit scoped restore mode. Existing unscoped `restore`/`restoreReport`
+The candidate implements an explicit scoped restore mode. Existing unscoped `restore`/`restoreReport`
 and strict buffered R2 behavior keep their compatibility contract.
 
 - Capture one immutable authorized conversation identity for the response. Never
@@ -87,15 +88,15 @@ and strict buffered R2 behavior keep their compatibility contract.
 - A scoped stream pins its committed context/head; existing close/change/reset and
   no-op behavior remains consistent with the shared streaming contract.
 
-Error names, subtype/result fields and method spelling are technical contract work,
-not implemented exports. Native Python/Node, browser WASM and Rust must expose and
+Current Core/WASM names and fields are in the linked implementation contract;
+native Python/Node still need thin conversation wrappers. Every SDK must expose and
 actually execute the same final semantics; type-only declarations do not qualify.
 
 ## Snapshot, backup and required proof
 
 Coordinate with the unmerged operation-v3 proposal: existing policy keys 1–7 retain
-their meanings, operation/count fields are proposed at 8/10, and key 9 is reserved
-for conversations. Do not create incompatible version-3 layouts. This document
+their meanings, operation/count fields are at 8/10, and the coordinated map11
+uses key9 for conversations. Do not create incompatible version-3 layouts. This document
 assigns no wire types or unapproved numeric limits. New readers preserve released
 v1/v2 bytes on read/export/no-op/discard; any real saved upgrade needs the approved
 warning that beta.1/beta.2 cannot open upgraded state.
@@ -114,8 +115,8 @@ behavior qualification remain separate gates.
 ## Concrete pending-send packet for review
 
 This packet extends the approved sequence; it does **not** ask whether copying or
-composer fill should count as sending. Neither counts. No conversation runtime is
-implemented by this proposal. Its current operations base is committed `d5584e9`;
+composer fill should count as sending. Neither counts. Core/WASM now implement the draft contract; native wrappers
+and final host/resource qualification remain outstanding. Its current operations base is committed `d5584e9`;
 the 100,000/99,744/256 capacity implementation is locally qualified in #162 but
 remains unreleased.
 
@@ -170,8 +171,8 @@ Do not implement that alternative implicitly.
 This settles the pause scope as well as the earlier confirmed-send sequence.
 Confirmation-capacity reservation and immutable logical identity with one-time
 site binding were also approved October 29; the wire,
-resource and API details still need review before runtime implementation. The
-code/fixture names below are proposals, not frozen SDK exports.
+resource and API details still need independent review and final qualification.
+The candidate methods are not frozen SDK exports.
 
 ### Reopening, cancellation and batches
 
@@ -225,9 +226,10 @@ before claiming acceptance or freezing the API.
 
 The [approved ordinary confirmation-capacity packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and required pre-send reservations. Implementation and verification are still pending.
 
-The [technical wire/API packet](conversation-wire-api.md) proposes the coordinated
+The [technical wire/API packet](conversation-wire-api.md) documents the coordinated
 key9 shape, derived resource bounds, native SDK matrix and encoder-only experiment.
-It does not implement conversation runtime or the approved capacity contract.
+Core/WASM implement that candidate; native conversation wrappers and final
+qualification remain outstanding.
 
 The later [first-chat identity packet](conversation-first-chat-identity.md) records
 the inspected extension's missing send/site-ID correlation and compares immutable

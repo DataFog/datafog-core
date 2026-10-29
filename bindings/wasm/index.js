@@ -344,10 +344,50 @@ function workspaceOperation(operation) {
   if (!Number.isSafeInteger(time) || time < 0 || time > 253402300799999) throw workspaceFailure("invalid_operation");
   return {id, json: JSON.stringify({id: Array.from(id), occurredAtMs: time})};
 }
+function conversationRecord(value,fields) {
+  if(!value || typeof value!=="object" || ![Object.prototype,null].includes(Object.getPrototypeOf(value))) throw workspaceFailure("invalid_conversation");
+  const properties=Object.getOwnPropertyDescriptors(value);
+  if(Reflect.ownKeys(properties).length!==fields.length) throw workspaceFailure("invalid_conversation");
+  const result={};
+  for(const field of fields) {
+    if(!properties[field]?.enumerable || !("value" in properties[field])) throw workspaceFailure("invalid_conversation");
+    result[field]=properties[field].value;
+  }
+  return result;
+}
+function conversationId(value) {
+  if(value instanceof Uint8Array) {workspaceBytes(value,16,true);return Array.from(value);}
+  if(!Array.isArray(value) || value.length!==16 || Reflect.ownKeys(value).length!==17) throw workspaceFailure("invalid_conversation");
+  const bytes=[];
+  for(let i=0;i<16;i++) {
+    const item=Object.getOwnPropertyDescriptor(value,String(i));
+    if(!item?.enumerable || !("value" in item) || !Number.isInteger(item.value) || item.value<0 || item.value>255) throw workspaceFailure("invalid_conversation");
+    bytes.push(item.value);
+  }
+  return bytes;
+}
+function conversationInput(value) {
+  const fields=conversationRecord(value,["id","surface","siteId","siteIdByteBudget"]);
+  fields.id=conversationId(fields.id);
+  workspaceText(fields.surface,16*1024*1024);
+  if(fields.siteId!==null) workspaceText(fields.siteId,16*1024*1024);
+  if(!Number.isSafeInteger(fields.siteIdByteBudget) || fields.siteIdByteBudget<1 || fields.siteIdByteBudget>16*1024*1024) throw workspaceFailure("invalid_conversation");
+  return fields;
+}
+function sendIntentJson(value) {
+  let fields;
+  try {
+    fields=conversationRecord(value,["preparationId","inputIndex"]);
+    fields.preparationId=conversationId(fields.preparationId);
+    if(!Number.isSafeInteger(fields.inputIndex) || fields.inputIndex<0 || fields.inputIndex>=32) throw workspaceFailure("invalid_send_intent");
+  } catch {throw workspaceFailure("invalid_send_intent");}
+  return JSON.stringify(fields);
+}
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); Object.freeze(this); }
   snapshotFormat() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state,"snapshot_format",handle)); }
   policyPreview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "policy_preview", handle)); }
+  sendIntents() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state,"send_intents",handle)); }
   previews() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "previews", handle)); }
   preview() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "preview", handle)); }
   heads() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "plan_heads", handle)); }
@@ -434,6 +474,48 @@ export class Workspace {
       } catch(error) { const failure=error instanceof DataFogError?error:workspaceFailure("invalid_finding");failure.inputIndex=inputIndex;throw failure; }
     }
     return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_review",`[${parts.join(",")}]`,operationId));
+  }
+  prepareConversationSend(inputs, operation) {
+    const context=workspaceOperation(operation);
+    if(!Array.isArray(inputs) || inputs.length===0 || Reflect.ownKeys(inputs).length!==inputs.length+1) throw workspaceFailure("invalid_batch");
+    if(inputs.length>32) throw workspaceFailure("resource_limit");
+    const parts=[];let budget=2;
+    for(let index=0;index<inputs.length;index++) {
+      try {
+        const item=Object.getOwnPropertyDescriptor(inputs,String(index));
+        if(!item?.enumerable || !("value" in item)) throw workspaceFailure("invalid_batch");
+        const row=conversationRecord(item.value,["input","conversation"]);
+        const part=`{"input":${workspaceReviewJson(row.input)},"conversation":${JSON.stringify(conversationInput(row.conversation))}}`;
+        budget+=new TextEncoder().encode(part).length+1;
+        if(budget>16*1024*1024) throw workspaceFailure("resource_limit");parts.push(part);
+      } catch(error) {const failure=error instanceof DataFogError?error:workspaceFailure("invalid_conversation");failure.inputIndex=index;throw failure;}
+    }
+    return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_conversation_send",`[${parts.join(",")}]`,context.json));
+  }
+  conversation(logicalId) {workspaceBytes(logicalId,16,true);return JSON.parse(workspaceCall(this.#state,"conversation",logicalId));}
+  conversationForSite(surface,siteId) {
+    workspaceText(surface,16*1024*1024);workspaceText(siteId,16*1024*1024);
+    return workspaceCall(this.#state,"conversation_for_site",surface,siteId);
+  }
+  sendIntentStatus(intent) {return JSON.parse(workspaceCall(this.#state,"send_intent_status",sendIntentJson(intent)));}
+  prepareObservedSend(intent,logicalId,surface,siteId,operation) {
+    workspaceBytes(logicalId,16,true);workspaceText(surface,16*1024*1024);workspaceText(siteId,16*1024*1024);
+    const context=workspaceOperation(operation);
+    return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_observed_send",sendIntentJson(intent),logicalId,surface,siteId,context.json));
+  }
+  prepareDefinitelyNotSent(intent,logicalId,operation) {
+    workspaceBytes(logicalId,16,true);const context=workspaceOperation(operation);
+    return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_definitely_not_sent",sendIntentJson(intent),logicalId,context.json));
+  }
+  restoreInConversation(text,logicalId) {workspaceText(text,16*1024*1024);workspaceBytes(logicalId,16,true);return workspaceCall(this.#state,"restore_in_conversation",text,logicalId);}
+  restoreReportInConversation(text,logicalId) {workspaceText(text,16*1024*1024);workspaceBytes(logicalId,16,true);return JSON.parse(workspaceCall(this.#state,"restore_report_in_conversation",text,logicalId));}
+  bufferedRestoreInConversation(logicalId,encoding="utf8") {
+    workspaceBytes(logicalId,16,true);if(encoding!=="utf8" && encoding!=="utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state,"buffered_restore_in_conversation",logicalId,encoding));
+  }
+  progressiveRestoreInConversation(logicalId,encoding="utf8") {
+    workspaceBytes(logicalId,16,true);if(encoding!=="utf8" && encoding!=="utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state,"progressive_restore_in_conversation",logicalId,encoding));
   }
   operations() { return JSON.parse(workspaceCall(this.#state, "operations")); }
   operationsPage(offset, limit) {

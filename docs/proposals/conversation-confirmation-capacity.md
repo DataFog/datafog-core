@@ -2,7 +2,7 @@
 
 Review proposal for [#148](https://github.com/DataFog/datafog-core/issues/148),
 coordinated with [#147/#162](https://github.com/DataFog/datafog-core/pull/162).
-**Approved October 29: reserve ordinary confirmation space before sending. No capacity reservation is implemented yet.** The confirmed-send
+**Approved October 29: reserve ordinary confirmation space before sending. Reservation is implemented in the Core/WASM candidate; final qualification is incomplete.** The confirmed-send
 sequence and conversation-wide pending pause are already approved. Do not ask for
 those decisions again.
 
@@ -84,8 +84,8 @@ the 256 row slots alone do not create 256 available revision increments in an
 already exhausted imported vault. Do not promise that they do.
 
 The technical admission design must handle recovery/resolution interleavings and
-state what future increments it preserves. No ledger or head-budget
-exception is implemented here. Required boundary cases include imported heads at
+state what future increments it preserves. The linked Core/WASM implementation derives its credits from retained history,
+rather than trusting claimed input totals. Required boundary cases include imported heads at
 `MAX`, `MAX-1` and the exact admitted two-save boundary, pending resolutions across
 recovery, unchanged no-op reads, and failure before external send where the funded
 increments do not fit. Retrying against an exhausted head cannot invent a send,

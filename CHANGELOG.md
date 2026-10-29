@@ -28,6 +28,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Core and browser WASM support saved conversation send intents, funded confirmation
+  capacity, one-time site binding and explicit conversation-scoped restoration.
 - Native Node exposes Core operation records, explicit timed preparation/outcomes,
   covered-history counts and bounded owned history pages.
 - Native Python exposes the draft Core operation records, recorded-history counts

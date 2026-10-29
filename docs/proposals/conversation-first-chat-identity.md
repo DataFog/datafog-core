@@ -1,7 +1,7 @@
 # First-chat identity — later decision packet
 
 For [#148](https://github.com/DataFog/datafog-core/issues/148). **Approved October 29: private immutable logical identity, then one-time
-matching site-ID binding. Not implemented.** Confirmed-send and whole-conversation pending pause
+matching site-ID binding. Core/WASM implementation draft; actual extension verification remains outstanding.** Confirmed-send and whole-conversation pending pause
 are already approved; this packet does not reopen either decision.
 
 ## The integration gap and inspected evidence
@@ -73,10 +73,10 @@ binding, changed target during approval or observation for another attempt rejec
 without a partial saved change. Host-owned logical IDs used by a LiteLLM/server
 integration are a distinct identity source, not proof of a browser site's ID.
 
-This would change the proposed key9 context tuple to a logical ID plus surface and
-nullable exact site ID, and add strict binding cross-checks. The
-[current wire packet](conversation-wire-api.md) still describes the earlier
-exact-site-ID pair and will be revised in the reviewed implementation plan. There is no shipped
+The candidate key9 context tuple now contains the logical ID, surface, nullable
+exact site ID and immutable host-declared UTF-8 site-ID byte budget. The
+[current wire packet](conversation-wire-api.md) records strict binding and capacity
+cross-checks in the Core/WASM implementation draft. There is no shipped
 conversation format to migrate, but final #162/#148 version coordination remains
 mandatory. No competing v3 layout may be published under the same version.
 
@@ -112,7 +112,7 @@ Sid approved the immutable logical-context and one-time binding design,
 conditional on actual extension evidence for acquiring a
 matching accepted-send/site-ID association. If that evidence cannot be established,
 ship the explicit unsupported-first-send boundary rather than claiming support.
-No new human question, wrapper API, binding mutation or provider call is introduced
-by this packet. Required future tests cover every crash boundary above, duplicated
+No provider was called or existing extension changed to obtain the source evidence
+in this packet; the Core/WASM implementation does not qualify a shipping adapter. Required future tests cover every crash boundary above, duplicated
 tabs/reload/navigation, same-site-ID races, wrong workspace/surface, partial same-
 chat batches, all four SDKs and actual reference-host persistence.
