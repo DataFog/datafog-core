@@ -199,6 +199,13 @@ export async function verifyNodeWorkspaceHost() {
     await assert.rejects(()=>streamRequest({deliver:async()=>{throw new Error("Synthetic private transport detail");}}),error=>error.code==="stream_delivery_failed" && error.complete===false && !error.message.includes("Synthetic"));
     async function* brokenSource(){yield new TextEncoder().encode("safe ");throw Object.assign(new Error("Synthetic private provider detail"),{complete:false,delivered:{private:"Synthetic"}});}
     await assert.rejects(()=>streamRequest({chunks:brokenSource()}),error=>error.code==="stream_input_failed" && error.complete===false && error.delivered.bytes===5 && !JSON.stringify(error).includes("Synthetic"));
+    // Callback-visible objects cannot contaminate authoritative progress/error metadata.
+    const mutateCounts=async chunk=>{chunk.delivered.bytes=999;chunk.delivered.private="Synthetic private callback detail";};
+    const untouchedComplete=await streamRequest({deliver:mutateCounts});
+    assert.deepEqual(untouchedComplete.delivered,complete.delivered);
+    await assert.rejects(()=>streamRequest({chunks:brokenSource(),deliver:mutateCounts}),error=>{
+      assert.equal(error.code,"stream_input_failed");assert.deepEqual(error.delivered,{bytes:5,codepoints:5,utf16:5,restoredMarkers:0});assert(!JSON.stringify(error).includes("Synthetic"));return true;
+    });
     await assert.rejects(()=>streamRequest({encoding:"utf32"}),error=>error.code==="invalid_encoding" && error.complete===false && error.delivered.bytes===0);
     const sourceSignal=new AbortController();let sourceEntered;
     const enteringSource=new Promise(resolve=>sourceEntered=resolve);

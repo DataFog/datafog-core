@@ -176,12 +176,13 @@ export async function restoreStoredResponseProgressively({store,scope,requestId,
   let workspace,stream;
   let delivered={bytes:0,codepoints:0,utf16:0,restoredMarkers:0};
   const cancelled=()=>{if(signal?.aborted)throw failure("cancelled");};
+  const progress=value=>({bytes:value.bytes,codepoints:value.codepoints,utf16:value.utf16,restoredMarkers:value.restoredMarkers});
   const emit=async chunk=>{
-    delivered=chunk.delivered;
+    delivered=progress(chunk.delivered);
     cancelled();
     // Counts describe text returned by Core to this host, not a remote write acknowledgment.
     if(chunk.text || chunk.complete) {
-      try {await deliver({...chunk,requestId,head:structuredClone(expected),signal});}
+      try {await deliver({...chunk,delivered:progress(delivered),requestId,head:structuredClone(expected),signal});}
       catch {throw failure(signal?.aborted ? "cancelled" : "stream_delivery_failed");}
     }
   };
@@ -204,7 +205,7 @@ export async function restoreStoredResponseProgressively({store,scope,requestId,
     }
     cancelled();
     const last=stream.finalize();await emit(last);
-    return {requestId,head:expected,delivered:last.delivered,complete:true};
+    return {requestId,head:expected,delivered:progress(last.delivered),complete:true};
   } catch(error) {
     if(error instanceof DataFogError) {
       if(error.delivered===undefined)error.delivered=delivered;
