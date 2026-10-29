@@ -46,7 +46,7 @@ fn progress(value: w::RestoreProgress) -> Value {
 pub(super) fn stream_failure(value: w::StreamFailure) -> Value {
     let mut result = failure(*value.error);
     result["delivered"] = progress(value.delivered);
-    result["complete"] = json!(false);
+    result["complete"] = json!(value.complete);
     result
 }
 fn chunk(value: w::RestoreChunk) -> Value {
@@ -296,6 +296,35 @@ impl Runtime {
                     .call(call, &bytes, &units)
             }
             _ => Err(Failure::Fixture),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_failure_keeps_public_complete_flag() {
+        for complete in [false, true] {
+            let value = stream_failure(w::StreamFailure {
+                error: Box::new(WorkspaceError {
+                    code: w::ErrorCode::InvalidMarker,
+                    finding_index: None,
+                    input_index: None,
+                    marker_issues: vec![],
+                    review_conflicts: vec![],
+                }),
+                delivered: w::RestoreProgress {
+                    bytes: 5,
+                    codepoints: 4,
+                    utf16: 4,
+                    restored_markers: 1,
+                },
+                complete,
+            });
+            assert_eq!(value["complete"], complete);
+            assert_eq!(value["delivered"]["restoredMarkers"], 1);
         }
     }
 }

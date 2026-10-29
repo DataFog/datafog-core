@@ -36,12 +36,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Native encrypted-host qualification verifies saved conversation intents, trusted
   callback association and confirmation across crashes, CAS races and lost acknowledgments.
-
 - Native Node exposes saved conversation send intents, one-time site binding and
   scoped strict/buffered/progressive restoration through the shared Core.
 
 - Core and browser WASM support saved conversation send intents, funded confirmation
   capacity, one-time site binding and explicit conversation-scoped restoration.
+
 - Native workspace qualification now exercises 32-plan admission and cleanup
   across independently opened handles/workers, retaining allocator and RSS/heap
   evidence without introducing a global host admission limit.
