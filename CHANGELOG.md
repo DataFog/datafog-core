@@ -33,6 +33,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
   snapshots, source/package hashes and failures without skipping missing runtimes.
   Strict and progressive response restoration are mandatory additional profiles.
 
+- The synthetic Node server host qualifies opt-in progressive response delivery,
+  late-failure incomplete status and cooperative cancellation against durable mappings.
+
 - Native Node exposes the shared workspace lifecycle, staged changes, policy,
   recall, combined review, strict buffered and opt-in progressive restoration
   without loading browser WASM. Streaming preserves Core error counts, encoding
