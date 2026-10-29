@@ -660,6 +660,12 @@ void pseudonymized;
 
 import { discoverFields, scanStructured, transformStructured, scanAndTransformStructured, type StructuredScanResult, type StructuredTransformResult } from "@datafog/node";
 import {Workspace, type WorkspaceFinding, type WorkspaceHead, type WorkspaceReviewResult, type WorkspacePolicy, type PreparedWorkspaceChange, workspaceByteRangeFromUtf16} from "@datafog/node";
+const workspaceErrorCodes: readonly import("@datafog/node").DataFogErrorCode[] = ["closed_workspace", "inactive_plan", "workspace_conflict", "invalid_finding", "invalid_encoding", "inactive_stream", "review_conflict", "invalid_batch", "invalid_marker", "invalid_snapshot", "invalid_operation_id", "invalid_policy", "resource_limit", "invalid_operation", "operation_reused"];
+function isWorkspacePolicyFailure(error: import("@datafog/node").DataFogError): boolean { return error.code === "invalid_policy"; }
+void workspaceErrorCodes; void isWorkspacePolicyFailure;
+const missingInputIndex: import("@datafog/node").DataFogError["inputIndex"] = null;
+const missingFindingIndex: import("@datafog/node").DataFogError["findingIndex"] = null;
+void missingInputIndex; void missingFindingIndex;
 const operation: import("@datafog/node").WorkspaceOperation={id:new Uint8Array(16),occurredAtMs:0};
 const timed=Workspace.createWithOperation(new Uint8Array(16),operation);
 const conversation: import("@datafog/node").WorkspaceConversation={id:new Uint8Array(16),surface:"synthetic",siteId:null,siteIdByteBudget:128};

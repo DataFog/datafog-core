@@ -180,6 +180,12 @@ void protectedDocument;
 void protectedTogether;
 
 import { Workspace, DataFogError, type WorkspaceFinding, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
+const workspaceErrorCodes: readonly import("@datafog/wasm").DataFogErrorCode[] = ["closed_workspace", "inactive_plan", "workspace_conflict", "invalid_finding", "invalid_encoding", "inactive_stream", "review_conflict", "invalid_batch", "invalid_marker", "invalid_snapshot", "invalid_operation_id", "invalid_policy", "resource_limit", "invalid_operation", "operation_reused"];
+function isWorkspacePolicyFailure(error: import("@datafog/wasm").DataFogError): boolean { return error.code === "invalid_policy"; }
+void workspaceErrorCodes; void isWorkspacePolicyFailure;
+const missingInputIndex: import("@datafog/wasm").DataFogError["inputIndex"] = null;
+const missingFindingIndex: import("@datafog/wasm").DataFogError["findingIndex"] = null;
+void missingInputIndex; void missingFindingIndex;
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
 const conversationDefinition = {id: new Uint8Array(16), surface: "synthetic_chat", siteId: null, siteIdByteBudget: 128};
 const conversationPlan = workspace.prepareConversationSend([{input: {text: "Jane", scannerFindings: [], userSelections: []}, conversation: conversationDefinition}], {id: new Uint8Array(16), occurredAtMs: 0});
@@ -228,7 +234,7 @@ void snapshotVersion; void previousChoice; void currentFormat;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
-const position: number | undefined = ({} as DataFogError).inputIndex;
+const position: number | null | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
 const atomicResponse = workspace.bufferedRestore();
@@ -897,6 +903,12 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const { verifyWorkspace, verifyWorkspaceOperations } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     await verifyWorkspaceOperations(workspaceApi);
+    let coreFailure;
+    try { workspaceApi.Workspace.openBundle(new Uint8Array()); }
+    catch (error) { coreFailure = error; }
+    if (!(coreFailure instanceof workspaceApi.DataFogError) || coreFailure.code !== "invalid_snapshot" || coreFailure.inputIndex !== null || coreFailure.findingIndex !== null)
+      throw new Error("Absent Core workspace indices retain explicit null in the installed error");
+
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspaceBackupFields}=await import("/workspace-backup-fields-conformance.mjs");

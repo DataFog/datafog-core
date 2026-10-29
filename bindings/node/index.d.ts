@@ -323,7 +323,7 @@ export interface WorkspacePolicyPreview {
 export interface PreparedWorkspaceChange {
   /** Intent IDs are owned metadata, never proof of a send. */
   sendIntents(): readonly WorkspaceSendIntent[];
-  /** Warn before saving a format upgrade; beta.1/beta.2 cannot open v3. */
+  /** Warn before a saved format upgrade: beta.1 cannot open v2, and beta.1/beta.2 cannot open v3. */
   snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
