@@ -57,7 +57,10 @@ for (const name of Object.keys(MODEL.files)) {
 await mkdir(path.join(dist, "bad-model"), {recursive: true});
 await cp(path.join(source, "tokenizer.json"), path.join(dist, "bad-model/tokenizer.json"));
 const corrupt = await readFile(path.join(source, "tokenizer_config.json"));
-corrupt[0] ^= 1;
+const newline = corrupt.indexOf(10);
+if (newline < 0) throw new Error("Expected whitespace in the pinned tokenizer configuration");
+corrupt[newline] = 32;
+JSON.parse(corrupt.toString("utf8"));
 await writeFile(path.join(dist, "bad-model/tokenizer_config.json"), corrupt);
 await cp(path.join(here, "src/model-page.html"), path.join(dist, "model-page.html"));
 await writeFile(path.join(dist, "model-background.js"), 'chrome.action.onClicked.addListener(() => chrome.tabs.create({url: chrome.runtime.getURL("model-page.html")}));\n');
@@ -91,6 +94,7 @@ const report = {
   sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {cwd: root, encoding: "utf8"}).trim(),
   sourceDirty: Boolean(execFileSync("git", ["status", "--porcelain"], {cwd: root, encoding: "utf8"}).trim()),
   model: MODEL, versions, manifest, assets, output, dist,
+  node: process.version, consumerLockSha256: await digest(path.join(consumer, "package-lock.json")),
   extensionFiles, extensionBytes: Object.values(extensionFiles).reduce((sum, file) => sum + file.bytes, 0),
   tarball: {file: tarball, bytes: (await stat(tarball)).size, sha256: await digest(tarball)},
   bundler: {name: "esbuild", version: JSON.parse(await readFile(path.join(here, "node_modules/esbuild/package.json"), "utf8")).version, outputs: Object.keys(bundle.metafile.outputs)},
