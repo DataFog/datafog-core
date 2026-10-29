@@ -200,8 +200,9 @@ fn narrow_or_differently_typed_corrections_cannot_waive_wider_protection() {
         WorkspaceFinding::new("PERSON", "Jane", TextRange { start: 0, end: 4 }),
     ];
     for findings in [input.to_vec(), input.into_iter().rev().collect()] {
-        let plan = workspace.prepare(text, &findings, [4; 16]).unwrap();
-        assert!(!plan.preview().unwrap().text.contains("Jane"));
+        let failure = workspace.prepare(text, &findings, [4; 16]).err().unwrap();
+        assert_eq!(failure.code, ErrorCode::ReviewConflict);
+        assert!(!failure.review_conflicts.is_empty());
     }
     activate(
         &mut workspace,

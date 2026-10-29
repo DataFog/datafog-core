@@ -20,6 +20,12 @@ serve({
   byteRange(text, start, end) { return workspaceByteRangeFromUtf16(text, start, end); },
   policy() { return active().policy(); },
   recall(text) { return active().recall(text); },
+  review(input) { return active().review(input); },
+  prepareReview(inputs,operation) {
+    const value=active().prepareReview(inputs,operation);
+    const id=next++;plans.set(id,value);
+    return {id,previews:value.previews(),format:value.snapshotFormat(),...value.heads()};
+  },
   preparePolicy(edits, operation) {
     const value=active().preparePolicyChanges(edits,operation);
     const id=next++;plans.set(id,value);
