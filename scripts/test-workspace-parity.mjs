@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {isDeepStrictEqual} from "node:util";
-import {canonicalWorkspaceValue} from "./workspace-parity-runner.mjs";
+import {canonicalWorkspaceValue,assertJavaScriptWorkspaceHeads} from "./workspace-parity-runner.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const fixturePath=path.join(root,"fixtures/workspace/sdk-contract-v1.json");
@@ -114,6 +114,23 @@ export function validateOperationOutput(value,fixture) {
     if(["inspectPlan","prepare","prepareBatch","prepareWithOperation","prepareBatchWithOperation","prepareRecovery","prepareRecoveryWithOperation","preparePolicyChanges","prepareOutcome"].includes(command.call) && (!head(result?.heads?.expectedHead)||!head(result?.heads?.candidateHead)||!bundle(result.candidateBundleHex)))bad();
   }
   return normalized;
+}
+
+// Run against retained outputs from each actual JavaScript SDK, rather than a
+// fabricated head. A numeric revision must fail before representation helpers.
+export function verifyActualJavaScriptHeadRejection(value) {
+  const heads=assertJavaScriptWorkspaceHeads(value);
+  if(!heads)throw new Error("workspace JavaScript head proof has no actual heads");
+  const changed=structuredClone(value);
+  const visit=item=>{
+    if(!item || typeof item!=="object")return;
+    if(!Array.isArray(item) && Object.hasOwn(item,"revision") && Object.hasOwn(item,"commitId"))item.revision=Number(item.revision);
+    for(const child of Object.values(item))visit(child);
+  };
+  visit(changed);let rejected=false;
+  try{assertJavaScriptWorkspaceHeads(changed);}catch{rejected=true;}
+  if(!rejected)throw new Error("workspace JavaScript numeric head mutation qualified");
+  return {actualHeads:heads,numericRevisionRejected:true};
 }
 
 export function validateConversationOutput(value,fixture) {
@@ -227,7 +244,7 @@ try {
   report.runtime.python=command(python,["--version"]).trim();
   if(command(python,["-c","from importlib.metadata import version; print(version('datafog-core'))"]).trim()!==selected.version) throw new Error("workspace parity installed Python package version differs from its pin");
   const results={},streaming={},operations={},conversations={};
-  async function conversationResult(sdk,raw){await writeFile(path.join(output,`${sdk}-conversations.raw.json`),JSON.stringify(raw,null,2));return validateConversationOutput(raw,conversationFixture);}
+  async function conversationResult(sdk,raw){await writeFile(path.join(output,`${sdk}-conversations.raw.json`),JSON.stringify(raw,null,2));if(["node","wasm"].includes(sdk)){report.javaScriptHeadMutationProof??={};report.javaScriptHeadMutationProof[sdk]=verifyActualJavaScriptHeadRejection(raw);}return validateConversationOutput(raw,conversationFixture);}
   results.rust=validateWorkspaceOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",fixturePath])),fixture);
   streaming.rust=validateStreamingOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_streaming_contract","--",streamingFixturePath])),streamingFixture);
   operations.rust=validateOperationOutput(parsed(command("cargo",["run","--quiet","-p","datafog-core","--example","workspace_contract","--",operationFixturePath])),operationFixture);

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput,validateConversationOutput} from "./test-workspace-parity.mjs";
+import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput,validateConversationOutput,verifyActualJavaScriptHeadRejection} from "./test-workspace-parity.mjs";
 import {validateNativeServerOutput} from "./native-server-parity.mjs";
 import {validatePlanPressure} from "./native-plan-pressure.mjs";
-import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
+import {runWorkspaceContract,assertJavaScriptWorkspaceHeads} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
 test("missing runtime methods fail before any workspace operation",()=>{
@@ -215,4 +215,14 @@ test("missing conversation runtime methods cannot fall back to compatibility res
   const api={Workspace:{create(){touched=true;},openBundle(){},prototype:{restore(){touched=true;}}}};
   assert.throws(()=>runWorkspaceContract(api,{schemaVersion:1,requiredMethods:["prepareConversationSend"],cases:[{id:"required",commands:[{call:"create"}]}]}));
   assert.equal(touched,false);
+});
+
+test("JavaScript heads reject numeric SDK revisions before representation normalization",()=>{
+  const head={revision:"18446744073709551615",commitId:Array(16).fill(1)};
+  assert.equal(assertJavaScriptWorkspaceHeads({heads:{expectedHead:head,candidateHead:head}}),2);
+  for(const revision of [1,1n,"01","-1","18446744073709551616",null]) {
+    assert.throws(()=>assertJavaScriptWorkspaceHeads({head:{...head,revision}}));
+  }
+  assert.deepEqual(verifyActualJavaScriptHeadRejection({head}),{actualHeads:1,numericRevisionRejected:true});
+  assert.throws(()=>verifyActualJavaScriptHeadRejection({}));
 });

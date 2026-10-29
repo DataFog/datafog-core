@@ -177,7 +177,11 @@ Raw per-SDK `*-conversations.raw.json` and validated `*-conversations.json`
 retain exact full heads, canonical inner bundles, actual send-intent IDs, numeric
 operation totals, nullable unknown times/history and original errors. Progressive
 failures preserve the actual public `complete` flag and prior delivered counts;
-validation never replaces those fields with expected constants. Mutation tests
+validation never replaces those fields with expected constants. JavaScript SDK
+heads must already contain canonical decimal-string revisions before any shared
+normalization. Each actual Node/WASM run also mutates its captured revisions to
+numbers and must reject them; Python alone converts its exact native integers
+for the common wire. Mutation tests
 reject altered counts, malformed heads, invented ranges, omitted methods and
 partial text on failed strict calls.
 

@@ -4,6 +4,20 @@ const bad=()=>{throw new Error("workspace parity harness contract failed");};
 const unhex=value=>{if(typeof value!=="string" || !/^(?:[a-f0-9]{2})*$/.test(value))bad();return Uint8Array.from(value.match(/../g)??[],item=>Number.parseInt(item,16));};
 const textValue=command=>{if(command.textRepeat){const {value,count}=command.textRepeat;if(typeof value!=="string" || !Number.isSafeInteger(count) || count<0 || count>2*1024*1024)bad();return value.repeat(count);}return command.text;};
 const hex=bytes=>Array.from(bytes,byte=>byte.toString(16).padStart(2,"0")).join("");
+// JavaScript SDK heads are already lossless decimal strings. Only the native
+// Python adapter may convert its exact integer representation for the wire.
+export function assertJavaScriptWorkspaceHeads(value) {
+  let heads=0;
+  const visit=item=>{
+    if(!item || typeof item!=="object")return;
+    if(!Array.isArray(item) && Object.hasOwn(item,"revision") && Object.hasOwn(item,"commitId")) {
+      if(typeof item.revision!=="string" || !/^(0|[1-9][0-9]*)$/.test(item.revision) || BigInt(item.revision)>18446744073709551615n)bad();
+      heads++;
+    }
+    for(const child of Object.values(item))visit(child);
+  };
+  visit(value);return heads;
+}
 export function canonicalWorkspaceValue(value) {
   if(Array.isArray(value))return value.map(canonicalWorkspaceValue);
   if(value && typeof value==="object") {
@@ -108,7 +122,7 @@ export function runWorkspaceContract(api,fixture) {
           else bad();
           value=inspect(p);plans.set(command.plan,p);planTexts.set(command.plan,value.previews.map(preview=>preview.text));if(conversationProfile)planIntents.set(command.plan,value.sendIntents);
         }
-        if(command.expectCode)bad();entry={call:command.call,ok:true,value:canonicalWorkspaceValue(value)};
+        if(command.expectCode)bad();assertJavaScriptWorkspaceHeads(value);entry={call:command.call,ok:true,value:canonicalWorkspaceValue(value)};
       } catch(error) {
         if(!workspaceErrors.has(error?.code) || error.code!==command.expectCode || error.message!==error.code)bad();
         if(conversationProfile && "text" in error)bad();
