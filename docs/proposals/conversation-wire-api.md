@@ -144,6 +144,12 @@ Adding key9 to a map10 bundle near the byte ceiling can itself exceed admission;
 equal recovery growth does not make such a candidate admissible. The entire final
 map11 must fit the existing ordinary byte limit before any saved send preparation.
 
+The [clean-commit receipt](evidence/conversation-wire-growth.json) at `ffa59ba`
+measured a 66-byte synthetic payload (67 bytes including key9). At 99,744 and
+99,999 existing rows, real Core recovery added 30 bytes; the carried map11 also
+added 30 bytes in each case. The extra recovery growth was zero. These snapshots
+were approximately 3.3 MB, **not** a final 16 MiB conversation admission test.
+
 The [draft adversarial fixtures](../../fixtures/workspace/conversation-contract-draft.json)
 describe same-chat partial batches, uncertain sends, wrong context, malformed
 relations and scoped-stream stops. They need actual Rust/Python/Node/WASM execution,

@@ -1,0 +1,34 @@
+{
+  "baseFixtureCommit": "ffa59bad59ed3d7268349a2289b45170f85c58c9",
+  "baseFixtureDirty": false,
+  "keyAndPayloadBytes": 67,
+  "observations": [
+    {
+      "afterBytes": 3291706,
+      "beforeBytes": 3291676,
+      "beforeRecords": 99744,
+      "carriedAfterBytes": 3291773,
+      "carriedBeforeBytes": 3291743,
+      "carriedKey9RecoveryGrowth": 30,
+      "coreRecoveryGrowth": 30,
+      "currentDecoderRejectsProposedMap": true,
+      "key9AdditionalGrowth": 0,
+      "profile": "ordinary"
+    },
+    {
+      "afterBytes": 3299356,
+      "beforeBytes": 3299326,
+      "beforeRecords": 99999,
+      "carriedAfterBytes": 3299423,
+      "carriedBeforeBytes": 3299393,
+      "carriedKey9RecoveryGrowth": 30,
+      "coreRecoveryGrowth": 30,
+      "currentDecoderRejectsProposedMap": true,
+      "key9AdditionalGrowth": 0,
+      "profile": "last-recovery"
+    }
+  ],
+  "payloadBytes": 66,
+  "remaining": "Final conversation encoder/decoder, nonempty encrypted backup, resource admission, and all SDK semantics must execute before release.",
+  "scope": "synthetic encoder growth only; not conversation runtime, admission, or decoder qualification"
+}
