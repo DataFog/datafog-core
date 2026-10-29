@@ -59,6 +59,7 @@ import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
 import {verifyNativeOperations} from "./native-node-operations-conformance.mjs";
+import {verifyNativeConversations} from "./native-node-conversation-conformance.mjs";
 import {verifyNodeWorkspaceHost} from "./node-workspace-host-conformance.mjs";
 import {verifyWorkspaceStreaming} from "./workspace-streaming-conformance.mjs";
 import * as germanApi from "@datafog/node";
@@ -66,6 +67,8 @@ const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"wor
 await verifyNativeWorkspace(germanApi,workspaceCounters);
 await verifyNativeOperations(germanApi,[workspaceCounters.high,JSON.parse(readFileSync(path.join(process.argv[2],"workspace/policy-v2.json"),"utf8"))]);
 await verifyWorkspaceStreaming(germanApi, JSON.parse(readFileSync(path.join(process.argv[2],"workspace/streaming-contract-v1.json"),"utf8")));
+const conversationProof=await verifyNativeConversations(germanApi);
+console.log("Native Node conversation proof passed: "+JSON.stringify(conversationProof));
 const hostProof=await verifyNodeWorkspaceHost();
 console.log("Native Node host proof passed: "+JSON.stringify(hostProof));
 verifyCoverageConflicts(germanApi);
@@ -659,6 +662,28 @@ import { discoverFields, scanStructured, transformStructured, scanAndTransformSt
 import {Workspace, type WorkspaceFinding, type WorkspaceHead, type WorkspaceReviewResult, type WorkspacePolicy, type PreparedWorkspaceChange, workspaceByteRangeFromUtf16} from "@datafog/node";
 const operation: import("@datafog/node").WorkspaceOperation={id:new Uint8Array(16),occurredAtMs:0};
 const timed=Workspace.createWithOperation(new Uint8Array(16),operation);
+const conversation: import("@datafog/node").WorkspaceConversation={id:new Uint8Array(16),surface:"synthetic",siteId:null,siteIdByteBudget:128};
+const conversationPlan=timed.prepareConversationSend([{input:{text:"",scannerFindings:[],userSelections:[]},conversation}],operation);
+const intent: import("@datafog/node").WorkspaceSendIntent=conversationPlan.sendIntents()[0];
+const sendStatus: import("@datafog/node").WorkspaceSendStatus=timed.sendIntentStatus(intent);
+const conversationState: import("@datafog/node").WorkspaceConversationState=timed.conversation(new Uint8Array(16));
+const siteIdentity: Uint8Array=timed.conversationForSite("synthetic","chat");
+timed.prepareObservedSend(intent,new Uint8Array(16),"synthetic","chat",operation).discard();
+timed.prepareDefinitelyNotSent(intent,new Uint8Array(16),operation).discard();
+const scopedText: string=timed.restoreInConversation("",new Uint8Array(16));
+const scopedReport: import("@datafog/node").WorkspaceRestoreReport=timed.restoreReportInConversation("",new Uint8Array(16));
+const scopedBuffered=timed.bufferedRestoreInConversation(new Uint8Array(16),"utf16");scopedBuffered.feedUtf16(new Uint16Array());scopedBuffered.finalize();scopedBuffered.close();
+const scopedProgressive=timed.progressiveRestoreInConversation(new Uint8Array(16));scopedProgressive.feed(new Uint8Array());scopedProgressive.finalize();scopedProgressive.close();
+const scopedIssue: import("@datafog/node").WorkspaceMarkerIssue["kind"]="not_issued_in_conversation";
+const sendError: import("@datafog/node").DataFogErrorCode="conversation_pending";
+const sendKind: import("@datafog/node").WorkspaceOperationRecord["kind"]="send_confirmed";
+// @ts-expect-error First-chat null is explicit and required.
+const missingBinding: import("@datafog/node").WorkspaceConversation={id:new Uint8Array(16),surface:"synthetic",siteIdByteBudget:128};
+// @ts-expect-error A send intent is not a prepared-plan capability.
+timed.activateSaved(intent,timed.head(),timed.head());
+// @ts-expect-error Scoped streaming requires byte IDs.
+timed.progressiveRestoreInConversation("site-id");
+void sendStatus;void conversationState;void siteIdentity;void scopedText;void scopedReport;void scopedIssue;void sendError;void sendKind;void missingBinding;
 const operationCounts: import("@datafog/node").WorkspaceCounts=timed.counts();
 const coverage: import("@datafog/node").WorkspaceHistoryCoverage=timed.historyCoverage();
 const operationPage: import("@datafog/node").WorkspaceOperationPage=timed.operationsPage(0,1000);
@@ -793,7 +818,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["native-node-operations-conformance.mjs","workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
+  for (const file of ["native-node-conversation-conformance.mjs","workspace-conversation-conformance.mjs","native-node-operations-conformance.mjs","workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();

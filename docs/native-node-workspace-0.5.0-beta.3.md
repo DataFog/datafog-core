@@ -5,7 +5,8 @@ integrating released beta.2 main and the approved Core streaming candidate #176.
 Rust N-API binding. It does not load browser WASM or implement a persistence host.
 The reviewed lifecycle and streaming calls are exposed. The current draft also
 wraps shared Core [operation records/counts and pages](native/node-operations.md)
-for #147. Conversation methods remain future #148 work and have no native exports.
+for #147. The current Node candidate also wraps the committed Core conversation
+methods for #148, with the same explicit saved-send and scoped-restore contract.
 The package is not released by this draft.
 
 ## Calls, ownership and representations
@@ -18,6 +19,9 @@ The package is not released by this draft.
 | `review`, `recall`, `policy` | corresponding read-only Core methods | Complete original byte/codepoint/UTF-16 coordinates; no allocation of aliases or host approval |
 | `preparePolicyChanges`, `prepareRecovery` | Core staged metadata/recovery methods | Exact approved policy and warned v1/v2-to-v3 draft upgrades; no handoff permission |
 | Plan `preview(s)`, `heads`, `policyPreview`, `snapshotFormat`, `exportCandidateBundle` | Core prepared-change getters | Sensitive local reads, copied output; export is plaintext for host encryption |
+| `prepareConversationSend`, `prepareObservedSend`, `prepareDefinitelyNotSent` | Core staged send preparation/resolution | Opaque normal save/activate plans; Core reserves later confirmation capacity and derives intended markers |
+| Plan `sendIntents`; `conversation`, `conversationForSite`, `sendIntentStatus` | Core saved context/intent views | Owned metadata copies; intent IDs alone grant no restoration or transport authority |
+| `restoreInConversation`, `restoreReportInConversation`, scoped buffered/progressive factories | Core conversation-aware restoration | Exact logical identity; unresolved intent pauses every scoped response in that conversation |
 | Plan `discard` | `PreparedChange::discard` | Consume pending plan; release its native storage; garbage collection also releases orphaned plan slots |
 | `activateSaved` | `Workspace::activate_saved` | Host first confirms durable complete-head CAS; rejects cross-instance/stale/consumed plans |
 | `restore`, `restoreReport` | corresponding Core restore methods | Whole-response fail-closed restoration |
@@ -89,3 +93,31 @@ Installed tests execute the shared streaming fixture, every byte/code-unit split
 malformed transport and terminal errors, plus native worker, garbage-collection,
 same-head and size-limit lifecycle cases. These are candidate beta.3 APIs and are
 not present in the published beta.2 packages.
+
+## Conversation binding evidence and limits
+
+The public conversation shapes and safe plain-property validation match WASM.
+Context and intent IDs accept exact 16-byte `Uint8Array` or dense unsigned-byte
+arrays for owned-view round trips; direct logical-ID parameters require
+`Uint8Array`. No accessor executes during shape validation. Per-member errors
+retain `inputIndex`; Core owns interpretation, capacity, membership, one-time
+binding and canonical decoding. All ten workspace methods and plan `sendIntents`
+use the existing native plan/child registry. New error codes and scoped marker
+issues preserve the complete existing error fields.
+
+`node scripts/test-node-package.mjs --prebuilt` packs and installs the actual
+native package, executes the shared 59-check conversation corpus, then adds
+Node transport/ownership, 32-plan, scoped UTF-16 and child-lifetime tests. It also
+uses the existing encrypted SQLite store for a failed first save, durable pending
+reopen, lost confirmation acknowledgment and replay rejection, plus an independent
+worker reopening and streaming the confirmed state. These are synthetic trusted
+observations; no actual provider send, extension identity acquisition, production
+host approval or four-SDK conversation parity is claimed. Existing foundation,
+streaming, operation and host checks remain mandatory.
+
+Saving a conversation transaction uses the coordinated unreleased v3/key9 format.
+Released v1/v2 state preserves exact read/no-op bytes until a real saved upgrade;
+warn before upgrading because published beta.1/beta.2 cannot reopen v3. A pending
+intent is not successful issuance; only the second durably saved trusted observed
+send enables its context's issued membership. An uncertain save requires reloading
+current saved state, with no resend or implicit unscoped fallback.

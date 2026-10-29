@@ -28,6 +28,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes saved conversation send intents, one-time site binding and
+  scoped strict/buffered/progressive restoration through the shared Core.
+
 - Core and browser WASM support saved conversation send intents, funded confirmation
   capacity, one-time site binding and explicit conversation-scoped restoration.
 - Workspace parity now also requires actual Python/Node encrypted-store CAS,
