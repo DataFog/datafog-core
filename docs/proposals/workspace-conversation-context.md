@@ -56,17 +56,19 @@ confirmation binds the site ID once. Compare known surface/site strings exactly;
 do not lowercase, trim, fuzzy-match or derive identity from model text. The host supplies these through its trusted
 request/tab registry, not provider-generated fields, arbitrary URLs or chat text.
 
-The conversation record should retain its creating confirmation operation and the
-canonical marker codes issued into it. Repeated confirmed handoffs add membership
+The conversation record derives its creation from its first retained preparation
+operation; issued membership retains the first successful confirmation operation
+and canonical marker codes issued into it. Repeated confirmed handoffs add membership
 without changing aliases or the first restored spelling. Individual operation
 records remain preserved under the approved history rules. No raw conversation
 text, original values, prompts, response bodies, titles, credentials or full URLs
 belong in these records, errors, logs or qualification receipts. Opaque IDs and
 marker membership are still private vault metadata, encrypted by the host.
 
-Exact string bounds, conversation/member limits, issuance-event shape, timestamps,
-count definitions and manual-confirmation support remain review proposals. Choose
-and measure them before implementation/freeze. The approved 100,000-operation
+The linked wire/API packet defines the candidate identity bounds, conversation/member
+relationships, timestamps and count definitions. Manual copying is not an observed
+successful send. Final installed-SDK and host/resource qualification remain required
+before acceptance/freeze. The approved 100,000-operation
 ceiling and recovery reserve must not be silently repurposed as unlimited
 conversation storage or weakened to make a new schema fit.
 
@@ -94,7 +96,7 @@ actually execute the same final semantics; type-only declarations do not qualify
 
 ## Snapshot, backup and required proof
 
-Coordinate with the unmerged operation-v3 proposal: existing policy keys 1–7 retain
+Coordinate with the merged operation-v3 implementation (#162): existing policy keys 1–7 retain
 their meanings, operation/count fields are at 8/10, and the coordinated map11
 uses key9 for conversations. Do not create incompatible version-3 layouts. This document
 assigns no wire types or unapproved numeric limits. New readers preserve released
@@ -116,9 +118,8 @@ behavior qualification remain separate gates.
 
 This packet extends the approved sequence; it does **not** ask whether copying or
 composer fill should count as sending. Neither counts. Core/WASM now implement the draft contract; native wrappers
-and final host/resource qualification remain outstanding. Its current operations base is committed `d5584e9`;
-the 100,000/99,744/256 capacity implementation is locally qualified in #162 but
-remains unreleased.
+and final host/resource qualification remain outstanding. Its operations base (#162) is merged;
+the 100,000/99,744/256 capacity contract remains unreleased.
 
 ### Why the first save needs a pending intent
 
@@ -224,7 +225,8 @@ It specifies expected future behavior only. Current SDKs do not execute these
 commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualification
 before claiming acceptance or freezing the API.
 
-The [approved ordinary confirmation-capacity packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and required pre-send reservations. Implementation and verification are still pending.
+The [approved ordinary confirmation-capacity packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and required pre-send reservations. The current Core/WASM candidate implements these reservations; final combined
+SDK, encrypted-backup and resource qualification remain required.
 
 The [technical wire/API packet](conversation-wire-api.md) documents the coordinated
 key9 shape, derived resource bounds, native SDK matrix and encoder-only experiment.
