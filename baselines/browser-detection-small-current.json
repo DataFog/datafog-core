@@ -16,13 +16,14 @@
     "launch bar and remaining misses"
   ],
   "syntheticOnly": true,
-  "sourceCommit": "20a8ea1fa4dbf008b8455a467ef5150d5b5ce3dd",
+  "sourceCommit": "b9348af90d3783346d07109b2cf97f6f7119f3ed",
   "sourceDirty": false,
   "inputs": {
-    "scripts/qualify-browser-detection.mjs": "8a86cbd30558780a9364148b00701030ab2e20f4f37c2c70a89f7b449e742678",
+    "scripts/qualify-browser-detection.mjs": "c6652a2eab7f44d74369701f22830f6bb1d470367e95e655c4c47f7700c151e4",
     "scripts/browser-detection-workspace-entry.mjs": "bbb2b457198b270c57e11aa0b75c8d2f7a06eb4c27a0a7b0adb74944acf3c612",
     "scripts/browser-detection-scoring.mjs": "ccaa7367269e2c81e42a8687b61b739ba95fbb253d4c642efdc315cacd7c48e8",
-    "scripts/test-browser-detection-scoring.mjs": "6a70756beeab4503997ee6eb772b8ed6a9fc85b7b8c46998e3e0aa75f80eb60f",
+    "scripts/browser-detection-contract.mjs": "0122da0b7757ea9b3d378624e7916f0625394aea314a365883e160b43d02bb68",
+    "scripts/test-browser-detection-scoring.mjs": "5363f5fdeb01edbabb05311b819a107b1b9ea518da1acbbf3226691ceedcfedd",
     "fixtures/browser-detection/qualification-v1.json": "9c5353809eaccc85f5927fbd04b919ad976fd96e1826d3fcb97b5acf34a1cadb",
     "bindings/wasm/models/model.mjs": "ace90f7c73b48cf6346a72bdbcecab57c1fd41d4e04dfe11fa80da38ba5dbf39",
     "bindings/wasm/package-lock.json": "4a321b514ae0a506b2e0bb81512be7303810803a9201eae5484f8f235d50f49c",
@@ -48,15 +49,15 @@
   },
   "package": {
     "file": "datafog-wasm-0.5.0-beta.2.tgz",
-    "bytes": 944162,
-    "sha256": "3ddc4ebf814926b3ef6b66c01aa875f68284dbe092c7d96c363d53e76f8a9351"
+    "bytes": 943953,
+    "sha256": "48c1314b65b5224c4a9730cbeaf692249bb5501dec20fd4e9ae4f385e7a1a2f2"
   },
   "versions": {
     "@datafog/wasm": "0.5.0-beta.2",
     "onnxruntime-web": "1.31.1",
     "@huggingface/tokenizers": "0.2.0"
   },
-  "consumerLockSha256": "23d0bbffd1dbe5f2623abeae58782ec9d4209511b9836b69de7865ca32ff9977",
+  "consumerLockSha256": "be12c054613738163d53444dc2e94ecb2e38e55f6d0b6b18fc2f78f63115ca16",
   "assets": {
     "models/onnx/model.onnx": {
       "bytes": 288521577,
@@ -79,14 +80,14 @@
       "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
     },
     "dist/datafog_wasm_bg.wasm": {
-      "bytes": 2865157,
-      "sha256": "6f2bbf192ec9aced347f2675a8f0fe5e055a4345ee47c7c0209ab2698314b2f8"
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
     }
   },
   "extensionFiles": {
     "artifacts.json": {
       "bytes": 5531,
-      "sha256": "90ca2eb3d9bcef0a094276e47af6c20b561f949dd9b0b16961515a8b48812973"
+      "sha256": "6a2f9a2e6a78c0e4c1fd25f8ac7dd6f8f14419fb551b5d1bc66cbea469c89b42"
     },
     "background.js": {
       "bytes": 109,
@@ -121,8 +122,8 @@
       "sha256": "a93bd0ad884842dab7468b44e38e93a9f3c10f121df0f2b491fe38dc585663e4"
     },
     "dist/datafog_wasm_bg.wasm": {
-      "bytes": 2865157,
-      "sha256": "6f2bbf192ec9aced347f2675a8f0fe5e055a4345ee47c7c0209ab2698314b2f8"
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
     },
     "dist/datafog_wasm_bg.wasm.d.ts": {
       "bytes": 5564,
@@ -144,17 +145,17 @@
       "bytes": 112,
       "sha256": "b69e65e62fc1f2094ce91be4b75e6f09c5b90b71688e8924f30035c9ffed5e09"
     },
-    "model-chunk-IJT44VAE.js": {
+    "model-chunk-57TFOREY.js": {
       "bytes": 1404,
-      "sha256": "8635e08c72ddb811bdbcf1e656386f8757f4901abaa1c7cac77d5b247bb2ff50"
+      "sha256": "b03c722f6a9096524aed8405379ff9fe4d8ac8d6e5f463a1664c6ce5b46bbda9"
     },
     "model-chunk-QMEWMJ7L.js": {
       "bytes": 390,
       "sha256": "923a7e2b68604a951d771624dfb1ed7b5ef3ae9afd7823a07a5939c7798016d8"
     },
-    "model-model-M4PUZGCY.js": {
+    "model-model-2HDKD6YN.js": {
       "bytes": 185,
-      "sha256": "5f979bc7599353ed10b8e0240dec499eb5375cdbbdacd30a01220a67f01195ce"
+      "sha256": "99f060ab6b77afdb361c6b3385511a9846c29497323a6af6a29cd3b872bfe228"
     },
     "model-page.html": {
       "bytes": 417,
@@ -162,11 +163,11 @@
     },
     "model-page.js": {
       "bytes": 83245,
-      "sha256": "16501022a6df02bf3a3bc8fd61624dfb159f7e0e71d2d57bfff7783c5703e74c"
+      "sha256": "88451de010a66e2bc4a1a13c632994ab820547cce332bac513e33047cfd3d7ea"
     },
-    "model-session-QNFGBEY5.js": {
+    "model-session-IC4YLALK.js": {
       "bytes": 212424,
-      "sha256": "fece8ecac64f8173c94ef42c194a4be7840e1c7e654434a0437d93d793a1a7d4"
+      "sha256": "72545f30d54595dde79558a4994e7ec5719f787d04bb79edc7b50357c523a4a1"
     },
     "models/onnx/model.onnx": {
       "bytes": 288521577,
@@ -217,8 +218,8 @@
       "sha256": "a93bd0ad884842dab7468b44e38e93a9f3c10f121df0f2b491fe38dc585663e4"
     },
     "vendor/package/dist/datafog_wasm_bg.wasm": {
-      "bytes": 2865157,
-      "sha256": "6f2bbf192ec9aced347f2675a8f0fe5e055a4345ee47c7c0209ab2698314b2f8"
+      "bytes": 2865414,
+      "sha256": "2fe9428e7a24d2160e63142d75c5934ed3a2286489a59f59477821517d37bbb4"
     },
     "vendor/package/dist/datafog_wasm_bg.wasm.d.ts": {
       "bytes": 5564,
@@ -285,10 +286,10 @@
       "sha256": "c1f7f1ad56e7521b4611d60220929631d02cb71953744c2b67e9547a3a317f29"
     }
   },
-  "qualificationEntrySha256": "2ddc62e54a78f41cf08d220ac4184b83d7f797d73a3b28ec2d407d3c7718f749",
+  "qualificationEntrySha256": "6a5786ccbd08df118329a21b61db0a9c4230d0f8b1dba67fb694ec1f7020efbd",
   "qualificationFiles": {
-    "qualification-entry.js": "2ddc62e54a78f41cf08d220ac4184b83d7f797d73a3b28ec2d407d3c7718f749",
-    "qualification-workspace.js": "72b152aa4041b7d103f9b1ee492572be38b474dfbc3a6b3a63fb05539a0d92ef",
+    "qualification-entry.js": "6a5786ccbd08df118329a21b61db0a9c4230d0f8b1dba67fb694ec1f7020efbd",
+    "qualification-workspace.js": "533850e545d0a4d6cb5e11105c95c8b56f8b3dacb2f88b3505e200b505e2df06",
     "qualification.html": "0e399a5e35a26f99e7f4e8519c685384996a9970a236119ee66c4d5ae78c4a7e"
   },
   "options": {
@@ -409,7 +410,7 @@
     ],
     "passed": true
   },
-  "observationsSha256": "e9d5f8f8998629b27972a21ac4d09506ca56b83988a2e3bc0368baf89e6a2dec",
+  "observationsSha256": "544713aca6a01f719939605a680c29abf670531158d40ce9526f13fd18d1ba98",
   "scores": {
     "shipping": {
       "exact": {
