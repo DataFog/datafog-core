@@ -5,8 +5,9 @@ policy-v2 implementation. **Do not merge or publish this draft yet.** Sid approv
 preserving every operation record: no deletion, sampling or summary replacement.
 Lossless compression is separate postlaunch work in #165. Sid also approved
 recorded-history-only counts, explicit unknown pre-upgrade history and per-record
-numeric input/replacement deltas on October 29. Lifetime capacity/recovery, legacy
-replay errors and the remaining accounting details below are still unapproved.
+numeric input/replacement deltas on October 29. He then approved the provisional
+100,000-row ceiling with the final 256 slots reserved for recovery. Legacy replay
+errors and the remaining accounting details below are still unapproved.
 
 ## Compatibility and transaction boundary
 
@@ -46,7 +47,7 @@ record too, so a backup already at the record limit cannot complete normal
 fresh-head import. The regression test makes that failure explicit; it is not an
 approved shipping behavior. Read/export still work.
 
-Recommended review choice: a **100,000-record hard ceiling**, with the final 256
+**Approved October 29:** a provisional **100,000-record hard ceiling**, with the final 256
 slots reserved for recovery and a small encoded-byte reserve for recovery
 metadata. Ordinary recorded activity would stop at 99,744 total rows; a fresh
 recovery could still retain every row and append its own record. This is a
@@ -54,7 +55,9 @@ bounded beta proposal, not unlimited history or an indefinite-recovery promise.
 At the hard record/byte ceiling, writes including further recovery still fail;
 read/export must remain available and the host must make the limit visible.
 The byte reserve must be derived from the final #148 wire schema, not guessed.
-Neither the proposed limit nor reserve is implemented or approved here.
+The count ceiling and 256-slot recovery reserve are approved; this draft
+still needs their implementation and boundary/browser/recovery qualification.
+The encoded-byte reserve must match the supported final wire format.
 
 Why this recommendation: 10,000 rows are inexpensive but can be exhausted after
 5,000 round trips if an application records preparation and copy confirmation.
@@ -182,8 +185,8 @@ WASM/TypeScript and live 100-fixture SDK parity pass on the committed integratio
 The full encrypted MV3 regression suite passes before commit; its clean
 committed-head receipt and Small qualification remain to be refreshed.
 
-Before merge: approve capacity/recovery behavior, remaining action/accounting
-semantics and legacy reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
+Before merge: implement and qualify the approved capacity/recovery bounds,
+approve remaining action/accounting semantics and legacy reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
 full installed/encrypted backup and native/browser qualification matrix. This
 draft does not complete C1/C3, freeze snapshot compatibility or authorize a beta.3
 release.
