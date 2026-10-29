@@ -9,6 +9,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/browser-model.yml"
+      - "examples/workspace-extension/**"
+      - "scripts/test-model-extension.mjs"
   push:
     branches: [main]
     paths:
@@ -18,6 +20,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/browser-model.yml"
+      - "examples/workspace-extension/**"
+      - "scripts/test-model-extension.mjs"
 
 permissions:
   contents: read
@@ -56,8 +60,18 @@ jobs:
       - run: npm run download-model
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - run: npm ci --prefix ../../examples/workspace-extension
+      - name: Verify candidate tarball in an unpacked MV3 extension
+        run: npm run test:model-extension --prefix ../../examples/workspace-extension
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: browser-entities
           path: spike/gliner2-browser/results/entities.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mv3-model-proof
+          path: |
+            examples/workspace-extension/output/playwright/**/report.json
+            examples/workspace-extension/output/playwright/**/artifacts.json
