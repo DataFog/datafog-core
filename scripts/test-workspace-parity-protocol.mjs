@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput} from "./test-workspace-parity.mjs";
+import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput} from "./test-workspace-parity.mjs";
+import {validateNativeServerOutput} from "./native-server-parity.mjs";
 import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
@@ -46,5 +47,97 @@ test("streaming qualification requires both modes, every command and complete de
   assert.doesNotThrow(()=>validateStreamingOutput(failed,bad));
   for(const mutate of [v=>delete v.delivered,v=>delete v.markerIssues[0].utf16Range,v=>{v.text="partial private text";}]) {
     const invalid=structuredClone(failed);mutate(invalid.cases[0].modes.progressive.steps[0].error);assert.throws(()=>validateStreamingOutput(invalid,bad));
+  }
+});
+
+const operationMethods=["createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage"];
+test("operation profile cannot skip missing native methods or its required calls",()=>{
+  for(const missing of operationMethods) {
+    let called=false;
+    class Workspace {static create(){called=true;}static createWithOperation(){called=true;}static openBundle(){}}
+    for(const method of operationMethods)if(method!=="createWithOperation")Workspace.prototype[method]=()=>{};
+    delete (missing==="createWithOperation"?Workspace:Workspace.prototype)[missing];
+    assert.throws(()=>runWorkspaceContract({Workspace},{schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"required",commands:[{call:"createWithOperation"}]}]}));
+    assert.equal(called,false);
+  }
+});
+test("operation output retains complete counts, unknown times, explicit pages and content-free rows",()=>{
+  const row={id:Array(16).fill(2),kind:"create",occurredAtMs:null,preparedInputs:0,transformedSpans:0};
+  const counts={operations:1,preparedInputs:0,transformedSpans:0,confirmedHandoffs:0,reportedBlockedAttempts:0};
+  const coverage={recordedHistoryOnly:true,preUpgradeHistory:"unknown"};
+  const source={schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"reads",commands:[{call:"operations",expectValue:[row]},{call:"counts",expectValue:counts},{call:"historyCoverage",expectValue:coverage},{call:"operationsPage",offset:0,limit:1}]}]};
+  const value={schemaVersion:1,profile:source.profile,cases:[{id:"reads",steps:[{call:"operations",ok:true,value:[row]},{call:"counts",ok:true,value:counts},{call:"historyCoverage",ok:true,value:coverage},{call:"operationsPage",ok:true,value:{records:[row],total:2,offset:0,nextOffset:1}}]}]};
+  assert.doesNotThrow(()=>validateOperationOutput(value,source));
+  for(const mutate of [
+    v=>{v.cases[0].steps[0].value[0].occurredAtMs=0;},
+    v=>{v.cases[0].steps[0].value[0].content="private input";},
+    v=>{delete v.cases[0].steps[1].value.reportedBlockedAttempts;},
+    v=>{v.cases[0].steps[2].value.preUpgradeHistory="not_applicable";},
+    v=>{v.cases[0].steps[3].value.nextOffset=null;},
+    v=>{v.cases[0].steps[3].value.records=[];},
+    v=>{v.cases[0].steps.pop();},
+  ]){const bad=structuredClone(value);mutate(bad);assert.throws(()=>validateOperationOutput(bad,source));}
+  assert.throws(()=>validateOperationOutput(value,{...source,requiredMethods:[]}));
+});
+test("read/discard/failed-save byte preservation is independently asserted",()=>{
+  const source={schemaVersion:1,profile:"protocol-test",cases:[{id:"saved",commands:[{call:"export",bundle:"before"},{call:"export",bundle:"after",sameBundleAs:"before"}]}]};
+  const result={schemaVersion:1,profile:source.profile,cases:[{id:"saved",steps:[{call:"export",ok:true,value:{bundleHex:"a10001"}},{call:"export",ok:true,value:{bundleHex:"a10001"}}]}]};
+  assert.doesNotThrow(()=>validateWorkspaceOutput(result,source));
+  result.cases[0].steps[1].value.bundleHex="a10002";assert.throws(()=>validateWorkspaceOutput(result,source));
+});
+
+
+function hostProtocol(kind="process-changed-head-race") {
+  const head=n=>({revision:n===2?"0":"1",commitId:Array(16).fill(n)});
+  const state=n=>({bundleHex:"a100"+String(n).padStart(2,"0"),head:head(n),counts:{operations:n===2?1:2}});
+  const oracle={seed:state(2),a:state(3),b:state(4),noop:state(2)};
+  const noop=kind==="process-noop-race";
+  const source={schemaVersion:1,profile:"native-server-cas-v1",sdks:["python","node"],candidateDefinitions:{a:{operationByte:3},b:{operationByte:4}},hostErrors:{conflict:{python:["workspace_conflict"],node:["workspace_conflict","storage_busy"]}},cases:[{id:kind,steps:["two-processes-ready","race",noop?"reopen-same-head":"reopen-winner"]}]};
+  const successful=(n,value)=>({ok:true,operationId:Array(16).fill(n),candidateBundleHex:value.bundleHex,head:value.head,acknowledgment:value.head,activated:true,saveCalls:1});
+  const outcomes=noop?[successful(5,oracle.seed),successful(6,oracle.seed)]:[successful(3,oracle.a),{ok:false,operationId:Array(16).fill(4),candidateBundleHex:oracle.b.bundleHex,error:{code:"workspace_conflict",message:"workspace_conflict"},activated:false,saveCalls:1}];
+  const after=noop?oracle.seed:oracle.a;
+  const value={schemaVersion:1,profile:source.profile,sdk:"node",cases:[{id:kind,before:oracle.seed,after,steps:[{call:"two-processes-ready",value:[{ready:true,parent:oracle.seed.head},{ready:true,parent:oracle.seed.head}]},{call:"race",value:outcomes},{call:source.cases[0].steps[2],value:after}]}]};
+  return {source,oracle,value};
+}
+test("native server qualification keeps exact winner IDs, candidate bytes and raw errors",()=>{
+  const {source,oracle,value}=hostProtocol();assert.doesNotThrow(()=>validateNativeServerOutput(value,source,oracle,"node"));
+  const alternate=structuredClone(value);
+  alternate.cases[0].steps[1].value=[{ok:false,operationId:Array(16).fill(3),candidateBundleHex:oracle.a.bundleHex,error:{code:"workspace_conflict",message:"workspace_conflict"},activated:false,saveCalls:1},{ok:true,operationId:Array(16).fill(4),candidateBundleHex:oracle.b.bundleHex,head:oracle.b.head,acknowledgment:oracle.b.head,activated:true,saveCalls:1}];
+  alternate.cases[0].after=oracle.b;alternate.cases[0].steps[2].value=oracle.b;
+  assert.doesNotThrow(()=>validateNativeServerOutput(alternate,source,oracle,"node"));
+  for(const change of [
+    v=>{v.cases[0].steps[1].value[0].operationId.fill(4);},
+    v=>{v.cases[0].steps[1].value[0].candidateBundleHex=oracle.b.bundleHex;},
+    v=>{v.cases[0].steps[1].value[1].error={code:"conflict",message:"conflict"};},
+    v=>{v.cases[0].steps[1].value[1].activated=true;},
+    v=>{v.cases[0].steps[1].value[0].saveCalls=2;},
+    v=>{v.cases[0].after=oracle.b;},
+    v=>{v.cases=[];},
+  ]){const invalid=structuredClone(value);change(invalid);assert.throws(()=>validateNativeServerOutput(invalid,source,oracle,"node"));}
+  assert.throws(()=>validateNativeServerOutput(value,{...source,sdks:["rust","python","node","wasm"]},oracle,"node"));
+  assert.throws(()=>validateNativeServerOutput(value,source,oracle,"wasm"));
+});
+test("no-op CAS can acknowledge both writers without pretending to be a delivery lock",()=>{
+  const {source,oracle,value}=hostProtocol("process-noop-race");assert.doesNotThrow(()=>validateNativeServerOutput(value,source,oracle,"node"));
+  const lost=structuredClone(value);lost.cases[0].steps[1].value.pop();assert.throws(()=>validateNativeServerOutput(lost,source,oracle,"node"));
+});
+test("native failed writes require unchanged encrypted row hashes and exact Core state",()=>{
+  const state={bundleHex:"a10002",head:{revision:"0",commitId:Array(16).fill(2)}};
+  const source={schemaVersion:1,profile:"native-server-cas-v1",sdks:["python","node"],hostErrors:{abort:{python:["storage_failure"],node:["storage_failure"]}},cases:[{id:"abort-rollback",steps:["save-aborted","unchanged"]}]};
+  const value={schemaVersion:1,profile:source.profile,sdk:"python",cases:[{id:"abort-rollback",before:state,after:state,steps:[{call:"save-aborted",value:{ok:false,error:{code:"storage_failure",message:"storage_failure"}}},{call:"unchanged",value:{rowBeforeSha256:"a".repeat(64),rowAfterSha256:"a".repeat(64),local:state}}]}]};
+  assert.doesNotThrow(()=>validateNativeServerOutput(value,source,{seed:state},"python"));
+  const changed=structuredClone(value);changed.cases[0].steps[1].value.rowAfterSha256="b".repeat(64);assert.throws(()=>validateNativeServerOutput(changed,source,{seed:state},"python"));
+});
+
+test("race acknowledgments preserve exact Node heads and Python null without missing-field fallback",()=>{
+  const {source,oracle,value}=hostProtocol();
+  assert.doesNotThrow(()=>validateNativeServerOutput(value,source,oracle,"node"));
+  for(const mutate of [v=>delete v.cases[0].steps[1].value[0].acknowledgment,v=>{v.cases[0].steps[1].value[0].acknowledgment=oracle.seed.head;},v=>{v.cases[0].steps[1].value[0].acknowledgment=null;}]) {
+    const wrong=structuredClone(value);mutate(wrong);assert.throws(()=>validateNativeServerOutput(wrong,source,oracle,"node"));
+  }
+  const python=structuredClone(value);python.sdk="python";python.cases[0].steps[1].value[0].acknowledgment=null;
+  assert.doesNotThrow(()=>validateNativeServerOutput(python,source,oracle,"python"));
+  for(const mutate of [v=>delete v.cases[0].steps[1].value[0].acknowledgment,v=>{v.cases[0].steps[1].value[0].acknowledgment=oracle.a.head;}]) {
+    const wrong=structuredClone(python);mutate(wrong);assert.throws(()=>validateNativeServerOutput(wrong,source,oracle,"python"));
   }
 });
