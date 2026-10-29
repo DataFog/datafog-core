@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "status": "Sid approved strict default + opt-in progressive irreversible delivery and incomplete EOF/oversized-prefix failure; Core draft runtime implemented; binding/API qualification pending",
+  "seed": {
+    "entityType": "PERSON",
+    "value": "Jane",
+    "namespaceByte": 1,
+    "operationByte": 2,
+    "prepareByte": 3
+  },
+  "cases": [
+    {
+      "id": "plain-words",
+      "chunks": [
+        "Hello ",
+        "world."
+      ],
+      "bufferedFeedOutput": [],
+      "bufferedFinal": "Hello world.",
+      "progressiveFinal": "Hello world."
+    },
+    {
+      "id": "marker-splits",
+      "source": "Hello {marker}!",
+      "allByteSplits": true,
+      "allUtf16Splits": true,
+      "bufferedFeedOutput": [],
+      "bufferedFinal": "Hello Jane!",
+      "progressiveCarry": "hold possible marker until closing delimiters"
+    },
+    {
+      "id": "adjacent-repeated",
+      "source": "{marker}{marker}",
+      "allByteSplits": true,
+      "bufferedFinal": "JaneJane",
+      "progressiveFinal": "JaneJane"
+    },
+    {
+      "id": "unicode",
+      "source": "👋 é {marker}",
+      "allByteSplits": true,
+      "allUtf16Splits": true,
+      "bufferedFinal": "👋 é Jane",
+      "progressiveFinal": "👋 é Jane"
+    },
+    {
+      "id": "late-damaged-marker",
+      "chunks": [
+        "Hello ",
+        "{marker}",
+        " ",
+        "[[PERSON_BAD]]"
+      ],
+      "bufferedFinalText": null,
+      "progressiveDelivered": "Hello Jane ",
+      "progressiveComplete": false,
+      "progressiveTerminal": "invalid_marker; earlier delivery cannot be retracted"
+    },
+    {
+      "id": "unknown-marker",
+      "chunks": [
+        "Hello ",
+        "[[PERSON_ZZZZZZ]]"
+      ],
+      "bufferedFinalText": null,
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false
+    },
+    {
+      "id": "bare-committed-word",
+      "source": "{bareMarker}",
+      "allByteSplits": true,
+      "bufferedFinalText": null,
+      "progressiveCarry": "hold ASCII word until boundary, then fail unbracketed; emit none of the word"
+    },
+    {
+      "id": "eof-held-prefix",
+      "chunks": [
+        "Hello ",
+        "[[PERSON_"
+      ],
+      "bufferedR2Final": "Hello [[PERSON_",
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false,
+      "decision": "approved stricter streaming EOF failure; nonstreaming R2 unchanged"
+    },
+    {
+      "id": "invalid-utf8",
+      "utf8Chunks": [
+        [
+          240
+        ],
+        [
+          40
+        ]
+      ],
+      "bufferedFinalError": "invalid_encoding",
+      "progressiveComplete": false
+    },
+    {
+      "id": "split-surrogate",
+      "utf16Chunks": [
+        [
+          55357
+        ],
+        [
+          56395
+        ]
+      ],
+      "bufferedFinal": "👋",
+      "progressiveFinal": "👋"
+    },
+    {
+      "id": "eof-high-surrogate",
+      "utf16Chunks": [
+        [
+          55357
+        ]
+      ],
+      "bufferedFinalError": "invalid_encoding",
+      "progressiveComplete": false
+    },
+    {
+      "id": "cancel-after-prefix",
+      "chunks": [
+        "Hello ",
+        "[[PERSON_"
+      ],
+      "action": "close",
+      "bufferedFeedOutput": [],
+      "progressiveDelivered": "Hello ",
+      "progressiveComplete": false
+    },
+    {
+      "id": "head-changed",
+      "chunks": [
+        "Hello "
+      ],
+      "action": "activate different saved head before next feed",
+      "bufferedError": "workspace_conflict",
+      "progressiveComplete": false
+    },
+    {
+      "id": "workspace-closed",
+      "chunks": [
+        "Hello "
+      ],
+      "action": "close workspace before finalize",
+      "bufferedError": "closed_workspace",
+      "progressiveComplete": false
+    }
+  ]
+}
