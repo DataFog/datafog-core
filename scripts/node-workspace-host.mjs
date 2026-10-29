@@ -49,8 +49,31 @@ export class EncryptedWorkspaceStore {
     if(!(value instanceof Uint8Array) || value.length!==32) throw failure("workspace_unavailable");
     return Buffer.from(value);
   }
-  #row(scope) {
-    return this.#database.prepare("SELECT * FROM workspaces WHERE tenant=? AND workspace=?").get(scope.tenantId,scope.workspaceId);
+  #row(scope,includeEnvelope=false) {
+    // CASE projection is one SQLite snapshot: validate lengths before returning
+    // blobs/text to JS. octet_length reads stored sizes without fetching contents.
+    const bounds=`typeof(revision)='text' AND octet_length(revision) BETWEEN 1 AND 20
+      AND typeof(commit_id)='text' AND octet_length(commit_id)=32
+      AND typeof(namespace)='text' AND octet_length(namespace)=32
+      AND typeof(nonce)='blob' AND octet_length(nonce)=12
+      AND typeof(tag)='blob' AND octet_length(tag)=16
+      AND typeof(ciphertext)='blob' AND octet_length(ciphertext) BETWEEN 1 AND 16777216`;
+    // Inspect textual grammar only after the byte-size guard. length equality
+    // rejects embedded NUL/multibyte text before GLOB's ASCII grammar checks.
+    const canonical=`length(revision)=octet_length(revision) AND revision NOT GLOB '*[^0-9]*'
+      AND (revision='0' OR substr(revision,1,1) GLOB '[1-9]')
+      AND (octet_length(revision)<20 OR revision COLLATE BINARY<='18446744073709551615')
+      AND length(commit_id)=32 AND commit_id NOT GLOB '*[^0-9a-f]*'
+      AND length(namespace)=32 AND namespace NOT GLOB '*[^0-9a-f]*'`;
+    const valid=`CASE WHEN ${bounds} THEN (${canonical}) ELSE 0 END`;
+    const fields=["revision","commit_id","namespace",...(includeEnvelope?["nonce","tag","ciphertext"]:[])];
+    const projection=fields.map(field=>`CASE WHEN ${valid} THEN ${field} END AS ${field}`).join(",");
+    const row=this.#database.prepare(`SELECT CASE WHEN ${valid} THEN 1 ELSE 0 END AS envelope_valid,${projection}
+      FROM workspaces WHERE tenant=? AND workspace=?`).get(scope.tenantId,scope.workspaceId);
+    if(!row)return row;
+    if(row.envelope_valid!==1 || !/^[a-f0-9]{32}$/.test(row.commit_id) || !/^[a-f0-9]{32}$/.test(row.namespace))throw failure("invalid_snapshot");
+    try {headValue(storedHead(row));} catch {throw failure("invalid_snapshot");}
+    return row;
   }
   #transaction(action) {
     try {
@@ -92,7 +115,7 @@ export class EncryptedWorkspaceStore {
     const scope=scopeValue(rawScope),key=this.#key(scope);
     let bundle,workspace;
     try {
-      const row=this.#row(scope);
+      const row=this.#row(scope,true);
       if(!row)throw failure("workspace_unavailable");
       const head=headValue(storedHead(row));
       const decipher=createDecipheriv("aes-256-gcm",key,row.nonce);

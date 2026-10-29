@@ -28,6 +28,13 @@ boolean `true`; strings, numbers and other truthy values reject without saving o
 releasing. The staged Core plan captures input before approval, and a changed
 presentation rejects rather than authorizing a rewritten preview.
 
+Stored reads use one atomic SQLite CASE projection to bound ciphertext at 16 MiB,
+nonce/tag lengths and canonical head/namespace metadata before those fields enter
+JavaScript or decryption begins. SQL checks byte sizes before inspecting bounded
+textual grammar, avoiding an unchecked length/read gap. CAS reads return bounded
+metadata without fetching ciphertext. Malformed sizes, NUL/non-ASCII/noncanonical
+metadata and invalid uint64 heads reject without decrypting or changing state.
+
 Snapshot plaintext is encrypted with AES-256-GCM. Tenant, workspace, namespace and
 complete head are authenticated as AAD. Only ciphertext, nonce/tag and opaque
 routing/head metadata enter SQLite; source/request bodies and keys are not stored

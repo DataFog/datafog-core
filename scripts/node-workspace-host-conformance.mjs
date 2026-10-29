@@ -269,13 +269,59 @@ export async function verifyNodeWorkspaceHost() {
       tamper.prepare("UPDATE workspaces SET tag=? WHERE tenant=? AND workspace=?").run(row.tag,scope.tenantId,scope.workspaceId);tamper.close();
     }
 
+    // Corrupted envelope sizes and metadata reject before JS materialization/decrypt.
+    const boundedDb=new DatabaseSync(database);
+    const validRow=boundedDb.prepare("SELECT * FROM workspaces WHERE tenant=? AND workspace=?").get(scope.tenantId,scope.workspaceId);
+    const restoreRow=()=>boundedDb.prepare("UPDATE workspaces SET revision=?,commit_id=?,namespace=?,nonce=?,ciphertext=?,tag=? WHERE tenant=? AND workspace=?")
+      .run(validRow.revision,validRow.commit_id,validRow.namespace,validRow.nonce,validRow.ciphertext,validRow.tag,scope.tenantId,scope.workspaceId);
+    const currentForMetadata=open(scope),metadataHead=currentForMetadata.head(),metadataBundle=currentForMetadata.exportBundle();currentForMetadata.close();
+    const originalPrepare=DatabaseSync.prototype.prepare,decipherBeforeBounds=crypto.createDecipheriv;
+    const materialized=[],materializedBlobs=[];let decryptAttempts=0;
+    try {
+      DatabaseSync.prototype.prepare=function(...args) {
+        const statement=originalPrepare.apply(this,args),get=statement.get.bind(statement);
+        statement.get=(...params)=>{
+          const result=get(...params);
+          if(result) {
+            materialized.push(Object.values(result).map(value=>typeof value==="string"?Buffer.byteLength(value):value instanceof Uint8Array?value.byteLength:0));
+            materializedBlobs.push(...Object.values(result).filter(value=>value instanceof Uint8Array).map(value=>value.byteLength));
+          }
+          return result;
+        };
+        return statement;
+      };
+      crypto.createDecipheriv=()=>{decryptAttempts++;throw new Error("Synthetic private decrypt detail");};syncBuiltinESMExports();
+      for(const update of [
+        "ciphertext=zeroblob(16777217)","ciphertext=zeroblob(0)",
+        "nonce=zeroblob(11)","nonce=zeroblob(13)","tag=zeroblob(15)","tag=zeroblob(17)",
+        "revision=''","revision=printf('%04096d',1)","revision='01'","revision='1'||char(0)","revision='18446744073709551616'",
+        "commit_id='0123456789abcdef'","commit_id=printf('%04096d',1)","commit_id='zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'",
+        "namespace='0123456789abcdef'","namespace=replace(hex(zeroblob(8)),'0','é')","namespace=printf('%04096d',1)","namespace='GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG'",
+      ]) {
+        restoreRow();boundedDb.prepare(`UPDATE workspaces SET ${update} WHERE tenant=? AND workspace=?`).run(scope.tenantId,scope.workspaceId);
+        const beforeVersion=boundedDb.prepare("PRAGMA data_version").get().data_version;
+        materialized.length=0;materializedBlobs.length=0;decryptAttempts=0;
+        assert.throws(()=>store.load(scope),error=>error.code==="invalid_snapshot" && error.message==="invalid_snapshot");
+        assert.throws(()=>store.saveIfHeadMatches(scope,metadataHead,metadataHead,metadataBundle),error=>error.code==="invalid_snapshot" && error.message==="invalid_snapshot");
+        assert.equal(decryptAttempts,0,"malformed stored bounds/metadata must reject before decrypt");
+        assert(materialized.every(sizes=>sizes.every(size=>size<=64)),"no oversized blob or metadata may enter JS");
+        assert.equal(materializedBlobs.length,0,"malformed stored metadata must not materialize ciphertext/nonce/tag");
+        assert.equal(boundedDb.prepare("PRAGMA data_version").get().data_version,beforeVersion,"rejection must leave stored state unchanged");
+      }
+      restoreRow();materializedBlobs.length=0;decryptAttempts=0;
+      store.saveIfHeadMatches(scope,metadataHead,metadataHead,metadataBundle);
+      assert.equal(materializedBlobs.length,0,"CAS head comparison reads metadata without materializing blobs");assert.equal(decryptAttempts,0);
+    } finally {
+      metadataBundle.fill(0);DatabaseSync.prototype.prepare=originalPrepare;crypto.createDecipheriv=decipherBeforeBounds;syncBuiltinESMExports();restoreRow();boundedDb.close();
+    }
+
     for(const file of await readdir(directory)) {
       if(!file.startsWith("workspaces.sqlite"))continue;
       const bytes=await readFile(path.join(directory,file));
       for(const text of [value,"Synthetic Crash Name","Synthetic Alpha Name","Synthetic Beta Name"])assert(!bytes.includes(Buffer.from(text)),"database/WAL must contain encrypted state only");
       assert(!bytes.includes(key) && !bytes.includes(otherKey),"host keys must not be persisted in database/WAL");
     }
-    return {progressiveComplete:true,progressiveLateFailure:true,progressiveCancellation:true,progressiveTransportFailure:true,stateChangingRaceWinners:1,stateChangingRaceLosers:1,noOpReleases:2,failedAuthenticationWiped:true,cooperativeReleaseCancellation:true,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
+    return {storedBoundsRejected:true,metadataOnlyCas:true,progressiveComplete:true,progressiveLateFailure:true,progressiveCancellation:true,progressiveTransportFailure:true,stateChangingRaceWinners:1,stateChangingRaceLosers:1,noOpReleases:2,failedAuthenticationWiped:true,cooperativeReleaseCancellation:true,crashBefore:true,crashAfter:true,lostAck:true,cancellation:true,tenantIsolation:true,historyOnlyRejected:true};
   } finally {
     for(const {worker}of workers)await worker.terminate();
     store.close();key.fill(0);otherKey.fill(0);await rm(directory,{recursive:true,force:true});
