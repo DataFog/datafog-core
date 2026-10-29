@@ -54,6 +54,7 @@ function workspaceFindings(findings) {
     entityType: finding.entityType, matchedText: finding.matchedText,
     range: {unit: "utf8_bytes", ...finding.byteRange},
     detectorName: finding.detectorName, detectorVersion: finding.detectorVersion,
+    source: "scanner", needsReview: true,
     ...(finding.confidence === undefined ? {} : {confidence: finding.confidence}),
   }));
 }
@@ -64,6 +65,13 @@ async function prepare(text) {
   pending = {change, preview: change.preview()};
   document.querySelector("#sink").textContent = "";
   return {...detected, preview: pending.preview, heads: change.heads()};
+}
+function prepareRecall(text) {
+  const recall = workspace.recall(text);
+  const change = workspace.prepare(text, recall.findings.map(span => span.finding), randomId());
+  pending = {change, preview: change.preview()};
+  document.querySelector("#sink").textContent = "";
+  return {recall, preview: pending.preview, heads: change.heads()};
 }
 async function approve(abort = false) {
   if (!pending) throw new Error("no pending approval");
@@ -79,7 +87,7 @@ async function approve(abort = false) {
 }
 async function closeModel() { await model?.close(); status("model_closed"); }
 window.modelProof = {
-  openModel, openWorkspace, scan, prepare, approve, closeModel,
+  openModel, openWorkspace, scan, prepare, prepareRecall, approve, closeModel,
   descriptor: () => model.describe(), restore: text => workspace.restore(text),
   restoreReport: text => workspace.restoreReport(text), records: readRecords,
   hasModel: () => Boolean(model),

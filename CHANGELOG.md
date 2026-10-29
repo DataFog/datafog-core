@@ -26,6 +26,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
   Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
 
+- Rust and WASM workspaces can recall committed values in new text, with source
+  metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
+  or an explicit limit failure and never change saved mappings or bypass approval.
+
+- Workspace findings and preview transformations carry scanner/recall/user source
+  and review metadata in Rust and WASM. Existing callers default to scanner and
+  review required; these display flags never bypass approval or persistence.
+
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
   reject occupied destinations, and preserve aliases under fresh workspace keys
@@ -67,6 +75,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Model sessions expose a Core-owned description of their configured backend, model identity, label mapping and raw-score scale across Rust, Python, Node and browser SDKs.
 
 ### Fixed
+
+- Native SSN findings retain their type when a semantic PERSON finding covers
+  exactly the same span, after entity selection and allowlists are applied.
 
 - Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 

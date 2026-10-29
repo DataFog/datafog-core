@@ -2582,10 +2582,16 @@ fn select_validated_findings(findings: &[Finding], config: &TransformationConfig
     // Selection works on references; only the findings that survive are cloned.
     let mut selected_findings: Vec<&Finding> = Vec::with_capacity(findings.len());
     let mut duplicate_indices = BTreeMap::new();
+    let mut native_ssn_ranges = BTreeSet::new();
     for finding in findings
         .iter()
         .filter(|finding| config.includes(finding) && !config.allows(finding))
     {
+        if finding.entity_type == Label::Ssn.as_str()
+            && finding.detector_name == Label::Ssn.detector_name()
+        {
+            native_ssn_ranges.insert((finding.byte_range.start, finding.byte_range.end));
+        }
         // Validation against the same text makes the byte range determine both
         // the matched text and the code-point range. Preserve encounter order
         // within each group: mixed confidence is not a sortable preference.
@@ -2607,6 +2613,12 @@ fn select_validated_findings(findings: &[Finding], config: &TransformationConfig
             }
         }
     }
+    // An eligible native SSN supersedes a generic PERSON claim on the same
+    // value. Different spans retain the existing overlap policy.
+    selected_findings.retain(|finding| {
+        finding.entity_type != "PERSON"
+            || !native_ssn_ranges.contains(&(finding.byte_range.start, finding.byte_range.end))
+    });
     selected_findings.sort_by(|left, right| {
         (
             left.codepoint_range.start,
