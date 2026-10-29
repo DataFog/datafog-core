@@ -97,6 +97,9 @@ not present in the published beta.2 packages.
 ## Conversation binding evidence and limits
 
 The public conversation shapes and safe plain-property validation match WASM.
+Malformed context-definition and site-lookup fields use `invalid_conversation`;
+malformed intents use `invalid_send_intent`, direct logical-ID selectors retain
+`invalid_operation_id`, and source text retains `invalid_finding`.
 Context and intent IDs accept exact 16-byte `Uint8Array` or dense unsigned-byte
 arrays for owned-view round trips; direct logical-ID parameters require
 `Uint8Array`. No accessor executes during shape validation. Per-member errors
@@ -106,7 +109,7 @@ use the existing native plan/child registry. New error codes and scoped marker
 issues preserve the complete existing error fields.
 
 `node scripts/test-node-package.mjs --prebuilt` packs and installs the actual
-native package, executes the shared 59-check conversation corpus, then adds
+native package, executes the shared 71-check conversation corpus, then adds
 Node transport/ownership, 32-plan, scoped UTF-16 and child-lifetime tests. It also
 uses the existing encrypted SQLite store for a failed first save, durable pending
 reopen, lost confirmation acknowledgment and replay rejection, plus an independent

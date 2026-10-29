@@ -37,12 +37,14 @@ export async function verifyNativeConversations(api) {
     const accessorId=Array(16).fill(22);Object.defineProperty(accessorId,"0",{enumerable:true,get(){calls++;return 22;}});
     reject(()=>workspace.prepareConversationSend([{input:review,conversation:{...definition,id:accessorId}}],op(23)),"invalid_conversation",0);
     for(const value of [null,{},[1],Array(16).fill(true),Array(16),new Uint8Array(15)]) {
-      reject(()=>workspace.prepareConversationSend([{input:review,conversation:{...definition,id:value}}],op(23)),value instanceof Uint8Array?"invalid_operation_id":"invalid_conversation",0);
+      reject(()=>workspace.prepareConversationSend([{input:review,conversation:{...definition,id:value}}],op(23)),"invalid_conversation",0);
     }
     reject(()=>workspace.prepareConversationSend([{input:review,conversation:definition},{input:{...review,corrections:null},conversation:definition}],op(23)),"invalid_finding",1);
     reject(()=>workspace.prepareConversationSend([{input:{...review,userSelections:[{...review.userSelections[0],confidence:NaN}]},conversation:definition}],op(23)),"invalid_finding",0);
     const operation=op(23);Object.defineProperty(operation,"occurredAtMs",{enumerable:true,get(){calls++;return 23;}});
     reject(()=>workspace.prepareConversationSend([{input:review,conversation:definition}],operation),"invalid_operation");
+    reject(()=>workspace.conversation(new Uint8Array(15)),"invalid_operation_id");
+    reject(()=>workspace.restoreInConversation(1,id(22)),"invalid_finding");
     assert.equal(calls,0);assert.deepEqual(workspace.exportBundle(),before);
     const plans=Array.from({length:32},(_,index)=>workspace.prepareConversationSend([{input:input("plain"),conversation:definition}],op(40+index)));
     reject(()=>workspace.prepareConversationSend([{input:input("plain"),conversation:definition}],op(80)),"resource_limit");
