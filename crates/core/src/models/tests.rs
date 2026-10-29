@@ -564,6 +564,38 @@ fn routed_rule_entities_never_touch_the_model_worker() {
 }
 
 #[test]
+fn partial_account_rules_do_not_bypass_native_model_admission() {
+    let session = idle_session();
+    let config = session
+        .routed_config(&serde_json::json!({"entities":["ACCOUNT_NUMBER"]}))
+        .unwrap();
+    assert_eq!(
+        config.rules.as_ref().and_then(ScanConfig::entities),
+        Some(&BTreeSet::from(["ACCOUNT_NUMBER".to_owned()]))
+    );
+    assert_eq!(
+        config.model_entities,
+        BTreeSet::from(["ACCOUNT_NUMBER".to_owned()])
+    );
+    let request = session.prepare_request().unwrap();
+    for text in [
+        "account number: 12345678",
+        "12345678",
+        "account ending in 1234",
+        "account number: XXXX1234",
+    ] {
+        assert_eq!(
+            session
+                .scan_routed(text, &config, &Cancellation::default())
+                .unwrap_err()
+                .code,
+            "model_busy"
+        );
+    }
+    drop(request);
+}
+
+#[test]
 fn routed_scans_keep_the_session_lifecycle_and_limits() {
     let session = idle_session();
     let config = session

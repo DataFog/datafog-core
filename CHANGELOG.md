@@ -28,6 +28,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Detect explicitly account-labelled four-digit endings and bounded X/asterisk
+  masks without inferring hidden digits or changing workspace literal identity.
+
+- Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
+  Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
+
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
   coverage/type conflicts block handoff with ranged review errors before a plan is
