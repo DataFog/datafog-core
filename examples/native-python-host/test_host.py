@@ -144,6 +144,12 @@ class HostTests(unittest.TestCase):
             self.assertEqual(upgraded.policy()["snapshotVersion"],2)
             self.assertEqual(upgraded.restore(result["text"]),text)
 
+    def test_only_explicit_boolean_approval_can_save_and_release(self):
+        with self.store.open() as before:raw=before.export_bundle()
+        for approved in [False,None,"false",1]:
+            self.error("cancelled",lambda:prepare_and_handoff(self.store,self.context,"Ada Example",[finding("Ada Example")],approved=approved))
+            with self.store.open() as after:self.assertEqual(after.export_bundle(),raw)
+
     def test_real_transaction_abort_never_activates_or_releases(self):
         with self.store.open() as before: raw=before.export_bundle();head=before.head()
         self.error("storage_failure",lambda:self.run_request(fault="abort_after_update"))

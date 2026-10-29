@@ -155,9 +155,9 @@ def prepare_and_handoff(store: EncryptedStore, context: RequestContext, text: st
     with store.open() as workspace:
         with workspace.prepare(text, findings, os.urandom(16)) as change:
             checkpoint("prepared")
-            if not approved or cancelled(): raise HostError("cancelled")
+            if approved is not True or cancelled(): raise HostError("cancelled")
             version=change.snapshot_format()
-            if version["currentVersion"]==1 and version["candidateVersion"]==2 and not acknowledge_upgrade:
+            if version["currentVersion"]==1 and version["candidateVersion"]==2 and acknowledge_upgrade is not True:
                 raise HostError("upgrade_notice_required")
             released_text = change.preview()["text"]
             parent, saved = change.expected_head(), change.candidate_head()
