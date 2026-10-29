@@ -143,7 +143,7 @@ async function verifyCurrentFieldBackups({launch,close,unlock,status,check,fixtu
 }
 
 async function verifyOperationFieldBackups({launch,close,unlock,status,check,fixture}) {
-  for(const name of ["current","legacyUpgraded"]) {
+  for(const name of ["current","legacyUpgraded","conversationPending","conversationResolved"]) {
     const gold=fixture[name];let page=await launch(`backup-operation-source-${name}`);
     const source=await page.evaluate(async({gold,password})=>{
       const {init,Workspace}=await import("./vendor/package/index.js");await init();
@@ -177,7 +177,7 @@ async function verifyOperationFieldBackups({launch,close,unlock,status,check,fix
         try {
           workspace=Workspace.openBundle(opened.bundle);recovered=workspace.exportBundle();
           const before=fixtureFieldBytes(original),after=fixtureFieldBytes(recovered);
-          const retained=[0,1,3,4,5,6,7].every(key=>equal([...before.get(key)],[...after.get(key)]));
+          const retained=[0,1,3,4,5,6,7,9].every(key=>equal([...before.get(key)],[...after.get(key)]));
           const rows=workspace.operations(),last=rows.at(-1),counts=workspace.counts(),head=workspace.head();
           const prefix=rows.length===gold.operations.length+1&&equal(rows.slice(0,-1),gold.operations);
           const recovery=last.kind==="recovery"&&last.occurredAtMs===null&&last.preparedInputs===0&&last.transformedSpans===0&&equal(last.id,head.commitId);
