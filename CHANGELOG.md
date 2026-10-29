@@ -55,6 +55,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
+
 - WASM workspace activation drops retained plans whose parent head is stale,
   releasing their previews and capacity. No-op and failed activations preserve
   valid current-head plans; explicitly discard unused live plans as before.

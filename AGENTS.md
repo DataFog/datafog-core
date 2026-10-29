@@ -28,7 +28,7 @@ Run `cargo dfv check` after any detection change. It runs doctor first and stops
 - Model-based: depends on engine tier (see below).
 - Benchmark: warn-only while baseline is provisional. Once a stable runner baseline exists: > 10% slower fails, 5-10% warns.
 - Parity: zero tolerance unless a PR intentionally updates a fixture.
-- Live parity: compares actual scan() output across Python, Node, and WASM bindings. WASM runs via headless Chromium.
+- Live parity: requires successful scan() output from Python, Node, and WASM on every selected fixture. Missing bindings, failed scans, malformed responses, and invalid offsets fail the run. JavaScript UTF-16 ranges are checked against the source; WASM runs via headless Chromium.
 
 **Model engine tiers:**
 - **first_party** (e.g. datafog): F1 drop > 1pt fails PR, <= 1pt warns. Owned by DataFog.
