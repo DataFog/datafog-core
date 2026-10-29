@@ -43,6 +43,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+          components: rustfmt, clippy
           targets: ${{ matrix.target }}
       - uses: actions/setup-python@v5
         with:
