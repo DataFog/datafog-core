@@ -265,7 +265,7 @@ try {
     temporaryDirectory,
   );
 
-for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
