@@ -38,7 +38,10 @@ fn main() -> ExitCode {
         "bench" => bench::run_bench(&args[1..], json_output),
         "smoke" => smoke::run_smoke(&args[1..], json_output),
         "parity" => {
-            if args[1..].iter().any(|arg| arg == "--workspace") {
+            if args[1..]
+                .iter()
+                .any(|arg| arg == "--workspace" || arg == "--plan-memory-diagnostic")
+            {
                 workspace_parity::run_workspace_parity(&args[1..], json_output)
             } else {
                 parity::run_parity(&args[1..], json_output)
@@ -94,6 +97,7 @@ SMOKE OPTIONS:
 
 PARITY OPTIONS:
     --workspace        Blocking installed workspace contract matrix (Rust/Python/Node/browser WASM)
+    --plan-memory-diagnostic  Opt-in Node 80-cycle RSS/heap investigation with --workspace
     --live             Run actual scans through installed SDKs and diff outputs
     --sample N         Sample N fixtures (default 100 for --live, prioritizes multibyte/emoji)
     --full             Run on all fixtures (nightly/workflow_dispatch)
