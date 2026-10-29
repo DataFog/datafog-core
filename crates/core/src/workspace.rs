@@ -6,8 +6,8 @@ mod codec;
 mod operations;
 pub use operations::{
     MAX_OPERATION_TIME_MS, MAX_OPERATIONS, MAX_ORDINARY_OPERATIONS, OperationContext,
-    OperationCounts, OperationHistoryCoverage, OperationKind, OperationOutcome, OperationRecord,
-    OutcomeKind, PreUpgradeHistory, RESERVED_RECOVERY_OPERATIONS,
+    OperationCounts, OperationHistoryCoverage, OperationKind, OperationOutcome, OperationPage,
+    OperationRecord, OutcomeKind, PreUpgradeHistory, RESERVED_RECOVERY_OPERATIONS,
 };
 mod policy;
 pub use policy::{

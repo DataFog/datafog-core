@@ -16,6 +16,11 @@ const tarball = JSON.parse(execFileSync("npm", ["pack", "--json", "--pack-destin
 execFileSync("tar", ["-xzf", path.join(dist, tarball), "-C", path.join(dist, "vendor")]);
 await rm(path.join(dist, tarball));
 await cp(path.join(here, "src"), dist, { recursive: true });
+execFileSync("cargo",["run","-p","datafog-core","--release","--example","workspace_operation_capacity","--",path.join(root,"target/operation-capacity")],{cwd:root,stdio:"inherit"});
+await mkdir(path.join(dist,"capacity-fixtures"),{recursive:true});
+for(const name of ["manifest.json","ordinary.cbor","last-recovery.cbor","hard.cbor"]) {
+  await cp(path.join(root,"target/operation-capacity",name),path.join(dist,"capacity-fixtures",name));
+}
 await cp(path.join(root, "scripts/workspace-policy-conformance.mjs"), path.join(dist, "workspace-policy-conformance.mjs"));
 await cp(path.join(root, "scripts/workspace-conformance.mjs"), path.join(dist, "workspace-conformance.mjs"));
 await cp(path.join(root,"scripts/workspace-review-conformance.mjs"),path.join(dist,"workspace-review-conformance.mjs"));
@@ -49,7 +54,7 @@ const versions = {};
 for (const name of ["playwright", "esbuild", "libsodium-wrappers-sumo", "libsodium-sumo"]) {
   versions[name] = JSON.parse(await readFile(path.join(here, "node_modules", name, "package.json"), "utf8")).version;
 }
-const inputPaths = ["Cargo.lock", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json", "scripts/test-workspace-extension.mjs", "scripts/test-workspace-followups.mjs", "scripts/test-workspace-backup.mjs", "scripts/test-workspace-policy.mjs", "scripts/test-workspace-operations.mjs", "fixtures/workspace/policy-v2.json", "scripts/test-workspace-review.mjs", "scripts/workspace-conformance.mjs", "scripts/workspace-review-conformance.mjs", "scripts/workspace-policy-conformance.mjs", "fixtures/workspace/monthly.json", "fixtures/workspace/counters.json", "fixtures/workspace/argon2id.json", "fixtures/workspace/argon2id-backup.json", "scripts/workspace-streaming-conformance.mjs", "fixtures/workspace/streaming-contract-v1.json"];
+const inputPaths = ["Cargo.lock", "bindings/wasm/package-lock.json", "examples/workspace-extension/package-lock.json", "scripts/test-workspace-extension.mjs", "scripts/test-workspace-followups.mjs", "scripts/test-workspace-backup.mjs", "scripts/test-workspace-policy.mjs", "scripts/test-workspace-operations.mjs", "scripts/test-workspace-operation-capacity.mjs", "crates/core/examples/workspace_operation_capacity.rs", "fixtures/workspace/policy-v2.json", "scripts/test-workspace-review.mjs", "scripts/workspace-conformance.mjs", "scripts/workspace-review-conformance.mjs", "scripts/workspace-policy-conformance.mjs", "fixtures/workspace/monthly.json", "fixtures/workspace/counters.json", "fixtures/workspace/argon2id.json", "fixtures/workspace/argon2id-backup.json", "scripts/workspace-streaming-conformance.mjs", "fixtures/workspace/streaming-contract-v1.json", "fixtures/workspace/backup-current-fields.json"];
 const inputHashes = Object.fromEntries(await Promise.all(inputPaths.map(async file => [file, createHash("sha256").update(await readFile(path.join(root, file))).digest("hex")])));
 await writeFile(path.join(dist, "artifacts.json"), JSON.stringify({
   coreBaseline: "0.4.4", sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {cwd: root, encoding: "utf8"}).trim(),

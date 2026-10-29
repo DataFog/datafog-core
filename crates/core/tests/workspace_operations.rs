@@ -2,7 +2,8 @@ use datafog_core::{
     TextRange,
     workspace::{
         ErrorCode, MAX_OPERATION_TIME_MS, OperationContext, OperationKind, OperationOutcome,
-        OutcomeKind, PreUpgradeHistory, Workspace, WorkspaceFinding, WorkspaceInput,
+        OutcomeKind, PolicyEdits, PreUpgradeHistory, TypeRule, TypeRuleEdit, Workspace,
+        WorkspaceFinding, WorkspaceInput,
     },
 };
 fn operation(id: u8, time: u64) -> OperationContext {
@@ -158,7 +159,7 @@ fn explicit_no_change_and_outcomes_are_commits_while_legacy_reads_and_previews_a
     }
     assert_eq!(
         workspace.prepare("", &[], [4; 16]).err().unwrap().code,
-        ErrorCode::OperationReused
+        ErrorCode::InvalidId
     );
 }
 #[test]
@@ -396,5 +397,138 @@ fn coverage_never_invents_unknown_prior_history_or_changes_legacy_bytes() {
             assert_eq!(legacy.export_bundle().unwrap(), bytes);
         }
         legacy.close();
+    }
+}
+
+#[test]
+fn paged_history_is_lossless_borrowed_and_read_only() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    for id in 3..7 {
+        let mut plan = workspace
+            .prepare_with_operation("", &[], operation(id, 0))
+            .unwrap();
+        activate(&mut workspace, &mut plan);
+    }
+    let before = workspace.export_bundle().unwrap();
+    let all = workspace.operations().unwrap();
+    let first = workspace.operations_page(0, 2).unwrap();
+    assert_eq!(first.records, &all[..2]);
+    assert_eq!(first.records.as_ptr(), all.as_ptr());
+    assert_eq!(
+        (first.total, first.offset, first.next_offset),
+        (5, 0, Some(2))
+    );
+    let second = workspace.operations_page(2, 2).unwrap();
+    assert_eq!(second.records, &all[2..4]);
+    assert_eq!(second.next_offset, Some(4));
+    let last = workspace.operations_page(4, 2).unwrap();
+    assert_eq!(last.records, &all[4..]);
+    assert_eq!(last.next_offset, None);
+    let end = workspace.operations_page(5, 1).unwrap();
+    assert!(end.records.is_empty());
+    assert_eq!((end.total, end.offset, end.next_offset), (5, 5, None));
+    for (offset, limit) in [
+        (6, 1),
+        (0, 0),
+        (0, 100_001),
+        (usize::MAX, 1),
+        (0, usize::MAX),
+    ] {
+        assert_eq!(
+            workspace.operations_page(offset, limit).unwrap_err().code,
+            ErrorCode::ResourceLimit
+        );
+    }
+    assert_eq!(workspace.export_bundle().unwrap(), before);
+    workspace.close();
+    assert_eq!(
+        workspace.operations_page(0, 1).unwrap_err().code,
+        ErrorCode::ClosedWorkspace
+    );
+}
+
+#[test]
+fn every_recognized_reused_id_preserves_legacy_and_explicit_error_contracts() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let mut mapping = workspace
+        .prepare(
+            "Jane",
+            &[WorkspaceFinding::new(
+                "PERSON",
+                "Jane",
+                TextRange { start: 0, end: 4 },
+            )],
+            [3; 16],
+        )
+        .unwrap();
+    activate(&mut workspace, &mut mapping);
+    let edits = PolicyEdits {
+        rules: vec![TypeRuleEdit {
+            entity_type: "PROJECT_CODE".into(),
+            rule: Some(TypeRule::Keep),
+        }],
+        choices: vec![],
+    };
+    let mut settings = workspace.prepare_policy_changes(&edits, [4; 16]).unwrap();
+    activate(&mut workspace, &mut settings);
+    let mut history = workspace
+        .prepare_outcome(
+            OperationOutcome {
+                kind: OutcomeKind::UserCancelled,
+                issue_count: 0,
+            },
+            operation(5, 0),
+        )
+        .unwrap();
+    activate(&mut workspace, &mut history);
+    let mut current = workspace.prepare_recovery([6; 16]).unwrap();
+    activate(&mut workspace, &mut current);
+    let saved = workspace.export_bundle().unwrap();
+    let workspace = Workspace::open_bundle(&saved).unwrap();
+    let head = workspace.head().unwrap();
+    let inputs = [WorkspaceInput {
+        text: "ordinary",
+        findings: &[],
+    }];
+    // Current head, mapping issuance, settings, history-only create and outcome.
+    for id in [6, 3, 4, 2, 5] {
+        for result in [
+            workspace.prepare("", &[], [id; 16]),
+            workspace.prepare_batch(&inputs, [id; 16]),
+            workspace.prepare_recovery([id; 16]),
+            workspace.prepare_policy_changes(
+                &PolicyEdits {
+                    rules: vec![],
+                    choices: vec![],
+                },
+                [id; 16],
+            ),
+        ] {
+            assert_eq!(
+                result.err().unwrap().code,
+                ErrorCode::InvalidId,
+                "legacy ID {id}"
+            );
+        }
+        for result in [
+            workspace.prepare_with_operation("", &[], operation(id, 0)),
+            workspace.prepare_batch_with_operation(&inputs, operation(id, 0)),
+            workspace.prepare_recovery_with_operation(operation(id, 0)),
+            workspace.prepare_outcome(
+                OperationOutcome {
+                    kind: OutcomeKind::UserCancelled,
+                    issue_count: 0,
+                },
+                operation(id, 0),
+            ),
+        ] {
+            assert_eq!(
+                result.err().unwrap().code,
+                ErrorCode::OperationReused,
+                "explicit ID {id}"
+            );
+        }
+        assert_eq!(workspace.head().unwrap(), head);
+        assert_eq!(workspace.export_bundle().unwrap(), saved);
     }
 }

@@ -8,6 +8,7 @@ mod models;
 mod parity;
 mod report;
 mod smoke;
+mod workspace_parity;
 
 use std::env;
 use std::process::ExitCode;
@@ -36,7 +37,13 @@ fn main() -> ExitCode {
         "eval" => eval::run_eval(&args[1..], json_output),
         "bench" => bench::run_bench(&args[1..], json_output),
         "smoke" => smoke::run_smoke(&args[1..], json_output),
-        "parity" => parity::run_parity(&args[1..], json_output),
+        "parity" => {
+            if args[1..].iter().any(|arg| arg == "--workspace") {
+                workspace_parity::run_workspace_parity(&args[1..], json_output)
+            } else {
+                parity::run_parity(&args[1..], json_output)
+            }
+        }
         "--help" | "-h" => {
             print_usage();
             ExitCode::SUCCESS
@@ -86,6 +93,7 @@ SMOKE OPTIONS:
     --sdk <name>       Test only one SDK (python, node, wasm)
 
 PARITY OPTIONS:
+    --workspace        Blocking installed workspace contract matrix (Rust/Python/Node/browser WASM)
     --live             Run actual scans through installed SDKs and diff outputs
     --sample N         Sample N fixtures (default 100 for --live, prioritizes multibyte/emoji)
     --full             Run on all fixtures (nightly/workflow_dispatch)

@@ -17,6 +17,10 @@ fn failure(code: ErrorCode) -> JsValue {
         review_conflicts: Vec::new(),
     })
 }
+fn operation_record_value(record: &workspace::OperationRecord) -> serde_json::Value {
+    json!({"id": record.id, "kind": record.kind.as_str(), "occurredAtMs": record.occurred_at_ms,
+        "preparedInputs": record.prepared_inputs, "transformedSpans": record.transformed_spans})
+}
 fn marker_issue_value(issue: &workspace::MarkerIssue) -> serde_json::Value {
     json!({
         "kind": issue.kind.as_str(),
@@ -288,11 +292,26 @@ impl WasmWorkspace {
         })
     }
     pub fn operations(&self) -> Result<String, JsValue> {
-        let values: Vec<_> = self.inner.operations().map_err(from_error)?.iter().map(|record| json!({
-            "id": record.id, "kind": record.kind.as_str(), "occurredAtMs": record.occurred_at_ms,
-            "preparedInputs": record.prepared_inputs, "transformedSpans": record.transformed_spans,
-        })).collect();
+        let values: Vec<_> = self
+            .inner
+            .operations()
+            .map_err(from_error)?
+            .iter()
+            .map(operation_record_value)
+            .collect();
         Ok(json!(values).to_string())
+    }
+    pub fn operations_page(&self, offset: usize, limit: usize) -> Result<String, JsValue> {
+        let page = self
+            .inner
+            .operations_page(offset, limit)
+            .map_err(from_error)?;
+        let records: Vec<_> = page.records.iter().map(operation_record_value).collect();
+        Ok(
+            json!({"records": records, "total": page.total, "offset": page.offset,
+            "nextOffset": page.next_offset})
+            .to_string(),
+        )
     }
     pub fn history_coverage(&self) -> Result<String, JsValue> {
         serde_json::to_string(&self.inner.history_coverage().map_err(from_error)?)

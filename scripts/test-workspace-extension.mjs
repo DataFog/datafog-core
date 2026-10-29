@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {verifyOperationCapacity} from "./test-workspace-operation-capacity.mjs";
 import {verifyOperationPersistence} from "./test-workspace-operations.mjs";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
 import {verifyReviewHost} from "./test-workspace-review.mjs";
@@ -16,6 +17,7 @@ const harness = path.join(root, "examples/workspace-extension");
 const { chromium } = createRequire(path.join(harness, "package.json"))("playwright");
 const fixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/monthly.json"), "utf8"));
 const counterFixtures = JSON.parse(await readFile(path.join(root, "fixtures/workspace/counters.json"), "utf8"));
+const backupFieldFixture=JSON.parse(await readFile(path.join(root,"fixtures/workspace/backup-current-fields.json"),"utf8"));
 const backupKdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id-backup.json"), "utf8"));
 const kdfFixture = JSON.parse(await readFile(path.join(root, "fixtures/workspace/argon2id.json"), "utf8"));
 execFileSync(process.execPath, ["--test", path.join(root, "scripts/test-workspace-wait.mjs")], {stdio: "inherit"});
@@ -23,6 +25,7 @@ execFileSync("npm", ["run", "build", "--prefix", harness], { stdio: "inherit" })
 const temporary = await mkdtemp(path.join(os.tmpdir(), "datafog-workspace-"));
 let context;
 let origin;
+let operationCapacity;
 const password = "synthetic-test-password-only";
 const observed = { externalRequests: 0, consoleMessages: 0, pageErrors: 0 };
 function check(condition, label) { if (!condition) throw new Error(label); }
@@ -77,8 +80,9 @@ async function prepare(page, source = fixture.january, type = fixture.type) {
 
 try {
   await verifyOperationPersistence({launch, close:async()=>{await context.close();context=undefined;}, status, check});
+  operationCapacity=await verifyOperationCapacity({launch,close:async()=>{await context.close();context=undefined;},status,check});
   await verifyPolicyHost({fresh,status,close:async()=>{await context.close();context=undefined;},launch,unlock,restored,control,check,counters:counterFixtures});
-  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check});
+  await verifyBackups({fresh, prepare, status, close: async () => { await context.close(); context = undefined; }, launch, unlock, restored, control, paused, check, backupFields:backupFieldFixture});
   let page = await fresh("source-markers");
   await page.locator("#source").fill("👋 é [[my_note]] plus [[PERSON_ZZZZZZ]]");
   await page.locator("#prepare").click(); await status(page, "invalid_marker");
@@ -407,6 +411,7 @@ try {
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
     reviewQualification,
+    operationCapacity,
     streamingQualification,
     checks: ["D8", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,

@@ -289,12 +289,27 @@ export async function verifyWorkspaceOperations(api) {
   const discardRecord = records.prepareWithOperation("", [], {id: id(205), occurredAtMs: 0}); discardRecord.discard();
   const duplicateRead = records.operations(); duplicateRead[0].id[0] = 7;
   check(equal(records.exportBundle(), recordsSaved) && records.operations()[0].id[0] === 202, "discard and mutated read results cannot change persisted records");
+  const pages = [records.operationsPage(0, 2), records.operationsPage(2, 2)];
+  check(JSON.stringify(pages.flatMap(page => page.records)) === JSON.stringify(records.operations()) && pages[0].nextOffset === 2 && pages[1].nextOffset === null && pages.every(page => page.total === 3), "explicit history pages retain every ordered record and report their end");
+  check(records.operationsPage(3, 1).records.length === 0 && records.operationsPage(3, 1).nextOffset === null, "page at end is explicitly empty");
+  for (const [offset, limit] of [[-1,1],[0,0],[4,1],[0,100001],[NaN,1],[0,1.5],[null,1],[0,undefined],[4294967296,1]]) throws(() => records.operationsPage(offset,limit), "resource_limit");
+  pages[0].records[0].id[0] = 8;
+  check(records.operations()[0].id[0] === 202 && equal(records.exportBundle(), recordsSaved), "paged results are owned copies with no hidden saved mutation");
   check(!JSON.stringify({records: records.operations(), counts: records.counts()}).includes("Jane"), "records/counts contain no raw values");
   const reopenedRecords = api.Workspace.openBundle(recordsSaved);
   check(JSON.stringify(reopenedRecords.counts()) === JSON.stringify(records.counts()), "records/counts survive snapshot reopen");
   const recoverRecord = reopenedRecords.prepareRecoveryWithOperation({id: id(205), occurredAtMs: 1});
   reopenedRecords.activateSaved(recoverRecord, recoverRecord.heads().expectedHead, recoverRecord.heads().candidateHead);
   check(reopenedRecords.operations().at(-1).kind === "recovery" && reopenedRecords.counts().operations === 4, "timed recovery adds one content-free record");
+  for (const value of [202, 203, 204]) {
+    throws(() => records.prepare("", [], id(value)), "invalid_operation_id");
+    throws(() => records.prepareBatch([{text:"ordinary",findings:[]}], id(value)), "invalid_operation_id");
+    throws(() => records.prepareRecovery(id(value)), "invalid_operation_id");
+    throws(() => records.preparePolicyChanges({rules:[],choices:[]}, id(value)), "invalid_operation_id");
+    throws(() => records.prepareWithOperation("", [], {id:id(value),occurredAtMs:0}), "operation_reused");
+    throws(() => records.prepareRecoveryWithOperation({id:id(value),occurredAtMs:0}), "operation_reused");
+  }
+  check(equal(records.exportBundle(), recordsSaved), "all reused-ID failures preserve saved bytes and head");
   records.close(); candidateRecords.close(); reopenedRecords.close();
 
 }
