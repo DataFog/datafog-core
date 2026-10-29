@@ -279,6 +279,10 @@ fn scoped_strict_and_streams_preserve_all_offset_and_failure_contracts() {
         .restore_report_in_conversation(&response, id(10))
         .unwrap();
     assert!(report.text.is_none());
+    assert_eq!(
+        report.restored_markers, 1,
+        "only the marker issued into this context is resolvable"
+    );
     assert_eq!(report.issues.len(), 1);
     assert_eq!(
         report.issues[0].kind,
