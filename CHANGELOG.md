@@ -34,6 +34,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Workspace parity exercises saved conversation state and scoped restoration
+  through all four SDKs, with separately qualified native conversation hosts.
+
 - Native Node exposes saved conversation send intents, one-time site binding and
   scoped strict/buffered/progressive restoration through the shared Core.
 
