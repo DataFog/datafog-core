@@ -356,7 +356,7 @@ function conversationRecord(value,fields) {
   return result;
 }
 function conversationId(value) {
-  if(value instanceof Uint8Array) {workspaceBytes(value,16,true);return Array.from(value);}
+  if(value instanceof Uint8Array) {if(value.length!==16)throw workspaceFailure("invalid_conversation");return Array.from(value);}
   if(!Array.isArray(value) || value.length!==16 || Reflect.ownKeys(value).length!==17) throw workspaceFailure("invalid_conversation");
   const bytes=[];
   for(let i=0;i<16;i++) {
@@ -366,11 +366,15 @@ function conversationId(value) {
   }
   return bytes;
 }
+function conversationText(value) {
+  if(typeof value!=="string" || !value.isWellFormed())throw workspaceFailure("invalid_conversation");
+  workspaceText(value,16*1024*1024);
+}
 function conversationInput(value) {
   const fields=conversationRecord(value,["id","surface","siteId","siteIdByteBudget"]);
   fields.id=conversationId(fields.id);
-  workspaceText(fields.surface,16*1024*1024);
-  if(fields.siteId!==null) workspaceText(fields.siteId,16*1024*1024);
+  conversationText(fields.surface);
+  if(fields.siteId!==null) conversationText(fields.siteId);
   if(!Number.isSafeInteger(fields.siteIdByteBudget) || fields.siteIdByteBudget<1 || fields.siteIdByteBudget>16*1024*1024) throw workspaceFailure("invalid_conversation");
   return fields;
 }
@@ -494,12 +498,12 @@ export class Workspace {
   }
   conversation(logicalId) {workspaceBytes(logicalId,16,true);return JSON.parse(workspaceCall(this.#state,"conversation",logicalId));}
   conversationForSite(surface,siteId) {
-    workspaceText(surface,16*1024*1024);workspaceText(siteId,16*1024*1024);
+    conversationText(surface);conversationText(siteId);
     return workspaceCall(this.#state,"conversation_for_site",surface,siteId);
   }
   sendIntentStatus(intent) {return JSON.parse(workspaceCall(this.#state,"send_intent_status",sendIntentJson(intent)));}
   prepareObservedSend(intent,logicalId,surface,siteId,operation) {
-    workspaceBytes(logicalId,16,true);workspaceText(surface,16*1024*1024);workspaceText(siteId,16*1024*1024);
+    workspaceBytes(logicalId,16,true);conversationText(surface);conversationText(siteId);
     const context=workspaceOperation(operation);
     return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_observed_send",sendIntentJson(intent),logicalId,surface,siteId,context.json));
   }

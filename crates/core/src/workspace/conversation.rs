@@ -694,6 +694,12 @@ impl Workspace {
     }
     /// Resolve a trusted exact site identity without normalization or fallback.
     pub fn conversation_for_site(&self, surface: &str, site_id: &str) -> Result<PublicId> {
+        if surface.is_empty() || site_id.is_empty() {
+            return Err(error(ErrorCode::InvalidConversation));
+        }
+        if surface.len().saturating_add(site_id.len()) > MAX_BUNDLE_BYTES {
+            return Err(error(ErrorCode::ResourceLimit));
+        }
         self.state()?
             .conversations
             .contexts
