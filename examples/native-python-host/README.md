@@ -66,9 +66,9 @@ state, installed native binary hash, input hashes, versions and test count. It
 contains no fixture text, keys or plaintext snapshots. Separate SQLite processes
 use the actual installed wheel; no Python substitute implements workspace logic.
 
-A real saved v1-to-v2 mutation also requires the application's explicit upgrade
-notice acknowledgment: tell the person before approval that `0.5.0-beta.1` cannot
-open the upgraded vault. The fixture's `approved` and `acknowledge_upgrade` flags
+A real saved format upgrade also requires the application's explicit upgrade
+notice acknowledgment: tell the person before approval that `0.5.0-beta.1` and
+`0.5.0-beta.2` cannot open an upgraded v3 vault. The fixture's `approved` and `acknowledge_upgrade` flags
 represent that separate user review; they are not automatic approvals supplied by
 Core. The host rejects a missing acknowledgment before any durable change.
 

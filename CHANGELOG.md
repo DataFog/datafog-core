@@ -32,6 +32,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
   v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
   Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
   remaining event/replay accounting stays under review for `0.5.0-beta.3`.
+- Native Node exposes the shared workspace lifecycle, staged changes, policy,
+  recall, combined review, strict buffered and opt-in progressive restoration
+  without loading browser WASM. Streaming preserves Core error counts, encoding
+  validation and parent/head lifecycle cleanup.
 - Native Python workspace handles expose Core preparation, combined review,
   recall, protected choices, recovery and strict/opt-in progressive restoration
   with typed errors, exact delivery counts, explicit saved-state activation and

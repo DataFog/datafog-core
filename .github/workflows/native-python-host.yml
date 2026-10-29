@@ -53,12 +53,21 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install maturin==1.14.1
-      - run: maturin build --manifest-path bindings/python/Cargo.toml --release
-      - run: |
-          python -m venv target/python-host-venv
-          target/python-host-venv/bin/python -m pip install --require-hashes -r examples/native-python-host/requirements.txt
-          target/python-host-venv/bin/python -m pip install target/wheels/*.whl
-          target/python-host-venv/bin/python examples/native-python-host/test_host.py
+      - name: Build this job's wheel outside the Rust cache
+        id: wheel
+        run: |
+          host_wheel_directory=$(mktemp -d "$RUNNER_TEMP/datafog-host-wheels.XXXXXX")
+          maturin build --manifest-path bindings/python/Cargo.toml --release --out "$host_wheel_directory"
+          echo "directory=$host_wheel_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify the installed host in a fresh environment
+        env:
+          DFV_HOST_WHEEL_DIRECTORY: ${{ steps.wheel.outputs.directory }}
+        run: |
+          host_environment=$(mktemp -d "$RUNNER_TEMP/datafog-host-venv.XXXXXX")
+          python -m venv --clear "$host_environment"
+          "$host_environment/bin/python" -m pip install --require-hashes -r examples/native-python-host/requirements.txt
+          "$host_environment/bin/python" -m pip install "$DFV_HOST_WHEEL_DIRECTORY"/*.whl
+          "$host_environment/bin/python" examples/native-python-host/test_host.py
       - uses: actions/upload-artifact@v4
         with:
           name: native-python-host-${{ matrix.os }}-${{ matrix.python }}
