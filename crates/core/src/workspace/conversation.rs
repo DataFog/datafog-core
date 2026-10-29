@@ -370,7 +370,9 @@ impl Conversations {
                 site_id_byte_budget: budget as usize,
             });
         }
-        let count = decode_count(d, bytes, MAX_OPERATIONS, 22)?;
+        // A 16-byte CBOR byte string occupies17 bytes, not18. Minimum
+        // tuple sizes must never reject dense valid collections.
+        let count = decode_count(d, bytes, MAX_OPERATIONS, 21)?;
         for _ in 0..count {
             codec::array(d, 4)?;
             let id = SendIntentId {
@@ -392,7 +394,7 @@ impl Conversations {
                     .is_none(),
             )?;
         }
-        let count = decode_count(d, bytes, MAX_OPERATIONS, 41)?;
+        let count = decode_count(d, bytes, MAX_OPERATIONS, 39)?;
         result
             .resolutions
             .try_reserve_exact(count)
@@ -418,7 +420,7 @@ impl Conversations {
                 sent: outcome == 0,
             });
         }
-        let count = decode_count(d, bytes, MAX_BUNDLE_BYTES, 29)?;
+        let count = decode_count(d, bytes, MAX_BUNDLE_BYTES, 28)?;
         for _ in 0..count {
             codec::array(d, 4)?;
             let context = d.u32()? as usize;
