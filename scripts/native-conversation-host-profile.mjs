@@ -135,5 +135,6 @@ export async function runNativeConversationHostProfile({root,temporary,python,ou
  for(const file of ["native-conversation-host-node.mjs","node-workspace-host.mjs"])await copyFile(path.join(root,"scripts",file),path.join(temporary,file));
  results.node=JSON.parse(command(process.execPath,["native-conversation-host-node.mjs",fixtureFile,oracleFile],temporary));
  for(const sdk of fixture.sdks){await writeFile(path.join(output,`${sdk}-native-conversation-host.json`),JSON.stringify(results[sdk],null,2));validateConversationHostOutput(results[sdk],fixture,oracle,sdk);}
+ command(process.execPath,[path.join(root,"scripts/test-native-conversation-host-protocol.mjs"),fixtureFile,oracleFile,path.join(output,"python-native-conversation-host.json"),path.join(output,"node-native-conversation-host.json")]);
  return {profile:fixture.profile,sdks:fixture.sdks,oracleSdk:"rust",cases:fixture.cases.length,steps:fixture.cases.reduce((sum,value)=>sum+value.steps.length,0),fixtureSha256:sha(bytes),existingSuites,scope:"actual native Python/Node encrypted stores only; controlled synthetic callbacks and site verification; no real provider or production host security approval"};
 }
