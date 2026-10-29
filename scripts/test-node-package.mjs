@@ -58,11 +58,13 @@ import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
+import {verifyNativeOperations} from "./native-node-operations-conformance.mjs";
 import {verifyNodeWorkspaceHost} from "./node-workspace-host-conformance.mjs";
 import {verifyWorkspaceStreaming} from "./workspace-streaming-conformance.mjs";
 import * as germanApi from "@datafog/node";
 const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
 await verifyNativeWorkspace(germanApi,workspaceCounters);
+await verifyNativeOperations(germanApi,[workspaceCounters.high,JSON.parse(readFileSync(path.join(process.argv[2],"workspace/policy-v2.json"),"utf8"))]);
 await verifyWorkspaceStreaming(germanApi, JSON.parse(readFileSync(path.join(process.argv[2],"workspace/streaming-contract-v1.json"),"utf8")));
 const hostProof=await verifyNodeWorkspaceHost();
 console.log("Native Node host proof passed: "+JSON.stringify(hostProof));
@@ -655,6 +657,22 @@ void pseudonymized;
 
 import { discoverFields, scanStructured, transformStructured, scanAndTransformStructured, type StructuredScanResult, type StructuredTransformResult } from "@datafog/node";
 import {Workspace, type WorkspaceFinding, type WorkspaceHead, type WorkspaceReviewResult, type WorkspacePolicy, type PreparedWorkspaceChange, workspaceByteRangeFromUtf16} from "@datafog/node";
+const operation: import("@datafog/node").WorkspaceOperation={id:new Uint8Array(16),occurredAtMs:0};
+const timed=Workspace.createWithOperation(new Uint8Array(16),operation);
+const operationCounts: import("@datafog/node").WorkspaceCounts=timed.counts();
+const coverage: import("@datafog/node").WorkspaceHistoryCoverage=timed.historyCoverage();
+const operationPage: import("@datafog/node").WorkspaceOperationPage=timed.operationsPage(0,1000);
+const operationRows: readonly import("@datafog/node").WorkspaceOperationRecord[]=timed.operations();
+const nextPageOffset: number|null=operationPage.nextOffset;
+timed.prepareWithOperation("",[],operation).discard();
+timed.prepareBatchWithOperation([{text:"",findings:[]}],operation).discard();
+timed.prepareRecoveryWithOperation(operation).discard();
+timed.prepareOutcome({kind:"copy_confirmed",issueCount:0},operation).discard();
+// @ts-expect-error operation timestamps are numeric host assertions, not strings.
+const wrongOperation: import("@datafog/node").WorkspaceOperation={id:new Uint8Array(16),occurredAtMs:"0"};
+// @ts-expect-error successful send is not an exposed operation outcome.
+const wrongOutcome: import("@datafog/node").WorkspaceOutcome={kind:"send_confirmed",issueCount:0};
+void operationCounts;void coverage;void operationRows;void nextPageOffset;void wrongOperation;void wrongOutcome;timed.close();
 const workspace=Workspace.create(new Uint8Array(16),new Uint8Array(16));
 const finding: WorkspaceFinding={entityType:"PERSON",matchedText:"Jane",range:workspaceByteRangeFromUtf16("Jane",0,4),source:"user",needsReview:true};
 const review: WorkspaceReviewResult=workspace.review({text:"Jane",scannerFindings:[],userSelections:[finding]});
@@ -775,7 +793,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
+  for (const file of ["native-node-operations-conformance.mjs","workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();

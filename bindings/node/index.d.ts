@@ -378,6 +378,30 @@ export interface WorkspaceReviewResult {
   readonly candidates: readonly WorkspaceReviewCandidate[];
   readonly conflicts: readonly WorkspaceReviewConflict[];
 }
+export interface WorkspaceOperation { readonly id: Uint8Array; readonly occurredAtMs: number; }
+export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
+export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
+export interface WorkspaceOperationRecord {
+  readonly id: readonly number[];
+  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | WorkspaceOutcomeKind;
+  readonly occurredAtMs: number | null;
+  readonly preparedInputs: number;
+  readonly transformedSpans: number;
+}
+export interface WorkspaceOperationPage {
+  readonly records: readonly WorkspaceOperationRecord[];
+  readonly total: number;
+  readonly offset: number;
+  readonly nextOffset: number | null;
+}
+export interface WorkspaceHistoryCoverage {
+  readonly recordedHistoryOnly: true;
+  readonly preUpgradeHistory: "unknown" | "not_applicable";
+}
+export interface WorkspaceCounts {
+  readonly operations: number; readonly preparedInputs: number; readonly transformedSpans: number;
+  readonly confirmedHandoffs: number; readonly reportedBlockedAttempts: number;
+}
 export type WorkspaceRestoreEncoding = "utf8" | "utf16";
 export interface WorkspaceRestoreProgress {
   readonly bytes: number;
@@ -407,6 +431,7 @@ export interface WorkspaceProgressiveRestore {
 }
 export class Workspace {
   private constructor();
+  static createWithOperation(namespace: Uint8Array, operation: WorkspaceOperation): Workspace;
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
   static openBundle(bytes: Uint8Array): Workspace;
   head(): WorkspaceHead;
@@ -418,6 +443,14 @@ export class Workspace {
   review(input: WorkspaceReviewInput): WorkspaceReviewResult;
   /** Recompute review for every input. Any unresolved overlap rejects the whole batch before a plan exists. Approval and durable save remain required. */
   prepareReview(inputs: readonly WorkspaceReviewInput[], operationId: Uint8Array): PreparedWorkspaceChange;
+  operations(): readonly WorkspaceOperationRecord[];
+  operationsPage(offset: number, limit: number): WorkspaceOperationPage;
+  counts(): WorkspaceCounts;
+  historyCoverage(): WorkspaceHistoryCoverage;
+  prepareWithOperation(text: string, findings: readonly WorkspaceFinding[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareBatchWithOperation(inputs: readonly WorkspaceInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareOutcome(outcome: WorkspaceOutcome, operation: WorkspaceOperation): PreparedWorkspaceChange;
   policy(): WorkspacePolicy;
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;

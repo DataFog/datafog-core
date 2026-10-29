@@ -28,6 +28,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes Core operation records, explicit timed preparation/outcomes,
+  covered-history counts and bounded owned history pages.
+- Native Python exposes the draft Core operation records, recorded-history counts
+  and coverage, timed preparation/recovery and explicit content-free outcomes
+  through the existing staged save/activation lifecycle, with explicit read-only
+  pages that preserve the full-history API.
+
 - Proposed content-free workspace records and recorded-history counts use staged
   v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
   Read-only pages expose every retained row without requiring a full JSON view.
