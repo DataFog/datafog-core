@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Add native Python conversation send-intent, confirmed issuance and scoped
+  strict/streaming restore methods backed by the shared Core decisions.
+
 - Prepare `0.5.0-beta.2` (Python `0.5.0b2`): sources, recall, exact saved choices,
   combined protected review, scoped detector rules and stronger backup passwords.
   Old vaults retain v1 bytes until a real approved saved upgrade; beta.1 cannot
