@@ -105,12 +105,13 @@ serve({
       finally { opened.bundle.fill(0); }
     });
   },
-  exportBackup() {
+  exportBackup(password) {
     return run(async () => {
       const value = active(), g = generation;
       await current(value, g);
-      const bytes = await exportBackup(value.vault, value.record, value.dataKey);
-      try { guard(g); await current(value, g); return bytes; }
+      controller?.abort(); controller = new AbortController();
+      const bytes = await exportBackup(value.vault, value.record, value.dataKey, password, controller.signal);
+      try { await checkpoint("after-export-wrap"); guard(g); await current(value, g); return bytes; }
       catch (error) { bytes.fill(0); throw error; }
     });
   },

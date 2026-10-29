@@ -18,7 +18,8 @@
     <p>Status: <output id="status" aria-live="polite">loading</output></p>
     <section>
       <h2>Encrypted workspace backup</h2>
-      <p>Export saves committed mappings and privacy settings, without source text or drafts. Either the password or recovery code current at export can open it. Keep backups private; later credential changes do not update older files.</p>
+      <p>Export saves committed mappings and privacy settings, without source text or drafts. Either the vault password or recovery code current at export can open it. Reenter the vault password to create the stronger backup wrapper, including after unlocking with a recovery code. Keep backups private; later credential changes do not update older files.</p>
+      <label>Current vault password for export <input id="backup-export-password" type="password" autocomplete="off" maxlength="1024"></label>
       <button id="backup-export">Export encrypted backup</button>
       <p>Restore into an empty profile. Existing workspaces are never overwritten or merged.</p>
       <label>Backup file <input id="backup-file" type="file" accept=".dfbackup,application/octet-stream"></label>
