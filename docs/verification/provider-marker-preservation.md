@@ -1,11 +1,12 @@
-# G1 provider marker preservation: preparation and capture draft
+# G1 provider marker preservation: offline preparation and initial scorecard
 
 Issue [#150](https://github.com/DataFog/datafog-core/issues/150) requires real
 ChatGPT, Claude and Gemini results before launch qualification. This packet is
 **offline preparation only**: zero provider runs, no preservation rate and no G1
-pass. It neither contacts providers nor contains a scorer. The capture protocol,
-provider/model selection, repetitions and denominator need maintainer review
-before runs begin. No paid calls or provider credentials are needed to verify it.
+pass. It never contacts providers. The initial per-task required-reference
+scorecard is approved; provider/model selection, repetitions, aggregation, genuine
+multi-turn coverage and execution remain separate decisions before runs begin.
+No paid calls or provider credentials are needed to verify it.
 
 ## Synthetic fixture and sending boundary
 
@@ -45,12 +46,19 @@ corpus does not assert an observed external send or qualify conversation binding
 `markers.json`, all five prompt files, the task/reference expectations and the
 preparation report are byte-for-byte unchanged. The manifest updates only the
 gold hash and actual generation source/wheel/native witnesses. The proposed
-170-reference denominator remains unapproved. Seven actual installed-wheel tests
-pass against this packet; provider runs remain zero, preservation rate remains
+170-reference denominator in that historical generation witness was unapproved.
+The separate approval below does not rewrite that generation record. Actual
+installed-wheel tests pass against this packet; provider runs remain zero, preservation rate remains
 null and G1 pass remains false. Final candidate integration and actual provider
 execution/review are separate gates.
 
-## Proposed reference and omission denominator
+## Approved initial reference and omission scorecard
+
+Sid approved this initial five-task baseline on October 29, 2026, around 14:22 UTC,
+against [this exact reviewed scorecard](https://github.com/DataFog/datafog-core/blob/bb4e2eeec349590f50d8d7c017123c2aadf31905/docs/verification/provider-marker-preservation.md#proposed-reference-and-omission-denominator).
+[`scorecard-review.json`](../../fixtures/provider-markers/scorecard-review.json)
+pins that approval, the original manifest hash and each task's exact partition.
+The manifest's original draft status and generation witness remain historical.
 
 Each task has a fixed reference set, recorded as marker IDs in the manifest.
 Case-to-field associations and the unedited marker tokens are the local reference;
@@ -64,23 +72,35 @@ there is no single gold natural-language response.
 | Rewrite | C02, C04 | 20 | 30 |
 | Follow-up | C01, C05 | 20 | 30 |
 
-The draft denominator is **170 distinct required references per provider/model
-repetition**. Required omissions remain failures rather than disappearing from the
-denominator. A repeated occurrence cannot compensate for a different missing
+The approved initial scorecard has **170 distinct required reference slots across
+the five tasks**. The denominator is not a decision about models or repetitions.
+Required omissions remain failures rather than disappearing from the denominator. A repeated occurrence cannot compensate for a different missing
 required marker. References from the permitted-omission set do not enlarge that
 170-slot denominator. They still must restore if returned, and damaged, unknown,
 foreign, unissued or wrong-label marker candidates remain strict errors. Provider
 omissions and malformed outputs must be retained for review, not silently dropped
 as failed trials. Invented ordinary prose cannot be inferred to be a marker.
 
-These are proposed counting rules, not implemented qualification arithmetic. The
-issue's >=99% target needs a reviewed aggregation rule: pooling providers can hide
-one failing provider, and the number of repetitions affects what 99% means. Review
-per-provider/model reporting, repeated occurrences, retries, truncation, provider
-errors and task fidelity before writing the scorer. The follow-up prompt contains
-an **inline synthetic prior-exchange description in one user message**; it does
-not prove preservation across a genuine multi-turn provider conversation. Decide
-whether to replace or supplement it with a recorded multi-turn sequence.
+The offline scorer implements only these per-task rules. It reports observed
+required and optional IDs, omissions, exact/tolerated occurrences and repetitions.
+A broad bracket-token locator supplies candidates to actual Core restoration; it
+does not implement label or Crockford validation. The sum of attributed occurrences
+must equal the full-response Core report or scoring fails closed. Literal synthetic
+originals are never marker credit.
+
+Observed references are distinct from successfully restored references. Core's
+strict whole-response failure releases no restored text: a damaged or unknown
+marker makes successful-restoration credit **zero for that task**, even when its
+other required markers were observed. Optional omissions are allowed; optional
+markers that are returned must also strictly restore. Repetitions cannot replace
+an omitted required ID. Diagnostics preserve Core's byte/codepoint/UTF-16 ranges
+and never include restored originals.
+
+The issue's >=99% target still needs separately reviewed provider/model identities,
+repetitions and aggregation. This scorer emits no preservation rate or provider/
+model pass, and does not authorize execution. The follow-up prompt contains an
+**inline synthetic prior-exchange description in one user message**; it is not
+a genuine multi-turn test.
 
 ## Reproducing the offline packet
 
@@ -140,12 +160,29 @@ validator tests from `provider_capture`; neither kind is automatically qualified
 A response with no markers may be ordinary valid text to Core while failing the
 provider task. Therefore even a fully restorable or empty-marker response leaves
 `qualification.g1Pass` false and `preservationRate` null pending human review and
-a reviewed scorer. Keep raw provider failures, edits/retries and truncation visible;
+separately reviewed execution and aggregation. Keep raw provider failures,
+edits/retries and truncation visible;
 never substitute these local tests for genuine provider captures.
 
 The installed Python smoke suite exercises the offline packet, all 50 strict
 restores, permitted case/Crockford tolerance, damaged/wrong-label/foreign/unissued
 rejection, atomic no-partial restore, Unicode issue offsets, tampering checks,
 metadata validation and byte-preserving local capture. These tests establish the
-preparation mechanism only. Provider/model choices, actual executions, denominator
-approval, token/cost observations and result review remain open under #150.
+offline mechanism only. Provider/model choices, actual executions, aggregation,
+token/cost observations and result review remain open under #150.
+
+## Offline task scoring
+
+Score a local synthetic response against one reviewed task using the installed
+native wheel:
+
+```sh
+python -m scripts.provider_markers.scoring fixtures/provider-markers \
+  --task reply --response target/g1/synthetic-response.txt
+```
+
+This is local analysis, not capture or provider execution. The output pins the
+response, scorecard, original manifest and actual native Core witness; reports
+per-task facts only; and always retains zero provider runs, null preservation rate
+and `g1Pass: false`. Use the capture protocol separately to retain any later
+authorized provider metadata and unchanged raw response.

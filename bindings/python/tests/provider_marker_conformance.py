@@ -2,6 +2,7 @@
 from pathlib import Path
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 import copy
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("provider_marker_preparation", ROOT / "scripts/provider_markers/preparation.py")
 prep = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prep)
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts.provider_markers import scoring
 
 class ProviderMarkerPreparationTests(unittest.TestCase):
     @classmethod
@@ -168,8 +172,146 @@ class ProviderMarkerPreparationTests(unittest.TestCase):
         self.assertEqual(missing["coreAnalysis"]["restoredMarkers"], 0)
 
 
+class ProviderMarkerScoringTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = ROOT / "fixtures/provider-markers"
+        cls.manifest = json.loads((cls.directory / "manifest.json").read_bytes())
+        cls.gold = json.loads((cls.directory / "gold/workspace.json").read_bytes())
+        cls.rows = {row["id"]: row for row in cls.gold["items"]}
+        cls.api, _ = prep.native()
+
+    def response(self, task):
+        return "\n".join(self.rows[identifier]["marker"] for identifier in task["requiredMarkerIds"])
+
+    def score(self, task, response):
+        value = scoring.score_response(self.directory, task["id"], response)
+        self.assertEqual(value["qualification"], {"providerRunsExecuted": 0, "preservationRate": None, "g1Pass": False})
+        self.assertNotIn("text", value["coreAnalysis"])
+        for row in self.gold["items"]:
+            self.assertNotIn(row["original"], json.dumps(value))
+        return value
+
+    def test_all_five_required_sets_score_without_aggregate_or_provider_pass(self):
+        before = {name: prep.digest((self.directory / name).read_bytes()) for name in self.manifest["files"]}
+        for task, expected in zip(self.manifest["tasks"], [50, 30, 50, 20, 20], strict=True):
+            with self.subTest(task=task["id"]):
+                value = self.score(task, self.response(task))
+                self.assertEqual(value["requiredReferences"], expected)
+                self.assertEqual(value["successfulRequiredReferences"], expected)
+                self.assertEqual(value["missingRequiredMarkerIds"], [])
+                self.assertEqual(value["observedOptionalMarkerIds"], [])
+                self.assertTrue(value["taskScorecardSatisfied"])
+        self.assertEqual(sum(len(task["requiredMarkerIds"]) for task in self.manifest["tasks"]), 170)
+        self.assertEqual(before, {name: prep.digest((self.directory / name).read_bytes()) for name in self.manifest["files"]})
+
+    def test_repetitions_cannot_offset_one_missing_reference_on_any_task(self):
+        for task in self.manifest["tasks"]:
+            with self.subTest(task=task["id"]):
+                required = task["requiredMarkerIds"]
+                response = " ".join(self.rows[value]["marker"] for value in required[:-1])
+                response += " " + self.rows[required[0]]["marker"] * 5
+                value = self.score(task, response)
+                self.assertEqual(value["missingRequiredMarkerIds"], [required[-1]])
+                self.assertEqual(value["observedRequiredReferences"], len(required) - 1)
+                self.assertEqual(value["successfulRequiredReferences"], len(required) - 1)
+                self.assertEqual(value["repeatedOccurrences"], 5)
+                self.assertFalse(value["taskScorecardSatisfied"])
+
+    def test_optional_markers_can_be_omitted_or_returned_without_enlarging_denominator(self):
+        for task in self.manifest["tasks"]:
+            value = self.score(task, (self.directory / task["path"]).read_text())
+            self.assertTrue(value["taskScorecardSatisfied"])
+            self.assertEqual(value["requiredReferences"], len(task["requiredMarkerIds"]))
+            self.assertEqual(value["observedOptionalMarkerIds"], task["permittedOmittedMarkerIds"])
+
+    def test_strict_failure_zeros_restoration_credit_despite_complete_observed_set(self):
+        task = self.manifest["tasks"][1]
+        optional = self.rows[task["permittedOmittedMarkerIds"][0]]["marker"]
+        wrong_label = "[[FAKE_" + optional[2:-2].rsplit("_", 1)[1] + "]]"
+        for invalid in [optional[2:-2], "[[PERSON_BAD]]", wrong_label]:
+            with self.subTest(invalid=invalid):
+                value = self.score(task, "👋 e\u0301 " + self.response(task) + " " + invalid)
+                self.assertEqual(value["observedRequiredReferences"], 30)
+                self.assertEqual(value["missingRequiredMarkerIds"], [])
+                self.assertEqual(value["successfulRequiredReferences"], 0)
+                self.assertFalse(value["coreAnalysis"]["textAvailable"])
+                self.assertFalse(value["taskScorecardSatisfied"])
+                with self.api.Workspace.open_bundle(bytes.fromhex(self.gold["bundleHex"])) as workspace:
+                    actual = workspace.restore_report("👋 e\u0301 " + self.response(task) + " " + invalid)
+                    self.assertEqual(value["coreAnalysis"]["issues"], actual["issues"])
+                    self.assertTrue(all(set(issue) >= {"byteRange", "codepointRange", "utf16Range"} for issue in actual["issues"]))
+
+    def test_foreign_unissued_and_case_crockford_tolerance_are_decided_by_core(self):
+        task = self.manifest["tasks"][3]
+        with self.api.Workspace.open_bundle(bytes.fromhex(self.gold["bundleHex"])) as workspace:
+            before = workspace.export_bundle()
+            pending = workspace.prepare("SYNTHETIC PENDING", [self.api.WorkspaceFinding("PERSON", "SYNTHETIC PENDING", self.api.TextRange(0, 17))], bytes([231]) * 16)
+            unissued = pending.preview()["text"]
+            value = self.score(task, self.response(task) + " " + unissued)
+            self.assertEqual(value["successfulRequiredReferences"], 0)
+            self.assertEqual(value["coreAnalysis"]["issues"][0]["kind"], "unknown")
+            pending.discard()
+            self.assertEqual(workspace.export_bundle(), before)
+        with self.api.Workspace.create(bytes([232]) * 16, bytes([233]) * 16) as foreign:
+            plan = foreign.prepare("SYNTHETIC FOREIGN", [self.api.WorkspaceFinding("PERSON", "SYNTHETIC FOREIGN", self.api.TextRange(0, 17))], bytes([234]) * 16)
+            marker = plan.preview()["text"]
+            foreign.activate_saved(plan, plan.expected_head(), plan.candidate_head())
+            self.assertEqual(self.score(task, self.response(task) + " " + marker)["successfulRequiredReferences"], 0)
+        transformed = []
+        for identifier in task["requiredMarkerIds"]:
+            marker = self.rows[identifier]["marker"]
+            label, code = marker[2:-2].rsplit("_", 1)
+            transformed.append("[[" + label.lower() + "_" + code.replace("0", "O").replace("1", "l") + "]]")
+        value = self.score(task, " ".join(transformed))
+        self.assertEqual(value["coreToleratedOccurrences"], 20)
+        self.assertEqual(value["verbatimOccurrences"], 0)
+        self.assertTrue(value["taskScorecardSatisfied"])
+
+    def test_literal_originals_empty_prose_and_nested_brackets_do_not_fabricate_credit(self):
+        task = self.manifest["tasks"][0]
+        for response in ["", "ordinary prose", " ".join(row["original"] for row in self.gold["items"])]:
+            value = self.score(task, response)
+            self.assertEqual(value["observedRequiredReferences"], 0)
+            self.assertEqual(len(value["missingRequiredMarkerIds"]), 50)
+            self.assertFalse(value["taskScorecardSatisfied"])
+        # Extra outer brackets do not conceal the actual Core-recognized inner tokens.
+        nested = " ".join("[" + row["marker"] + "]" for row in self.gold["items"])
+        self.assertTrue(self.score(task, nested)["taskScorecardSatisfied"])
+
+    def test_approval_partition_and_occurrence_total_disagreement_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "packet"
+            shutil.copytree(self.directory, directory)
+            path = directory / "scorecard-review.json"
+            review = json.loads(path.read_text())
+            review["tasks"][0]["requiredMarkerIds"].pop()
+            path.write_bytes(prep.canonical(review))
+            with self.assertRaisesRegex(ValueError, "approved initial baseline"):
+                scoring.score_response(directory, "summarize", "ordinary prose")
+        from unittest.mock import patch
+        with patch.object(scoring, "CANDIDATES", re.compile(r"(?!)")):
+            with self.assertRaisesRegex(ValueError, "full Core report"):
+                scoring.score_response(self.directory, "summarize", self.response(self.manifest["tasks"][0]))
+        with self.assertRaisesRegex(ValueError, "unknown reviewed task"):
+            scoring.score_response(self.directory, "unreviewed", "")
+
+    def test_offline_cli_preserves_raw_hash_and_has_no_provider_pass(self):
+        task = self.manifest["tasks"][1]
+        with tempfile.TemporaryDirectory() as temporary:
+            response = Path(temporary) / "response.txt"
+            raw = (self.response(task) + "\r\n").encode()
+            response.write_bytes(raw)
+            result = json.loads(subprocess.check_output([sys.executable, "-m", "scripts.provider_markers.scoring", str(self.directory), "--task", task["id"], "--response", str(response)], cwd=ROOT))
+            self.assertEqual(result["responseSha256"], prep.digest(raw))
+            self.assertEqual(result["responseUtf8Bytes"], len(raw))
+            self.assertTrue(result["taskScorecardSatisfied"])
+            self.assertFalse(result["qualification"]["g1Pass"])
+
+
 def verify_provider_marker_preparation():
-    result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromTestCase(ProviderMarkerPreparationTests))
+    suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in (ProviderMarkerPreparationTests, ProviderMarkerScoringTests))
+    result = unittest.TextTestRunner(verbosity=1).run(suite)
     if not result.wasSuccessful(): raise AssertionError("offline provider marker preparation failed")
 
 if __name__ == "__main__":
