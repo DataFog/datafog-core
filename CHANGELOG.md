@@ -35,6 +35,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
   recall, combined review, strict buffered and opt-in progressive restoration
   without loading browser WASM. Streaming preserves Core error counts, encoding
   validation and parent/head lifecycle cleanup.
+- Native Python workspace handles expose Core preparation, combined review,
+  recall, protected choices, recovery and strict/opt-in progressive restoration
+  with typed errors, exact delivery counts, explicit saved-state activation and
+  bounded pending-plan lifetimes.
 - Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
   head, with strict buffered finalization by default and a separate opt-in
   progressive adapter. Late marker/encoding errors stop progressive output with
