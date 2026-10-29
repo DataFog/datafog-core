@@ -176,6 +176,17 @@ workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsRevie
 // @ts-expect-error Review source is a closed set.
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
 void findingSource; void needsReview;
+const currentPolicy = workspace.policy();
+const snapshotVersion: 1 | 2 = currentPolicy.snapshotVersion;
+const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
+const settingPreview = policyChange.policyPreview();
+const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
+const currentFormat: 1 | 2 = policyChange.snapshotFormat().currentVersion;
+// @ts-expect-error Choices use a closed disposition set.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
+// @ts-expect-error Review flags cannot grant an exception through a settings edit.
+workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive", needsReview: false}]}, new Uint8Array(16));
+void snapshotVersion; void previousChoice; void currentFormat;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);
@@ -272,6 +283,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
   browser = await chromium.launch();
@@ -785,6 +797,23 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
     const { verifyWorkspace } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
+    await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
+    try {
+      const before = native.export_bundle();
+      for (const edits of [
+        {rules: [{entityType: "PRODUCT_CODE"}], choices: []},
+        {rules: [], choices: [{entityType: "PERSON", value: "May"}]},
+      ]) {
+        let code;
+        try { native.prepare_policy_changes(JSON.stringify(edits), new Uint8Array(16).fill(3)); }
+        catch (error) { code = JSON.parse(String(error)).code; }
+        if (code !== "invalid_policy") throw new Error("Raw policy input requires an explicit action");
+      }
+      if (JSON.stringify(native.export_bundle()) !== JSON.stringify(before)) throw new Error("Malformed policy input changed workspace");
+    } finally { native.close(); native.free(); }
   });
   console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
   if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));

@@ -159,7 +159,11 @@ pub(super) fn find(state: &State, text: &str) -> Result<RecallResult> {
     }
     let word = Regex::new(r"\A[\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\u{200C}\u{200D}]\z")
         .map_err(|_| error(ErrorCode::InvalidFinding))?;
-    let identities: Vec<_> = state.entries.keys().collect();
+    let identities: Vec<_> = state
+        .entries
+        .keys()
+        .filter(|identity| state.hides(identity))
+        .collect();
     let mut nodes = vec![Node::default()];
     let mut work = Budget(MAX_WORK);
     let mut key_bytes = 0usize;
