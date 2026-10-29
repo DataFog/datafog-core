@@ -398,3 +398,50 @@ fn coverage_never_invents_unknown_prior_history_or_changes_legacy_bytes() {
         legacy.close();
     }
 }
+
+#[test]
+fn paged_history_is_lossless_borrowed_and_read_only() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    for id in 3..7 {
+        let mut plan = workspace
+            .prepare_with_operation("", &[], operation(id, 0))
+            .unwrap();
+        activate(&mut workspace, &mut plan);
+    }
+    let before = workspace.export_bundle().unwrap();
+    let all = workspace.operations().unwrap();
+    let first = workspace.operations_page(0, 2).unwrap();
+    assert_eq!(first.records, &all[..2]);
+    assert_eq!(first.records.as_ptr(), all.as_ptr());
+    assert_eq!(
+        (first.total, first.offset, first.next_offset),
+        (5, 0, Some(2))
+    );
+    let second = workspace.operations_page(2, 2).unwrap();
+    assert_eq!(second.records, &all[2..4]);
+    assert_eq!(second.next_offset, Some(4));
+    let last = workspace.operations_page(4, 2).unwrap();
+    assert_eq!(last.records, &all[4..]);
+    assert_eq!(last.next_offset, None);
+    let end = workspace.operations_page(5, 1).unwrap();
+    assert!(end.records.is_empty());
+    assert_eq!((end.total, end.offset, end.next_offset), (5, 5, None));
+    for (offset, limit) in [
+        (6, 1),
+        (0, 0),
+        (0, 100_001),
+        (usize::MAX, 1),
+        (0, usize::MAX),
+    ] {
+        assert_eq!(
+            workspace.operations_page(offset, limit).unwrap_err().code,
+            ErrorCode::ResourceLimit
+        );
+    }
+    assert_eq!(workspace.export_bundle().unwrap(), before);
+    workspace.close();
+    assert_eq!(
+        workspace.operations_page(0, 1).unwrap_err().code,
+        ErrorCode::ClosedWorkspace
+    );
+}
