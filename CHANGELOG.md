@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as the Beta A developer integration
+  release: persistent workspace handoff/restore and optional English browser Small
+  model sessions. Pin this beta exactly and recreate disposable development vaults
+  on upgrades; snapshot compatibility remains provisional.
+
 - Toolchain versions are now pinned in repository root files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`) as the single source of truth; the Dockerfile, devcontainer, and CI read these files instead of hardcoding versions
 - `cargo dfv doctor` reads version requirements from pin files and fails loudly when a pin file is missing; it no longer uses hardcoded version constants
 
