@@ -1,0 +1,62 @@
+{
+  "coreWitness": {
+    "cargoLockSha256": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
+    "coreTree": "c688387c42c9253a63ba7878c37cb71c20008092",
+    "distributionVersion": "0.5.0b2",
+    "generatorSha256": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b",
+    "nativeBinaryFilename": "datafog_core.abi3.so",
+    "nativeBinarySha256": "7cb450289223a0d0cbc28276ee6a3f751a9e3460c86a14991330acefb9c425bb",
+    "python": "3.14.6",
+    "pythonTree": "05a154fc9e1c2d2b04fdf1fe811c6275bf22979f",
+    "repository": "DataFog/datafog-core",
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "sourceCommit": "fc62f13529fab92ac921913a55f666ca1837eb8f",
+    "wheelFilename": "datafog_core-0.5.0b2-cp310-abi3-macosx_11_0_arm64.whl",
+    "wheelSha256": "2a34fbb06a792ee8bd716eaaba23b10eee8712ec110414475599e5d78ab2414f"
+  },
+  "frozenPreparationAndOriginalPacketByteExactAgainst": "e0c5b64771ad96a1288952a375d8abb1a14ac0c4",
+  "g1Pass": false,
+  "pilotReady": false,
+  "preservationRate": null,
+  "providerRunsExecuted": 0,
+  "qualifiedCommit": "fc62f13529fab92ac921913a55f666ca1837eb8f",
+  "retainedLogHashes": {
+    "capture-tests.log": "8cb7417e93de83a2ba777e5ba783535f49f9eb43c3c6c752f201d118af18e884",
+    "doctor.log": "e22ef3760762d30f295bb3283d9ff07d98078f7ab4006ebced708f8b07618470",
+    "marker-tests.log": "9bfb130883b0088b3fe807c8cc147986366301dec34171bbf27aade0307883f8"
+  },
+  "schemaVersion": 1,
+  "scope": "Offline additive Claude Desktop metadata collection and actual installed native Core analysis; historical web/API output parity. No provider requests or successful-send proof.",
+  "sourceDirty": false,
+  "sourceHashes": {
+    "bindings/python/tests/provider_desktop_capture_conformance.py": "797f2d156878c874fed67dcf1479d462617144d3ec221d8d205f2cae7c3ea805",
+    "bindings/python/tests/test_installed.py": "b7d3957a84a9fd69da68bd52979789ac0cd5a387f7476bebbed3b566eaf18843",
+    "docs/proposals/evidence/g1-desktop-access-observation.json": "528324e418867cd690bd36519c7c5a872b2d3eddfc676a5fd61cb0324b872b62",
+    "docs/proposals/evidence/g1-desktop-trial-plan.json": "d47d479851b11994c05e3c33fb3a4070223cc5f8426d0ec93972f320d2de75ab",
+    "docs/proposals/g1-claude-desktop-initial-trial.md": "9c654336f5763ab6bcf9ec03ea03206259736300469f6470c293ac8d71ecff1e",
+    "fixtures/provider-markers/gold/workspace.json": "1daccfa7e1d59188ed2fd0e4adf15e34d41c1ae450de45ed9faa2ed0ca9044f5",
+    "fixtures/provider-markers/manifest.json": "b5995aca1d6ead3e96f0b2e1a1a48f3d166f88babf5c2bcb2227c7c3e41dc50a",
+    "scripts/provider_markers/capture-metadata.schema.json": "7e440baffd47496322b1640222a627ff2615b7b8a8d5f5a4376bf578c2e9de54",
+    "scripts/provider_markers/capture-with-desktop.schema.json": "f05acaf85b496946ed3041c8bffb4e0983e94ed767063fe4598346cf7dfab296",
+    "scripts/provider_markers/capture.py": "1cca5551d6e059eb63035bbe208b0956a39f2d6b6ad80411562339a16131bf69",
+    "scripts/provider_markers/preparation.py": "211da75501f22223846a55267d5cc1cfccd631ce60dd2d96383ad3269c403b8b"
+  },
+  "tests": {
+    "allPassed": true,
+    "closedMetadataMutationsPerSurface": 29,
+    "desktopCaptureCases": 8,
+    "doctorPassed": true,
+    "legacyPositiveComparisons": 36,
+    "packetAndScorecardCases": 15,
+    "surfaces": [
+      "web",
+      "api",
+      "desktop"
+    ]
+  },
+  "unresolvedExecutionPrerequisites": [
+    "Human authorization for the bounded five-task trial",
+    "Verify all tools disabled in fresh normal chats; existing composer menu did not establish this",
+    "Reobserve exact visible model identity and existing no-extra-cost access at execution"
+  ]
+}
