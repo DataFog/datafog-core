@@ -102,7 +102,7 @@ lists and returned strings still cannot be promised cryptographic erasure.
 The native methods call the actual committed Core implementation from #162:
 `create_with_operation`, `prepare_with_operation`,
 `prepare_batch_with_operation`, `prepare_recovery_with_operation`,
-`prepare_outcome`, `operations`, `counts` and `history_coverage`. No Python
+`prepare_outcome`, `operations`, `operations_page`, `counts` and `history_coverage`. No Python
 history engine, clock, durable write, logging or automatic failure callback is
 introduced. The [shared operation proposal](../proposals/workspace-operation-records.md)
 owns the provisional format and remaining review questions.
@@ -159,13 +159,24 @@ and choices preserved. Explain that beta.1/beta.2 cannot reopen upgraded v3 stat
 before host approval. Core controls the approved provisional 100,000 retained-row
 ceiling and final 256 recovery slots, along with the snapshot byte limit; the
 binding does not evict history or promise indefinite recovery. New explicit
-contexts report `operation_reused` for known reused IDs. The shared proposal's
-legacy replay split and future conversation schema remain review work.
+contexts report `operation_reused` for known reused IDs; legacy calls consistently
+retain `invalid_operation_id`. The future conversation schema and final joint
+format qualification remain separate review work.
 
-The mandatory installed operation tests exercise all eight methods without
+The mandatory installed operation tests exercise all nine methods without
 feature-detection skips, timestamps/transport errors, atomic batch counts and
 original error indices, read copies, staged no-ops, discarded/failed saves,
 explicit outcomes, recovery, consumed/closed/32-slot lifetimes and v1/v2 upgrades.
 The same public typed calls are checked by mypy and pyright, including negative
 missing/extra fields and invalid outcome kinds. Native host/provenance integration,
 shared operation parity and final v3 compatibility remain separate gates.
+
+
+`operations_page(offset, limit)` is an additive read-only view over every retained
+row. It returns `{records, total, offset, nextOffset}` with copied camelCase record
+values. The offset may equal the total (an empty final page); the limit is explicitly
+1–100,000. Invalid bounds, booleans, floats and user numeric coercions return
+`resource_limit`. A `None` cursor means the end, not dropped rows. The host can
+iterate these windows without materializing the whole history; `operations()`
+still returns all rows unchanged. Neither method truncates, evicts or writes
+history. Empty legacy history stays unknown and byte-preserving.

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import unittest
-from datafog_core import DataFogWorkspaceError, Workspace, WorkspaceHead, WorkspaceInput, WorkspaceFinding, TextRange
+from datafog_core import DataFogWorkspaceError, Workspace, WorkspaceHead, WorkspaceInput, WorkspaceReviewInput, WorkspaceFinding, TextRange
 
 ROOT = Path(__file__).resolve().parents[3]
 MAX_TIME = 253402300799999
@@ -32,7 +32,7 @@ class WorkspaceOperationTests(unittest.TestCase):
 
     def test_all_operation_methods_are_native_and_creation_records_only_known_time(self):
         w = self.workspace
-        for name in ("create_with_operation", "operations", "counts", "history_coverage", "prepare_with_operation", "prepare_batch_with_operation", "prepare_recovery_with_operation", "prepare_outcome"):
+        for name in ("create_with_operation", "operations", "operations_page", "counts", "history_coverage", "prepare_with_operation", "prepare_batch_with_operation", "prepare_recovery_with_operation", "prepare_outcome"):
             self.assertTrue(callable(getattr(Workspace, name)))
         self.assertEqual(w.operations(), [{"id": list(public_id(202)), "kind": "create", "occurredAtMs": 0, "preparedInputs": 0, "transformedSpans": 0}])
         self.assertEqual(w.counts(), {"operations": 1, "preparedInputs": 0, "transformedSpans": 0, "confirmedHandoffs": 0, "reportedBlockedAttempts": 0})
@@ -159,6 +159,56 @@ class WorkspaceOperationTests(unittest.TestCase):
             self.error("invalid_operation", lambda: w.prepare_outcome(value, context(203)))
         self.assertEqual(calls, [])
         self.assertEqual(w.export_bundle(), before)
+
+    def test_owned_pages_are_explicit_complete_bounded_reads_without_hidden_writes(self):
+        w = self.workspace
+        for value in range(203, 210): save(w, w.prepare_outcome({"kind": "user_cancelled", "issueCount": 0}, context(value)))
+        before = w.export_bundle(); full = w.operations(); head = w.head(); rows = []; offset = 0
+        while True:
+            page = w.operations_page(offset, 3)
+            self.assertEqual((page["offset"], page["total"]), (offset, len(full)))
+            rows += page["records"]
+            if page["nextOffset"] is None: break
+            self.assertEqual(page["nextOffset"], offset + len(page["records"]))
+            offset = page["nextOffset"]
+        self.assertEqual(rows, full)
+        self.assertEqual(w.operations_page(len(full), 100000), {"records": [], "total": len(full), "offset": len(full), "nextOffset": None})
+        page = w.operations_page(0, 1); page["records"][0]["id"][0] = 0; page["records"][0]["occurredAtMs"] = None
+        self.assertEqual(w.operations_page(0, 1)["records"], full[:1])
+        calls = []
+        class Index:
+            def __index__(self): calls.append("index"); return 1
+        for offset, limit in ((len(full)+1, 1), (0, 0), (0, 100001), (-1, 1), (0, -1), (0, .5), (True, 1), (0, False), (2**100, 1), (0, Index())):
+            self.error("resource_limit", lambda: w.operations_page(offset, limit))
+        self.assertEqual(calls, [])
+        self.assertEqual((w.export_bundle(), w.head(), w.operations()), (before, head, full))
+        fixture = json.loads((ROOT / "fixtures/workspace/policy-v2.json").read_text()); raw = bytes.fromhex(fixture["bundleHex"])
+        with Workspace.open_bundle(raw) as old:
+            self.assertEqual(old.operations_page(0, 1), {"records": [], "total": 0, "offset": 0, "nextOffset": None})
+            self.assertEqual(old.export_bundle(), raw)
+        w.close(); self.error("closed_workspace", lambda: w.operations_page(0, 1))
+
+    def test_history_only_replays_preserve_legacy_error_codes_and_explicit_distinction(self):
+        w = self.workspace
+        for value in (203, 204): save(w, w.prepare_outcome({"kind": "user_cancelled", "issueCount": 0}, context(value)))
+        before = w.export_bundle(); head = w.head(); counts = w.counts()
+        operation_id = public_id(203)
+        legacy_calls = (
+            lambda: w.prepare("", [], operation_id),
+            lambda: w.prepare_batch([WorkspaceInput("", [])], operation_id),
+            lambda: w.prepare_review([WorkspaceReviewInput("")], operation_id),
+            lambda: w.prepare_recovery(operation_id),
+            lambda: w.prepare_policy_changes({"rules": [{"entityType": "CUSTOM", "rule": "hide"}], "choices": []}, operation_id),
+        )
+        for call in legacy_calls: self.error("invalid_operation_id", call)
+        explicit_calls = (
+            lambda: w.prepare_with_operation("", [], context(203)),
+            lambda: w.prepare_batch_with_operation([WorkspaceInput("", [])], context(203)),
+            lambda: w.prepare_recovery_with_operation(context(203)),
+            lambda: w.prepare_outcome({"kind": "user_cancelled", "issueCount": 0}, context(203)),
+        )
+        for call in explicit_calls: self.error("operation_reused", call)
+        self.assertEqual((w.export_bundle(), w.head(), w.counts()), (before, head, counts))
 
     def test_validation_indices_owned_reads_plan_slots_and_close_lifecycle(self):
         w = self.workspace; before = w.export_bundle()

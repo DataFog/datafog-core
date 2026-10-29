@@ -190,6 +190,10 @@ assert_type(recorded.operations()[0]["id"], list[int])
 assert_type(recorded.operations()[0]["occurredAtMs"], int | None)
 assert_type(recorded.operations()[0]["preparedInputs"], int)
 assert_type(recorded.operations()[0]["transformedSpans"], int)
+assert_type(recorded.operations_page(0, 2)["records"][0]["occurredAtMs"], int | None)
+assert_type(recorded.operations_page(0, 2)["nextOffset"], int | None)
+assert_type(recorded.operations_page(0, 2)["total"], int)
+assert_type(recorded.operations_page(0, 2)["offset"], int)
 assert_type(recorded.counts()["operations"], int)
 assert_type(recorded.counts()["confirmedHandoffs"], int)
 assert_type(recorded.history_coverage()["recordedHistoryOnly"], Literal[True])
@@ -251,6 +255,8 @@ Workspace.create(bytes(16), bytes(16)).buffered_restore().feed_utf16(b"text")  #
 
 
 INVALID += """
+Workspace.create(bytes(16), bytes(16)).operations_page("0", 2)  # error
+Workspace.create(bytes(16), bytes(16)).operations_page(0, 1.5)  # error
 Workspace.create_with_operation(bytes(16), {"id": bytes(16)})  # error
 Workspace.create_with_operation(bytes(16), {"id": "bad", "occurredAtMs": 1})  # error
 Workspace.create_with_operation(bytes(16), {"id": bytes(16), "occurredAtMs": "1"})  # error

@@ -73,3 +73,12 @@ pub(super) fn counts(value: w::OperationCounts) -> Value {
         "transformedSpans":value.transformed_spans,"confirmedHandoffs":value.confirmed_handoffs,
         "reportedBlockedAttempts":value.reported_blocked_attempts})
 }
+
+// Bounds stay Core-owned; reject Python coercion before entering the native call.
+pub(super) fn page_index(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let invalid = || failure(py, w::ErrorCode::ResourceLimit);
+    if !value.is_exact_instance_of::<PyInt>() {
+        return Err(invalid());
+    }
+    value.extract::<usize>().map_err(|_| invalid())
+}

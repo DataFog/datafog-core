@@ -714,6 +714,24 @@ impl Workspace {
         let values: Vec<_> = records.iter().map(operations::record).collect();
         json_object(py, &values)
     }
+    fn operations_page(
+        &self,
+        py: Python<'_>,
+        offset: &Bound<'_, PyAny>,
+        limit: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let offset = operations::page_index(py, offset)?;
+        let limit = operations::page_index(py, limit)?;
+        let page = self
+            .inner
+            .operations_page(offset, limit)
+            .map_err(|error| workspace_error(py, error))?;
+        let records: Vec<_> = page.records.iter().map(operations::record).collect();
+        json_object(
+            py,
+            &json!({"records":records,"total":page.total,"offset":page.offset,"nextOffset":page.next_offset}),
+        )
+    }
     fn counts(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let counts = self
             .inner
