@@ -120,3 +120,39 @@ prove complete Unicode delivery, late unknown-marker and invalid-encoding failur
 stale expected-head rejection, cancellation between chunks and during a paused
 cooperative write, and sanitized iterator/callback failures. Production key storage,
 server-wide admission and client-carried state remain separate W6/G4 qualification.
+
+## Synthetic tool-envelope and request correlation slice
+
+The installed Node package also runs `node-tool-envelope-conformance.mjs`. Its
+synthetic envelope has one explicitly designated text slot. Only that slot enters
+Core. Tool schemas, tool IDs, structured tool inputs and a raw argument string
+containing Unicode and marker-shaped text remain structurally/byte unchanged.
+The fixture never infers which fields are text from a provider's schema or tries
+to parse/restore arbitrary JSON, tool arguments or SSE framing.
+
+A test-local trusted transport registry binds separate opaque request capabilities
+to their original route, tenant/workspace and saved full head. Two concurrent
+requests containing the same original value use separate workspaces and actual
+encrypted SQLite saves. Same-workspace follow-ups intentionally share an alias
+and permit the existing no-op saves; equal aliases or original values cannot
+replace request correlation. Swapped, fabricated and wrong-workspace capabilities
+reject before restoration. Spoofed provider request/scope metadata stays opaque
+and never selects a mapping store. This models an already trusted host association;
+it does not prove that a real provider adapter acquired that association correctly,
+or that Core can detect a host initially binding the wrong response.
+
+Only the progressive helper enforces that saved head; a later changed head rejects
+before any delivery. The existing nonstreaming helper uses the current authorized
+workspace and retains its unscoped compatibility contract. Its route capability
+checks do not prove that each restored marker was issued in this request or chat.
+Conversation-aware issuance and pending-send checks remain the separate #148 work.
+
+Nonstreaming restoration publishes a cloned envelope only after strict success.
+Progressive tests retain the opaque envelope while feeding only designated byte
+chunks through the existing native adapter. They prove Unicode completion, a late
+unknown marker stopping incomplete with prior counts, and cooperative cancellation
+without later delivery. This is not a provider-frame rewriter or an atomic delivery
+claim. The slice adds no SDK exports, tenant key policy, global admission controls
+or conversation/send semantics. Equivalent Python tool-envelope acceptance and
+actual provider/host integration remain required; this Node proof does not close
+W6 or qualify a LiteLLM contribution.

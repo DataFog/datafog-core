@@ -332,6 +332,8 @@ try {
   server = serverInfo.server;
   writeFileSync(path.join(temporaryDirectory,"workspace-backup-fields-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-backup-fields-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-backup-fields.json"),readFileSync(path.join(root,"fixtures/workspace/backup-current-fields.json")));
+  for(const file of ["workspace-backup-field-bytes.mjs","workspace-backup-operation-fields-conformance.mjs"])writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
+  writeFileSync(path.join(temporaryDirectory,"workspace-backup-operation-fields.json"),readFileSync(path.join(root,"fixtures/workspace/backup-operation-fields.json")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-streaming-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
@@ -897,6 +899,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspaceBackupFields}=await import("/workspace-backup-fields-conformance.mjs");
     await verifyWorkspaceBackupFields(workspaceApi,await fetch("/workspace-backup-fields.json").then(response=>response.json()));
+    const {verifyWorkspaceBackupOperationFields}=await import("/workspace-backup-operation-fields-conformance.mjs");
+    verifyWorkspaceBackupOperationFields(workspaceApi,await fetch("/workspace-backup-operation-fields.json").then(response=>response.json()));
     const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");
     await verifyWorkspaceStreaming(workspaceApi,await fetch("/workspace-streaming.json").then(r=>r.json()));
     const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
