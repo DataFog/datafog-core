@@ -76,3 +76,4 @@ jobs:
             examples/workspace-extension/output/playwright/**/report.json
             examples/workspace-extension/output/playwright/**/artifacts.json
             examples/workspace-extension/output/playwright/**/consumer/package-lock.json
+            examples/workspace-extension/output/playwright/**/consumer/*.tgz
