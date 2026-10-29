@@ -1,0 +1,167 @@
+{
+  "scope": "Synthetic actual installed WASM MV3 persistence/crypto, controlled transport and measured native/browser graphs; no actual site observation, branded Chrome, production host admission, RSS or low-hardware SLA qualification.",
+  "sourceCommit": "0a4d756fbaeb097ea17a13869140b3cc089cedd5",
+  "sourceDirty": false,
+  "coreRuntimeTree": "c85e3c7e3ca7f58ff44aa4920899079c8be73e96",
+  "browser": "151.0.7922.34",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v24.18.0",
+  "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+  "conversationQualification": {
+    "scope": "actual synthetic MV3 persistence, controlled transport and Core-backed large graphs; no real site observation verification",
+    "imports": [
+      {
+        "method": "password",
+        "profile": 2,
+        "pending": true
+      },
+      {
+        "method": "recovery",
+        "profile": 2,
+        "pending": true
+      }
+    ],
+    "contract": {
+      "checks": 72,
+      "scope": "actual Core-backed conversation methods; synthetic trusted observations only, no provider acceptance",
+      "partialBatch": true,
+      "oneTimeBinding": true,
+      "wholeChatPause": true,
+      "scopedUnicode": true
+    },
+    "graphs": [
+      {
+        "profile": "near-ordinary",
+        "contexts": 49870,
+        "rows": 99742,
+        "confirmedHandoffs": 49870,
+        "pendingPlans": 32,
+        "openMs": 158.60000002384186,
+        "prepareMs": 4166.600000023842,
+        "wasmLinearBeforePlans": 43712512,
+        "wasmLinearWithPlans": 802684928,
+        "wasmLinearAfterDiscard": 802684928,
+        "note": "Reserved WASM linear memory does not shrink after discard; native cleanup is measured separately. No browser RSS/low-hardware SLA is claimed."
+      },
+      {
+        "profile": "hard",
+        "contexts": 49871,
+        "rows": 100000,
+        "confirmedHandoffs": 49871,
+        "pendingPlans": 0,
+        "openMs": 151.29999995231628,
+        "prepareMs": 0,
+        "wasmLinearBeforePlans": 43712512,
+        "wasmLinearWithPlans": 43712512,
+        "wasmLinearAfterDiscard": 43712512,
+        "note": "Reserved WASM linear memory does not shrink after discard; native cleanup is measured separately. No browser RSS/low-hardware SLA is claimed."
+      }
+    ],
+    "final": {
+      "reopened": true,
+      "partialScopedStop": true,
+      "firstSaveAbort": true,
+      "noAutomaticResend": true,
+      "transportCalls": 3,
+      "counts": {
+        "confirmedHandoffs": 3,
+        "operations": 7,
+        "preparedInputs": 3,
+        "reportedBlockedAttempts": 0,
+        "transformedSpans": 3
+      }
+    }
+  },
+  "operationBackupQualification": {
+    "profile": "workspace-operation-backup-fields-v1",
+    "histories": 4,
+    "credentialPaths": 8,
+    "authenticatedOperationRejections": 15,
+    "source": {
+      "commit": "41a3b8128f67da62136ec68240b7d72e0b0a4806",
+      "coreRuntimeTree": "c85e3c7e3ca7f58ff44aa4920899079c8be73e96",
+      "generatorSha256": "9f6c3ae4b031398b1823c6cbe2978b200968717ec61b00e6fd57e8e04655ee52"
+    }
+  },
+  "nativeGraph": {
+    "arch": "aarch64",
+    "notes": "One optimized native process, example-only counting allocator. Requested bytes exclude allocator overhead. No browser peak/low-hardware SLA, production host admission or actual site-observation qualification is claimed. Full history includes real confirmed member rows with no invented alias-count relationship.",
+    "os": "macos",
+    "profiles": [
+      {
+        "afterDropAdditionalRequestedBytes": 0,
+        "contexts": 49870,
+        "lastContextLookupMs": 0.19375,
+        "openMs": 59.886625,
+        "openNetRequestedBytes": 14451670,
+        "openPeakAdditionalRequestedBytes": 30966374,
+        "peakPlansAdditionalRequestedBytes": 831316250,
+        "pendingPlans": 32,
+        "prepareMs": 2381.4422080000004,
+        "profile": "near-ordinary",
+        "retainedPlansAdditionalRequestedBytes": 814801088,
+        "rows": 99742,
+        "sha256": "9731e5fc14d8275c33760dcb1e2bc966960ca890b4af6de108d61ee6c46e0cb1",
+        "wireBytes": 7369524
+      },
+      {
+        "afterDropAdditionalRequestedBytes": 0,
+        "contexts": 49871,
+        "lastContextLookupMs": 0.18812500000000001,
+        "openMs": 59.795500000000004,
+        "openNetRequestedBytes": 14466296,
+        "openPeakAdditionalRequestedBytes": 30981000,
+        "peakPlansAdditionalRequestedBytes": 0,
+        "pendingPlans": 0,
+        "prepareMs": 0.0,
+        "profile": "hard",
+        "retainedPlansAdditionalRequestedBytes": 0,
+        "rows": 100000,
+        "sha256": "731d942cfddd01096c1797987e663cd5e9b259ae90d23493452b29f3e24551fb",
+        "wireBytes": 7377352
+      }
+    ],
+    "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "sourceCommit": "0a4d756fbaeb097ea17a13869140b3cc089cedd5",
+    "sourceDirty": false,
+    "syntheticOnly": true
+  },
+  "externalRequests": 0,
+  "consoleMessages": 0,
+  "pageErrors": 0,
+  "fullIntegrationResultSha256": "68d77f66ec3717a66265ae7c64657aed8bf64e18d80de179b2e6a6e671879cd9",
+  "nativeGraphSha256": "a4473a783d4ec8d8842ec0f32821d2f44b335e4f5ab6062e0f52a46b9cec0d35",
+  "inputHashes": {
+    "scripts/workspace-backup-field-bytes.mjs": "c618e6ee1c2fb7688be1a40001bb09ec9c2a9061b03c3e73568ba65f27f3019c",
+    "scripts/workspace-backup-operation-fields-conformance.mjs": "881f7602d2297478c4f1bdde91667d6dd6b714d225d173b57bd10c18569e6091",
+    "fixtures/workspace/backup-operation-fields.json": "af5bcee3d62614fe6d7438c5f15bf331393ffe933f03a9c8f6af1b11080e3481",
+    "crates/core/examples/workspace_backup_operation_fields.rs": "9f6c3ae4b031398b1823c6cbe2978b200968717ec61b00e6fd57e8e04655ee52",
+    "Cargo.lock": "ad33c34ad800013633f3d6b0ea0f378432626af963aa91305e487aa5dc4080f6",
+    "bindings/wasm/package-lock.json": "4a321b514ae0a506b2e0bb81512be7303810803a9201eae5484f8f235d50f49c",
+    "examples/workspace-extension/package-lock.json": "fabba853fb2faa16b13db5d8cf30a33bb64f90a5681715bde23ea16afa2503ce",
+    "scripts/test-workspace-extension.mjs": "2499d2f6a87f04ec43944de67e62c534fbcb2dc4210f79da45ad37c3d00698e9",
+    "scripts/test-workspace-followups.mjs": "d3df39d7a0a74c28d02e93701b98436b8906432082fc23f3ec517fbda4a538f5",
+    "scripts/test-workspace-backup.mjs": "6bf52b5c91381924a29f1e34df3e314bead41621942f5f78d944f9f5dd43de22",
+    "scripts/test-workspace-policy.mjs": "335663f66042c00d3dee4f1f629c599e34d35790e0163fd38ec4a0d8c53e8cce",
+    "scripts/test-workspace-operations.mjs": "e68c35d27df1633eaa45a4a6db49e829df25db98d5bd361eca609201e87e082c",
+    "scripts/test-workspace-operation-capacity.mjs": "0961000d7f68d50b0c30ca1ec0451bf6da37a0c322d68fd020bb8354f7540a5e",
+    "crates/core/examples/workspace_operation_capacity.rs": "dad3ba594b562b0b8c944249ea48e4c1894d9dcb929bac07068b9911a97036fb",
+    "fixtures/workspace/policy-v2.json": "8e0d4cb41b5c46e3b7b7072fd46f445e0fc8e47015fe4f9a24af94992a13afe9",
+    "scripts/test-workspace-review.mjs": "414484388e1193ecc1c039862beb1f29b1125ef2f1214db2b3bac77a41bc55a1",
+    "scripts/workspace-conformance.mjs": "111d7dece666859e4230a180a7ccc75635f96d50610617a413ef7da8204a82bd",
+    "scripts/workspace-review-conformance.mjs": "1582a13d3a0e6468c085adbb1a60fe8a29652447ade846e2b172ea7932ff7c58",
+    "scripts/workspace-policy-conformance.mjs": "56b94d8c3783069c43e435a26e4dc54ea6bb00f6575d990c0e8325c17d540ee3",
+    "fixtures/workspace/monthly.json": "5f4971eae1f4bf59316004e374cb42dba8dd7e7bf5cad54b74c0d0fcffd15cba",
+    "fixtures/workspace/counters.json": "06f6622aa523da6cbd83ddf670edc1ae32658e8c890b002c6b3674b6536243cf",
+    "fixtures/workspace/argon2id.json": "21322bd8518a9d559416edbdb7e24a164ab7678cf3b83030f4134e66e7be13bc",
+    "fixtures/workspace/argon2id-backup.json": "0e342b04e007079b3925d327165c58ad00627e325ff28dd0f0e75919ca3ccfd3",
+    "scripts/workspace-streaming-conformance.mjs": "26e01f10c6d7c0ec39c816244188dc2a2c37f9c09f61054a0fb4b5843e3b67c7",
+    "fixtures/workspace/streaming-contract-v1.json": "c1f7f1ad56e7521b4611d60220929631d02cb71953744c2b67e9547a3a317f29",
+    "fixtures/workspace/backup-current-fields.json": "a7f57ab9d53febc911e4ba390c281a4d70ce99528cffc2d92ac889e8667c4236",
+    "scripts/test-workspace-conversations.mjs": "c4edfe35a4b36ab977198dd8e4d5a133e6728a9eee02d574e071ac1081664262",
+    "scripts/workspace-conversation-conformance.mjs": "7c2b8a1a7eec0d4b48c9e400fd08fc898508c8c37489536764ab137eed94f7d9",
+    "crates/core/examples/workspace_conversation_capacity.rs": "fcefe99b98159a29f7c41eeca17148058fc01fa7831473239c8596a7c12402e7",
+    "examples/workspace-extension/src/conversation-proof.js": "d905c193f79ca17023c5237322329bce91484794fde213685e58f4ffbdce4585"
+  }
+}
