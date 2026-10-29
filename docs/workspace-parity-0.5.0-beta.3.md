@@ -16,8 +16,10 @@ or harness failure. Result keys normalize only representation (Python's exact
 revision integer to its decimal wire string, copied bytes to lowercase hex),
 without discarding offsets, choices, flags or errors.
 
-Conversation provenance and actual W6 CAS/retry cases remain required additions
-before X8 can close. Operation/history access now runs as its own mandatory profile. Strict and opt-in progressive restoration
+Conversation provenance remains an addition before X8 can close. Operation/history
+access runs as its own mandatory profile. Existing Python/Node encrypted server
+CAS/process qualification is now separately mandatory, with explicit two-host
+applicability; it does not certify four SQL hosts or shipping-host security. Strict and opt-in progressive restoration
 now run as a second mandatory four-SDK profile, alongside the launch foundation. This foundation profile must never be
 presented as full 0.5.0-beta.3 or real-data security certification. The foundation native wrappers are committed. This focused stack consumes the
 committed Python/Node operation wrappers from #186/#187 for actual qualification;
@@ -141,3 +143,12 @@ records the clean qualified commit, source/package/fixture hashes and canonical
 per-runtime hashes. The CLI retains the corresponding full outputs and installed
 packages under its run directory; the same command reproduces them without a
 single-SDK bypass.
+
+## Separately counted native server profile
+
+[Native-server qualification](native-server-parity-0.5.0-beta.3.md) runs nine real
+encrypted-store/process scenarios and 28 checkpoints for Python/Node only. It
+retains raw host errors and actual winning candidate IDs against deterministic
+Core bundles, plus both existing high-level handoff/stream suites. Its profile
+SDKs/counts stay separate from the unchanged four-SDK 37/421 totals. Conversation
+and shipping-host security approval remain outside that proof.
