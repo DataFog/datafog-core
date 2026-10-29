@@ -23,7 +23,10 @@ and saves a state-changing candidate together. No-op candidates keep their head,
 so independent no-op saves can both succeed. Delivery deduplication/admission is
 a separate host duty and is not inferred from snapshot CAS. Busy waits are bounded; busy or stale failure
 releases no text and does not activate a losing plan. Core preview and approval
-are not persistence or delivery.
+are not persistence or delivery. The approval callback must return the literal
+boolean `true`; strings, numbers and other truthy values reject without saving or
+releasing. The staged Core plan captures input before approval, and a changed
+presentation rejects rather than authorizing a rewritten preview.
 
 Snapshot plaintext is encrypted with AES-256-GCM. Tenant, workspace, namespace and
 complete head are authenticated as AAD. Only ciphertext, nonce/tag and opaque

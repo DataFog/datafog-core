@@ -87,11 +87,31 @@ export async function verifyNodeWorkspaceHost() {
     await rejected(()=>run(failedScope,"failed_request","Synthetic Failed Name",43,{fault:phase=>{if(phase==="before_commit")throw new HostFailure("storage_failure");}}),"storage_failure");
     assert.deepEqual(head(failedScope),failedHead);assert.equal(released.length,0);
 
+    // Approval is an explicit boolean, never JavaScript truthiness.
+    for(const decision of [false,null,undefined,"false",1,{}]) {
+      await rejected(()=>run(failedScope,"nonboolean_approval","Synthetic Not Approved",44,{approve:async()=>decision}),"cancelled");
+      assert.deepEqual(head(failedScope),failedHead);assert.equal(released.length,0);
+    }
+
     await rejected(()=>run(failedScope,"changed_approval","Synthetic Approval Name",44,{approve:async presentation=>{
       presentation.previews[0].text="Synthetic Unapproved Replacement";
       presentation.head.commitId.fill(0);return true;
     }}),"invalid_approval");
     assert.deepEqual(head(failedScope),failedHead);assert.equal(released.length,0);
+
+    // Mutable caller input is already captured by the staged Core plan before approval.
+    const boundScope={...scope,workspaceId:"approval_input_bound"};initialize(boundScope,46);
+    const mutableInput=input("Synthetic Bound Name"),boundReleases=[];
+    await runPreparedRequest({store,scope:boundScope,requestId:"bound_request",input:mutableInput,operationId:id(48),approve:async()=>{
+      mutableInput.text="Synthetic Unapproved Replacement";
+      mutableInput.userSelections[0].matchedText="Synthetic Unapproved Replacement";
+      mutableInput.userSelections[0].range.end=Buffer.byteLength(mutableInput.text);
+      return true;
+    },release:async result=>boundReleases.push(result)});
+    assert.equal(boundReleases.length,1);
+    const bound=open(boundScope);
+    try {assert.equal(bound.restore(boundReleases[0].text),"Synthetic Bound Name");assert.equal(bound.recall("Synthetic Unapproved Replacement").findings.length,0);}
+    finally {bound.close();}
 
     const lostScope={...scope,workspaceId:"lost_ack"};initialize(lostScope,51);
     await rejected(()=>run(lostScope,"lost_request","Synthetic Lost Name",53,{fault:phase=>{if(phase==="after_commit")throw new HostFailure("save_ack_unknown");}}),"save_ack_unknown");

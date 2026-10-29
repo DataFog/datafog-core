@@ -148,7 +148,7 @@ export async function runPreparedRequest({store,scope,requestId,input,operationI
     const previews=plan.previews(),heads=plan.heads();
     const presentation=structuredClone({requestId,head:heads.expectedHead,previews,snapshotFormat:plan.snapshotFormat()});
     const approvedPresentation=JSON.stringify(presentation);
-    if(!await approve(presentation))throw failure("cancelled");
+    if(await approve(presentation)!==true)throw failure("cancelled");
     if(JSON.stringify(presentation)!==approvedPresentation)throw failure("invalid_approval");
     cancelled();bytes=plan.exportCandidateBundle();
     const confirmed=store.saveIfHeadMatches(owner,heads.expectedHead,heads.candidateHead,bytes,fault);
