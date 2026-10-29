@@ -160,8 +160,12 @@ void discovered;
 void protectedDocument;
 void protectedTogether;
 
-import { Workspace, DataFogError, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
+import { Workspace, DataFogError, type WorkspaceFinding, type WorkspaceInput, type WorkspacePreview, type WorkspaceRestoreReport } from "@datafog/wasm";
 const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
+const nullableWorkspaceFinding: WorkspaceFinding = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}, confidence: null, detectorName: null, detectorVersion: null};
+const reviewedNullable = workspace.review({text: "Jane", scannerFindings: [nullableWorkspaceFinding], userSelections: []});
+workspace.prepare("Jane", reviewedNullable.candidates.map(candidate => candidate.finding), new Uint8Array(16));
+
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
@@ -193,6 +197,22 @@ workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads(
 const position: number | undefined = ({} as DataFogError).inputIndex;
 // @ts-expect-error Batch findings must declare their coordinate system.
 workspace.prepareBatch([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {start: 0, end: 4}}]}], new Uint8Array(16));
+const atomicResponse = workspace.bufferedRestore();
+const noFeedOutput: void = atomicResponse.feed(new Uint8Array([65]));
+const atomicReport: WorkspaceRestoreReport = atomicResponse.finalize();
+const liveResponse = workspace.progressiveRestore("utf16");
+const liveChunk = liveResponse.feedUtf16(new Uint16Array([65]));
+const deliveredBytes: number = liveChunk.delivered.bytes;
+const completeResponse: boolean = liveResponse.finalize().complete;
+const terminalCounts: number | undefined = ({} as DataFogError).delivered?.utf16;
+const terminalIncomplete: false | undefined = ({} as DataFogError).complete;
+// @ts-expect-error Progressive feed accepts bytes, not a coercible array/string.
+liveResponse.feed([65]);
+// @ts-expect-error Encoding is a closed set.
+workspace.progressiveRestore("utf32");
+// @ts-expect-error Atomic feeds never release text.
+const unexpectedAtomicChunk: string = atomicResponse.feed(new Uint8Array());
+void noFeedOutput; void atomicReport; void deliveredBytes; void completeResponse; void terminalCounts; void terminalIncomplete;
 const report: WorkspaceRestoreReport = workspace.restoreReport("Jane");
 const restoredText: string | null = report.text;
 // @ts-expect-error Issue kinds are a closed set.
@@ -261,7 +281,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -280,9 +300,13 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-streaming-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
@@ -353,6 +377,43 @@ try {
     const {verifyNpi} = await import("/npi-conformance.mjs");
     const npiRecords = (await fetch("/npi.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyNpi(germanApi,npiRecords);
+    const streetContract = new BrowserModelContract({"street line":"STREET_ADDRESS", "address":"ADDRESS"});
+    try {
+      const text = "👋 Street address: 12 Willow Road, Anytown";
+      const start = new TextEncoder().encode(text.slice(0,text.indexOf("12 Willow"))).length;
+      const streetEnd = start + "12 Willow Road".length;
+      const end = new TextEncoder().encode(text).length;
+      if (!streetContract.needs_model(text, {entities:["STREET_ADDRESS"]})) throw new Error("street rule skipped configured model");
+      const result = streetContract.complete(text, [
+        {native_label:"street line",start,end:streetEnd,coordinate_unit:"utf8_byte"},
+        {native_label:"address",start,end,coordinate_unit:"utf8_byte"},
+      ], {});
+      const index = result.findings.findIndex(f => f.entityType === "STREET_ADDRESS");
+      if (index < 0 || result.evidence[index].sources.length !== 2 ||
+          !result.findings.some(f => f.entityType === "ADDRESS" && f.matchedText === "12 Willow Road, Anytown")) throw new Error("street/full-address evidence changed");
+    } finally { streetContract.free(); }
+    const {verifyStreetAddress} = await import("/street-address-conformance.mjs");
+    verifyStreetAddress(germanApi, (await fetch("/street-address.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    const {verifyAccountNumber} = await import("/account-number-conformance.mjs");
+    verifyAccountNumber(germanApi, (await fetch("/account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    verifyAccountNumber(germanApi, (await fetch("/masked-account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    const accountContract = new BrowserModelContract({"bank account":"ACCOUNT_NUMBER"});
+    try {
+      for (const [text, value, sources] of [
+        ["👋 account number: 12345678", "12345678", 2],
+        ["👋 12345678", "12345678", 1],
+        ["👋 account ending in 1234", "1234", 2],
+        ["👋 account number: XXXX1234", "XXXX1234", 2],
+        ["👋 XXXX1234", "XXXX1234", 1],
+      ]) {
+        const config = {entities:["ACCOUNT_NUMBER"]};
+        if (!accountContract.needs_model(text, config)) throw new Error("partial account rule skipped model");
+        const start = new TextEncoder().encode(text.slice(0,text.indexOf(value))).length;
+        const result = accountContract.complete(text, [{native_label:"bank account", start, end:start+value.length, coordinate_unit:"utf8_byte"}], config);
+        if (result.findings.length !== 1 || result.findings[0].matchedText !== value) throw new Error("model account coverage lost");
+        if (result.evidence[0].sources.length !== sources) throw new Error("account evidence lost");
+      }
+    } finally { accountContract.free(); }
     verifyGerman(germanApi,germanRecords);
     verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
     verifyJwt(germanApi,jwtRecords);
@@ -800,6 +861,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const {verifyWorkspaceStreaming}=await import("/workspace-streaming-conformance.mjs");
+    await verifyWorkspaceStreaming(workspaceApi,await fetch("/workspace-streaming.json").then(r=>r.json()));
     const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
     const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
     try {

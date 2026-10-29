@@ -21,8 +21,8 @@ def verify_integration():
     rows = [expand_fixture(json.loads(line)) for line in FIXTURES.read_text().splitlines()]
     capabilities = datafog_core.capabilities()
     assert capabilities["contract_version"] == 1
-    assert len(capabilities["supported_entities"]) == 23
-    assert len(capabilities["default_entities"]) == 14
+    assert len(capabilities["supported_entities"]) == 25
+    assert len(capabilities["default_entities"]) == 16
     assert {"API_KEY", "BEARER_TOKEN", "CREDENTIAL_URI"} <= set(
         capabilities["default_entities"]
     )
