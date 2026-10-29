@@ -21,7 +21,7 @@ fn horizontal(character: char) -> bool {
 
 fn unit_continuation(tail: &str) -> bool {
     let word = tail
-        .trim_start_matches(char::is_whitespace)
+        .trim_start_matches(|character: char| character.is_whitespace() || character == ',')
         .split(|character: char| !character.is_ascii_alphabetic())
         .next()
         .unwrap_or_default();

@@ -65,7 +65,8 @@ geographic formats requires separate review.
   or continued value. Malformed/additional `Apt`, `Suite`, `Unit`, `Flat`, `Floor`
   continuations and the unsupported English markers `Apartment`, `Ste`, `Room`,
   `Building`, `Level` are rejected after a comma or line ending; the captured span
-  never crosses lines. Other comma components terminate the street span. Unknown
+  never crosses lines. Empty comma/line components do not hide a following known
+  unit marker. Other comma components terminate the street span. Unknown
   unit vocabulary cannot be distinguished universally from a city by this lexical
   rule; retain model/user review for those formats. Fixtures make these boundaries
   concrete.
@@ -127,16 +128,17 @@ complete. This scope approval does not qualify the model or release beta.2.
 
 ## Implementation evidence
 
-The executable rule corpus contains 112 cases: 62 supported labelled examples
-and 50 negatives, including the unlabelled-policy alternatives, unsupported
+The executable rule corpus contains 117 cases: 64 supported labelled examples
+and 53 negatives, including the unlabelled-policy alternatives, unsupported
 formats and boundary regressions. Installed Rust/Python/Node/browser-WASM checks
 consume the same expected street-only ranges. Contract tests separately retain
 native/custom model `STREET_ADDRESS`, equal-span evidence and wider model
 `ADDRESS`; synthetic backend spans are not an inference qualification claim.
 
-On macOS ARM64 with Node 24.18.0, the 112 short fixture texts scanned 1,000 times
-each after warmup averaged 0.63 µs on #159 and 1.66 µs with the new coverage.
+Before separator hardening, on macOS ARM64 with Node 24.18.0, the 112 short fixture
+texts scanned 1,000 times each after warmup averaged 0.63 µs on #159 and 1.66 µs
+with the new coverage.
 This includes returning the new findings and is an uncontrolled local
 measurement, not a stable performance claim. Release WASM changed from 2,458,647
-to 2,466,557 bytes (+7,910 bytes, about 0.32%). `cargo dfv bench` remains the
-separate provisional performance gate.
+to 2,466,285 bytes (+7,638 bytes, about 0.31%) with separator hardening.
+`cargo dfv bench` remains the separate provisional performance gate.
