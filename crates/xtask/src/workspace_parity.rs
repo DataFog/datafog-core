@@ -15,10 +15,18 @@ fn failure(category: &str, json_output: bool) -> ExitCode {
 }
 
 pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
-    if args
-        .iter()
-        .any(|arg| !["--workspace", "--json", "--dry-run"].contains(&arg.as_str()))
-    {
+    if !args.iter().any(|arg| arg == "--workspace") {
+        return failure("memory diagnostic requires --workspace", json_output);
+    }
+    if args.iter().any(|arg| {
+        ![
+            "--workspace",
+            "--json",
+            "--dry-run",
+            "--plan-memory-diagnostic",
+        ]
+        .contains(&arg.as_str())
+    }) {
         return failure(
             "workspace parity requires the complete four-SDK matrix",
             json_output,
@@ -27,7 +35,7 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
     if args.iter().any(|arg| arg == "--dry-run") {
         println!(
             "{}",
-            json!({"pass":false,"dry_run":true,"executed":false,"sdks":["rust","python","node","wasm"]})
+            json!({"pass":false,"dry_run":true,"executed":false,"planMemoryDiagnosticRequested":args.iter().any(|arg|arg=="--plan-memory-diagnostic"),"sdks":["rust","python","node","wasm"]})
         );
         return ExitCode::SUCCESS;
     }
@@ -53,12 +61,15 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
             json_output,
         );
     }
-    let status = Command::new("node")
+    let mut command = Command::new("node");
+    command
         .arg(root.join("scripts/test-workspace-parity.mjs"))
         .arg("--output")
-        .arg(&run)
-        .current_dir(&root)
-        .output();
+        .arg(&run);
+    if args.iter().any(|arg| arg == "--plan-memory-diagnostic") {
+        command.arg("--plan-memory-diagnostic");
+    }
+    let status = command.current_dir(&root).output();
     let status = match status {
         Ok(status) => status,
         Err(_) => return failure("workspace parity runtime could not start", json_output),

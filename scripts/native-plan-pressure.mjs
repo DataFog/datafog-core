@@ -30,7 +30,7 @@ export function validatePlanPressure(value,config,sdk){
  value.done.forEach((done,worker)=>{if(done.phase!=="done" || done.worker!==worker || done.retainedWrappers!==value.cycles.at(-1).workers[worker].released.retainedWrappers || done.retainedReferenceListAfterDrop!==0)bad();const pid=value.cycles[0].workers[worker].held.before.pid;validSample(done.after,pid);validSample(done.afterDrop,pid);});
  return value;
 }
-export async function runNativePlanPressure({root,temporary,python,output,command}){
+export async function runNativePlanPressure({root,temporary,python,output,command,planMemoryDiagnostic=false}){
  const configFile=path.join(root,"fixtures/workspace/native-plan-pressure-v1.json"),bytes=await readFile(configFile),config=JSON.parse(bytes);
  await copyFile(configFile,path.join(output,"plan-pressure-fixture.json"));
  const core=JSON.parse(command("cargo",["run","--quiet","--release","-p","datafog-core","--example","workspace_operation_capacity","--","--plan-pressure"]));
@@ -42,9 +42,13 @@ export async function runNativePlanPressure({root,temporary,python,output,comman
  await copyFile(path.join(root,"scripts/native-plan-pressure-node.mjs"),path.join(temporary,"native-plan-pressure-node.mjs"));
  results.node=JSON.parse(command(process.execPath,["native-plan-pressure-node.mjs",configFile],temporary));
  await writeFile(path.join(output,"node-plan-pressure.json"),JSON.stringify(results.node,null,2));validatePlanPressure(results.node,config,"node");
+ let nodeMemoryExtension={executed:false};
+ if(planMemoryDiagnostic){
  const extended={...config,cycles:80},extendedFile=path.join(output,"node-plan-pressure-extended-fixture.json");await writeFile(extendedFile,JSON.stringify(extended,null,2));
  const extendedNode=JSON.parse(command(process.execPath,["native-plan-pressure-node.mjs",extendedFile],temporary));
  await writeFile(path.join(output,"node-plan-pressure-extended.json"),JSON.stringify(extendedNode,null,2));validatePlanPressure(extendedNode,extended,"node");
- return {pass:true,profile:config.profile,sdks:["python","node"],fixtureWorkersPerSdk:config.workers,fixtureHandlesPerWorker:config.handlesPerWorker,sdkLimitPerHandle:32,cycles:config.cycles,observedSimultaneousPlansPerSdk:config.workers*config.handlesPerWorker*32,sourceBytesPerPlan:config.sourceBytes,fixtureSha256:createHash("sha256").update(bytes).digest("hex"),coreAllocationAfterDiscardBytes:core.additionalRequestedBytesAfterDiscard,nodeMemoryExtension:{warmupCycles:16,additionalCycles:64,totalCycles:80,dropsRetainedReferences:true},
+  nodeMemoryExtension={executed:true,warmupCycles:16,additionalCycles:64,totalCycles:80,dropsRetainedReferences:true};
+ }
+ return {pass:true,profile:config.profile,sdks:["python","node"],fixtureWorkersPerSdk:config.workers,fixtureHandlesPerWorker:config.handlesPerWorker,sdkLimitPerHandle:32,cycles:config.cycles,observedSimultaneousPlansPerSdk:config.workers*config.handlesPerWorker*32,sourceBytesPerPlan:config.sourceBytes,fixtureSha256:createHash("sha256").update(bytes).digest("hex"),coreAllocationAfterDiscardBytes:core.additionalRequestedBytesAfterDiscard,nodeMemoryExtension,
   memoryScope:"Exact shared-Core requested bytes are separate from observed process RSS and JS/Python heaps. Stale wrappers are retained; native registry allocations are not directly instrumented. Worker processes are joined/reaped. No global Core/host admission limit or hardware SLA is selected."};
 }

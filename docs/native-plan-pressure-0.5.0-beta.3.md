@@ -55,15 +55,22 @@ code/shared pages and fragmentation; sums are not unique physical memory. No RSS
 threshold is used as a shipping budget or as proof of native `free`.
 
 The first 16-cycle Node observation did not establish a resident-memory plateau,
-so a bounded controlled extension uses the same workload in fresh Node workers:
+so one bounded controlled extension used the same workload in fresh Node workers:
 16 warmup plus 64 additional cycles, retaining 7,840 closed wrappers per worker,
-then dropping the retained list and sampling after explicit GC. In the exploratory
-run, post-release RSS rose roughly 98→248 MB /100→219 MB over 80 cycles. The final
-16 cycles rose about 5.3 MB /1.1 MB; dropping references lowered JS used heap about
-0.6 MB but did not lower RSS. External-memory reporting also changed at the final
-GC. That remains an **unresolved residency trend**, not a leak diagnosis or a
-claim that the entire native binding heap returns to baseline. Full raw curves
-are retained so this limit cannot disappear behind a pass flag.
+then dropping the retained list and sampling after explicit GC. The retained clean
+`39346db` diagnostic showed post-release RSS roughly 93→188 MB /94→195 MB over
+80 cycles. The final 16 cycles rose about 1.1 MB /0.9 MB; dropping references
+lowered JS used heap about 0.6 MB but did not lower RSS. That remains an
+**unresolved residency trend**, not a leak diagnosis or a claim that the entire
+native binding heap returns to baseline. The [lossless diagnostic receipt](verification/evidence/native-plan-pressure-node-diagnostic.jsonl)
+retains every cycle, before/held/released sample and final reference-drop result.
+
+The 80-cycle investigation is **not a required CI gate**. Normal parity requires
+only the 16-cycle Python/Node slot/lifetime proof and exact Core-discard counter.
+An explicit `cargo dfv parity --workspace --plan-memory-diagnostic` reproduces
+fresh 16-warmup/64-additional Node cycles if more investigation is needed. It adds
+no resident-memory acceptance budget. The ordinary receipt marks this diagnostic
+as not executed; a dry run never claims it ran.
 
 Passing qualifies per-handle slot/lifetime behavior, complete worker cleanup and
 the exact shared-Core discard measurement. Direct native-registry allocation
