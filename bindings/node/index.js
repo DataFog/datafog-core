@@ -580,6 +580,15 @@ function workspaceReviewJson(input) {
   return `{"text":${JSON.stringify(fields.text)},"scannerFindings":${scannerJson},"userSelections":${userJson},"corrections":[${corrected.join(",")}]}`;
 }
 
+function workspaceOperation(operation) {
+  if (!operation || typeof operation !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(operation))) throw workspaceFailure("invalid_operation");
+  const properties = Object.getOwnPropertyDescriptors(operation);
+  if (Reflect.ownKeys(properties).length !== 2 || !properties.id?.enumerable || !("value" in properties.id) || !properties.occurredAtMs?.enumerable || !("value" in properties.occurredAtMs)) throw workspaceFailure("invalid_operation");
+  const id = properties.id.value, time = properties.occurredAtMs.value;
+  workspaceBytes(id, 16, true);
+  if (!Number.isSafeInteger(time) || time < 0 || time > 253402300799999) throw workspaceFailure("invalid_operation");
+  return {id, json: JSON.stringify({id: Array.from(id), occurredAtMs: time})};
+}
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); workspaceFinalizer.register(this, {state, handle}, this); Object.freeze(this); }
   snapshotFormat() { const {state, handle} = workspacePlan(this); return JSON.parse(workspaceCall(state,"snapshot_format",handle)); }
@@ -628,6 +637,12 @@ export class Workspace {
     try { return new Workspace(workspaceToken, NativeWorkspace.create(Buffer.from(namespace), Buffer.from(operationId))); }
     catch (error) { throw normalizeError(error, "internal_error"); }
   }
+  static createWithOperation(namespace, context) {
+    workspaceBytes(namespace,16,true);
+    const operation=workspaceOperation(context);
+    try {return new Workspace(workspaceToken,NativeWorkspace.create_with_operation(Buffer.from(namespace),operation.json));}
+    catch(error){throw normalizeError(error,"internal_error");}
+  }
   static openBundle(bytes) {
     workspaceBytes(bytes, 16 * 1024 * 1024);
     try { return new Workspace(workspaceToken, NativeWorkspace.open_bundle(Buffer.from(bytes))); }
@@ -636,6 +651,13 @@ export class Workspace {
   head() { return JSON.parse(workspaceCall(this.#state, "head")); }
   namespace() { return workspaceCall(this.#state, "namespace"); }
   exportBundle() { return workspaceCall(this.#state, "export_bundle"); }
+  operations() { return JSON.parse(workspaceCall(this.#state, "operations")); }
+  operationsPage(offset, limit) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100000) throw workspaceFailure("resource_limit");
+    return JSON.parse(workspaceCall(this.#state, "operations_page", offset, limit));
+  }
+  counts() { return JSON.parse(workspaceCall(this.#state, "counts")); }
+  historyCoverage() { return JSON.parse(workspaceCall(this.#state, "history_coverage")); }
   policy() { return JSON.parse(workspaceCall(this.#state,"policy")); }
   preparePolicyChanges(edits, operationId) {
     workspaceBytes(operationId,16,true);
@@ -668,6 +690,21 @@ export class Workspace {
     workspaceBytes(operationId, 16, true);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operationId));
   }
+  prepareRecoveryWithOperation(context) {
+    const operation = workspaceOperation(context);
+    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operation.id, operation.json));
+  }
+  prepareWithOperation(text, findings, context) { return this.prepareBatchWithOperation([{text, findings}], context); }
+  prepareOutcome(outcome, context) {
+    const operation = workspaceOperation(context);
+    if (!outcome || typeof outcome !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(outcome))) throw workspaceFailure("invalid_operation");
+    const fields = Object.getOwnPropertyDescriptors(outcome);
+    if (Reflect.ownKeys(fields).length !== 2 || !fields.kind?.enumerable || !("value" in fields.kind) || !fields.issueCount?.enumerable || !("value" in fields.issueCount)) throw workspaceFailure("invalid_operation");
+    const kind = fields.kind.value, issueCount = fields.issueCount.value;
+    if (typeof kind !== "string" || kind.length > 32 || !Number.isSafeInteger(issueCount) || issueCount < 0 || issueCount > 10000) throw workspaceFailure("invalid_operation");
+    const json = JSON.stringify({kind, issueCount});
+    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_outcome", json, operation.json));
+  }
   prepare(text, findings, operationId) {
     workspaceText(text, 1024 * 1024); workspaceBytes(operationId, 16, true);
     if (!Array.isArray(findings)) throw workspaceFailure("invalid_finding");
@@ -678,7 +715,12 @@ export class Workspace {
     workspaceText(json, 16 * 1024 * 1024);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare", text, json, operationId));
   }
-  prepareBatch(inputs, operationId) {
+  prepareBatch(inputs,operationId) {return this.#prepareBatch(inputs,operationId);}
+  prepareBatchWithOperation(inputs,context) {
+    const operation=workspaceOperation(context);
+    return this.#prepareBatch(inputs,operation.id,operation.json);
+  }
+  #prepareBatch(inputs, operationId, context) {
     workspaceBytes(operationId, 16, true);
     if (!Array.isArray(inputs) || inputs.length === 0) throw workspaceFailure("invalid_batch");
     if (inputs.length > 32) throw workspaceFailure("resource_limit");
@@ -710,7 +752,7 @@ export class Workspace {
         throw failure;
       }
     }
-    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_batch", `[${parts.join(",")}]`, operationId));
+    return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_batch", `[${parts.join(",")}]`, operationId, context));
   }
   activateSaved(change, expectedHead, savedHead) {
     const plan = workspacePlans.get(change);

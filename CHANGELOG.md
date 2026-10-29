@@ -28,6 +28,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes Core operation records, explicit timed preparation/outcomes,
+  covered-history counts and bounded owned history pages.
 - Native Python exposes the draft Core operation records, recorded-history counts
   and coverage, timed preparation/recovery and explicit content-free outcomes
   through the existing staged save/activation lifecycle, with explicit read-only
