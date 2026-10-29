@@ -2,7 +2,7 @@
 mod models;
 mod workspace;
 pub use models::open_model_session;
-pub use workspace::NativeWorkspace;
+pub use workspace::{NativeRestoreStream, NativeWorkspace};
 
 use napi::bindgen_prelude::Buffer;
 use napi::{Env, Error, Status, Unknown};
