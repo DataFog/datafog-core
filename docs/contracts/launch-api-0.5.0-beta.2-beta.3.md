@@ -16,12 +16,12 @@ release or proof that the shipping extension/server has passed qualification.
 | Core/WASM ledger, counts, coverage and paging | #162 merged into main at `699887e6d13164c9549494dd4ba8b0ec32ce8f6f`; awaiting beta.3 publication | Approved history implementation, not completion of all C1/C2 or a joint snapshot freeze |
 | Native Python operation adapter | [#186](https://github.com/DataFog/datafog-core/pull/186) merged at `aee4a415`; awaiting beta.3 publication | Same Core contract with native snake_case calls and exact Python values |
 | Native Node operation adapter | [#187](https://github.com/DataFog/datafog-core/pull/187) merged at `507b92b0`; awaiting beta.3 publication | Main now contains the combined Core/Python/Node operation surface; compile success still does not freeze/release it |
-| Conversation/send-intent scoped restoration | Approved product obligations plus proposal work in #148/#182/#185 | No conversation runtime methods or final key9 layout in this SDK seam; reservation and first-chat logical ID/binding approved; implementation pending |
+| Conversation/send-intent scoped restoration | Committed Core/WASM #185 with reviewed Python #195 and Node #196 assembled by #197 into the #185 feature branch; #199 adds joint parity | Actual candidate methods and map11/key9 below; these methods are not on main or in published beta.2 at this candidate boundary |
 | CSV and provider qualification | #149 / #150 remain separate decisions/execution gates | No CSV/provider API or provider calls are introduced by this inventory |
 
 The adjacent [type inventory](launch-api-proposal.d.ts) imports actual WASM and
-Node declarations; it does not augment `Workspace`, emit code or declare future
-conversation methods. [TypeScript examples](launch-api-examples.ts) cover the
+Node declarations; it does not augment `Workspace`, emit code or invent future
+methods. The conversation aliases refer to actual committed candidate declarations. [TypeScript examples](launch-api-examples.ts) cover the
 shared JavaScript surface and [Python examples](launch-api-python-example.py)
 cover the real native names. Read them against this candidate, not an older
 registry package. The SDKs remain thin; Core owns normalization, offsets, markers,
@@ -36,7 +36,8 @@ clock, source flag or candidate preview grants none of that authority.
 Every mutation follows prepare → review/approve → candidate export → encrypt and
 atomically compare-and-save with the **complete expected head** → confirm the
 saved head → activate. Only then may approved text leave the review surface.
-A head includes exact revision plus a 16-byte commit ID; matching revision alone
+Approval must be literal `true` / Python `True`; truthy strings or numbers are not
+approval. A head includes exact revision plus a 16-byte commit ID; matching revision alone
 is insufficient. Operation IDs are fresh host-random 16-byte values, not hashes of
 source text. Creation is an unsaved bootstrap until the host persists its bundle.
 
@@ -233,8 +234,8 @@ category permits reuse or implies exactly-once external delivery.
 
 Each retained row contains `id`, `kind`, nullable `occurredAtMs`, `preparedInputs`
 and `transformedSpans`. Current kinds are `create`, `prepare`, `recovery`,
-`policy_change`, `copy_confirmed`, `user_cancelled`, `blocked_input` and
-`restore_blocked`. There is no implemented `handoff_confirmed` kind in this seam.
+`policy_change`, `conversation_prepare`, `send_confirmed`, `send_not_sent`,
+`copy_confirmed`, `user_cancelled`, `blocked_input` and `restore_blocked`. There is no implemented `handoff_confirmed` kind in this seam.
 No source text, normalized identity, arbitrary message, URL or issue details
 belong in these rows. Content-free metadata is still private vault data.
 
@@ -243,7 +244,7 @@ belong in these rows. Content-free metadata is still private vault data.
 | `operations` | Every retained committed row, including create/recovery and explicit outcomes |
 | `preparedInputs` | Sum of recorded preparation input members, including empty findings |
 | `transformedSpans` | Replaced source occurrences, including repeated values, not distinct identities |
-| `confirmedHandoffs` | Reserved at zero until the reviewed observed-send transaction exists |
+| `confirmedHandoffs` | Retained committed `send_confirmed` rows; copying, pending intentions and definite non-delivery do not increment it |
 | `reportedBlockedAttempts` | Explicitly saved blocked-input/restore rows, one per attempt rather than per issue |
 
 An explicit preparation records success even when no mapping changes. Legacy
@@ -267,9 +268,12 @@ presented as known lifetime totals.
 ### Retention, explicit pages and finite recovery
 
 Sid approved a provisional 100,000 retained-row ceiling with the final 256 slots
-reserved for recovery. New ordinary records stop at 99,744 rows. At 100,000,
-further recovery also fails explicitly; reads/export remain available. No row,
-old ID or covered total is evicted, sampled or truncated. Postlaunch lossless
+reserved for recovery. For new **unfunded** ordinary activity, retained rows `T`
+plus pending resolution credits `P` must fit the 99,744 ordinary ceiling. A
+previously funded resolution consumes its credit instead of requiring a new
+ordinary slot: it can still complete after all 256 recoveries, up to the hard
+100,000-row limit. At that hard limit further recovery also fails explicitly;
+reads/export remain available. No row, old ID or covered total is evicted, sampled or truncated. Postlaunch lossless
 compression remains #165. This bound is not unlimited history or a low-memory
 platform guarantee.
 
@@ -281,13 +285,20 @@ Concatenating pages over an unchanged head equals the full view. Result mutation
 cannot change saved state. The host may use pages to avoid a full JSON allocation;
 there is no hidden pagination or changed full-history default.
 
-The v3 encoder reserves 7,699 bytes for 256 maximum supported recovery rows plus
-conservative head/array/count header growth. Ordinary records use the reduced
-budget; recovery may use the full 16 MiB cap. Valid old vaults already near that
+The v3 encoder initially reserves 7,699 bytes for 256 maximum supported recovery
+rows plus conservative head/array/count header growth. Ordinary records preserve
+the remaining recovery budget. Recovery can consume its own allotment within the
+16 MiB cap, while still protecting any outstanding confirmation credits. Valid old vaults already near that
 cap remain readable/exportable and can hit the byte ceiling earlier. No data is
-trimmed to make room. Final conversation payload/recovery growth must be reconciled
-before freezing a joint v3 format; these recovery-only slots are not silently
-assigned to send confirmation. See [operation evidence and limits](../proposals/workspace-operation-records.md).
+trimmed to make room. The conversation candidate separately reserves one later
+resolution row and conservatively encoded bytes per pending intent, including
+its immutable site-ID bound. All other writes, including recovery, preserve
+outstanding confirmation bytes and revision increments, plus remaining recovery
+byte/revision credits. Checked u64 admission verifies room for those increments
+before sending; row slots alone cannot guarantee an available revision. The 256
+recovery-only slots are not reassigned to sending. See the
+[confirmation-capacity proof](../proposals/conversation-confirmation-capacity.md)
+and [operation evidence and limits](../proposals/workspace-operation-records.md).
 
 ## Native names, exact values and typed failures
 
@@ -308,8 +319,9 @@ them (undefined). Python indices are int or None.
 Actual workspace codes include `closed_workspace`, `inactive_plan`,
 `inactive_stream`, `workspace_conflict`, `invalid_finding`, `invalid_encoding`,
 `review_conflict`, `invalid_batch`, `invalid_marker`, `invalid_snapshot`,
-`invalid_operation_id`, `invalid_policy`, `resource_limit`, `invalid_operation`
-and `operation_reused`. Error messages/codes and safe ranges contain no source or
+`invalid_operation_id`, `invalid_policy`, `resource_limit`, `invalid_operation`,
+`operation_reused`, `invalid_conversation`, `conversation_unknown`,
+`conversation_pending` and `invalid_send_intent`. Error messages/codes and safe ranges contain no source or
 restored values. Errors do not become successful empty results. Typed declarations
 do not prove random IDs, numeric bounds, authorization, storage durability or plan
 ownership; Core and the trusted host still enforce them at runtime.
@@ -346,8 +358,8 @@ output. Closing/dropping the parent or activating a changed head clears children
 failed saves and same-head no-ops preserve them. Hosts own provider iteration,
 cooperative cancellation, output callbacks and incomplete-status presentation.
 Stop on host/provider failure too; do not automatically retry, resend or fabricate
-completion. Provider SSE/tool parsing and conversation-pinned streaming are not
-implemented by these examples.
+completion. The candidate also exposes scoped buffered/progressive factories
+below; provider SSE/tool parsing remains a host integration responsibility.
 
 ## Snapshot, backup and host boundary
 
@@ -357,18 +369,22 @@ no-ops, discarded plans and failed saves do not upgrade them. Released beta.2
 new workspaces use v2. Beta.1 cannot open policy-v2 state; warn before saving a
 real v1→v2 upgrade and preserve old backup files.
 
-The operation candidate uses a distinct v3 map: version/key0 and established
-fields through7, operation rows at8, counts at10, with key9 **absent/reserved** for
-joint conversation work. Key5 remains an empty reserved merge slot. New candidate
+The coordinated conversation candidate uses a v3 map with exactly 11 keys:
+version/key0, established fields through7, operation rows at8, conversations at9
+and counts at10. Key9 retains contexts, unresolved intents, terminal resolutions
+and confirmed marker membership; it is not an arbitrary metadata extension. Key5 remains an empty reserved merge slot. New candidate
 workspaces bootstrap v3; a real approved saved legacy mutation/recovery stages v3.
 Warn **before saving** that beta.1 and beta.2 cannot open the upgraded v3 vault.
 Keeping an old backup does not make later state readable by its old decoder.
 The old unshipped operation-v2 layout is rejected, not mistaken for policy-v2.
 
-This is not a frozen joint v3: #148 still needs coordinated key9 storage,
-reservation/confirmation accounting, canonical malformed-decoder tests, encrypted
-reopen/recovery, complete field backup coverage and four-SDK comparison. Unknown
-fields are not silently dropped. No fake contract-version export is introduced.
+This is an implemented candidate, not the final G3 freeze. The earlier unshipped
+map10 operation-only v3 is not accepted as map11 and is not a supported migration
+source. Four public-lifecycle map11 gold states, 42 malformed vectors and
+password/recovery-code encrypted recovery cover the current persisted fields;
+see the [field inventory](../verification/workspace-backup-fields.md). Joint
+acceptance and shipping-host review remain separate. Unknown fields are not
+silently dropped; no fake contract-version export is introduced.
 
 The reference-host backup flow reauthenticates a freshly entered password for
 every export, even while unlocked. Argon2id is the approved 256 MiB / t=3 / p=1
@@ -389,10 +405,11 @@ resent chat text alone cannot reconstruct mappings. G4 #153 reviews actual shipp
 hosts/keys/storage; a reference harness is not certification of Josh's extension
 or a production server. No LiteLLM/provider adapter is supplied here.
 
-## Approved conversation intent; unresolved implementation
+## Committed conversation candidate and trusted-host obligations
 
-[Issue #148](https://github.com/DataFog/datafog-core/issues/148) records two explicit
-October29 approvals, replacing the older insertion-based sketch:
+[Issue #148](https://github.com/DataFog/datafog-core/issues/148) records the approved
+October29 lifecycle, reservation and identity decisions, replacing the older
+insertion-based sketch:
 
 - Mappings save/activate before external handoff. Only the trusted host's observed
   successful **send to that exact chat** establishes issuance through a second
@@ -408,7 +425,7 @@ October29 approvals, replacing the older insertion-based sketch:
 - Before sending, reserve the confirmation row and encoded-byte space. Other
   activity, including recovery, cannot spend those credits. The approved 100,000
   retained-row ceiling and 256 recovery-only slots remain unchanged. This is the
-  approved reservation requirement, not an implemented API or final wire allocation.
+  implemented reservation requirement; it is not a production host memory SLA.
 
 - A first chat has a private permanent logical ID before its site ID exists,
   then one verified binding to the actual observed site conversation. The host
@@ -416,13 +433,48 @@ October29 approvals, replacing the older insertion-based sketch:
   automatically resend to manufacture confirmation.
 
 The explicit unscoped compatibility API remains unchanged; the host must never
-silently fall back to it to bypass the pause. Identity acquisition/validation,
-confirmed membership, safe wrong-context ranges, joint key9 layout and actual host
-send observations still require implementation and review. The approved logical-ID/binding and reservation requirements need coordinated
-implementation and actual host verification/proof; it does not make
-failed/uncertain durable saves successful or allocate recovery-only slots to sending. This
-inventory declares no conversation/reservation method signatures or manual-confirmation
-escape hatch. The current SDK seam has none of those runtime calls.
+silently fall back to it to bypass a pause or issuance check. It accepts current
+workspace mappings without proving they were issued to the requested chat.
+
+| Actual candidate call (WASM / Node) | Python / Rust name | Result / trusted boundary |
+| --- | --- | --- |
+| `prepareConversationSend(inputs, operation)` | `prepare_conversation_send` | Combined Core review; stages mappings, contexts and funded pending intents atomically. Save/activate before transport. |
+| `conversation(logicalId)` | `conversation` | Owned context, pending-intent count and issued-marker count. |
+| `conversationForSite(surface, siteId)` | `conversation_for_site` | Logical ID for an existing exact binding; never guesses or creates one. |
+| `sendIntentStatus(intent)` | `send_intent_status` | `pending`, `observed_sent` or `definitely_not_sent`. |
+| `prepareObservedSend(intent, logicalId, surface, siteId, operation)` | `prepare_observed_send` | Trusted observation tied to the exact saved attempt; stages binding, membership and confirmation atomically. Save/activate separately. |
+| `prepareDefinitelyNotSent(intent, logicalId, operation)` | `prepare_definitely_not_sent` | Trusted definite non-delivery only; timeout/uncertainty is not sufficient. Stages a saved resolution without issuance. |
+| `restoreInConversation(text, logicalId)` | `restore_in_conversation` | Strict scoped text or content-free failure. |
+| `restoreReportInConversation(text, logicalId)` | `restore_report_in_conversation` | Strict report with original byte/codepoint/UTF-16 issues, including `not_issued_in_conversation`. |
+| `bufferedRestoreInConversation(logicalId, encoding?)` | `buffered_restore_in_conversation` | All-or-nothing scoped response; no feed text. |
+| `progressiveRestoreInConversation(logicalId, encoding?)` | `progressive_restore_in_conversation` | Explicit irreversible scoped chunks; prior delivered counts and terminal incomplete failure semantics above. |
+
+Prepared changes expose `sendIntents()` / Python/Rust `send_intents()`. Capture
+these exact `{preparationId, inputIndex}` identifiers before activation consumes
+the plan. A `WorkspaceConversationInput` combines the existing review input with
+`{id, surface, siteId, siteIdByteBudget}`. `id` is a permanent private 16-byte
+logical ID; the `siteId` field is required. Use null until the host knows the
+exact site ID; an already-known existing chat may supply its exact binding when
+the context is registered. An unknown first-chat ID binds once only after trusted
+observed sending. The immutable
+positive UTF-8 `siteIdByteBudget` must cover the later observed ID. Contexts and
+intent input indices do not carry source/prompt content or transport authority.
+
+Malformed context definitions/site lookups use `invalid_conversation`; unknown
+logical contexts use `conversation_unknown`; any unresolved intent pauses the
+whole context with `conversation_pending`; malformed, unknown, wrong-context or
+already-resolved intents use `invalid_send_intent`. Direct logical-ID transport
+selectors retain `invalid_operation_id`, and invalid text retains
+`invalid_finding`. Safe marker issues preserve original ranges, not restored
+text. Mixed eligible/unissued reports may count eligible markers while returning
+null text; rejected markers never contribute to `restoredMarkers`.
+
+A partial batch confirmation does not clear its other pending members. Pauses,
+confirmed membership and immutable bindings survive reopen/recovery. Changed
+saved heads invalidate scoped children; same-head no-op activation preserves them.
+Identity acquisition, trusted send observation, authenticated tenant/request
+association and durable saves remain host obligations. No manual-confirmation
+escape hatch, inferred remote receipt or automatic resend is added.
 
 CSV #149 scope and provider/model/sampling/denominator/execution choices under
 #150 remain pending. [G1 preparation #184](https://github.com/DataFog/datafog-core/pull/184)
@@ -436,13 +488,13 @@ compiling this document.
 | Requirement | Implementation / remaining evidence |
 | --- | --- |
 | Released sources/recall/policy/combined review/rules/stronger backup | beta.2 release; #140/#141/#144/#145/#146/#142 |
-| C1/C3 recorded operations | #147/#162; actual native adapters #186 and Node operation stack; shared operation parity remains |
-| C2/R3 conversation/send intent/restore | #148/#182/#185; approved sequencing/pause/reservation/logical-ID binding; implementation and final format pending |
-| X6 / X7 native bindings | #167/#168; installed wheel/package and typed errors, plus future conversation integration |
+| C1/C3 recorded operations | #147/#162 with native #186/#187 and merged operation parity #188; joint candidate acceptance remains |
+| C2/R3 conversation/send intent/restore | #185 candidate with #197 combined SDKs; implemented reservation, binding and scoped restoration; final G3/host acceptance remains |
+| X6 / X7 native bindings | #195/#196 implemented conversation adapters assembled by #197; actual installed packages and declarations qualified, not published beta.2 features |
 | R4 strict/progressive | #169/#176/#174/#175 implemented; native/host/provenance acceptance still joint work |
-| X8 workspace parity | #171/#179 foundation+streaming, #188 operations and #190 separate native-server profiles merged; conversation and final recovery qualification still needed |
+| X8 workspace parity | #199 candidate executes four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16; final acceptance and production host applicability remain |
 | W6 / G4 server and vault | #170/#153; actual host ownership, keys/storage/admission/cancellation and shipping review |
-| B2 complete backup | #152/#181; extend field-to-fixture coverage for every newly committed joint-v3 field |
+| B2 complete backup | #152/#181/#192 plus #185 map11 migration: four gold states, 42 malformed vectors and encrypted recovery; final joint acceptance remains |
 | G1 / G2 qualification | #150 real provider trials; #151 actual shipping model/rules/recall evidence |
 | D9 CSV | #149 if approved; no signature or implementation here |
 | G3 freeze | #154 only after full actual API/decoders/backup/native/parity/host qualification; this document does not close it |

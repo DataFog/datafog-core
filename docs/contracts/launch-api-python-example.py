@@ -1,5 +1,6 @@
 """Compile-only consumers of the actual installed candidate; no provider/storage runs."""
 from __future__ import annotations
+from typing import TYPE_CHECKING
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from os import urandom
 from time import time_ns
@@ -7,6 +8,13 @@ from datafog_core import (
     DataFogWorkspaceError, DataFogWorkspaceStreamError, Workspace,
     WorkspaceHead, WorkspaceInput, WorkspaceReviewInput,
 )
+
+if TYPE_CHECKING:
+    # Actual installed annotations; no runtime imports or invented SDK exports.
+    from datafog_core import (
+        _WorkspaceOperation, _WorkspaceConversationInput, _WorkspaceSendIntent,  # pyright: ignore[reportPrivateUsage]
+        _WorkspaceConversationState,  # pyright: ignore[reportPrivateUsage]
+    )
 
 # Trusted host callbacks must bind exact input/generation/approval and durable CAS.
 SaveCandidate = Callable[[bytes, WorkspaceHead, WorkspaceHead], Awaitable[WorkspaceHead]]
@@ -34,7 +42,7 @@ async def current_review(
             warning = "Saving v3 prevents 0.5.0-beta.1 and 0.5.0-beta.2 from opening this vault."
         elif version["currentVersion"] == 1 and version["candidateVersion"] == 2:
             warning = "Saving v2 prevents 0.5.0-beta.1 from opening this vault."
-        if not await approve(previews, warning):
+        if (await approve(previews, warning)) is not True:
             return None
         # Python returns immutable caller-owned bytes; reference release is not erasure.
         candidate = plan.export_candidate_bundle()
@@ -117,4 +125,66 @@ def rejected_types(workspace: Workspace) -> None:
     workspace.operations_page(0, 1.5)  # type: ignore[arg-type]
     workspace.prepare_outcome({"kind": "handoff_confirmed", "issueCount": 0}, {"id": bytes(16), "occurredAtMs": 0})  # type: ignore[typeddict-item]
     workspace.prepare_with_operation("", [], {"id": bytes(16), "occurredAtMs": 0, "text": "forbidden"})  # type: ignore[typeddict-unknown-key]
-    workspace.conversations()  # type: ignore[attr-defined]
+    workspace.conversations()  # type: ignore[attr-defined]  # No plural enumeration API.
+
+
+async def save_conversation_preparation(
+    workspace: Workspace, inputs: list[_WorkspaceConversationInput], operation: _WorkspaceOperation,
+    save: SaveCandidate, approve: Approve,
+) -> tuple[list[str], list[_WorkspaceSendIntent]] | None:
+    # Save pending intentions/mappings before transport; capture IDs before activation.
+    with workspace.prepare_conversation_send(inputs, operation) as plan:
+        intents = plan.send_intents()
+        previews = plan.previews()
+        version = plan.snapshot_format()
+        warning = None
+        if version["currentVersion"] < 3:
+            warning = "Saving v3 prevents 0.5.0-beta.1 and 0.5.0-beta.2 from opening this vault."
+        if (await approve(previews, warning)) is not True:
+            return None
+        saved = await save(plan.export_candidate_bundle(), plan.expected_head(), plan.candidate_head())
+        workspace.activate_saved(plan, plan.expected_head(), saved)
+        return [preview["text"] for preview in previews], intents
+    return None
+
+
+async def save_observed_conversation_send(
+    workspace: Workspace, intent: _WorkspaceSendIntent, logical_id: bytes,
+    surface: str, site_id: str, operation: _WorkspaceOperation,
+    save: SaveCandidate, approve: Approve,
+) -> bool:
+    # Trusted observation of the exact saved send attempt is a precondition.
+    # This example performs no send; approval alone is not an observation.
+    with workspace.prepare_observed_send(intent, logical_id, surface, site_id, operation) as plan:
+        if (await approve(plan.previews(), None)) is not True:
+            return False
+        saved = await save(plan.export_candidate_bundle(), plan.expected_head(), plan.candidate_head())
+        workspace.activate_saved(plan, plan.expected_head(), saved)
+        return True
+    return False
+
+
+def stage_definite_non_delivery(
+    workspace: Workspace, intent: _WorkspaceSendIntent, logical_id: bytes, operation: _WorkspaceOperation,
+) -> None:
+    # Definite non-delivery only, never uncertainty. Discarding does not clear a pause.
+    with workspace.prepare_definitely_not_sent(intent, logical_id, operation):
+        pass
+
+
+def scoped_conversation_types(
+    workspace: Workspace, logical_id: bytes, surface: str, site_id: str,
+    intent: _WorkspaceSendIntent, text: str,
+) -> tuple[_WorkspaceConversationState, bytes, str, str]:
+    # Call on a confirmed context. Pending contexts reject even plain text.
+    state = workspace.conversation(logical_id)
+    binding: bytes = workspace.conversation_for_site(surface, site_id)
+    status = workspace.send_intent_status(intent)
+    restored: str = workspace.restore_in_conversation(text, logical_id)
+    report = workspace.restore_report_in_conversation(text, logical_id)
+    assert isinstance(report["restoredMarkers"], int)
+    with workspace.buffered_restore_in_conversation(logical_id, "utf8") as strict:
+        strict.feed(b"")
+    with workspace.progressive_restore_in_conversation(logical_id, "utf16") as progressive:
+        progressive.feed_utf16([])
+    return state, binding, status, restored

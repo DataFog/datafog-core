@@ -9,6 +9,7 @@ import type {
   CandidateWorkspace, CandidatePlan, WorkspaceFinding, WorkspaceInput,
   WorkspaceHead, WorkspacePreview, WorkspaceReviewInput, WorkspaceOperation,
   WorkspaceOperationRecord, WorkspaceOperationPage, WorkspaceRestoreProgress,
+  WorkspaceConversationInput, WorkspaceConversationState, WorkspaceSendIntent, WorkspaceSendStatus,
 } from "./launch-api-proposal.js";
 
 // Trusted host obligation, not an SDK promise of approval/encryption/durability.
@@ -38,7 +39,7 @@ async function approveAndSave(workspace: CandidateWorkspace, plan: CandidatePlan
   let consumed = false;
   try {
     const previews = plan.previews();
-    if (!(await approve(previews, upgradeWarning(plan)))) return {kind: "cancelled" as const};
+    if ((await approve(previews, upgradeWarning(plan))) !== true) return {kind: "cancelled" as const};
     const {expectedHead, candidateHead} = plan.heads();
     const bytes = plan.exportCandidateBundle();
     try {
@@ -93,11 +94,11 @@ export function typedInventory(browser: BrowserWorkspace, node: NodeWorkspace, o
     const next: number | null = page.nextOffset;
     const covered: true = workspace.historyCoverage().recordedHistoryOnly;
     const prior: "unknown" | "not_applicable" = workspace.historyCoverage().preUpgradeHistory;
-    const reservedHandoffs: number = workspace.counts().confirmedHandoffs; // Runtime remains zero.
+    const confirmedHandoffs: number = workspace.counts().confirmedHandoffs; // Saved observed-send rows only.
     // Outcomes/recovery have no text previews or external-delivery authority.
     workspace.prepareOutcome({kind: "user_cancelled", issueCount: 0}, operation).discard();
     workspace.prepareRecoveryWithOperation(operation).discard();
-    void unknownTime; void next; void covered; void prior; void reservedHandoffs;
+    void unknownTime; void next; void covered; void prior; void confirmedHandoffs;
   }
 }
 
@@ -151,9 +152,9 @@ export function currentRecall(workspace: CandidateWorkspace, text: string): read
 
 // Negative checks describe unsupported calls, not promises of their future names.
 export function typeBoundaries(workspace: CandidateWorkspace, operation: WorkspaceOperation) {
-  // @ts-expect-error Conversation APIs are absent from this committed seam.
+  // @ts-expect-error There is no plural enumeration API; use exact logical/site lookup.
   workspace.conversations();
-  // @ts-expect-error Scoped restore is absent; no signature is invented here.
+  // @ts-expect-error Scoped restore exists but requires the exact Uint8Array logical ID.
   workspace.restoreInConversation("synthetic", {});
   // @ts-expect-error No timed combined-review method exists.
   workspace.prepareReviewWithOperation([], operation);
@@ -168,4 +169,64 @@ export function typeBoundaries(workspace: CandidateWorkspace, operation: Workspa
   // @ts-expect-error Corrections use candidateKey, not the old target field.
   const correction: WorkspaceReviewInput = {text: "Jane", scannerFindings: [], userSelections: [], corrections: [{target: "old", replacement: {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}}]};
   void source; void correction;
+}
+
+
+/** First stage only: return approved text/intent IDs after the pending state saves.
+ * The trusted host must correlate transport to this exact saved attempt. */
+export async function saveConversationPreparation(
+  workspace: CandidateWorkspace, inputs: readonly WorkspaceConversationInput[], operation: WorkspaceOperation,
+  save: SaveCandidate, approve: Approve,
+) {
+  const plan = workspace.prepareConversationSend(inputs, operation);
+  const intents: readonly WorkspaceSendIntent[] = plan.sendIntents(); // Before activation consumes it.
+  const result = await approveAndSave(workspace, plan, save, approve);
+  return result.kind === "cancelled" ? null : {previews: result.previews, intents};
+}
+
+/** Call only for a trusted actual-send observation of the saved exact attempt.
+ * Approval alone cannot invent that observation; this function sends nothing. */
+export async function saveObservedConversationSend(
+  workspace: CandidateWorkspace, intent: WorkspaceSendIntent, logicalId: Uint8Array,
+  surface: string, siteId: string, operation: WorkspaceOperation,
+  save: SaveCandidate, approve: Approve,
+): Promise<boolean> {
+  const plan = workspace.prepareObservedSend(intent, logicalId, surface, siteId, operation);
+  const result = await approveAndSave(workspace, plan, save, approve);
+  return result.kind !== "cancelled"; // No text previews or resend permission.
+}
+
+/** Definite non-delivery is a separate trusted assertion, never a timeout fallback.
+ * This example discards the staged resolution; it does not clear a saved pause. */
+export function stageDefiniteNonDelivery(
+  workspace: CandidateWorkspace, intent: WorkspaceSendIntent, logicalId: Uint8Array, operation: WorkspaceOperation,
+): void {
+  workspace.prepareDefinitelyNotSent(intent, logicalId, operation).discard();
+}
+
+/** Invoke against a confirmed context; pending contexts reject even ordinary text.
+ * Existing unscoped methods are compatibility calls, never a fallback here. */
+export function scopedConversationTypes(
+  workspace: CandidateWorkspace, logicalId: Uint8Array, surface: string, siteId: string,
+  intent: WorkspaceSendIntent, text: string,
+) {
+  const state: WorkspaceConversationState = workspace.conversation(logicalId);
+  const binding: Uint8Array = workspace.conversationForSite(surface, siteId);
+  const status: WorkspaceSendStatus = workspace.sendIntentStatus(intent);
+  const restored: string = workspace.restoreInConversation(text, logicalId);
+  const report = workspace.restoreReportInConversation(text, logicalId);
+  const strict = workspace.bufferedRestoreInConversation(logicalId, "utf8");
+  try {
+    const progressive = workspace.progressiveRestoreInConversation(logicalId, "utf16");
+    try { return {state, binding, status, restored, report}; }
+    finally { progressive.close(); }
+  } finally { strict.close(); }
+}
+
+/** All four actual C2 codes belong to both JavaScript SDK declarations. */
+export function conversationFailureCodes(error: BrowserError | NodeError) {
+  const codes: readonly (BrowserError["code"] & NodeError["code"])[] = [
+    "invalid_conversation", "conversation_unknown", "conversation_pending", "invalid_send_intent",
+  ];
+  return codes.some(code => code === error.code);
 }
