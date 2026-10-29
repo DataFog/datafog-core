@@ -40,7 +40,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def verify_account_number() -> None:
-    for line in (ROOT / "fixtures" / "account-number.jsonl").read_text().splitlines():
+    for line in ((ROOT / "fixtures" / "account-number.jsonl").read_text().splitlines()
+                 + (ROOT / "fixtures" / "masked-account-number.jsonl").read_text().splitlines()):
         row = json.loads(line)
         text = row["text"]
         def project(findings):

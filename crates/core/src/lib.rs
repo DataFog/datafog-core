@@ -4767,28 +4767,36 @@ mod tests {
         ))
         .with_token_provider(TestTokenProvider::default());
         let context = PrivacyContext::new("account").unwrap();
-        let text = "👋 account number: 00123456";
-        for strategy in [
-            json!({"strategy":"pseudonymize","key_ref":"account"}),
-            json!({"strategy":"tokenize","token_ref":"account"}),
+        for text in [
+            "👋 account number: 00123456",
+            "👋 account ending in 1234",
+            "👋 account number: XXXX1234",
         ] {
-            let config = parse_scan_and_transform_config(&json!({
-                "transform":{"default":strategy,"entities":["ACCOUNT_NUMBER"]}
-            }))
-            .unwrap();
-            let result =
-                block_on(manager.scan_and_transform_with_context(text, &config, Some(&context)))
-                    .unwrap();
-            assert_eq!(result.transformations.len(), 1);
-            assert!(!result.text.contains("00123456"));
-            assert!(result.text.starts_with("👋 account number: "));
-            if strategy["strategy"] == "tokenize" {
-                assert_eq!(
-                    block_on(manager.restore(&result.text, &context))
-                        .unwrap()
-                        .text,
-                    text
-                );
+            for strategy in [
+                json!({"strategy":"pseudonymize","key_ref":"account"}),
+                json!({"strategy":"tokenize","token_ref":"account"}),
+            ] {
+                let config = parse_scan_and_transform_config(&json!({
+                    "transform":{"default":strategy,"entities":["ACCOUNT_NUMBER"]}
+                }))
+                .unwrap();
+                let result = block_on(manager.scan_and_transform_with_context(
+                    text,
+                    &config,
+                    Some(&context),
+                ))
+                .unwrap();
+                assert_eq!(result.transformations.len(), 1);
+                assert!(!result.text.contains("1234"));
+                assert!(result.text.starts_with("👋 account"));
+                if strategy["strategy"] == "tokenize" {
+                    assert_eq!(
+                        block_on(manager.restore(&result.text, &context))
+                            .unwrap()
+                            .text,
+                        text
+                    );
+                }
             }
         }
     }

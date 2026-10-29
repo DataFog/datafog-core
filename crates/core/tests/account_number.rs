@@ -20,7 +20,13 @@ fn project(text: &str, findings: &[Finding]) -> Value {
 
 #[test]
 fn labelled_account_number_conformance() {
-    for line in include_str!("../../../fixtures/account-number.jsonl").lines() {
+    for line in [
+        include_str!("../../../fixtures/account-number.jsonl"),
+        include_str!("../../../fixtures/masked-account-number.jsonl"),
+    ]
+    .into_iter()
+    .flat_map(str::lines)
+    {
         let row: Value = serde_json::from_str(line).unwrap();
         let text = row["text"].as_str().unwrap();
         let config = parse_scan_config(&row["config"]).unwrap();
@@ -147,4 +153,72 @@ fn account_addition_keeps_existing_card_findings_and_selection() {
     );
     let allow = parse_transformation_config(&json!({"entities":["ACCOUNT_NUMBER"], "default":{"strategy":"redact"}, "allow":{"regex":{"ACCOUNT_NUMBER":[{"pattern":"4111[0-9]+"}]}}})).unwrap();
     assert_eq!(transform(text, &findings, &allow).unwrap().text, text);
+}
+
+#[test]
+fn masked_accounts_keep_literal_workspace_identity_and_restore_visible_text() {
+    use datafog_core::workspace::{Workspace, WorkspaceFinding};
+    let mut workspace = Workspace::create([51; 16], [52; 16]).unwrap();
+    let mut markers = Vec::new();
+    for (index, text) in [
+        "account ending in 1234",
+        "account number: 00121234",
+        "account number: XXXX1234",
+        "account number: 00991234",
+        "acct ending in 1234",
+        "acct no.: xxxx1234",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let findings: Vec<_> = scan_with_config(
+            text,
+            &parse_scan_config(&json!({"entities":["ACCOUNT_NUMBER"]})).unwrap(),
+        )
+        .into_iter()
+        .map(|finding| {
+            WorkspaceFinding::new(
+                finding.entity_type,
+                finding.matched_text,
+                finding.byte_range,
+            )
+        })
+        .collect();
+        assert_eq!(findings.len(), 1);
+        let mut pending = workspace
+            .prepare(text, &findings, [60 + u8::try_from(index).unwrap(); 16])
+            .unwrap();
+        let preview = pending.preview().unwrap();
+        let range = preview.transformations[0].output_byte_range;
+        markers.push(preview.text[range.start..range.end].to_owned());
+        let expected = if index == 5 {
+            "acct no.: XXXX1234"
+        } else {
+            text
+        };
+        let protected = preview.text.clone();
+        let parent = pending.expected_head().unwrap();
+        let candidate = pending.candidate_head().unwrap();
+        workspace
+            .activate_saved(&mut pending, parent, candidate)
+            .unwrap();
+        assert_eq!(workspace.restore(&protected).unwrap(), expected);
+    }
+    assert_ne!(markers[0], markers[1]);
+    assert_ne!(markers[0], markers[2]);
+    assert_ne!(markers[0], markers[3]);
+    assert_ne!(markers[1], markers[3]);
+    assert_eq!(markers[0], markers[4]);
+    assert_eq!(markers[2], markers[5]);
+}
+
+#[test]
+fn ending_allowlist_matches_the_observed_suffix() {
+    let text = "account ending in 1234";
+    let config = parse_scan_and_transform_config(&json!({
+        "transform":{"default":{"strategy":"redact"},"entities":["ACCOUNT_NUMBER"],
+            "allow":{"regex":{"ACCOUNT_NUMBER":[{"pattern":"1234"}]}}}
+    }))
+    .unwrap();
+    assert_eq!(scan_and_transform(text, &config).unwrap().text, text);
 }
