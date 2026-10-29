@@ -143,6 +143,7 @@ async function verifyCurrentFieldBackups({launch,close,unlock,status,check,fixtu
 }
 
 async function verifyOperationFieldBackups({launch,close,unlock,status,check,fixture}) {
+  const qualification={histories:0,credentialPaths:0,authenticatedOperationRejections:0};
   for(const name of ["current","legacyUpgraded","conversationPending","conversationResolved"]) {
     const gold=fixture[name];let page=await launch(`backup-operation-source-${name}`);
     const source=await page.evaluate(async({gold,password})=>{
@@ -193,9 +194,10 @@ async function verifyOperationFieldBackups({launch,close,unlock,status,check,fix
       },{gold,password});
       check(proof.retained&&proof.prefix&&proof.recovery&&proof.freshHead&&proof.totals&&proof.coverage&&proof.aliases&&proof.replay==="operation_reused","B2 every operation row/delta, original fields and coverage survive authenticated recovery/restart");
       check(freshWorkspaceKey(backup,source.recoveryCode,proof.envelope),"B2 operation recovery installs a fresh destination workspace key");
+      qualification.credentialPaths++;
       await close();
     }
-    backup.fill(0);
+    backup.fill(0);qualification.histories++;
   }
   const page=await launch("backup-operation-invalid"),baseline=await fingerprint(page);
   for(const vector of fixture.rejections.filter(vector=>vector.encryptedImport)) {
@@ -212,8 +214,10 @@ async function verifyOperationFieldBackups({launch,close,unlock,status,check,fix
     },{gold:fixture.current,vector,password});
     await review(page,Buffer.from(backup));await status(page,vector.code);
     check(await fingerprint(page)===baseline&&await page.locator("#backup-approve").isDisabled()&&await page.locator("#backup-preview").textContent()==="","B2 authenticated malformed ledger/count data imports nothing and grants no approval");
+    qualification.authenticatedOperationRejections++;
   }
   await close();
+  return qualification;
 }
 
 export async function verifyBackups({fresh, prepare, status, close, launch, unlock, restored, control, paused, check, backupFields, operationBackupFields}) {
@@ -570,8 +574,8 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   await unlock(page); await restored(page, output, "restored"); await close();
   console.log("PASS G4 restore approval, cancellation, atomic abort/lost acknowledgment and competing imports");
   await verifyCurrentFieldBackups({launch,close,unlock,status,check,fixture:backupFields});
-  await verifyOperationFieldBackups({launch,close,unlock,status,check,fixture:operationBackupFields});
+  const operationQualification=await verifyOperationFieldBackups({launch,close,unlock,status,check,fixture:operationBackupFields});
   console.log("PASS B2 current snapshot fields, both credentials, fresh keys/head, reserved merge slot and authenticated missing-field rejection");
-  return {profile:"workspace-operation-backup-fields-v1",histories:2,credentialPaths:4,authenticatedOperationRejections:operationBackupFields.rejections.filter(vector=>vector.encryptedImport).length,source:operationBackupFields.source};
+  return {profile:"workspace-operation-backup-fields-v1",...operationQualification,source:operationBackupFields.source};
 
 }
