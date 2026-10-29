@@ -3,6 +3,7 @@ use super::*;
 use ::datafog_core::workspace as w;
 use pyo3::types::PyBytes;
 use serde_json::{Value, json};
+mod operations;
 mod stream;
 
 create_exception!(datafog_core, DataFogWorkspaceError, PyValueError);
@@ -315,6 +316,29 @@ impl WorkspaceInput {
     }
 }
 
+fn workspace_inputs(
+    py: Python<'_>,
+    inputs: Vec<Py<WorkspaceInput>>,
+) -> PyResult<Vec<WorkspaceInput>> {
+    if inputs.len() > w::MAX_INPUTS {
+        return Err(failure(py, w::ErrorCode::ResourceLimit));
+    }
+    let mut bytes = 0usize;
+    for item in &inputs {
+        let item = item.borrow(py);
+        bytes = bytes.saturating_add(item.text.len());
+        for f in &item.findings {
+            bytes = bytes.saturating_add(finding_bytes(f));
+        }
+        material_limit(py, bytes)?;
+    }
+    let inputs: Vec<_> = inputs
+        .iter()
+        .map(|input| input.borrow(py).clone())
+        .collect();
+    Ok(inputs)
+}
+
 #[pyclass(frozen, skip_from_py_object, name = "WorkspaceReviewCorrection")]
 #[derive(Clone)]
 pub(super) struct WorkspaceReviewCorrection {
@@ -562,6 +586,22 @@ impl Workspace {
             .map_err(|e| workspace_error(py, e))
     }
     #[staticmethod]
+    fn create_with_operation(
+        py: Python<'_>,
+        namespace: &[u8],
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
+        let operation = operations::context(py, operation)?;
+        w::Workspace::create_with_operation(id(py, namespace)?, operation)
+            .map(|inner| Self {
+                inner,
+                plans: std::sync::Mutex::new(Vec::new()),
+                streams: std::sync::Mutex::new(stream::Registry::default()),
+                closed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            })
+            .map_err(|error| workspace_error(py, error))
+    }
+    #[staticmethod]
     fn open_bundle(py: Python<'_>, bundle: &[u8]) -> PyResult<Self> {
         w::Workspace::open_bundle(bundle)
             .map(|inner| Self {
@@ -621,22 +661,7 @@ impl Workspace {
         inputs: Vec<Py<WorkspaceInput>>,
         operation_id: &[u8],
     ) -> PyResult<WorkspacePreparedChange> {
-        if inputs.len() > w::MAX_INPUTS {
-            return Err(failure(py, w::ErrorCode::ResourceLimit));
-        }
-        let mut bytes = 0usize;
-        for item in &inputs {
-            let item = item.borrow(py);
-            bytes = bytes.saturating_add(item.text.len());
-            for f in &item.findings {
-                bytes = bytes.saturating_add(finding_bytes(f));
-            }
-            material_limit(py, bytes)?;
-        }
-        let inputs: Vec<_> = inputs
-            .iter()
-            .map(|input| input.borrow(py).clone())
-            .collect();
+        let inputs = workspace_inputs(py, inputs)?;
         let borrowed: Vec<_> = inputs
             .iter()
             .map(|input| w::WorkspaceInput {
@@ -646,6 +671,98 @@ impl Workspace {
             .collect();
         let operation = id(py, operation_id)?;
         self.stage(py, || self.inner.prepare_batch(&borrowed, operation))
+    }
+    fn prepare_with_operation(
+        &self,
+        py: Python<'_>,
+        text: &str,
+        findings: Vec<Py<WorkspaceFinding>>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let operation = operations::context(py, operation)?;
+        let findings = self::findings(py, findings)?;
+        self.stage(py, || {
+            self.inner
+                .prepare_with_operation(text, &findings, operation)
+        })
+    }
+    fn prepare_batch_with_operation(
+        &self,
+        py: Python<'_>,
+        inputs: Vec<Py<WorkspaceInput>>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let operation = operations::context(py, operation)?;
+        let inputs = workspace_inputs(py, inputs)?;
+        let borrowed: Vec<_> = inputs
+            .iter()
+            .map(|input| w::WorkspaceInput {
+                text: &input.text,
+                findings: &input.findings,
+            })
+            .collect();
+        self.stage(py, || {
+            self.inner
+                .prepare_batch_with_operation(&borrowed, operation)
+        })
+    }
+    fn operations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let records = self
+            .inner
+            .operations()
+            .map_err(|error| workspace_error(py, error))?;
+        let values: Vec<_> = records.iter().map(operations::record).collect();
+        json_object(py, &values)
+    }
+    fn operations_page(
+        &self,
+        py: Python<'_>,
+        offset: &Bound<'_, PyAny>,
+        limit: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let offset = operations::page_index(py, offset)?;
+        let limit = operations::page_index(py, limit)?;
+        let page = self
+            .inner
+            .operations_page(offset, limit)
+            .map_err(|error| workspace_error(py, error))?;
+        let records: Vec<_> = page.records.iter().map(operations::record).collect();
+        json_object(
+            py,
+            &json!({"records":records,"total":page.total,"offset":page.offset,"nextOffset":page.next_offset}),
+        )
+    }
+    fn counts(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let counts = self
+            .inner
+            .counts()
+            .map_err(|error| workspace_error(py, error))?;
+        json_object(py, &operations::counts(counts))
+    }
+    fn history_coverage(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let coverage = self
+            .inner
+            .history_coverage()
+            .map_err(|error| workspace_error(py, error))?;
+        json_object(py, &coverage)
+    }
+    fn prepare_outcome(
+        &self,
+        py: Python<'_>,
+        outcome: &Bound<'_, PyAny>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let operation = operations::context(py, operation)?;
+        let outcome = operations::outcome(py, outcome)?;
+        self.stage(py, || self.inner.prepare_outcome(outcome, operation))
+    }
+    fn prepare_recovery_with_operation(
+        &self,
+        py: Python<'_>,
+        operation: &Bound<'_, PyAny>,
+    ) -> PyResult<WorkspacePreparedChange> {
+        let operation = operations::context(py, operation)?;
+        self.stage(py, || self.inner.prepare_recovery_with_operation(operation))
     }
     fn review(
         &self,
