@@ -21,9 +21,24 @@ export async function verifyNativeWorkspace(api, counters) {
   for (const confidence of [NaN,Infinity,-Infinity]) {
     throws(()=>workspace.prepare(text,[{...finding,confidence}],id(53)),"invalid_finding");
   }
+  let accessorCalls=0;
+  const accessorFinding={...finding};
+  Object.defineProperty(accessorFinding,"matchedText",{enumerable:true,get(){accessorCalls++;return "Jane";}});
+  throws(()=>workspace.prepare(text,[accessorFinding],id(53)),"invalid_finding");
+  assert.equal(accessorCalls,0,"finding transport must reject getters without executing them");
+  const accessorEdits={rules:[],choices:[]};
+  Object.defineProperty(accessorEdits,"rules",{enumerable:true,get(){accessorCalls++;return [];}});
+  throws(()=>workspace.preparePolicyChanges(accessorEdits,id(53)),"invalid_policy");
+  assert.equal(accessorCalls,0,"policy transport must reject getters without executing them");
   const change=workspace.prepare(text,[finding],id(53));
   const heads=change.heads(), encoded=change.exportCandidateBundle();
   const output=change.preview().text;
+  const accessorHead={...heads.expectedHead};
+  Object.defineProperty(accessorHead,"revision",{enumerable:true,get(){accessorCalls++;return "0";}});
+  throws(()=>workspace.activateSaved(change,accessorHead,heads.candidateHead),"workspace_conflict");
+  throws(()=>workspace.activateSaved(change,{...heads.expectedHead,revision:0},heads.candidateHead),"workspace_conflict");
+  assert.equal(accessorCalls,0,"head transport must reject getters without executing them");
+  assert.deepEqual(workspace.head(),heads.expectedHead,"malformed activation cannot mutate committed state");
   const copy=encoded.slice();encoded.fill(0);
   assert.deepEqual(change.exportCandidateBundle(),copy,"snapshot export is a copy, not native backing storage");
   const other=api.Workspace.openBundle(workspace.exportBundle());
