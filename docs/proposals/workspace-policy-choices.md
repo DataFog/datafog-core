@@ -55,7 +55,9 @@ workspace.activateSaved(change, heads.expectedHead, heads.candidateHead);
 ```
 
 `rule` is `hide`, `keep` or `null` (reset). `disposition` is `keep`,
-`not_sensitive` or `null` (remove). `policy()` returns current settings and saved
+`not_sensitive` or `null` (remove). Both action fields are required, including in
+raw WASM JSON: omission is malformed input, not a removal request.
+`policy()` returns current settings and saved
 snapshot version. Policy plans have no text previews or handoff permission;
 `policyPreview()` contains local before/after edits. Exact no-op edits preserve
 head, bytes and version. Candidate exports are immutable and retryable after a
@@ -110,8 +112,12 @@ Future operation records and their capacity/compression remain separate work.
 Existing version-1 vaults open and re-export byte for byte. Reads, no-op
 preparation, exact no-op settings edits and discarded candidates do not upgrade.
 A real saved mutation or recovery stages version 2 while preserving aliases and
-counters. New workspaces bootstrap version 2. The outer encrypted vault and
-backup formats are unchanged and carry the complete inner snapshot.
+counters. New workspaces bootstrap version 2. This change preserves the existing
+encrypted-vault envelope and stronger version-2 backup envelope. New backup
+exports require password reauthentication and contain only the 256 MiB/t3
+password wrapper; password and recovery-code imports retain all settings. A
+restored vault keeps that stronger profile. Legacy version-1 backup imports
+remain supported, independently of the inner snapshot's version.
 
 **Before approving a v1→v2 save, tell the person that beta.1 cannot open the
 upgraded vault.** Existing backup files remain unchanged. The reference host

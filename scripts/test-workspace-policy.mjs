@@ -37,6 +37,7 @@ export async function verifyPolicyHost({fresh,status,close,launch,unlock,restore
   await mark(page,status,"Jane");
   check(await page.locator("#format-upgrade").isHidden(),"D7 legacy alias/no-op preparation needs no upgrade warning");
   await page.locator("#cancel").click();await status(page,"cancelled");
+  await page.locator("#backup-export-password").fill(password);
   const legacyDownload=page.waitForEvent("download");await page.locator("#backup-export").click();
   const legacyBackup=await readFile(await (await legacyDownload).path());await status(page,"backup_exported");
   await stage(page,status,"Jane");
@@ -82,6 +83,7 @@ export async function verifyPolicyHost({fresh,status,close,launch,unlock,restore
   await page.locator("#cancel").click();await status(page,"cancelled");
   await stage(page,status,"", "keep","rule","PRODUCT_CODE");
   await page.locator("#approve").click();await status(page,"saved");
+  await page.locator("#backup-export-password").fill(password);
   const downloading=page.waitForEvent("download");await page.locator("#backup-export").click();
   const download=await downloading;await status(page,"backup_exported");
   const backup=await readFile(await download.path());

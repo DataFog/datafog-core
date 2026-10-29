@@ -800,6 +800,21 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    const { NativeWorkspace } = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
+    const native = NativeWorkspace.create(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
+    try {
+      const before = native.export_bundle();
+      for (const edits of [
+        {rules: [{entityType: "PRODUCT_CODE"}], choices: []},
+        {rules: [], choices: [{entityType: "PERSON", value: "May"}]},
+      ]) {
+        let code;
+        try { native.prepare_policy_changes(JSON.stringify(edits), new Uint8Array(16).fill(3)); }
+        catch (error) { code = JSON.parse(String(error)).code; }
+        if (code !== "invalid_policy") throw new Error("Raw policy input requires an explicit action");
+      }
+      if (JSON.stringify(native.export_bundle()) !== JSON.stringify(before)) throw new Error("Malformed policy input changed workspace");
+    } finally { native.close(); native.free(); }
   });
   console.log("Installed @datafog/wasm package matches fixtures, findings and workspace contracts.");
   if (modelRequests.length) throw new Error("Rule-only imports/scans loaded optional model assets: " + modelRequests.join(", "));

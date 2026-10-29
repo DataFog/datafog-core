@@ -1,7 +1,7 @@
 # Committed-value recall — proposed 0.5.0-beta.2 contract
 
 This is the implementation review for [D5 / #141](https://github.com/DataFog/datafog-core/issues/141),
-stacked on [D4 / #156](https://github.com/DataFog/datafog-core/pull/156).
+built on the merged [D4 / #156](https://github.com/DataFog/datafog-core/pull/156).
 **This API is unreleased and requires review.** The method is implemented in this
 candidate's Rust/WASM exports; it is absent from the published `0.5.0-beta.1`
 package. [#158](https://github.com/DataFog/datafog-core/pull/158) is a wider type-only
