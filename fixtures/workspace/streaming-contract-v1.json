@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "profile": "workspace-streaming-v1",
+  "status": "draft Rust/Core and WASM runtime contract; published packages have no streaming exports",
+  "seed": {
+    "namespaceByte": 1,
+    "operationByte": 2,
+    "prepareByte": 3,
+    "entityType": "PERSON",
+    "value": "Jane"
+  },
+  "cases": [
+    {
+      "id": "live-marker-and-late-failure-reset",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "Hello ",
+            "deliveredText": "Hello ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "Hello "
+        },
+        {
+          "op": "feed",
+          "expect": {
+            "text": "Jane",
+            "deliveredText": "Hello Jane",
+            "restoredMarkers": 1,
+            "complete": false
+          },
+          "text": "{marker}"
+        },
+        {
+          "op": "feed",
+          "expect": {
+            "text": " ",
+            "deliveredText": "Hello Jane ",
+            "restoredMarkers": 1,
+            "complete": false
+          },
+          "text": " "
+        },
+        {
+          "op": "feed",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "Hello Jane ",
+            "restoredMarkers": 1,
+            "complete": false,
+            "issueKind": "damaged"
+          },
+          "text": "discarded [[PERSON_BAD]]"
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "inactive_stream",
+            "deliveredText": "Hello Jane ",
+            "restoredMarkers": 1,
+            "complete": false
+          }
+        },
+        {
+          "op": "reset"
+        },
+        {
+          "op": "feed",
+          "expect": {
+            "text": "fresh.",
+            "deliveredText": "fresh.",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "fresh."
+        },
+        {
+          "op": "finalize",
+          "expect": {
+            "text": "",
+            "deliveredText": "fresh.",
+            "restoredMarkers": 0,
+            "complete": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "eof-prefix",
+      "encoding": "utf8",
+      "strictR2": "safe [[PERSON_",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "safe ",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "safe "
+        },
+        {
+          "op": "feed",
+          "expect": {
+            "text": "",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "[[PERSON_"
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "damaged"
+          }
+        }
+      ]
+    },
+    {
+      "id": "oversized-prefix",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "safe ",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "safe "
+        },
+        {
+          "op": "feed",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "damaged"
+          },
+          "text": "{oversizedPrefix}"
+        }
+      ]
+    },
+    {
+      "id": "bare-code-at-eof",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "{bareMarker}"
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "unbracketed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "unknown-marker",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "unknown"
+          },
+          "text": "[[PERSON_ZZZZZZ]]"
+        }
+      ]
+    },
+    {
+      "id": "utf8-scalar-split",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "bytes": [
+            240
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "bytes": [
+            159,
+            145
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "bytes": [
+            139
+          ],
+          "expect": {
+            "text": "👋",
+            "deliveredText": "👋",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "finalize",
+          "expect": {
+            "text": "",
+            "deliveredText": "👋",
+            "restoredMarkers": 0,
+            "complete": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "invalid-utf8",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "bytes": [
+            240
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "bytes": [
+            40
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "invalid_encoding",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "utf16-surrogate-split",
+      "encoding": "utf16",
+      "steps": [
+        {
+          "op": "feedUtf16",
+          "units": [
+            55357
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feedUtf16",
+          "units": [
+            56395
+          ],
+          "expect": {
+            "text": "👋",
+            "deliveredText": "👋",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "finalize",
+          "expect": {
+            "text": "",
+            "deliveredText": "👋",
+            "restoredMarkers": 0,
+            "complete": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "utf16-eof-high-surrogate",
+      "encoding": "utf16",
+      "steps": [
+        {
+          "op": "feedUtf16",
+          "units": [
+            55357
+          ],
+          "expect": {
+            "text": "",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "invalid_encoding",
+            "deliveredText": "",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cancel-after-prefix",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "safe ",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "safe "
+        },
+        {
+          "op": "feed",
+          "expect": {
+            "text": "",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "[[P"
+        },
+        {
+          "op": "closeStream"
+        },
+        {
+          "op": "feed",
+          "expectError": {
+            "code": "inactive_stream",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "tail"
+        }
+      ]
+    },
+    {
+      "id": "changed-head",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "safe ",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "safe "
+        },
+        {
+          "op": "advanceWorkspace"
+        },
+        {
+          "op": "feed",
+          "expectError": {
+            "code": "workspace_conflict",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "tail"
+        }
+      ]
+    },
+    {
+      "id": "closed-workspace",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "expect": {
+            "text": "safe ",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          },
+          "text": "safe "
+        },
+        {
+          "op": "closeWorkspace"
+        },
+        {
+          "op": "finalize",
+          "expectError": {
+            "code": "closed_workspace",
+            "deliveredText": "safe ",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "unicode-late-damaged-original-ranges",
+      "encoding": "utf8",
+      "steps": [
+        {
+          "op": "feed",
+          "text": "👋 é ",
+          "expect": {
+            "text": "👋 é ",
+            "deliveredText": "👋 é ",
+            "restoredMarkers": 0,
+            "complete": false
+          }
+        },
+        {
+          "op": "feed",
+          "text": "[[PERSON_BAD]]",
+          "expectError": {
+            "code": "invalid_marker",
+            "deliveredText": "👋 é ",
+            "restoredMarkers": 0,
+            "complete": false,
+            "issueKind": "damaged",
+            "markerIssues": [
+              {
+                "kind": "damaged",
+                "byteRange": {
+                  "start": 9,
+                  "end": 23
+                },
+                "codepointRange": {
+                  "start": 5,
+                  "end": 19
+                },
+                "utf16Range": {
+                  "start": 6,
+                  "end": 20
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
