@@ -26,12 +26,14 @@ DataFog Core detects PII and credentials using rule-based detectors and optional
 | PRIVATE_KEY | Rule | PEM-encoded private keys |
 | CREDENTIAL_URI | Rule | URIs with embedded credentials |
 
-### Labeled US identifiers (always enabled, require text label)
+### Labeled entities (always enabled, require text label)
 
 | Entity | Detector | Notes |
 |--------|----------|-------|
 | US_ROUTING_NUMBER | Rule | ABA routing numbers with preceding label |
 | NPI | Rule | National Provider Identifier with preceding label |
+| ACCOUNT_NUMBER | Rule | Bounded numeric formats after account labels |
+| STREET_ADDRESS | Rule | English street lines after address labels |
 
 ### German locale entities (require `locale: "de"`)
 
@@ -52,15 +54,15 @@ DataFog Core detects PII and credentials using rule-based detectors and optional
 | UUID | `detect_uuid: true` | UUID v1-v5 patterns |
 | PERSON | Structured scan only | Name-field discovery in JSON |
 
-### Model-only entities (require ModelSession)
+### Model-extended entities (require ModelSession for broader coverage)
 
 | Entity | Backend | Notes |
 |--------|---------|-------|
-| FIRST_NAME | DataFog | Model inference |
-| LAST_NAME | DataFog | Model inference |
-| STREET_ADDRESS | DataFog/GLiNER2 | Model inference |
-| CUSTOMER_ID | DataFog | Model inference |
-| ACCOUNT_NUMBER | DataFog | Model inference |
+| FIRST_NAME | DataFog | Model inference only |
+| LAST_NAME | DataFog | Model inference only |
+| STREET_ADDRESS | DataFog/GLiNER2 | Model extends labelled rule coverage |
+| CUSTOMER_ID | DataFog | Model inference only |
+| ACCOUNT_NUMBER | DataFog | Model extends labelled rule coverage |
 
 ## How to get to it (user POV)
 
@@ -162,7 +164,9 @@ The `format` option affects email detection boundaries:
 
 ### Labeled identifiers
 
-US_ROUTING_NUMBER and NPI require a text label before the number. The label provides context that the number is an identifier rather than random digits.
+US_ROUTING_NUMBER, NPI, ACCOUNT_NUMBER, and STREET_ADDRESS require a text label before the value. The label provides context that the value is an identifier rather than random text.
+
+ACCOUNT_NUMBER and STREET_ADDRESS also have model coverage for cases without labels. The rule-based detection handles bounded formats with explicit labels; models handle broader unlabelled coverage when a ModelSession is configured.
 
 ### German locale aliases
 
