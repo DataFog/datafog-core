@@ -73,7 +73,7 @@ function hideRecovery() { element("recovery-created").value = ""; element("recov
 function clearViews() {
   clearDraft(); clearImportPreview(); hideRecovery();
   element("sink").textContent = ""; element("restore-input").value = ""; element("restored").textContent = "";
-  for (const id of ["password", "backup-credential", "backup-file"]) element(id).value = "";
+  for (const id of ["password", "backup-export-password", "backup-credential", "backup-file"]) element(id).value = "";
 }
 async function perform(task) {
   const g = generation;
@@ -82,7 +82,7 @@ async function perform(task) {
     if (g === generation) {
       status(safeCode(error));
       showMarkerIssues(error);
-      const guidance = error.code === "invalid_marker" ? " Edit the highlighted source markers or use the exact pseudonym from this unlocked workspace before retrying." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
+      const guidance = error.code === "invalid_marker" ? " Edit the highlighted source markers or use the exact pseudonym from this unlocked workspace before retrying." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "kdf_unavailable" ? " Password derivation could not run with the required resources. No cheaper profile was used; retry on a device with sufficient memory." : error.code === "invalid_credentials" ? " Enter the correct credential. Backup export requires the current vault password, even after recovery-code unlock; password reset is not available here." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
@@ -90,7 +90,7 @@ async function perform(task) {
 }
 function renderBusy() {
   if (importPlan && importPlan.generation !== generation) clearImportPreview();
-  for (const id of ["password", "unlock-method", "create", "unlock", "mark", "prepare", "restore", "add-input", "backup-export", "backup-file", "backup-method", "backup-credential", "backup-review"]) element(id).disabled = operations > 0;
+  for (const id of ["password", "unlock-method", "create", "unlock", "mark", "prepare", "restore", "add-input", "backup-export", "backup-export-password", "backup-file", "backup-method", "backup-credential", "backup-review"]) element(id).disabled = operations > 0;
   element("approve").disabled = operations > 0 || plan === undefined;
   element("backup-approve").disabled = operations > 0 || importPlan === undefined;
 }
@@ -117,16 +117,20 @@ for (const name of ["create", "unlock"]) {
   });
 }
 element("recovery-dismiss").addEventListener("click", hideRecovery);
-element("backup-export").addEventListener("click", () => perform(async g => {
-  const bytes = await broker.call("exportBackup");
-  try {
-    if (g !== generation) return;
-    const url = URL.createObjectURL(new Blob([bytes], {type: "application/octet-stream"}));
-    try { const link = document.createElement("a"); link.href = url; link.download = "datafog-workspace.dfbackup"; link.click(); }
-    finally { setTimeout(() => URL.revokeObjectURL(url), 0); }
-    status("backup_exported");
-  } finally { bytes.fill(0); }
-}));
+element("backup-export").addEventListener("click", () => {
+  const password = element("backup-export-password").value;
+  element("backup-export-password").value = "";
+  return perform(async g => {
+    const bytes = await broker.call("exportBackup", [password]);
+    try {
+      if (g !== generation) return;
+      const url = URL.createObjectURL(new Blob([bytes], {type: "application/octet-stream"}));
+      try { const link = document.createElement("a"); link.href = url; link.download = "datafog-workspace.dfbackup"; link.click(); }
+      finally { setTimeout(() => URL.revokeObjectURL(url), 0); }
+      status("backup_exported");
+    } finally { bytes.fill(0); }
+  });
+});
 for (const [id, event] of [["backup-file", "change"], ["backup-method", "change"], ["backup-credential", "input"]]) {
   element(id).addEventListener(event, () => {
     const staged = importPlan !== undefined; clearImportPreview();

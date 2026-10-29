@@ -249,11 +249,13 @@ function workspaceFindingsJson(findings) {
     const item = Object.getOwnPropertyDescriptor(findings, String(i));
     if (!item?.enumerable || !("value" in item)) throw workspaceFailure("invalid_finding");
     const value = item.value;
-    const f = object(value, ["entityType", "matchedText", "range", "confidence", "detectorName", "detectorVersion"]);
+    const f = object(value, ["entityType", "matchedText", "range", "confidence", "detectorName", "detectorVersion", "source", "needsReview"]);
     const range = object(f.range, ["unit", "start", "end"]);
     budget += 256; // A conservative bound for keys, punctuation and scalar numbers.
     string(f.entityType); string(f.matchedText); string(range.unit);
     for (const field of ["detectorName", "detectorVersion"]) if (f[field] !== undefined && f[field] !== null) string(f[field]);
+    if (f.source !== undefined) string(f.source);
+    if (f.needsReview !== undefined && typeof f.needsReview !== "boolean") throw workspaceFailure("invalid_finding");
     if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && typeof f.confidence !== "number")) throw workspaceFailure("invalid_finding");
     if (budget > maximum) throw workspaceFailure("resource_limit");
   }

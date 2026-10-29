@@ -75,6 +75,14 @@ struct FindingInput {
     confidence: Option<f32>,
     detector_name: Option<String>,
     detector_version: Option<String>,
+    #[serde(default)]
+    source: workspace::FindingSource,
+    #[serde(default = "default_needs_review")]
+    needs_review: bool,
+}
+
+fn default_needs_review() -> bool {
+    workspace::DEFAULT_NEEDS_REVIEW
 }
 
 #[derive(Deserialize)]
@@ -107,6 +115,8 @@ fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, Wo
                 confidence: f.confidence,
                 detector_name: f.detector_name,
                 detector_version: f.detector_version,
+                source: f.source,
+                needs_review: f.needs_review,
             })
         })
         .collect()
@@ -118,6 +128,8 @@ fn preview_value(preview: &workspace::Preview) -> serde_json::Value {
         .iter()
         .map(|t| {
             json!({
+                "source": t.source.as_str(),
+                "needsReview": t.needs_review,
                 "sourceByteRange": super::TextRange::from(t.source_byte_range),
                 "sourceCodepointRange": super::TextRange::from(t.source_codepoint_range),
                 "sourceUtf16Range": super::TextRange::from(t.source_utf16_range),

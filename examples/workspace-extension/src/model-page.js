@@ -54,6 +54,7 @@ function workspaceFindings(findings) {
     entityType: finding.entityType, matchedText: finding.matchedText,
     range: {unit: "utf8_bytes", ...finding.byteRange},
     detectorName: finding.detectorName, detectorVersion: finding.detectorVersion,
+    source: "scanner", needsReview: true,
     ...(finding.confidence === undefined ? {} : {confidence: finding.confidence}),
   }));
 }

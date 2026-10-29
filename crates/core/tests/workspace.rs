@@ -1,7 +1,7 @@
 use datafog_core::{
     TextRange,
     workspace::{
-        ErrorCode, MarkerIssueKind, Workspace, WorkspaceFinding, WorkspaceInput,
+        ErrorCode, FindingSource, MarkerIssueKind, Workspace, WorkspaceFinding, WorkspaceInput,
         byte_range_from_utf16,
     },
 };
@@ -42,6 +42,134 @@ fn saved_person(namespace: [u8; 16]) -> (Workspace, String) {
     let mut workspace = Workspace::create(namespace, [2; 16]).unwrap();
     let marker = commit(&mut workspace, "PERSON", "Jane", [3; 16]);
     (workspace, marker)
+}
+
+#[test]
+fn review_metadata_tracks_each_batch_input_without_entering_the_snapshot() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let original = workspace.export_bundle().unwrap();
+    let text = "👋 e\u{301} Jane";
+    let mut finding = WorkspaceFinding::new("PERSON", "Jane", TextRange { start: 9, end: 13 });
+    let baseline = workspace
+        .prepare(text, &[finding.clone()], [3; 16])
+        .unwrap();
+    let defaults = &baseline.preview().unwrap().transformations[0];
+    assert_eq!(defaults.source, FindingSource::Scanner);
+    assert!(defaults.needs_review);
+    finding.source = FindingSource::User;
+    finding.needs_review = false;
+    let explicit = workspace
+        .prepare(text, &[finding.clone()], [3; 16])
+        .unwrap();
+    assert_eq!(
+        baseline.export_candidate_bundle().unwrap(),
+        explicit.export_candidate_bundle().unwrap()
+    );
+    assert_eq!(workspace.export_bundle().unwrap(), original);
+    let mut recalled = finding.clone();
+    recalled.source = FindingSource::Recall;
+    recalled.needs_review = true;
+    let first = [finding];
+    let second = [recalled];
+    let batch = workspace
+        .prepare_batch(
+            &[
+                WorkspaceInput {
+                    text,
+                    findings: &first,
+                },
+                WorkspaceInput {
+                    text,
+                    findings: &second,
+                },
+            ],
+            [4; 16],
+        )
+        .unwrap();
+    let previews = batch.previews().unwrap();
+    for (preview, source, review) in [
+        (&previews[0], FindingSource::User, false),
+        (&previews[1], FindingSource::Recall, true),
+    ] {
+        let span = &preview.transformations[0];
+        assert_eq!((span.source, span.needs_review), (source, review));
+        assert_eq!(span.source_byte_range, TextRange { start: 9, end: 13 });
+        assert_eq!(span.source_codepoint_range, TextRange { start: 5, end: 9 });
+        assert_eq!(span.source_utf16_range, TextRange { start: 6, end: 10 });
+    }
+}
+
+#[test]
+fn duplicate_review_metadata_follows_the_selected_finding_and_stable_ties() {
+    let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let mut scanner = WorkspaceFinding::new("PERSON", "Jane", TextRange { start: 0, end: 4 });
+    scanner.confidence = Some(0.1);
+    let mut selected = scanner.clone();
+    selected.source = FindingSource::User;
+    selected.needs_review = false;
+    selected.confidence = Some(0.9);
+    for findings in [
+        [scanner.clone(), selected.clone()],
+        [selected.clone(), scanner.clone()],
+    ] {
+        let pending = workspace.prepare("Jane", &findings, [3; 16]).unwrap();
+        let preview = pending.preview().unwrap();
+        assert_eq!(preview.transformations.len(), 1);
+        assert_eq!(preview.transformations[0].source, FindingSource::User);
+        assert!(!preview.transformations[0].needs_review);
+    }
+    scanner.confidence = Some(-0.0);
+    selected.confidence = Some(0.0);
+    let pending = workspace
+        .prepare("Jane", &[scanner.clone(), selected.clone()], [3; 16])
+        .unwrap();
+    assert_eq!(
+        pending.preview().unwrap().transformations[0].source,
+        FindingSource::User
+    );
+    scanner.confidence = selected.confidence;
+    for (findings, source) in [
+        ([scanner.clone(), selected.clone()], FindingSource::Scanner),
+        ([selected, scanner], FindingSource::User),
+    ] {
+        let pending = workspace.prepare("Jane", &findings, [3; 16]).unwrap();
+        assert_eq!(pending.preview().unwrap().transformations[0].source, source);
+    }
+}
+
+#[test]
+fn review_flags_do_not_change_overlap_selection_or_saved_activation() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let outer = WorkspaceFinding::new("PERSON", "Jane Smith", TextRange { start: 0, end: 10 });
+    let mut inner = WorkspaceFinding::new("CUSTOM", "Jane", TextRange { start: 0, end: 4 });
+    inner.source = FindingSource::User;
+    inner.needs_review = false;
+    let mut pending = workspace
+        .prepare("Jane Smith", &[inner, outer], [3; 16])
+        .unwrap();
+    let preview = pending.preview().unwrap();
+    assert_eq!(preview.transformations.len(), 1);
+    assert_eq!(preview.transformations[0].source, FindingSource::Scanner);
+    assert!(preview.transformations[0].needs_review);
+    assert!(is_marker(&preview.text, "PERSON"));
+    let marker = preview.text.clone();
+    assert_eq!(
+        workspace.restore(&marker).err().unwrap().code,
+        ErrorCode::InvalidMarker
+    );
+    let saved = pending.export_candidate_bundle().unwrap().to_vec();
+    let expected = pending.expected_head().unwrap();
+    let candidate = pending.candidate_head().unwrap();
+    workspace
+        .activate_saved(&mut pending, expected, candidate)
+        .unwrap();
+    assert_eq!(
+        Workspace::open_bundle(&saved)
+            .unwrap()
+            .restore(&marker)
+            .unwrap(),
+        "Jane Smith"
+    );
 }
 
 #[test]

@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- New browser workspace backups require password reauthentication and use
+  Argon2id with 256 MiB and three passes, replacing the older password wrapper.
+  Legacy backups remain importable; restored new backups retain the stronger
+  profile for password unlock.
+
 - Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults
@@ -17,6 +22,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - `cargo dfv doctor` reads version requirements from pin files and fails loudly when a pin file is missing; it no longer uses hardcoded version constants
 
 ### Added
+
+- Workspace findings and preview transformations carry scanner/recall/user source
+  and review metadata in Rust and WASM. Existing callers default to scanner and
+  review required; these display flags never bypass approval or persistence.
 
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
