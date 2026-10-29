@@ -76,6 +76,7 @@ cargo dfv parity                   # Verify fixture offsets across coordinate sy
 cargo dfv parity --dry-run         # Show commands without executing
 cargo dfv parity --live --sample 100  # Run actual scans, sample 100 fixtures
 cargo dfv parity --live --full     # Run all fixtures (nightly/workflow_dispatch)
+cargo dfv parity --workspace       # Workspace contract matrix (Rust/Python/Node/WASM)
 ```
 
 ### When --models is required
