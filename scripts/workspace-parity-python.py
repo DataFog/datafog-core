@@ -37,6 +37,7 @@ def run(fixture):
     if not all(hasattr(api, name) for name in ("Workspace", "WorkspaceFinding", "WorkspaceInput", "WorkspaceReviewInput", "WorkspaceReviewCorrection", "DataFogWorkspaceError")):
         raise ValueError("native workspace API unavailable")
     aliases={"openBundle":"open_bundle","exportBundle":"export_bundle","prepareBatch":"prepare_batch","prepareReview":"prepare_review","preparePolicyChanges":"prepare_policy_changes","prepareRecovery":"prepare_recovery","restoreReport":"restore_report","activateSaved":"activate_saved","snapshotFormat":"snapshot_format","policyPreview":"policy_preview","exportCandidateBundle":"export_candidate_bundle"}
+    aliases.update({"createWithOperation":"create_with_operation","prepareWithOperation":"prepare_with_operation","prepareBatchWithOperation":"prepare_batch_with_operation","prepareRecoveryWithOperation":"prepare_recovery_with_operation","prepareOutcome":"prepare_outcome","operationsPage":"operations_page","historyCoverage":"history_coverage"})
     for method in fixture["requiredMethods"]:
         if method=="plan.heads":
             if not all(hasattr(api.WorkspacePreparedChange,name) for name in ("expected_head","candidate_head")):
@@ -47,7 +48,7 @@ def run(fixture):
             if not hasattr(owner,aliases.get(name,name)):
                 raise ValueError("mandatory native workspace method unavailable")
     output = []
-    supported = {"create", "openBundle", "head", "export", "close", "inspectPlan", "discard", "activateSaved", "recall", "review", "restore", "restoreReport", "restorePlanText", "restoreReportPlanText", "prepare", "prepareBatch", "prepareReview", "preparePolicyChanges", "prepareRecovery"}
+    supported = {"createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create", "openBundle", "head", "export", "close", "inspectPlan", "discard", "activateSaved", "recall", "review", "restore", "restoreReport", "restorePlanText", "restoreReportPlanText", "prepare", "prepareBatch", "prepareReview", "preparePolicyChanges", "prepareRecovery"}
     for scenario in fixture["cases"]:
         workspaces, plans, plan_texts, bundles, reviews = {}, {}, {}, {}, {}
         steps = []
@@ -85,8 +86,10 @@ def run(fixture):
                 raise ValueError("unsupported mandatory fixture command")
             try:
                 operation = bytes([command["operationByte"]]) * 16 if "operationByte" in command else None
-                if call == "create":
-                    workspace = api.Workspace.create(bytes([command["namespaceByte"]]) * 16, operation)
+                context={"id":operation,"occurredAtMs":command.get("occurredAtMs")}
+                if call in ("create","createWithOperation"):
+                    namespace=bytes([command["namespaceByte"]])*16
+                    workspace = api.Workspace.create(namespace,operation) if call=="create" else api.Workspace.create_with_operation(namespace,context)
                     workspaces[command["workspace"]] = workspace
                     value = snapshot(workspace)
                 elif call == "openBundle":
@@ -95,6 +98,10 @@ def run(fixture):
                     value = snapshot(workspace)
                 elif call == "head":
                     value = head(workspaces[command["workspace"]].head())
+                elif call in ("operations","counts","historyCoverage"):
+                    value=getattr(workspaces[command["workspace"]],aliases.get(call,call))()
+                elif call=="operationsPage":
+                    value=workspaces[command["workspace"]].operations_page(command["offset"],command["limit"])
                 elif call == "export":
                     workspace = workspaces[command["workspace"]]
                     bundles[command["bundle"]] = workspace.export_bundle()
@@ -125,6 +132,14 @@ def run(fixture):
                     workspace = workspaces[command["workspace"]]
                     if call == "prepare":
                         plan = workspace.prepare(text_value(command), [finding(item) for item in command["findings"]], operation)
+                    elif call=="prepareWithOperation":
+                        plan=workspace.prepare_with_operation(text_value(command),[finding(item) for item in command["findings"]],context)
+                    elif call=="prepareBatchWithOperation":
+                        plan=workspace.prepare_batch_with_operation([api.WorkspaceInput(item["text"],[finding(value) for value in item["findings"]]) for item in command["inputs"]],context)
+                    elif call=="prepareRecoveryWithOperation":
+                        plan=workspace.prepare_recovery_with_operation(context)
+                    elif call=="prepareOutcome":
+                        plan=workspace.prepare_outcome(command["outcome"],context)
                     elif call == "prepareBatch":
                         plan = workspace.prepare_batch([api.WorkspaceInput(item["text"], [finding(item) for item in item["findings"]]) for item in command["inputs"]], operation)
                     elif call == "prepareReview":
