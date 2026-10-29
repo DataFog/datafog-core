@@ -75,7 +75,7 @@ async function run(fixture,oracle){
    const store=new EncryptedWorkspaceStore(database,owner=>owner.tenantId===scope.tenantId&&owner.workspaceId===scope.workspaceId?key:undefined);
    const initial=name==="existing-chat-pause"?"twoConfirmed":"seed",bootstrap=Uint8Array.from(Buffer.from(oracle.states[initial].bundleHex,"hex"));store.initialize(scope,bootstrap);bootstrap.fill(0);
    const result={id:name,before:state(store,scope),steps:[]},record=(call,value)=>result.steps.push({call,value});
-   let w,plan,confirmation,foreign;
+   let w,plan,confirmation,foreign,foreignKey;
    try{
     w=open(store,scope);
     if(name.startsWith("process-")||name.startsWith("crash-")){
@@ -110,7 +110,7 @@ async function run(fixture,oracle){
       if(["callback-mismatch","context-and-tenant-isolation"].includes(name)){
        let changes=[{preparationId:[...id(99)]},{logicalId:[...id(11)]},{siteId:"wrong_site"}];let foreignBefore;
        if(name==="context-and-tenant-isolation"){
-        const foreignScope={...scope,tenantId:"synthetic_foreign"};foreign=new EncryptedWorkspaceStore(database,owner=>owner.tenantId===foreignScope.tenantId&&owner.workspaceId===foreignScope.workspaceId?key:undefined);const bytes=Uint8Array.from(Buffer.from(oracle.states.seed.bundleHex,"hex"));foreign.initialize(foreignScope,bytes);bytes.fill(0);foreignBefore={scope:foreignScope,digest:rowDigest(database,foreignScope)};
+        const foreignScope={...scope,tenantId:"synthetic_foreign"};foreignKey=randomBytes(32);foreign=new EncryptedWorkspaceStore(database,owner=>owner.tenantId===foreignScope.tenantId&&owner.workspaceId===foreignScope.workspaceId?foreignKey:undefined);const bytes=Uint8Array.from(Buffer.from(oracle.states.seed.bundleHex,"hex"));foreign.initialize(foreignScope,bytes);bytes.fill(0);foreignBefore={scope:foreignScope,digest:rowDigest(database,foreignScope)};
         changes=[{scope:{...scope,tenantId:"synthetic_foreign"}},{scope:{...scope,workspaceId:"synthetic_foreign"}}];
        }
        const evidence=dispatch(store,scope,fixture,intent,output,kind,changes);for(const callback of evidence.callbacks)assert(!association(evidence.attempt,evidence.siteVerification,callback));
@@ -139,7 +139,7 @@ async function run(fixture,oracle){
      }
     }
     result.after=state(store,scope);result.trace={...trace};cases.push(result);
-   }finally{w?.close();foreign?.close();store.close();key.fill(0);}
+   }finally{w?.close();foreign?.close();foreignKey?.fill(0);store.close();key.fill(0);}
   }
   return {schemaVersion:1,profile:fixture.profile,sdk:"node",cases};
  }finally{await Promise.all(children.map(child=>child.exitCode!==null||child.signalCode!==null?undefined:new Promise(resolve=>{child.once("exit",resolve);child.kill("SIGKILL");})));await rm(directory,{recursive:true,force:true});}

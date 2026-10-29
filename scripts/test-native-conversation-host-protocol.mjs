@@ -11,6 +11,7 @@ const step=(v,id,call)=>scenario(v,id).steps.find(value=>value.call===call).valu
 for(const [sdk,actual] of [["python",python],["node",node]]){
  test(`${sdk}: complete actual profile is accepted`,()=>validateConversationHostOutput(actual,fixture,oracle,sdk));
  const reject=(name,change)=>test(`${sdk}: ${name}`,()=>{const changed=structuredClone(actual);change(changed);assert.throws(()=>validateConversationHostOutput(changed,fixture,oracle,sdk));});
+ reject("an unclean worker exit cannot be ignored",v=>{step(v,"process-pending-race","race")[0].processExit.code=1;});
  reject("a missing native scenario fails",v=>{v.cases.pop();});
  reject("unscoped applicability cannot replace native SDK identity",v=>{v.sdk="wasm";});
  reject("missing actual callback cannot confer confirmation",v=>{delete step(v,"observed-success","transport-observed").received;});

@@ -14,7 +14,8 @@ function fixtureCheck(fixture){
  same(fixture.sdks,["python","node"]);same(fixture.cases?.map(value=>value.id),requiredCases);
 }
 export function conversationHostOracle(fixture,result){
- fixtureCheck(fixture);const states={},plans={};const commands=fixture.oracle.cases[0].commands,steps=result.cases?.[0]?.steps;
+ fixtureCheck(fixture);if(result?.schemaVersion!==1||result.profile!==fixture.oracle.profile||result.cases?.length!==1||result.cases[0].id!==fixture.oracle.cases[0].id)bad();
+ const states={},plans={};const commands=fixture.oracle.cases[0].commands,steps=result.cases?.[0]?.steps;
  if(fixture.oracle.profile!=="workspace-conversations-v1"||!fixture.oracle.requiredMethods.includes("plan.sendIntents")||commands.length!==steps?.length)bad();
  commands.forEach((command,index)=>{
   const entry=steps[index];if(entry.ok!==true||entry.call!==command.call)bad();
