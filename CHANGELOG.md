@@ -121,6 +121,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Private snapshot encoding wipes replaced native buffers and failed serialized
+  prefixes. Successful bundle exports retain their existing caller-owned bytes.
+
 - Native SSN findings retain their type when a semantic PERSON finding covers
   exactly the same span, after entity selection and allowlists are applied.
 

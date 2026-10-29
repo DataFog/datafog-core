@@ -2,28 +2,22 @@
 use super::*;
 use minicbor::{Decoder, Encoder};
 
-struct BoundedWriter(Vec<u8>);
+struct BoundedWriter(Zeroizing<Vec<u8>>);
 impl minicbor::encode::Write for BoundedWriter {
     type Error = ();
     fn write_all(&mut self, bytes: &[u8]) -> std::result::Result<(), ()> {
-        if self
-            .0
-            .len()
-            .checked_add(bytes.len())
-            .is_none_or(|n| n > MAX_BUNDLE_BYTES)
-        {
-            return Err(());
-        }
-        self.0.try_reserve(bytes.len()).map_err(|_| ())?;
-        self.0.extend_from_slice(bytes);
-        Ok(())
+        // The same bounded growth used by response adapters wipes replaced
+        // backings; ownership also clears partially encoded state on failure.
+        private_bytes::append(&mut self.0, bytes, MAX_BUNDLE_BYTES).map_err(|_| ())
     }
 }
 
 pub(super) fn encode(state: &State) -> Result<Vec<u8>> {
-    let mut encoder = Encoder::new(BoundedWriter(Vec::new()));
+    let mut encoder = Encoder::new(BoundedWriter(Zeroizing::new(Vec::new())));
     encode_into(state, &mut encoder).map_err(|_| error(ErrorCode::ResourceLimit))?;
-    Ok(encoder.into_writer().0)
+    let mut writer = encoder.into_writer();
+    // Successful exports deliberately transfer their plaintext bytes to the caller.
+    Ok(std::mem::take(&mut *writer.0))
 }
 
 fn encode_into(
