@@ -578,7 +578,12 @@ fn partial_account_rules_do_not_bypass_native_model_admission() {
         BTreeSet::from(["ACCOUNT_NUMBER".to_owned()])
     );
     let request = session.prepare_request().unwrap();
-    for text in ["account number: 12345678", "12345678"] {
+    for text in [
+        "account number: 12345678",
+        "12345678",
+        "account ending in 1234",
+        "account number: XXXX1234",
+    ] {
         assert_eq!(
             session
                 .scan_routed(text, &config, &Cancellation::default())

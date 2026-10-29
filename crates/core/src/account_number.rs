@@ -6,9 +6,17 @@ use std::sync::LazyLock;
 static DETECTOR: LazyLock<Regex> = LazyLock::new(|| {
     let horizontal = r"(?u:[ \t\x{00a0}\x{202f}])";
     Regex::new(&format!(
-        r"\b(?i-u:(?:account|acct){horizontal}+(?:number|no\.)(?:{horizontal}+|{horizontal}*[:#]{horizontal}*))(?P<value>[0-9]{{6,17}})\b"
+        r"\b(?i-u:(?:account|acct){horizontal}+(?:number|no\.)(?:{horizontal}+|{horizontal}*[:#]{horizontal}*))(?P<value>[0-9]{{6,17}}|(?:[Xx]{{4,12}}|\*{{4,12}})[0-9]{{4}})\b"
     ))
     .expect("static labelled account regex must compile")
+});
+
+static ENDING_DETECTOR: LazyLock<Regex> = LazyLock::new(|| {
+    let horizontal = r"(?u:[ \t\x{00a0}\x{202f}])";
+    Regex::new(&format!(
+        r"\b(?i-u:(?:account|acct)(?:{horizontal}+(?:number|no\.))?{horizontal}+ending{horizontal}+in{horizontal}+)(?P<value>[0-9]{{4}})\b"
+    ))
+    .expect("static account-ending regex must compile")
 });
 
 fn horizontal(character: char) -> bool {
@@ -28,16 +36,18 @@ fn continues_numeric_value(tail: &str) -> bool {
 }
 
 pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
-    for captures in DETECTOR.captures_iter(text) {
-        let Some(value) = captures.name("value") else {
-            continue;
-        };
-        if !continues_numeric_value(&text[value.end()..]) {
-            candidates.push(Candidate {
-                label: Label::AccountNumber,
-                start_byte: value.start(),
-                end_byte: value.end(),
-            });
+    for detector in [&*DETECTOR, &*ENDING_DETECTOR] {
+        for captures in detector.captures_iter(text) {
+            let Some(value) = captures.name("value") else {
+                continue;
+            };
+            if !continues_numeric_value(&text[value.end()..]) {
+                candidates.push(Candidate {
+                    label: Label::AccountNumber,
+                    start_byte: value.start(),
+                    end_byte: value.end(),
+                });
+            }
         }
     }
 }

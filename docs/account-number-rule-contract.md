@@ -2,7 +2,8 @@
 
 Status: **0.5.0-beta.2 draft; not released**.
 This is the account-number slice of [D2 / #144](https://github.com/DataFog/datafog-core/issues/144).
-Masked values and street addresses need separate format contracts. The synthetic
+[Masked account values](masked-account-number-rule-contract.md) have a separate
+format contract; street addresses remain separately scoped. The synthetic
 cases in `fixtures/account-number.jsonl` are rule acceptance cases and reusable
 launch fixtures, not model qualification results.
 
@@ -47,7 +48,8 @@ Terminal punctuation or punctuation followed by prose is permitted.
   finding. Existing equal-span selection chooses ACCOUNT_NUMBER for a default
   transformation; selecting CREDIT_CARD keeps card attribution. This intentional
   new overlap is covered by a regression, not a new source-precedence rule.
-- `ending in 1234`, `XXXX1234` and `****1234` belong to the masked-value contract.
+- Masked accounts follow the separate masked-value contract; bare endings or
+  masked tokens still lack account context.
 - JSON field keys do not supply text context; scan each decoded string as today.
 
 Each positive has a value, exact codepoint offsets and transformation
@@ -80,7 +82,7 @@ Run doctor, the rule precision/recall checks, installed SDK smoke and live parit
 this corpus runs in the Core and installed SDK conformance paths. Keep the
 existing corpus unchanged unless an intentional coverage change is reviewed. Measure binary and
 latency impact before making performance claims. This slice leaves
-#144 open and does not mark masked-value or street-address coverage complete.
+#144 open; street-address coverage remains separately scoped.
 
 
 ## Local impact measurement

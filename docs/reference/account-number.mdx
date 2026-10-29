@@ -27,9 +27,15 @@ console.assert(result.text === "bank account number: [ACCOUNT_NUMBER]");
 ```
 
 Rules run by default across locales. Bare numbers, generic `account:` labels,
-intervening prose, split numeric values, masked values and alphanumeric accounts
-are excluded. Structured scanning uses the same text rule within each decoded
-string; field keys do not supply the label.
+intervening prose, split numeric values and alphanumeric accounts are excluded.
+The [masked-account contract](../masked-account-number-rule-contract.md) also
+accepts account-labelled four-digit endings and bounded X/asterisk masks. For
+`account ending in 1234`, only `1234` is the value. For
+`account number: XXXX1234`, the whole `XXXX1234` token is the value. A visible
+suffix is not a full account identity; workspace matching and recall use the
+existing normalized literal value and cannot recover hidden digits. Structured
+scanning uses the same text rule within each decoded string; field keys do not
+supply the label.
 
 Rust, Python, Node and browser WASM share Core semantics. Findings have no
 confidence score and use `datafog-core/account-number` provenance, original byte

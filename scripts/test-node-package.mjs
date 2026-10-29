@@ -131,6 +131,7 @@ verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
 verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
+verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"masked-account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
 verifyGerman(germanApi,germanRecords);
 verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
 verifyJwt(germanApi,jwtRecords);
