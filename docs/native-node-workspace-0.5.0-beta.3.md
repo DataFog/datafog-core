@@ -1,10 +1,10 @@
 # Native Node workspace contract — 0.5.0-beta.3 candidate
 
 Implementation work for [X7 / #168](https://github.com/DataFog/datafog-core/issues/168),
-stacked on the committed combined-review candidate #173. This is an in-process
+integrating released beta.2 main and the approved Core streaming candidate #176. This is an in-process
 Rust N-API binding. It does not load browser WASM or implement a persistence host.
 Only methods present in the committed shared Core are exposed; provenance,
-conversation and streaming methods join once their compatible Core contracts land.
+and conversation methods join once their compatible Core contracts land.
 The package is not released by this draft.
 
 ## Calls, ownership and representations
@@ -19,7 +19,8 @@ The package is not released by this draft.
 | Plan `preview(s)`, `heads`, `policyPreview`, `snapshotFormat`, `exportCandidateBundle` | Core prepared-change getters | Sensitive local reads, copied output; export is plaintext for host encryption |
 | Plan `discard` | `PreparedChange::discard` | Consume pending plan; release its native storage; garbage collection also releases orphaned plan slots |
 | `activateSaved` | `Workspace::activate_saved` | Host first confirms durable complete-head CAS; rejects cross-instance/stale/consumed plans |
-| `restore`, `restoreReport` | corresponding Core restore methods | Whole-response fail-closed restoration; no streaming claim |
+| `restore`, `restoreReport` | corresponding Core restore methods | Whole-response fail-closed restoration |
+| `bufferedRestore`, `progressiveRestore` | Core owned restoration adapters | Factory-only child pinned to the committed head; strict buffering or explicit irreversible chunks |
 | `close` | `Workspace::close` | Idempotent; clears retained plans and invalidates all outstanding capabilities |
 | `workspaceByteRangeFromUtf16` | `byte_range_from_utf16` | Validates original scalar boundaries; no replacement of unpaired surrogates |
 
@@ -62,6 +63,28 @@ the installed native library. Exercise consumed/stale/closed plans and worker
 isolation. Shared [X8 / #171](https://github.com/DataFog/datafog-core/issues/171)
 fixtures compare actual installed native output with Rust/browser/Python and fail
 on missing, skipped, unsupported or malformed calls. Declaration tests alone do
-not prove execution. Future Core provenance/conversation/streaming additions must
+not prove execution. Future Core provenance/conversation additions must
 extend this matrix and all SDKs before [G3 / #154](https://github.com/DataFog/datafog-core/issues/154)
 freezes the launch contract.
+
+## Restoring response chunks
+
+`bufferedRestore("utf8" | "utf16")` retains the strict R2 behavior: `feed(Uint8Array)`
+and `feedUtf16(Uint16Array)` release no text, and `finalize()` returns the complete
+restoration report. `progressiveRestore()` is an explicit opt-in to irreversible
+output: successful feeds return `{text, delivered, complete: false}`; only a
+successful finalization sets `complete: true`. Provider framing is host-owned.
+
+Both adapters call the same Core implementation as WASM, including all marker,
+UTF-8/UTF-16 and cumulative resource limits. A terminal progressive error preserves
+prior delivered counts and original issue ranges, has `complete: false`, and
+contains no failed-call text. Previously returned chunks cannot be retracted.
+Use `reset()` only for a fresh response at the same current head; it does not undo
+output. Close, owner garbage collection and saved head changes release private
+child state; a same-head no-op save preserves children. Transport accepts only the
+specified typed arrays and copies them without changing the caller's buffers.
+
+Installed tests execute the shared streaming fixture, every byte/code-unit split,
+malformed transport and terminal errors, plus native worker, garbage-collection,
+same-head and size-limit lifecycle cases. These are candidate beta.3 APIs and are
+not present in the published beta.2 packages.

@@ -58,9 +58,11 @@ import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
+import {verifyWorkspaceStreaming} from "./workspace-streaming-conformance.mjs";
 import * as germanApi from "@datafog/node";
 const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
 await verifyNativeWorkspace(germanApi,workspaceCounters);
+await verifyWorkspaceStreaming(germanApi, JSON.parse(readFileSync(path.join(process.argv[2],"workspace/streaming-contract-v1.json"),"utf8")));
 verifyCoverageConflicts(germanApi);
 await verifyCoverageProviderCalls(germanApi);
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
@@ -657,7 +659,18 @@ const policy: WorkspacePolicy=workspace.policy();
 const plan: PreparedWorkspaceChange=workspace.prepareReview([{text:"Jane",scannerFindings:[finding],userSelections:[]}],new Uint8Array(16));
 const head: WorkspaceHead=plan.heads().candidateHead;
 const revision: string=head.revision;
-plan.policyPreview();plan.snapshotFormat();plan.discard();workspace.close();
+plan.policyPreview();plan.snapshotFormat();plan.discard();
+const buffered=workspace.bufferedRestore("utf16");buffered.feedUtf16(new Uint16Array());buffered.finalize();buffered.close();
+const progressive=workspace.progressiveRestore();
+const chunk: import("@datafog/node").WorkspaceRestoreChunk=progressive.feed(new Uint8Array());
+const progress: import("@datafog/node").WorkspaceRestoreProgress=chunk.delivered;
+// @ts-expect-error UTF16 units are not UTF8 bytes.
+progressive.feed(new Uint16Array());
+// @ts-expect-error strict buffering does not release chunks.
+const impossibleChunk: import("@datafog/node").WorkspaceRestoreChunk=buffered.feed(new Uint8Array());
+// @ts-expect-error raw stream capabilities are private.
+import {NativeRestoreStream} from "@datafog/node";
+void progress;void impossibleChunk;progressive.close();workspace.close();
 // @ts-expect-error raw native plan handles are not public package declarations.
 import {NativeWorkspace} from "@datafog/node";
 // @ts-expect-error revisions cannot use lossy JavaScript numbers.
@@ -759,7 +772,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs"]) {
+  for (const file of ["workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();

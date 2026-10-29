@@ -29,7 +29,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 ### Added
 
 - Native Node exposes the shared workspace lifecycle, staged changes, policy,
-  recall, combined review and strict restoration without loading browser WASM.
+  recall, combined review, strict buffered and opt-in progressive restoration
+  without loading browser WASM. Streaming preserves Core error counts, encoding
+  validation and parent/head lifecycle cleanup.
 - Rust and browser WASM can restore UTF-8 or UTF-16 response chunks against a committed workspace
   head, with strict buffered finalization by default and a separate opt-in
   progressive adapter. Late marker/encoding errors stop progressive output with
