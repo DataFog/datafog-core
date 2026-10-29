@@ -129,7 +129,7 @@ A and no indication of uncertainty. Restoring A would appear safe even though th
 new send's confirmation was never reconciled. An in-memory flag cannot enforce the
 approved pause after a restart or backup import.
 
-**Recommendation:** the first explicit conversation-send preparation stages both
+**Approved October 29:** the first explicit conversation-send preparation stages both
 the mappings and a content-free pending intent in the same candidate. The trusted
 host approves, durably saves and activates that candidate before attempting the
 external send. This is an intention to send, never successful issuance. Preview,
@@ -148,9 +148,9 @@ resolves the pending state. Only its durable save and activation count as a
 confirmed handoff. A failed/discarded candidate leaves the saved pending state and
 counts unchanged. Retrying a confirmation transaction never calls the transport.
 
-### Bounded product question: how much does uncertainty pause?
+### Approved October 29: conversation-wide pause
 
-**Recommend conversation-wide blocking.** While any durable send intent for the
+**Sid approved conversation-wide blocking.** While any durable send intent for the
 selected conversation remains unresolved, all conversation-aware restore calls for
 that conversation stop with a content-free pending-state error. This includes
 older responses containing A, text containing only previously issued markers, and
@@ -165,9 +165,10 @@ persisted request/response association that is not part of the current contract;
 a provider field or model-generated identifier cannot establish that association.
 Do not implement that alternative implicitly.
 
-This is the remaining product effect to review, not a reopening of Sid's
-confirmed-send decision. The code/fixture names below are proposals, not frozen
-SDK exports.
+This settles the pause scope as well as the earlier confirmed-send sequence.
+Confirmation-capacity reservation remains a separate unapproved choice; the wire,
+resource and API details still need review before runtime implementation. The
+code/fixture names below are proposals, not frozen SDK exports.
 
 ### Reopening, cancellation and batches
 

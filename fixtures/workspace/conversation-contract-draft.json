@@ -265,5 +265,10 @@
         }
       ]
     }
-  ]
+  ],
+  "blockingDecision": {
+    "status": "approved",
+    "date": "2026-10-29",
+    "decision": "Durable pending intent pauses every conversation-aware restore for the exact conversation, including earlier/plain replies; no automatic fallback or resend."
+  }
 }
