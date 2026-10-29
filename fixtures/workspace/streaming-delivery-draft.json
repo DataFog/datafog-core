@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "status": "progressive expectations require human approval; buffered is R2-compatible",
+  "seed": {"entityType": "PERSON", "value": "Jane", "namespaceByte": 1, "operationByte": 2, "prepareByte": 3},
+  "cases": [
+    {"id":"plain-words","chunks":["Hello ","world."],"bufferedFeedOutput":[],"bufferedFinal":"Hello world.","proposedProgressiveFinal":"Hello world."},
+    {"id":"marker-splits","source":"Hello {marker}!","allByteSplits":true,"allUtf16Splits":true,"bufferedFeedOutput":[],"bufferedFinal":"Hello Jane!","proposedProgressiveCarry":"hold possible marker until closing delimiters"},
+    {"id":"adjacent-repeated","source":"{marker}{marker}","allByteSplits":true,"bufferedFinal":"JaneJane","proposedProgressiveFinal":"JaneJane"},
+    {"id":"unicode","source":"👋 é {marker}","allByteSplits":true,"allUtf16Splits":true,"bufferedFinal":"👋 é Jane","proposedProgressiveFinal":"👋 é Jane"},
+    {"id":"late-damaged-marker","chunks":["Hello ","{marker}"," ","[[PERSON_BAD]]"],"bufferedFinalText":null,"proposedProgressiveDelivered":"Hello Jane ","proposedProgressiveComplete":false,"proposedProgressiveTerminal":"invalid_marker; earlier delivery cannot be retracted"},
+    {"id":"unknown-marker","chunks":["Hello ","[[PERSON_ZZZZZZ]]"],"bufferedFinalText":null,"proposedProgressiveDelivered":"Hello ","proposedProgressiveComplete":false},
+    {"id":"bare-committed-word","source":"{bareMarker}","allByteSplits":true,"bufferedFinalText":null,"proposedProgressiveCarry":"hold ASCII word until boundary, then fail unbracketed; emit none of the word"},
+    {"id":"eof-held-prefix","chunks":["Hello ","[[PERSON_"],"bufferedR2Final":"Hello [[PERSON_","proposedProgressiveDelivered":"Hello ","proposedProgressiveComplete":false,"decision":"proposed stricter progressive EOF failure, not approved"},
+    {"id":"invalid-utf8","utf8Chunks":[[240],[40]],"bufferedFinalError":"invalid_encoding","proposedProgressiveComplete":false},
+    {"id":"split-surrogate","utf16Chunks":[[55357],[56395]],"bufferedFinal":"👋","proposedProgressiveFinal":"👋"},
+    {"id":"eof-high-surrogate","utf16Chunks":[[55357]],"bufferedFinalError":"invalid_encoding","proposedProgressiveComplete":false},
+    {"id":"cancel-after-prefix","chunks":["Hello ","[[PERSON_"],"action":"close","bufferedFeedOutput":[],"proposedProgressiveDelivered":"Hello ","proposedProgressiveComplete":false},
+    {"id":"head-changed","chunks":["Hello "],"action":"activate different saved head before next feed","bufferedError":"workspace_conflict","proposedProgressiveComplete":false},
+    {"id":"workspace-closed","chunks":["Hello "],"action":"close workspace before finalize","bufferedError":"closed_workspace","proposedProgressiveComplete":false}
+  ]
+}

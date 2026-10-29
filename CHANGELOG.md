@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Rust can buffer UTF-8 or UTF-16 response chunks against a committed workspace
+  head and finalize with the existing all-or-nothing restoration report. Feeds
+  release no text; this atomic adapter does not provide progressive delivery.
+
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
   coverage/type conflicts block handoff with ranged review errors before a plan is
