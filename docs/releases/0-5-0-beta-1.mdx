@@ -1,10 +1,10 @@
 ---
 title: "0.5.0 beta.1"
-description: "Beta A: persistent workspace integration and optional English browser Small detection."
+description: "0.5.0-beta.1: persistent workspace integration and optional English browser Small detection."
 icon: "tag"
 ---
 
-This is the **Beta A developer integration candidate** tracked in
+This is the **0.5.0-beta.1 developer integration candidate** tracked in
 [#132](https://github.com/DataFog/datafog-core/issues/132). Publication and the
 installed-package acceptance result must be recorded there before treating this
 version as available. Use synthetic data while building the extension integration.
@@ -33,7 +33,7 @@ It must save the exact encrypted candidate with a complete-head comparison befor
 calling `activateSaved`, and release text only after activation succeeds. A package
 upgrade does not add an extension vault, review UI or send-button enforcement.
 
-Follow the [Beta A integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/beta-a-extension-integration.md)
+Follow the [0.5.0-beta.1 integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.1.md)
 for `Workspace`, opaque plans, offset units, failure handling, follow-ups and
 close/reopen behavior. Its reference harness uses actual IndexedDB and local
 cryptography; test fault controls are not shipping extension features.
@@ -72,7 +72,9 @@ workflows also require the separate native model integration matrix for the exac
 release commit, followed by publication dry runs.
 
 Josh's product still needs the extension integration and its own end-to-end
-acceptance against exact Core and extension commits. Beta B adds finding sources
-and recall; Beta C adds remembered choices/rules; Beta D adds provenance and
-conversation records. A real-data pilot additionally needs the snapshot/contract
+acceptance against exact Core and extension commits. Finding sources and recall
+target `0.5.0-beta.2`; later choices/rules and
+provenance/conversation work follow the versions or TBD assignments in the
+[requirements spreadsheet](https://docs.google.com/spreadsheets/d/1Z5bwpzXiyncgg4nC5tPehSoO3mvg6nTGh8gxI4Q-3y0/edit).
+A real-data pilot additionally needs the snapshot/contract
 freeze, shipping-model qualification, provider marker tests and vault/backup review.

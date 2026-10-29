@@ -8,7 +8,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
-- Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as the Beta A developer integration
+- Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults
   on upgrades; snapshot compatibility remains provisional.

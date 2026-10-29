@@ -20,7 +20,7 @@ Each PR targets the one before it:
 | Restore report | All-or-nothing restore that lists blocking markers |
 | Backup | Encrypted backup export and recovery |
 
-The Beta A host/SDK boundary is documented in [the extension integration contract](beta-a-extension-integration.md).
+The 0.5.0-beta.1 host/SDK boundary is documented in [the extension integration contract](extension-integration-0.5.0-beta.1.md).
 
 The harness in `examples/workspace-extension` is synthetic-only conformance code.
 Its vault, broker and backup flows are the starting point for the extension.
@@ -51,12 +51,12 @@ If the file-upload investigation keeps CSV in V1, add:
 
 ## Detection, in parallel
 
-- **Browser model (D2).** Beta A uses the optional English GLiNER2.5 Small
+- **Browser model (D2).** 0.5.0-beta.1 uses the optional English GLiNER2.5 Small
   adapter exposed by `@datafog/wasm/models`. It runs pinned ONNX assets locally
   with no Python worker; importing the SDK does not activate it. Model/tokenizer
   files are about 297 MB and are provisioned separately. See
   [browser setup and limits](browser-model.md) and the
-  [Beta A extension contract](beta-a-extension-integration.md).
+  [0.5.0-beta.1 extension contract](extension-integration-0.5.0-beta.1.md).
 
   Native GLiNER2 PII/general models and the DataFog native engine remain separate
   adapters. The old native GLiNER2 count-floor fix does not establish Small
@@ -66,7 +66,7 @@ If the file-upload investigation keeps CSV in V1, add:
   isolation. Measure load, memory and UI stalls in the owning extension context.
   A local native helper remains a possible later fallback if browser resource
   costs are unacceptable. Community accuracy is warn-only; contract regressions
-  block. Shared engine/Decima work is parallel, not a prerequisite for Beta A.
+  block. Shared engine/Decima work is parallel, not a prerequisite for 0.5.0-beta.1.
 
 - **Free-text rules (D1).** Account numbers after a label, masked forms ("ending
   in 1234", `XXXX1234`), and a baseline street-address rule. Positive and negative
@@ -151,11 +151,11 @@ Before that, real-data testing uses a throwaway browser profile or a build that
 saves no mappings. The critical path is the review screen (Core PRs 1–4) and
 GLiNER2.5 Small in the browser, which decides how many names are caught before review.
 
-## Beta A readiness and remaining pilot risks
+## 0.5.0-beta.1 readiness and remaining pilot risks
 
 The release checklist is [issue #132](https://github.com/DataFog/datafog-core/issues/132).
-Beta A is a developer integration package for synthetic Chrome extension tests;
-Betas B–D and the final pilot-format freeze are separate milestones. Pin the exact
+0.5.0-beta.1 is a developer integration package for synthetic Chrome extension tests;
+Later prereleases and the final pilot-format freeze are separate milestones. Pin the exact
 package version and recreate provisional development vaults on upgrades unless a
 migration has been explicitly qualified.
 
