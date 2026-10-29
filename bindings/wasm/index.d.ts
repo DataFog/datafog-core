@@ -54,6 +54,7 @@ export type DataFogErrorCode =
   | "invalid_configuration"
   | "invalid_batch"
   | "invalid_finding"
+  | "review_conflict"
   | "closed_workspace"
   | "inactive_plan"
   | "workspace_conflict"

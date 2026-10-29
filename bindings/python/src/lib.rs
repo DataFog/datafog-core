@@ -921,7 +921,7 @@ fn privacy_error(py: Python<'_>, error: core::PrivacyError) -> PyErr {
         core::PrivacyErrorCode::InvalidConfiguration => {
             PyErr::new::<DataFogConfigurationError, _>(error.to_string())
         }
-        core::PrivacyErrorCode::InvalidFinding => {
+        core::PrivacyErrorCode::InvalidFinding | core::PrivacyErrorCode::ReviewConflict => {
             PyErr::new::<DataFogFindingError, _>(error.to_string())
         }
         core::PrivacyErrorCode::KeyProviderRequired

@@ -270,6 +270,7 @@ try {
 
   writeFileSync(path.join(temporaryDirectory,"german-conformance.mjs"), readFileSync(path.join(root,"scripts/german-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-overlap-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-overlap-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"coverage-conformance.mjs"), readFileSync(path.join(root,"scripts/coverage-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"jwt-conformance.mjs"), readFileSync(path.join(root,"scripts/jwt-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"bearer-token-conformance.mjs"), readFileSync(path.join(root,"scripts/bearer-token-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"private-key-conformance.mjs"), readFileSync(path.join(root,"scripts/private-key-conformance.mjs")));
@@ -332,6 +333,8 @@ try {
     } finally { contract.free(); }
     expectThrows(() => scan(123), "TypeError");
     const germanApi = await import("/node_modules/@datafog/wasm/index.js");
+    const {verifyCoverageConflicts} = await import("/coverage-conformance.mjs");
+    verifyCoverageConflicts(germanApi);
     const {verifyGerman} = await import("/german-conformance.mjs");
     const {verifyCredentialOverlaps} = await import("/credential-overlap-conformance.mjs");
     const {verifyJwt} = await import("/jwt-conformance.mjs");

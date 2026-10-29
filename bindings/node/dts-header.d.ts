@@ -124,6 +124,7 @@ export interface ScanAndTransformConfig {
 export type DataFogErrorCode =
   | "invalid_configuration"
   | "invalid_finding"
+  | "review_conflict"
   | "key_provider_required"
   | "key_not_found"
   | "key_access_denied"

@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Transformations stop with `review_conflict` when overlap selection would expose
+  part of another eligible finding. Resolve the conflict before retrying;
+  providers are not called and no partial transformed result is returned.
+
 - Core-owned workspace rules and exact remembered choices, including explicit
   protected-type false-positive corrections, with staged approval/save, recall
   enforcement and a warned, byte-preserving legacy-to-policy-v2 upgrade.
