@@ -790,7 +790,7 @@ fn markers_are_short_unique_codes_and_restore_tolerates_case_and_crockford_subst
 }
 
 #[test]
-fn damaged_markers_fail_restore_but_remain_plain_text_in_new_source() {
+fn damaged_markers_block_new_source_before_approval() {
     let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     let marker = commit(&mut workspace, "PERSON", "Jane", [3; 16]);
     let shortened = format!("{}]]", &marker[..marker.len() - 3]);
@@ -804,9 +804,14 @@ fn damaged_markers_fail_restore_but_remain_plain_text_in_new_source() {
             "{damaged}"
         );
         let text = format!("{marker} and {damaged}");
-        let mut pending = workspace.prepare(&text, &[], [4; 16]).unwrap();
-        assert_eq!(pending.preview().unwrap().text, text);
-        pending.discard();
+        assert_eq!(
+            workspace
+                .prepare(&text, &[], [4; 16])
+                .err()
+                .expect("damaged source must block before approval")
+                .code,
+            ErrorCode::InvalidMarker,
+        );
     }
     for ordinary in [
         "[[Jane]]",
@@ -1129,4 +1134,66 @@ fn thirty_three_sequential_codes_are_unique() {
         .map(|m| &m[m.len() - 8..m.len() - 2])
         .collect();
     assert_eq!(codes.len(), markers.len(), "codes should be unique");
+}
+
+#[test]
+fn source_marker_diagnostics_are_input_local_and_rejection_is_atomic() {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    let marker = commit(&mut workspace, "PERSON", "Jane", [3; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    let bare = &marker[2..marker.len() - 2];
+    let text = format!("👋 é [[my_note]] [[PERSON_ZZZZZZ]] {bare} {marker}");
+    let finding = WorkspaceFinding::new("PERSON", "John", TextRange { start: 0, end: 4 });
+    let inputs = [
+        WorkspaceInput {
+            text: "John",
+            findings: &[finding],
+        },
+        WorkspaceInput {
+            text: &text,
+            findings: &[],
+        },
+    ];
+    let failure = workspace.prepare_batch(&inputs, [4; 16]).err().unwrap();
+    assert_eq!(failure.code, ErrorCode::InvalidMarker);
+    assert_eq!(failure.input_index, Some(1));
+    assert_eq!(failure.finding_index, None);
+    assert_eq!(
+        failure
+            .marker_issues
+            .iter()
+            .map(|issue| issue.kind)
+            .collect::<Vec<_>>(),
+        [
+            MarkerIssueKind::Damaged,
+            MarkerIssueKind::Unknown,
+            MarkerIssueKind::Unbracketed
+        ]
+    );
+    let expected = ["[[my_note]]", "[[PERSON_ZZZZZZ]]", bare];
+    for (issue, value) in failure.marker_issues.iter().zip(expected) {
+        let start = text.find(value).unwrap();
+        assert_eq!(
+            issue.byte_range,
+            TextRange {
+                start,
+                end: start + value.len()
+            }
+        );
+        assert_eq!(issue.codepoint_range.start, text[..start].chars().count());
+        assert_eq!(
+            issue.utf16_range.start,
+            text[..start].encode_utf16().count()
+        );
+    }
+    assert_eq!(workspace.export_bundle().unwrap(), saved);
+    assert_eq!(
+        workspace.restore_report(&text).unwrap().issues,
+        failure.marker_issues
+    );
+    assert!(!format!("{failure:?}").contains("my_note"));
+    let ordinary = format!("[[Jane]] [[not a marker]] ORDER_ABC123 {marker}");
+    let mut plan = workspace.prepare(&ordinary, &[], [4; 16]).unwrap();
+    assert_eq!(plan.preview().unwrap().text, ordinary);
+    plan.discard();
 }
