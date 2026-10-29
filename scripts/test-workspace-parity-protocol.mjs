@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput} from "./test-workspace-parity.mjs";
+import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput,validateConversationOutput,verifyActualJavaScriptHeadRejection} from "./test-workspace-parity.mjs";
 import {validateNativeServerOutput} from "./native-server-parity.mjs";
 import {validatePlanPressure} from "./native-plan-pressure.mjs";
-import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
+import {runWorkspaceContract,assertJavaScriptWorkspaceHeads} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
 test("missing runtime methods fail before any workspace operation",()=>{
@@ -171,4 +171,58 @@ test("native load proof requires each handle's real admission, cleanup and indep
 test("load observations do not invent a process RSS admission budget",()=>{
   const {config,value}=pressureProtocol();for(const worker of value.cycles[0].workers)for(const sample of [worker.held.before,worker.held.held,worker.released.after])sample.rss=4_000_000_000;
   assert.doesNotThrow(()=>validatePlanPressure(value,config,"node"));
+});
+
+function conversationProtocol(commands, values) {
+  const requiredMethods=["prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","plan.sendIntents"];
+  return {source:{schemaVersion:1,profile:"workspace-conversations-v1",requiredMethods,cases:[{id:"scoped",commands}]},value:{schemaVersion:1,profile:"workspace-conversations-v1",cases:[{id:"scoped",steps:commands.map((command,index)=>({call:command.call,ok:true,value:values[index]}))}]}};
+}
+const scopedIssue={kind:"not_issued_in_conversation",byteRange:{start:5,end:22},codepointRange:{start:2,end:19},utf16Range:{start:3,end:20}};
+test("conversation reports preserve zero and mixed eligible counts rather than hiding rejected markers",()=>{
+  for(const eligible of [0,1]) {
+    const report={text:null,restoredMarkers:eligible,issues:[scopedIssue]};
+    const {source,value}=conversationProtocol([{call:"restoreReportInConversation",expectValue:report}],[report]);
+    assert.doesNotThrow(()=>validateConversationOutput(value,source));
+    for(const mutate of [
+      step=>{step.value.restoredMarkers=eligible===0?1:0;},
+      step=>{step.value.text="partially restored";},
+      step=>{step.value.issues[0].utf16Range=step.value.issues[0].byteRange;},
+      step=>{step.value.issues[0].sourceText="not allowed";},
+    ]) {const wrong=structuredClone(value);mutate(wrong.cases[0].steps[0]);assert.throws(()=>validateConversationOutput(wrong,source));}
+  }
+});
+test("conversation stream failures retain real completion, counters and every required error field",()=>{
+  const delivered={bytes:10,codepoints:7,utf16:8,restoredMarkers:0};
+  const {source,value}=conversationProtocol([{call:"progressiveRestoreInConversation",stream:"r"},{call:"streamFeed",stream:"r",expectCode:"invalid_marker",expectError:{complete:false,delivered}}],[null,null]);
+  value.cases[0].steps[1]={call:"streamFeed",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[scopedIssue],reviewConflicts:[],delivered,complete:false}};
+  assert.doesNotThrow(()=>validateConversationOutput(value,source));
+  for(const mutate of [step=>delete step.error.complete,step=>{step.error.complete=true;},step=>{step.error.delivered.restoredMarkers=1;},step=>{step.error.text="not allowed";},step=>delete step.error.inputIndex]) {
+    const wrong=structuredClone(value);mutate(wrong.cases[0].steps[1]);assert.throws(()=>validateConversationOutput(wrong,source));
+  }
+});
+test("conversation plan metadata requires exact full heads, bytes and owned intent identifiers",()=>{
+  const head={revision:"18446744073709551615",commitId:Array(16).fill(1)};
+  const plan={heads:{expectedHead:head,candidateHead:head},previews:[],snapshotFormat:{currentVersion:3,candidateVersion:3},policyPreview:null,candidateBundleHex:"aa0003",sendIntents:[{preparationId:Array(16).fill(2),inputIndex:0}]};
+  const {source,value}=conversationProtocol([{call:"prepareConversationSend"}],[plan]);
+  assert.doesNotThrow(()=>validateConversationOutput(value,source));
+  for(const mutate of [step=>{step.value.heads.candidateHead.revision=9007199254740992;},step=>{step.value.heads.expectedHead.commitId.pop();},step=>{step.value.candidateBundleHex="";},step=>delete step.value.sendIntents,step=>{step.value.sendIntents[0].inputIndex=32;}]) {
+    const wrong=structuredClone(value);mutate(wrong.cases[0].steps[0]);assert.throws(()=>validateConversationOutput(wrong,source));
+  }
+  for(const method of source.requiredMethods){const missing=structuredClone(source);missing.requiredMethods=missing.requiredMethods.filter(name=>name!==method);assert.throws(()=>validateConversationOutput(value,missing));}
+});
+test("missing conversation runtime methods cannot fall back to compatibility restoration",()=>{
+  let touched=false;
+  const api={Workspace:{create(){touched=true;},openBundle(){},prototype:{restore(){touched=true;}}}};
+  assert.throws(()=>runWorkspaceContract(api,{schemaVersion:1,requiredMethods:["prepareConversationSend"],cases:[{id:"required",commands:[{call:"create"}]}]}));
+  assert.equal(touched,false);
+});
+
+test("JavaScript heads reject numeric SDK revisions before representation normalization",()=>{
+  const head={revision:"18446744073709551615",commitId:Array(16).fill(1)};
+  assert.equal(assertJavaScriptWorkspaceHeads({heads:{expectedHead:head,candidateHead:head}}),2);
+  for(const revision of [1,1n,"01","-1","18446744073709551616",null]) {
+    assert.throws(()=>assertJavaScriptWorkspaceHeads({head:{...head,revision}}));
+  }
+  assert.deepEqual(verifyActualJavaScriptHeadRejection({head}),{actualHeads:1,numericRevisionRejected:true});
+  assert.throws(()=>verifyActualJavaScriptHeadRejection({}));
 });

@@ -103,7 +103,7 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
 
 fn complete_workspace_report(report: &Value) -> bool {
     let four_sdk_total = |field: &str| {
-        ["foundation", "streaming", "operations"]
+        ["foundation", "streaming", "operations", "conversations"]
             .iter()
             .try_fold(0_u64, |sum, profile| {
                 sum.checked_add(report["profiles"][profile][field].as_u64()?)
@@ -119,12 +119,12 @@ fn complete_workspace_report(report: &Value) -> bool {
         && report["profiles"]["nativeServer"]["planPressure"]["profile"]
             == "native-plan-pressure-v1"
         && report["profiles"]["nativeServer"]["planPressure"]["sdks"] == json!(["python", "node"])
-        && ["foundation", "streaming", "operations"]
+        && ["foundation", "streaming", "operations", "conversations"]
             .iter()
             .all(|profile| {
                 report["profiles"][profile]["sdks"] == json!(["rust", "python", "node", "wasm"])
             })
-        && ["foundation", "streaming", "operations", "nativeServer"]
+        && ["foundation", "streaming", "operations", "conversations", "nativeServer"]
             .iter()
             .all(|profile| {
                 ["cases", "steps"].iter().all(|field| {
@@ -133,6 +133,15 @@ fn complete_workspace_report(report: &Value) -> bool {
                         .is_some_and(|value| value > 0)
                 })
             })
+        && report["profiles"]["conversations"]["profile"] == "workspace-conversations-v1"
+        && report["profiles"]["nativeServer"]["conversationHost"]["profile"] == "native-conversation-host-v1"
+        && report["profiles"]["nativeServer"]["conversationHost"]["sdks"] == json!(["python", "node"])
+        && report["profiles"]["nativeServer"]["conversationHost"]["oracleSdk"] == "rust"
+        && ["cases", "steps"].iter().all(|key| report["profiles"]["nativeServer"]["conversationHost"][key].as_u64().is_some_and(|value| value > 0))
+        && report["profiles"]["nativeServer"]["conversationHost"]["existingSuites"]["python"]["passed"] == true
+        && report["profiles"]["nativeServer"]["conversationHost"]["existingSuites"]["python"]["tests"].as_u64().is_some_and(|value| value >= 27)
+        && report["profiles"]["nativeServer"]["conversationHost"]["existingSuites"]["node"]["passed"] == true
+        && report["profiles"]["nativeServer"]["conversationHost"]["existingSuites"]["node"]["checks"].as_u64().is_some_and(|value| value >= 17)
         && report["profiles"]["operations"]["profile"] == "workspace-operations-v1"
         && report["profiles"]["streaming"]["profile"] == "workspace-streaming-v1"
         && report["profiles"]["streaming"]["modes"] == json!(["buffered", "progressive"])
@@ -157,22 +166,63 @@ mod tests {
             "foundation":{"sdks":["rust","python","node","wasm"],"profile":"launch-workspace-current","cases":17,"steps":156},
             "streaming":{"sdks":["rust","python","node","wasm"],"profile":"workspace-streaming-v1","modes":["buffered","progressive"],"cases":13,"steps":80},
             "operations":{"sdks":["rust","python","node","wasm"],"profile":"workspace-operations-v1","cases":7,"steps":185},
-            "nativeServer":{"profile":"native-server-cas-v1","sdks":["python","node"],"oracleSdk":"rust","planPressure":{"pass":true,"profile":"native-plan-pressure-v1","sdks":["python","node"]},"cases":9,"steps":28}},
-            "cases":37,"steps":421,"errors":[]});
+            "conversations":{"sdks":["rust","python","node","wasm"],"profile":"workspace-conversations-v1","cases":8,"steps":179},
+            "nativeServer":{"profile":"native-server-cas-v1","sdks":["python","node"],"oracleSdk":"rust","planPressure":{"pass":true,"profile":"native-plan-pressure-v1","sdks":["python","node"]},"conversationHost":{"profile":"native-conversation-host-v1","sdks":["python","node"],"oracleSdk":"rust","cases":16,"steps":66,"existingSuites":{"python":{"passed":true,"tests":27},"node":{"passed":true,"checks":17}}},"cases":9,"steps":28}},
+            "cases":45,"steps":600,"errors":[]});
         assert!(complete_workspace_report(&report));
         let mut folded = report.clone();
-        folded["cases"] = json!(46);
-        folded["steps"] = json!(449);
+        folded["cases"] = json!(70);
+        folded["steps"] = json!(694);
         assert!(!complete_workspace_report(&folded));
         let mut wrong_scope = report.clone();
         wrong_scope["profiles"]["nativeServer"]["sdks"] = json!(["rust", "python", "node", "wasm"]);
         assert!(!complete_workspace_report(&wrong_scope));
-        for profile in ["foundation", "streaming", "operations", "nativeServer"] {
+        for key in [
+            "profile",
+            "sdks",
+            "oracleSdk",
+            "cases",
+            "steps",
+            "existingSuites",
+        ] {
+            let mut missing = report.clone();
+            missing["profiles"]["nativeServer"]["conversationHost"]
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+            assert!(!complete_workspace_report(&missing));
+        }
+        for key in ["cases", "steps"] {
+            let mut empty = report.clone();
+            empty["profiles"]["nativeServer"]["conversationHost"][key] = json!(0);
+            assert!(!complete_workspace_report(&empty));
+        }
+        let mut wrong_host_scope = report.clone();
+        wrong_host_scope["profiles"]["nativeServer"]["conversationHost"]["sdks"] =
+            json!(["rust", "python", "node", "wasm"]);
+        assert!(!complete_workspace_report(&wrong_host_scope));
+        let mut skipped_original = report.clone();
+        skipped_original["profiles"]["nativeServer"]["conversationHost"]["existingSuites"]["python"]
+            ["tests"] = json!(26);
+        assert!(!complete_workspace_report(&skipped_original));
+        for profile in [
+            "foundation",
+            "streaming",
+            "operations",
+            "conversations",
+            "nativeServer",
+        ] {
             let mut missing = report.clone();
             missing["profiles"].as_object_mut().unwrap().remove(profile);
             assert!(!complete_workspace_report(&missing));
         }
-        for profile in ["foundation", "streaming", "operations", "nativeServer"] {
+        for profile in [
+            "foundation",
+            "streaming",
+            "operations",
+            "conversations",
+            "nativeServer",
+        ] {
             for field in ["cases", "steps"] {
                 let mut empty = report.clone();
                 empty["profiles"][profile][field] = json!(0);

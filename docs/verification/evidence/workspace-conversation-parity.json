@@ -1,0 +1,215 @@
+{
+  "qualifiedCommit": "3d73d3f2c0636c363936f8c73d4c987d22ce58c3",
+  "sourceDirty": false,
+  "pass": true,
+  "scope": "Synthetic deterministic four-SDK parity and separately counted actual Python/Node encrypted reference hosts; no provider execution, production host security approval, full G3 freeze or beta.3 publication",
+  "cases": 45,
+  "steps": 600,
+  "countsScope": "cases/steps cover four-SDK foundation/streaming/operations/conversations only; nativeServer CAS, conversationHost and planPressure observations apply separately to Python/Node encrypted hosts",
+  "profiles": {
+    "conversations": {
+      "profile": "workspace-conversations-v1",
+      "cases": 8,
+      "steps": 179,
+      "sdks": [
+        "rust",
+        "python",
+        "node",
+        "wasm"
+      ]
+    },
+    "operations": {
+      "profile": "workspace-operations-v1",
+      "cases": 7,
+      "steps": 185,
+      "sdks": [
+        "rust",
+        "python",
+        "node",
+        "wasm"
+      ]
+    },
+    "foundation": {
+      "profile": "launch-workspace-current",
+      "cases": 17,
+      "steps": 156,
+      "sdks": [
+        "rust",
+        "python",
+        "node",
+        "wasm"
+      ]
+    },
+    "streaming": {
+      "profile": "workspace-streaming-v1",
+      "cases": 13,
+      "modes": [
+        "buffered",
+        "progressive"
+      ],
+      "steps": 80,
+      "sdks": [
+        "rust",
+        "python",
+        "node",
+        "wasm"
+      ]
+    },
+    "nativeServer": {
+      "profile": "native-server-cas-v1",
+      "sdks": [
+        "python",
+        "node"
+      ],
+      "oracleSdk": "rust",
+      "cases": 9,
+      "steps": 28,
+      "fixtureSha256": "b2d28b48a643efbc99422f151db6dbf1d8cb18d98f8314c48f541f370b99c268",
+      "requirementsSha256": "51b1cab9f980e73056904b97720e9785c3449bfe68d3d17c2c6a91c7081b05b9",
+      "planPressure": {
+        "pass": true,
+        "profile": "native-plan-pressure-v1",
+        "sdks": [
+          "python",
+          "node"
+        ],
+        "fixtureWorkersPerSdk": 2,
+        "fixtureHandlesPerWorker": 2,
+        "sdkLimitPerHandle": 32,
+        "cycles": 16,
+        "observedSimultaneousPlansPerSdk": 128,
+        "sourceBytesPerPlan": 262144,
+        "fixtureSha256": "576e66c8cc46816555713ec7f34d50431d66b84e29f14d9478f86aece7a38b71",
+        "coreAllocationAfterDiscardBytes": 0,
+        "nodeMemoryExtension": {
+          "executed": false
+        },
+        "memoryScope": "Exact shared-Core requested bytes are separate from observed process RSS and JS/Python heaps. Stale wrappers are retained; native registry allocations are not directly instrumented. Worker processes are joined/reaped. No global Core/host admission limit or hardware SLA is selected."
+      },
+      "conversationHost": {
+        "profile": "native-conversation-host-v1",
+        "sdks": [
+          "python",
+          "node"
+        ],
+        "oracleSdk": "rust",
+        "cases": 16,
+        "steps": 66,
+        "fixtureSha256": "9aa8eafd06a7d44e7ded90ca79132eed2e1329a19ee2dd8ad3d45d07205cb278",
+        "existingSuites": {
+          "python": {
+            "tests": 27,
+            "passed": true
+          },
+          "node": {
+            "checks": 17,
+            "passed": true
+          }
+        },
+        "scope": "actual native Python/Node encrypted stores only; controlled synthetic callbacks and site verification; no real provider or production host security approval"
+      },
+      "existingSuites": {
+        "python": {
+          "tests": 27,
+          "passed": true
+        },
+        "node": {
+          "checks": 17,
+          "passed": true
+        }
+      },
+      "scope": "actual existing Python/Node encrypted SQLite hosts only; not four SQL hosts, provider/KMS/admission policy or real provider confirmation; controlled C2 qualification is counted in conversationHost"
+    }
+  },
+  "runtime": {
+    "node": "v24.18.0",
+    "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "python": "Python 3.14.6",
+    "chromium": "151.0.7922.34"
+  },
+  "sourceSha256": {
+    "fixtures/workspace/conversation-contract-v1.json": "9e232a568367a5fe41c68778820269874d47c5df8cf87e4cd9f3348aef732558",
+    "crates/core/examples/workspace_contract.rs": "316acbf4c3aeee4c0c976a21a69f4072fa6763d5578210e29dded4bca5892f95",
+    "crates/core/examples/workspace_contract/conversation.rs": "48967b9c94389c038998e6abffdf4c2e49733e540fe8e4c018b0afaa0bfc302c",
+    "crates/core/examples/workspace_streaming_contract.rs": "4fccc4c1a1d943ca6df14f5005fa90cf62966939c1ce7d336e98323981507caf",
+    "crates/xtask/src/workspace_parity.rs": "cae8676eeeec0bcba8fa93f64d973ae827190c7d94cffef8f29686979003b87a",
+    "scripts/workspace-parity-runner.mjs": "7a7a7e022bf653900796f2d574f1e38fe17f49cda1fd6e2e61cc297828417005",
+    "scripts/workspace-parity-python.py": "903a0557bffdaf74591a8405616aa49edb211d75ae7ead89fd8e03c807d6a363",
+    "scripts/test-workspace-parity.mjs": "d8b23cfbc1b3d09871f7d10a550959afd8f75d96cb1b803ecf0b663c1c5ee895",
+    "scripts/test-workspace-parity-protocol.mjs": "35e4da1b036d0b7ee8fe35af1fbfeb81c5fa2a9544e554f81ad1ae564f710f9b",
+    "scripts/native-conversation-host-profile.mjs": "cdd7da4c805ee6ad2d4fb8c11ae8f1950bcf9c21098c06604c8e6b259d04758b",
+    "scripts/native-conversation-host-node.mjs": "d31a24aa243026a81483c9035cea481e9d80d94f1de9728b17b00051d9739fca",
+    "scripts/native-conversation-host-python.py": "dfe12cfc789fca71e5431cd20be07b4092cb758bec2b15c8aa81808673d3a8b7",
+    "fixtures/workspace/native-conversation-host-v1.json": "9aa8eafd06a7d44e7ded90ca79132eed2e1329a19ee2dd8ad3d45d07205cb278",
+    "scripts/test-native-conversation-host-protocol.mjs": "4c43a49e314f3f7ac9284613ee514233bbb1229f0b78d1c695957e02e778684f"
+  },
+  "packages": {
+    "node": {
+      "sha256": "cd7cb58dd2e6238d8fe990a690fb1163f87f4e4da14b25c8bc85ce4bbecf3354",
+      "bytes": 2025511
+    },
+    "wasm": {
+      "sha256": "af2c7aefa82423c84c4ede4dbb39360bac26b15019541633b5b056a1151f0159",
+      "bytes": 1020305
+    },
+    "python": {
+      "sha256": "fa5d327082e9cbd540ffd519244c30ae0846eeb2a7bdec7bf3fbde01674949fc",
+      "bytes": 2245860,
+      "version": "0.5.0b2",
+      "projectSha256": "186b884c3c17db0d8db0d39499f215f1df285246bf39c4f2210f1dd2990c6a28"
+    }
+  },
+  "javaScriptHeadMutationProof": {
+    "node": {
+      "actualHeads": 117,
+      "numericRevisionRejected": true
+    },
+    "wasm": {
+      "actualHeads": 117,
+      "numericRevisionRejected": true
+    }
+  },
+  "foundationStreamingOperationCanonicalSha256": {
+    "rust.json": "9ef457a026653b469f4c3bf4771a40ed56c0f7c828d8458de2fc4e317889fd81",
+    "rust-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "rust-operations.json": "ac4041d848b2636c5ecca74810602150a9c27d48dc2e86da126503ccb586cda1",
+    "python.json": "9ef457a026653b469f4c3bf4771a40ed56c0f7c828d8458de2fc4e317889fd81",
+    "python-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "python-operations.json": "ac4041d848b2636c5ecca74810602150a9c27d48dc2e86da126503ccb586cda1",
+    "node.json": "9ef457a026653b469f4c3bf4771a40ed56c0f7c828d8458de2fc4e317889fd81",
+    "node-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "node-operations.json": "ac4041d848b2636c5ecca74810602150a9c27d48dc2e86da126503ccb586cda1",
+    "wasm.json": "9ef457a026653b469f4c3bf4771a40ed56c0f7c828d8458de2fc4e317889fd81",
+    "wasm-streaming.json": "5803ffef8b8e80243d8dcd6abe844a9f8c97eac6e352f3c5efd59998de11100d",
+    "wasm-operations.json": "ac4041d848b2636c5ecca74810602150a9c27d48dc2e86da126503ccb586cda1"
+  },
+  "conversationAndHostOutputSha256": {
+    "rust-conversations.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "rust-conversations.raw.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "python-conversations.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "python-conversations.raw.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "node-conversations.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "node-conversations.raw.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "wasm-conversations.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "wasm-conversations.raw.json": "62afa7eacb2adec02800f8d6c1a966db3099e305c98d075d80ceedb2e907a0e5",
+    "native-conversation-host-core-reference.json": "80856ef1d2c8e79af23f237a31a467310874e010c637d6e1f658ad962e47020e",
+    "native-conversation-host-oracle.json": "edd099096e13d7585078d80f0f1aab5e2499f6fd0901eb39b4ede50503d31cc8",
+    "python-native-conversation-host.json": "fc56fbe80b0ec2d274ba1405796c20420fa3c109624aa7dcdb9eaf89d743503e",
+    "node-native-conversation-host.json": "397a21d19dc73a7c0dd4017a2f376ccc48ad66dec5d96821752c3e729fa30627"
+  },
+  "protocolTests": 19,
+  "hostActualOutputMutationTests": 64,
+  "retainedRun": "target/dfv/runs/20261029T140027Z/workspace-parity",
+  "validation": [
+    "required doctor including binding freshness",
+    "Rustfmt",
+    "focused xtask/Core example Clippy",
+    "five CLI integration tests",
+    "two actual completion-flag example regressions",
+    "actual installed four-SDK 45/600 matrix",
+    "separate native CAS9/28, conversation16/66 and16-cycle pressure proofs",
+    "closed typed callbacks and exact actual Core-error oracle fields",
+    "numeric raw JavaScript revision mutation rejection"
+  ],
+  "syntheticOnly": true
+}
