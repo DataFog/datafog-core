@@ -114,6 +114,10 @@ try {
   await call("openWorkspace", password);
   assert.equal(await call("seedStale", text, first.value.findings), 31);
   const prepared = await call("prepare", text);
+  assert(prepared.preview.transformations.length > 0);
+  assert(prepared.preview.transformations.every(span => span.source === "scanner" && span.needsReview === true));
+  report.reviewPreview = prepared.preview;
+  passed("scanner review metadata and input-local highlight ranges survive packed-SDK workspace preparation");
   assert(!prepared.preview.text.includes("John Smith"));
   assert.equal(await page.locator("#sink").textContent(), "");
   const uncommitted = await call("restoreReport", prepared.preview.text);

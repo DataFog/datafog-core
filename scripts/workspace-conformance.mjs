@@ -9,6 +9,31 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+  const sources = api.Workspace.create(id(25), id(26));
+  const sourceText = "👋 é Jane";
+  const legacy = {entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 9, end: 13}};
+  const legacyPlan = sources.prepare(sourceText, [legacy], id(27));
+  const legacySpan = legacyPlan.preview().transformations[0];
+  check(legacySpan.source === "scanner" && legacySpan.needsReview === true, "omitted source metadata preserves conservative legacy defaults");
+  const sourcePlan = sources.prepareBatch([
+    {text: sourceText, findings: [{...legacy, source: "user", needsReview: false}]},
+    {text: sourceText, findings: [{...legacy, source: "recall", needsReview: true}]},
+  ], id(28));
+  const sourcePreviews = sourcePlan.previews();
+  check(sourcePreviews.map(p => p.transformations[0].source).join() === "user,recall", "batch previews retain input-local source metadata");
+  check(sourcePreviews[0].transformations[0].needsReview === false && sourcePreviews[1].transformations[0].needsReview === true, "explicit review flags survive the Core binding");
+  const sourceSpan = sourcePreviews[0].transformations[0];
+  check(sourceSpan.sourceByteRange.start === 9 && sourceSpan.sourceCodepointRange.start === 5 && sourceSpan.sourceUtf16Range.start === 6, "review metadata preserves all Unicode range units");
+  for (const metadata of [{source: "private-source"}, {source: null}, {source: 1}, {needsReview: null}, {needsReview: "false"}]) {
+    throws(() => sources.prepare(sourceText, [{...legacy, ...metadata}], id(29)), "invalid_finding");
+  }
+  let sourceGetterRead = false;
+  throws(() => sources.prepare(sourceText, [{...legacy, get source() { sourceGetterRead = true; return "user"; }}], id(29)), "invalid_finding");
+  check(!sourceGetterRead, "source accessors are rejected without reading them");
+  const preferred = sources.prepare(sourceText, [{...legacy, source: "scanner", confidence: 0.1}, {...legacy, source: "user", needsReview: false, confidence: 0.9}], id(29));
+  check(preferred.preview().transformations[0].source === "user" && preferred.preview().transformations[0].needsReview === false, "metadata follows the selected duplicate rather than the first matching range");
+  throws(() => sources.restore(sourcePreviews[0].text), "invalid_marker");
+  sourcePlan.discard(); preferred.discard(); legacyPlan.discard(); sources.close();
   const blocked = api.Workspace.create(id(30), id(31));
   const blockedSaved = blocked.exportBundle();
   let sourceFailure;

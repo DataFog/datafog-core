@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Workspace findings and preview transformations carry scanner/recall/user source
+  and review metadata in Rust and WASM. Existing callers default to scanner and
+  review required; these display flags never bypass approval or persistence.
+
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
   reject occupied destinations, and preserve aliases under fresh workspace keys
