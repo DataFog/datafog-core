@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:model": "node build-model.mjs",
+    "test:model-extension": "node ../../scripts/test-model-extension.mjs",
     "test:workspace-integration": "node ../../scripts/test-workspace-extension.mjs"
   },
   "dependencies": {
