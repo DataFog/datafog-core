@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {verifyFollowups} from "./test-workspace-followups.mjs";
+import {verifyReviewHost} from "./test-workspace-review.mjs";
 import {verifyPolicyHost} from "./test-workspace-policy.mjs";
 import {verifyBackups} from "./test-workspace-backup.mjs";
 import {waitForBrokerState} from "./workspace-test-wait.mjs";
@@ -322,14 +323,18 @@ try {
   check(await page.locator("#restored").textContent() === fixture.january, "A8 validation failures preserve saved mappings");
   console.log("PASS A8 credentials, KDF bounds and authenticated-envelope tampering");
 
+  await verifyReviewHost({fresh,status,close:async()=>{await context?.close();context=undefined;},launch,unlock,control,check});
+  console.log("PASS D8 combined review conflicts, fresh edit, failed save, approved handoff and recall reopen");
+
   await context?.close(); context = undefined;
   const browserPage = await launch("wasm-contract");
-  await browserPage.evaluate(async counters => {
+  const reviewQualification = await browserPage.evaluate(async counters => {
     const api = await import("./vendor/package/index.js");
     const { verifyWorkspace } = await import("./workspace-conformance.mjs");
-    await verifyWorkspace(api, counters);
+    const qualified=await verifyWorkspace(api, counters);
     const {verifyWorkspacePolicy} = await import("./workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(api, counters);
+    return qualified;
   }, counterFixtures);
   console.log("PASS A3/A7/A8 installed WASM inputs, lifecycle, canonical CBOR and uint64 parity");
 
@@ -389,7 +394,8 @@ try {
     result: "passed", browser: context.browser().version(), platform: process.platform, arch: process.arch,
     execution: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     scope: "synthetic Chromium workflow; branded Chrome and branch-rule enforcement are separate qualifications",
-    checks: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
+    reviewQualification,
+    checks: ["D8", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "B1", "B2", "B3", "F1", "F2", "G1", "G2", "G3", "G4"],
     externalRequests: observed.externalRequests, consoleMessages: observed.consoleMessages, pageErrors: observed.pageErrors,
     artifacts,
   }, null, 2));

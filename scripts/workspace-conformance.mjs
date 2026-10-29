@@ -1,3 +1,4 @@
+import {verifyWorkspaceReview} from "./workspace-review-conformance.mjs";
 /** Shared installed-package workspace checks; all values are synthetic. */
 export async function verifyWorkspace(api, counters) {
   const check = (condition, label) => { if (!condition) throw new Error(label); };
@@ -9,6 +10,7 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+  const reviewMeasurements=verifyWorkspaceReview(api);
   const recallWorkspace = api.Workspace.create(id(21), id(22));
   const approvedValue = "İ Jane";
   const seed = recallWorkspace.prepare(approvedValue, [{entityType: "PERSON", matchedText: approvedValue, range: {unit: "utf8_bytes", start: 0, end: new TextEncoder().encode(approvedValue).length}}], id(23));
@@ -247,5 +249,5 @@ export async function verifyWorkspace(api, counters) {
   change = w.prepare("", [], id(7)); w.close();
   throws(() => change.preview(), "closed_workspace");
   reopened.close();
-  return true;
+  return {reviewMeasurements};
 }

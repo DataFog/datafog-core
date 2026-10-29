@@ -61,14 +61,14 @@ function workspaceFindings(findings) {
 async function prepare(text) {
   const detected = await scan(text);
   const findings = workspaceFindings(detected.value.findings);
-  const change = workspace.prepare(text, findings, randomId());
+  const change = workspace.prepareReview([{text,scannerFindings:findings,userSelections:[]}],randomId());
   pending = {change, preview: change.preview()};
   document.querySelector("#sink").textContent = "";
   return {...detected, preview: pending.preview, heads: change.heads()};
 }
 function prepareRecall(text) {
   const recall = workspace.recall(text);
-  const change = workspace.prepare(text, recall.findings.map(span => span.finding), randomId());
+  const change = workspace.prepareReview([{text,scannerFindings:[],userSelections:[]}],randomId());
   pending = {change, preview: change.preview()};
   document.querySelector("#sink").textContent = "";
   return {recall, preview: pending.preview, heads: change.heads()};

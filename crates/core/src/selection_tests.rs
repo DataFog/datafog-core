@@ -195,7 +195,7 @@ fn ssn_person_priority_keeps_nonoverlapping_person_findings() {
 }
 
 #[test]
-fn different_span_ssn_person_overlaps_keep_existing_selection_policy() {
+fn different_span_ssn_person_overlaps_preserve_coverage_or_require_review() {
     let text = "AB 123-45-6789 CD";
     let ssn = scan(text).remove(0);
     let config = TransformationConfig::new(TransformationStrategy::Redact);
@@ -209,7 +209,12 @@ fn different_span_ssn_person_overlaps_keep_existing_selection_policy() {
             vec![ssn.clone(), person.clone()],
             vec![person.clone(), ssn.clone()],
         ] {
-            assert_eq!(transform(text, &findings, &config).unwrap().text, expected);
+            let result = transform(text, &findings, &config);
+            if (start, end) == (0, 8) {
+                assert_eq!(result.unwrap_err().code(), PrivacyErrorCode::ReviewConflict);
+            } else {
+                assert_eq!(result.unwrap().text, expected);
+            }
         }
     }
 }
@@ -227,12 +232,12 @@ fn cyclic_overlap_preferences_preserve_pairwise_winner() {
     assert!(overlap_preference(&findings[2], &findings[0]).is_lt());
     let config = TransformationConfig::new(TransformationStrategy::Redact);
     assert_eq!(
-        select_findings(text, &findings, &config).unwrap(),
+        select_validated_findings(&findings, &config),
         vec![findings[2].clone()]
     );
     assert_eq!(
-        transform(text, &findings, &config).unwrap().text,
-        "ab[PERSON]"
+        transform(text, &findings, &config).unwrap_err().code(),
+        PrivacyErrorCode::ReviewConflict
     );
 }
 
@@ -292,6 +297,33 @@ fn validation_still_precedes_filtering_and_duplicate_collapse() {
 
 struct Random(u64);
 
+fn assert_public_selection_is_covered(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) {
+    let expected = reference_selection(findings, config);
+    assert_eq!(select_validated_findings(findings, config), expected);
+    // Independent byte-wise proof, rather than repeating the interval guard.
+    let lost = findings.iter().enumerate().find(|(_, finding)| {
+        config.includes(finding)
+            && !config.allows(finding)
+            && (finding.byte_range.start..finding.byte_range.end).any(|byte| {
+                !expected.iter().any(|selected| {
+                    selected.byte_range.start <= byte && byte < selected.byte_range.end
+                })
+            })
+    });
+    if let Some((index, _)) = lost {
+        assert_eq!(
+            select_findings(text, findings, config),
+            Err(PrivacyError::review_conflict(index))
+        );
+    } else {
+        assert_eq!(select_findings(text, findings, config), Ok(expected));
+    }
+}
+
 impl Random {
     fn below(&mut self, limit: usize) -> usize {
         self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1);
@@ -350,11 +382,8 @@ fn selection_matches_reference_across_unicode_ranges_policies_and_input_orders()
         for permutation in 0..3 {
             random.shuffle(&mut findings);
             let config = &configs[trial % configs.len()];
-            assert_eq!(
-                select_findings(&text, &findings, config).unwrap(),
-                reference_selection(&findings, config),
-                "trial {trial}, permutation {permutation}",
-            );
+            let _ = permutation;
+            assert_public_selection_is_covered(&text, &findings, config);
         }
     }
 }
@@ -377,10 +406,7 @@ fn ordered_interval_selection_handles_touching_nested_and_partial_spans() {
                 .collect();
             for _ in 0..20 {
                 random.shuffle(&mut findings);
-                assert_eq!(
-                    select_findings(&text, &findings, &config).unwrap(),
-                    reference_selection(&findings, &config)
-                );
+                assert_public_selection_is_covered(&text, &findings, &config);
             }
         }
     }

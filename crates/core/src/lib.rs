@@ -3,6 +3,7 @@ mod account_number;
 mod api_key;
 mod bearer_token;
 mod capabilities;
+mod coverage;
 mod credential_uri;
 mod email_context;
 pub use capabilities::{
@@ -1691,6 +1692,8 @@ pub enum PrivacyErrorCode {
     InvalidConfiguration,
     /// One caller-supplied finding is invalid.
     InvalidFinding,
+    /// Overlap selection cannot preserve all eligible source coverage.
+    ReviewConflict,
     /// Pseudonymization was selected without a runtime provider.
     KeyProviderRequired,
     /// The requested provider key does not exist.
@@ -1733,6 +1736,7 @@ impl PrivacyErrorCode {
         match self {
             Self::InvalidConfiguration => "invalid_configuration",
             Self::InvalidFinding => "invalid_finding",
+            Self::ReviewConflict => "review_conflict",
             Self::KeyProviderRequired => "key_provider_required",
             Self::KeyNotFound => "key_not_found",
             Self::KeyAccessDenied => "key_access_denied",
@@ -1804,6 +1808,15 @@ pub struct PrivacyError {
 }
 
 impl PrivacyError {
+    fn review_conflict(finding_index: usize) -> Self {
+        Self {
+            code: PrivacyErrorCode::ReviewConflict,
+            reason: None,
+            path: Some(format!("/findings/{finding_index}")),
+            finding_index: Some(finding_index),
+            message: "overlapping findings require review before transformation".to_owned(),
+        }
+    }
     fn invalid_configuration(
         reason: PrivacyErrorReason,
         path: impl Into<String>,
@@ -2575,7 +2588,21 @@ fn select_findings(
         }
     }
 
-    Ok(select_validated_findings(findings, config))
+    let selected = select_validated_findings(findings, config);
+    let eligible: Vec<_> = findings
+        .iter()
+        .enumerate()
+        .filter(|(_, finding)| config.includes(finding) && !config.allows(finding))
+        .collect();
+    let required: Vec<_> = eligible
+        .iter()
+        .map(|(_, finding)| finding.byte_range)
+        .collect();
+    let selected_ranges: Vec<_> = selected.iter().map(|finding| finding.byte_range).collect();
+    if let Some(&uncovered) = coverage::uncovered(&required, &selected_ranges).first() {
+        return Err(PrivacyError::review_conflict(eligible[uncovered].0));
+    }
+    Ok(selected)
 }
 
 fn select_validated_findings(findings: &[Finding], config: &TransformationConfig) -> Vec<Finding> {
@@ -6319,20 +6346,98 @@ mod tests {
     }
 
     #[test]
-    fn equal_partial_overlaps_prefer_the_earlier_source_position() {
+    fn equal_partial_overlaps_require_review_instead_of_exposing_the_suffix() {
         let text = "abcdef";
         let earlier = supplied_ascii_finding(text, "ZETA", 0, 4, None, "z");
         let later = supplied_ascii_finding(text, "ALPHA", 2, 6, None, "a");
 
-        let result = transform(
+        let failure = transform(
             text,
             &[later, earlier.clone()],
             &config(TransformationStrategy::Redact),
         )
-        .unwrap();
+        .unwrap_err();
+        assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+        assert_eq!(failure.finding_index(), Some(0));
+    }
 
-        assert_eq!(result.text, "[ZETA]ef");
-        assert_transformation_source(&result.transformations[0], &earlier);
+    #[test]
+    fn every_transform_selector_rejects_lost_coverage_before_provider_work() {
+        let text = "abcdef";
+        let first = supplied_ascii_finding(text, "ALPHA", 0, 4, None, "first");
+        let second = supplied_ascii_finding(text, "ZETA", 2, 6, None, "second");
+        let findings = [first, second];
+        let redaction = config(TransformationStrategy::Redact);
+        let context = PrivacyContext::new("synthetic").unwrap();
+        for failure in [
+            transform(text, &findings, &redaction).unwrap_err(),
+            crate::required_key_selectors(text, &findings, &redaction).unwrap_err(),
+            crate::transform_with_resolved_keys(text, &findings, &redaction, vec![]).unwrap_err(),
+            crate::required_tokenization_items(text, &findings, &redaction, Some(&context))
+                .unwrap_err(),
+            crate::transform_with_provider_results(
+                text,
+                &findings,
+                &redaction,
+                Some(&context),
+                vec![],
+                vec![],
+            )
+            .unwrap_err(),
+        ] {
+            assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+            assert_eq!(failure.finding_index(), Some(1));
+            assert_eq!(failure.path(), Some("/findings/1"));
+            assert!(!failure.to_string().contains(text));
+        }
+        let tokens = TestTokenProvider::default();
+        let manager =
+            PrivacyManager::new(TestKeyProvider::default()).with_token_provider(tokens.clone());
+        let pseudonymize = parse_transformation_config(
+            &json!({"default":{"strategy":"pseudonymize","key_ref":"unqueried"}}),
+        )
+        .unwrap();
+        assert_eq!(
+            block_on(manager.transform(text, &findings, &pseudonymize))
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::ReviewConflict
+        );
+        let tokenize = parse_transformation_config(
+            &json!({"default":{"strategy":"tokenize","token_ref":"unqueried"}}),
+        )
+        .unwrap();
+        assert_eq!(
+            block_on(manager.transform_with_context(text, &findings, &tokenize, Some(&context)))
+                .unwrap_err()
+                .code(),
+            PrivacyErrorCode::ReviewConflict
+        );
+        assert_eq!(manager.provider.call_count(), 0);
+        assert!(tokens.tokenize_calls.lock().unwrap().is_empty());
+        let data = json!({"a":"xy", "z":text});
+        let located = vec![
+            crate::structured::StructuredFinding {
+                path: "/a".to_owned(),
+                finding: supplied_ascii_finding("xy", "ALPHA", 0, 2, None, "first"),
+            },
+            crate::structured::StructuredFinding {
+                path: "/z".to_owned(),
+                finding: findings[0].clone(),
+            },
+            crate::structured::StructuredFinding {
+                path: "/z".to_owned(),
+                finding: findings[1].clone(),
+            },
+        ];
+        let failure =
+            block_on(manager.transform_structured(&data, &located, &pseudonymize, Some(&context)))
+                .unwrap_err();
+        assert_eq!(failure.code(), PrivacyErrorCode::ReviewConflict);
+        assert_eq!(failure.finding_index(), Some(2));
+        assert_eq!(failure.path(), Some("/findings/2/finding"));
+        assert_eq!(manager.provider.call_count(), 0);
+        assert!(tokens.tokenize_calls.lock().unwrap().is_empty());
     }
 
     #[test]
