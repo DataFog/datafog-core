@@ -21,6 +21,7 @@ fn encode_with_limit(state: &State, limit: usize) -> Result<Vec<u8>> {
     });
     encode_into(state, &mut encoder).map_err(|_| error(ErrorCode::ResourceLimit))?;
     let mut writer = encoder.into_writer();
+    // Successful exports deliberately transfer their plaintext bytes to the caller.
     Ok(std::mem::take(&mut *writer.bytes))
 }
 pub(super) fn encode(state: &State) -> Result<Vec<u8>> {
