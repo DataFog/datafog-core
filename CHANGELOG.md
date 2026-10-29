@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- New browser workspace backups require password reauthentication and use
+  Argon2id with 256 MiB and three passes, replacing the older password wrapper.
+  Legacy backups remain importable; restored new backups retain the stronger
+  profile for password unlock.
+
 - Prepare `0.5.0-beta.1` (Python `0.5.0b1`) as a developer integration
   release: persistent workspace handoff/restore and optional English browser Small
   model sessions. Pin this beta exactly and recreate disposable development vaults
@@ -21,6 +26,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Transformations stop with `review_conflict` when overlap selection would expose
   part of another eligible finding. Resolve the conflict before retrying;
   providers are not called and no partial transformed result is returned.
+
+- Rust and WASM workspaces can recall committed values in new text, with source
+  metadata and original byte/codepoint/UTF-16 ranges. Queries return all matches
+  or an explicit limit failure and never change saved mappings or bypass approval.
+
+- Workspace findings and preview transformations carry scanner/recall/user source
+  and review metadata in Rust and WASM. Existing callers default to scanner and
+  review required; these display flags never bypass approval or persistence.
 
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,

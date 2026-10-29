@@ -165,6 +165,17 @@ const workspace = Workspace.create(new Uint8Array(16), new Uint8Array(16));
 const inputs: readonly WorkspaceInput[] = [{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}];
 const pending = workspace.prepareBatch(inputs, new Uint8Array(16));
 const previews: readonly WorkspacePreview[] = pending.previews();
+const findingSource: "scanner" | "recall" | "user" = previews[0].transformations[0].source;
+const needsReview: boolean = previews[0].transformations[0].needsReview;
+const recalled = workspace.recall("Jane");
+const completeRecall: true = recalled.complete;
+const recallSource: "recall" = recalled.findings[0].finding.source;
+workspace.prepare("Jane", recalled.findings.map(span => span.finding), new Uint8Array(16));
+void completeRecall; void recallSource;
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsReview: false}], new Uint8Array(16));
+// @ts-expect-error Review source is a closed set.
+workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
+void findingSource; void needsReview;
 const recovery = workspace.prepareRecovery(new Uint8Array(16));
 const recoveredBytes: Uint8Array = recovery.exportCandidateBundle();
 workspace.activateSaved(recovery, recovery.heads().expectedHead, recovery.heads().candidateHead);

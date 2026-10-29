@@ -75,6 +75,14 @@ struct FindingInput {
     confidence: Option<f32>,
     detector_name: Option<String>,
     detector_version: Option<String>,
+    #[serde(default)]
+    source: workspace::FindingSource,
+    #[serde(default = "default_needs_review")]
+    needs_review: bool,
+}
+
+fn default_needs_review() -> bool {
+    workspace::DEFAULT_NEEDS_REVIEW
 }
 
 #[derive(Deserialize)]
@@ -107,6 +115,8 @@ fn adapt_findings(inputs: Vec<FindingInput>) -> Result<Vec<WorkspaceFinding>, Wo
                 confidence: f.confidence,
                 detector_name: f.detector_name,
                 detector_version: f.detector_version,
+                source: f.source,
+                needs_review: f.needs_review,
             })
         })
         .collect()
@@ -118,6 +128,8 @@ fn preview_value(preview: &workspace::Preview) -> serde_json::Value {
         .iter()
         .map(|t| {
             json!({
+                "source": t.source.as_str(),
+                "needsReview": t.needs_review,
                 "sourceByteRange": super::TextRange::from(t.source_byte_range),
                 "sourceCodepointRange": super::TextRange::from(t.source_codepoint_range),
                 "sourceUtf16Range": super::TextRange::from(t.source_utf16_range),
@@ -164,6 +176,28 @@ impl WasmWorkspace {
     }
     pub fn export_bundle(&self) -> Result<Vec<u8>, JsValue> {
         self.inner.export_bundle().map_err(from_error)
+    }
+    pub fn recall(&self, text: &str) -> Result<String, JsValue> {
+        let result = self.inner.recall(text).map_err(from_error)?;
+        let findings: Vec<_> = result.findings.iter().map(|span| {
+            let finding = &span.finding;
+            json!({
+                "finding": {
+                    "entityType": finding.entity_type,
+                    "matchedText": finding.matched_text,
+                    "range": { "unit": "utf8_bytes", "start": finding.byte_range.start, "end": finding.byte_range.end },
+                    "source": finding.source.as_str(),
+                    "needsReview": finding.needs_review,
+                },
+                "byteRange": super::TextRange::from(finding.byte_range),
+                "codepointRange": super::TextRange::from(span.codepoint_range),
+                "utf16Range": super::TextRange::from(span.utf16_range),
+            })
+        }).collect();
+        Ok(
+            json!({ "head": head_value(result.head), "complete": true, "findings": findings })
+                .to_string(),
+        )
     }
     pub fn prepare_recovery(&mut self, operation: &[u8]) -> Result<u32, JsValue> {
         if self.plans.len() >= 32 {
