@@ -3,9 +3,9 @@
 Implementation work for [X7 / #168](https://github.com/DataFog/datafog-core/issues/168),
 integrating released beta.2 main and the approved Core streaming candidate #176. This is an in-process
 Rust N-API binding. It does not load browser WASM or implement a persistence host.
-The reviewed lifecycle and streaming calls are exposed. Operation records/counts
-and conversation methods remain native/all-SDK follow-up to the Rust/WASM #147
-and future #148 drafts; they are not represented by fake native APIs.
+The reviewed lifecycle and streaming calls are exposed. The current draft also
+wraps shared Core [operation records/counts and pages](native/node-operations.md)
+for #147. Conversation methods remain future #148 work and have no native exports.
 The package is not released by this draft.
 
 ## Calls, ownership and representations

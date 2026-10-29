@@ -28,6 +28,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Node exposes Core operation records, explicit timed preparation/outcomes,
+  covered-history counts and bounded owned history pages.
+
 - Proposed content-free workspace records and recorded-history counts use staged
   v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
   Read-only pages expose every retained row without requiring a full JSON view.

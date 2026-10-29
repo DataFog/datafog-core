@@ -69,6 +69,37 @@ fn parse_head(json: &str) -> Result<Head, Error> {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct OperationInput {
+    id: Vec<u8>,
+    occurred_at_ms: u64,
+}
+fn operation_context(json: &str) -> Result<workspace::OperationContext, Error> {
+    if json.len() > 256 {
+        return Err(failure(ErrorCode::InvalidOperation));
+    }
+    let input: OperationInput =
+        serde_json::from_str(json).map_err(|_| failure(ErrorCode::InvalidOperation))?;
+    if input.occurred_at_ms > workspace::MAX_OPERATION_TIME_MS {
+        return Err(failure(ErrorCode::InvalidOperation));
+    }
+    Ok(workspace::OperationContext {
+        id: id(&input.id)?,
+        occurred_at_ms: input.occurred_at_ms,
+    })
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct OutcomeInput {
+    kind: String,
+    issue_count: usize,
+}
+fn operation_record_value(record: &workspace::OperationRecord) -> serde_json::Value {
+    json!({"id":record.id,"kind":record.kind.as_str(),"occurredAtMs":record.occurred_at_ms,
+        "preparedInputs":record.prepared_inputs,"transformedSpans":record.transformed_spans})
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RangeInput {
     unit: String,
@@ -272,6 +303,93 @@ impl NativeWorkspace {
             streams: stream::Registry::default(),
         })
     }
+    #[napi(factory, js_name = "create_with_operation")]
+    pub fn create_with_operation(
+        namespace: Buffer,
+        context_json: String,
+    ) -> Result<NativeWorkspace, Error> {
+        let inner =
+            Workspace::create_with_operation(id(&namespace)?, operation_context(&context_json)?)
+                .map_err(from_error)?;
+        Ok(Self {
+            inner,
+            plans: BTreeMap::new(),
+            next_plan: 1,
+            streams: stream::Registry::default(),
+        })
+    }
+    #[napi(js_name = "operations")]
+    pub fn operations(&self) -> Result<String, Error> {
+        let records: Vec<_> = self
+            .inner
+            .operations()
+            .map_err(from_error)?
+            .iter()
+            .map(operation_record_value)
+            .collect();
+        Ok(json!(records).to_string())
+    }
+    #[napi(js_name = "operations_page")]
+    pub fn operations_page(&self, offset: u32, limit: u32) -> Result<String, Error> {
+        let page = self
+            .inner
+            .operations_page(offset as usize, limit as usize)
+            .map_err(from_error)?;
+        let records: Vec<_> = page.records.iter().map(operation_record_value).collect();
+        Ok(json!({"records":records,"total":page.total,"offset":page.offset,"nextOffset":page.next_offset}).to_string())
+    }
+    #[napi(js_name = "counts")]
+    pub fn counts(&self) -> Result<String, Error> {
+        let counts = self.inner.counts().map_err(from_error)?;
+        Ok(json!({"operations":counts.operations,"preparedInputs":counts.prepared_inputs,
+            "transformedSpans":counts.transformed_spans,"confirmedHandoffs":counts.confirmed_handoffs,
+            "reportedBlockedAttempts":counts.reported_blocked_attempts}).to_string())
+    }
+    #[napi(js_name = "history_coverage")]
+    pub fn history_coverage(&self) -> Result<String, Error> {
+        serde_json::to_string(&self.inner.history_coverage().map_err(from_error)?)
+            .map_err(|_| failure(ErrorCode::ResourceLimit))
+    }
+    #[napi(js_name = "prepare_outcome")]
+    pub fn prepare_outcome(
+        &mut self,
+        outcome_json: String,
+        context_json: String,
+    ) -> Result<u32, Error> {
+        if self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        if outcome_json.len() > 128 {
+            return Err(failure(ErrorCode::InvalidOperation));
+        }
+        let input: OutcomeInput = serde_json::from_str(&outcome_json)
+            .map_err(|_| failure(ErrorCode::InvalidOperation))?;
+        let kind = match input.kind.as_str() {
+            "copy_confirmed" => workspace::OutcomeKind::CopyConfirmed,
+            "user_cancelled" => workspace::OutcomeKind::UserCancelled,
+            "blocked_input" => workspace::OutcomeKind::BlockedInput,
+            "restore_blocked" => workspace::OutcomeKind::RestoreBlocked,
+            _ => return Err(failure(ErrorCode::InvalidOperation)),
+        };
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_outcome(
+                workspace::OperationOutcome {
+                    kind,
+                    issue_count: input.issue_count,
+                },
+                operation_context(&context_json)?,
+            )
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
     #[napi(js_name = "head")]
     pub fn head(&self) -> Result<String, Error> {
         Ok(head_value(self.inner.head().map_err(from_error)?).to_string())
@@ -396,7 +514,11 @@ impl NativeWorkspace {
         Ok(handle)
     }
     #[napi(js_name = "prepare_recovery")]
-    pub fn prepare_recovery(&mut self, operation: Buffer) -> Result<u32, Error> {
+    pub fn prepare_recovery(
+        &mut self,
+        operation: Buffer,
+        context: Option<String>,
+    ) -> Result<u32, Error> {
         if self.plans.len() >= 32 {
             return Err(failure(ErrorCode::ResourceLimit));
         }
@@ -404,10 +526,16 @@ impl NativeWorkspace {
             .next_plan
             .checked_add(1)
             .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
-        let plan = self
-            .inner
-            .prepare_recovery(id(&operation)?)
-            .map_err(from_error)?;
+        let plan = if let Some(context) = context {
+            let parsed = operation_context(&context)?;
+            if parsed.id != id(&operation)? {
+                return Err(failure(ErrorCode::InvalidOperation));
+            }
+            self.inner.prepare_recovery_with_operation(parsed)
+        } else {
+            self.inner.prepare_recovery(id(&operation)?)
+        }
+        .map_err(from_error)?;
         let handle = self.next_plan;
         self.plans.insert(handle, plan);
         self.next_plan = next;
@@ -446,7 +574,12 @@ impl NativeWorkspace {
         Ok(handle)
     }
     #[napi(js_name = "prepare_batch")]
-    pub fn prepare_batch(&mut self, inputs_json: String, operation: Buffer) -> Result<u32, Error> {
+    pub fn prepare_batch(
+        &mut self,
+        inputs_json: String,
+        operation: Buffer,
+        context: Option<String>,
+    ) -> Result<u32, Error> {
         if inputs_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
             return Err(failure(ErrorCode::ResourceLimit));
         }
@@ -482,10 +615,16 @@ impl NativeWorkspace {
             .next_plan
             .checked_add(1)
             .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
-        let plan = self
-            .inner
-            .prepare_batch(&borrowed, id(&operation)?)
-            .map_err(from_error)?;
+        let plan = if let Some(context) = context {
+            let parsed = operation_context(&context)?;
+            if parsed.id != id(&operation)? {
+                return Err(failure(ErrorCode::InvalidOperation));
+            }
+            self.inner.prepare_batch_with_operation(&borrowed, parsed)
+        } else {
+            self.inner.prepare_batch(&borrowed, id(&operation)?)
+        }
+        .map_err(from_error)?;
         let handle = self.next_plan;
         self.plans.insert(handle, plan);
         self.next_plan = next;
