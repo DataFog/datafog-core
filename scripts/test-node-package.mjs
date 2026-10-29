@@ -49,6 +49,8 @@ import { verifyEmailContext } from "./email-context-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyCredentialUri, verifyCredentialUriProviders } from "./credential-uri-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
+import { verifyStreetAddress } from "./street-address-conformance.mjs";
+import { verifyAccountNumber } from "./account-number-conformance.mjs";
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
@@ -132,6 +134,11 @@ verifyCredentialUri(germanApi,credential_uriRecords);
 verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
+verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
+verifyStreetAddress(germanApi, readFileSync(path.join(fixturesDirectory,"street-address.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
+
+
+verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"masked-account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
 verifyGerman(germanApi,germanRecords);
 verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
 verifyJwt(germanApi,jwtRecords);
@@ -749,6 +756,8 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
