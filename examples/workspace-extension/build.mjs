@@ -17,7 +17,10 @@ execFileSync("tar", ["-xzf", path.join(dist, tarball), "-C", path.join(dist, "ve
 await rm(path.join(dist, tarball));
 await cp(path.join(here, "src"), dist, { recursive: true });
 execFileSync("cargo",["run","-p","datafog-core","--release","--example","workspace_operation_capacity","--",path.join(root,"target/operation-capacity")],{cwd:root,stdio:"inherit"});
-await cp(path.join(root,"target/operation-capacity"),path.join(dist,"capacity-fixtures"),{recursive:true});
+await mkdir(path.join(dist,"capacity-fixtures"),{recursive:true});
+for(const name of ["manifest.json","ordinary.cbor","last-recovery.cbor","hard.cbor"]) {
+  await cp(path.join(root,"target/operation-capacity",name),path.join(dist,"capacity-fixtures",name));
+}
 await cp(path.join(root, "scripts/workspace-policy-conformance.mjs"), path.join(dist, "workspace-policy-conformance.mjs"));
 await cp(path.join(root, "scripts/workspace-conformance.mjs"), path.join(dist, "workspace-conformance.mjs"));
 await cp(path.join(root,"scripts/workspace-review-conformance.mjs"),path.join(dist,"workspace-review-conformance.mjs"));

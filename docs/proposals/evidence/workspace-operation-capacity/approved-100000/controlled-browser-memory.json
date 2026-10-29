@@ -1,0 +1,800 @@
+{
+  "scope": "same encrypted snapshot/profile1 KDF, fresh cloned browser process for each mode, two repetitions; no new read limit",
+  "sourceCommit": "4dc78bd2f3367df03fc5180dd8090d51327c7d7e",
+  "sourceDirty": false,
+  "browser": "/Users/sid/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+  "platform": "darwin",
+  "arch": "arm64",
+  "fixtureSha256": "1289d1d4ecc2e4990aada1faa1f125018693005557776089b9d1bd2ae912dfdd",
+  "encryptedIdentitySha256": "c8ddfc72d9cbd6fd29ec8dce0b6ac2748d713372abbc7cee66f877499c4a4001",
+  "pageSize": 1000,
+  "measurements": [
+    {
+      "repetition": 0,
+      "mode": "none",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 0,
+        "preparedInputs": 0,
+        "transformedSpans": 0,
+        "checksum": 2166136261,
+        "elapsedMs": 0
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 229769216
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100466688
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296632320
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123256832
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138100736
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99532800
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82345984
+          }
+        ],
+        "processRssSumBytes": 1070104576,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 229801984
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100466688
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296714240
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123256832
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138100736
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99532800
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82345984
+          }
+        ],
+        "processRssSumBytes": 1070219264,
+        "jsHeapUsedBytes": 1575416,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 229801984
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100466688
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296534016
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123256832
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138100736
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99532800
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82345984
+          }
+        ],
+        "processRssSumBytes": 1070039040,
+        "jsHeapUsedBytes": 1575156,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "unchanged": true
+    },
+    {
+      "repetition": 0,
+      "mode": "full",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 99744,
+        "preparedInputs": 3191776,
+        "transformedSpans": 997430000,
+        "checksum": 2606331689,
+        "elapsedMs": 294.2000000476837
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226623488
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100352000
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296845312
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123207680
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138051584
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99713024
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1067155456,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226656256
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100352000
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 515588096
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123256832
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138051584
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99713024
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1285980160,
+        "jsHeapUsedBytes": 15143892,
+        "jsHeapTotalBytes": 15941632,
+        "wasmLinearMemoryBytes": 229507072
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226656256
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100352000
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 501776384
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123256832
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138051584
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99713024
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1272168448,
+        "jsHeapUsedBytes": 1578468,
+        "jsHeapTotalBytes": 2162688,
+        "wasmLinearMemoryBytes": 229507072
+      },
+      "unchanged": true
+    },
+    {
+      "repetition": 0,
+      "mode": "paged",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 99744,
+        "preparedInputs": 3191776,
+        "transformedSpans": 997430000,
+        "checksum": 2606331689,
+        "elapsedMs": 194.79999995231628
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226689024
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296615936
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123240448
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138051584
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99631104
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1066975232,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2162688,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226738176
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 311803904
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123273216
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138035200
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99631104
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1082228736,
+        "jsHeapUsedBytes": 1686120,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226754560
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 311771136
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123273216
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 138035200
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99631104
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82362368
+          }
+        ],
+        "processRssSumBytes": 1082212352,
+        "jsHeapUsedBytes": 1584600,
+        "jsHeapTotalBytes": 2162688,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "unchanged": true
+    },
+    {
+      "repetition": 1,
+      "mode": "none",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 0,
+        "preparedInputs": 0,
+        "transformedSpans": 0,
+        "checksum": 2166136261,
+        "elapsedMs": 0.09999990463256836
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226852864
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100450304
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296714240
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123092992
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137592832
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99581952
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82509824
+          }
+        ],
+        "processRssSumBytes": 1066795008,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226902016
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100450304
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296779776
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123092992
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137592832
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99581952
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82509824
+          }
+        ],
+        "processRssSumBytes": 1066909696,
+        "jsHeapUsedBytes": 1575416,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226902016
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100450304
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296550400
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123092992
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137592832
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99581952
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82509824
+          }
+        ],
+        "processRssSumBytes": 1066680320,
+        "jsHeapUsedBytes": 1575156,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "unchanged": true
+    },
+    {
+      "repetition": 1,
+      "mode": "full",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 99744,
+        "preparedInputs": 3191776,
+        "transformedSpans": 997430000,
+        "checksum": 2606331689,
+        "elapsedMs": 295.5
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 228818944
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100499456
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296763392
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123174912
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137887744
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99713024
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82493440
+          }
+        ],
+        "processRssSumBytes": 1069350912,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 228851712
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100499456
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 515522560
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123207680
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137887744
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99729408
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82493440
+          }
+        ],
+        "processRssSumBytes": 1288192000,
+        "jsHeapUsedBytes": 15143892,
+        "jsHeapTotalBytes": 15941632,
+        "wasmLinearMemoryBytes": 229507072
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 228851712
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100499456
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 501792768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123207680
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137887744
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99729408
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82493440
+          }
+        ],
+        "processRssSumBytes": 1274462208,
+        "jsHeapUsedBytes": 1578468,
+        "jsHeapTotalBytes": 2162688,
+        "wasmLinearMemoryBytes": 229507072
+      },
+      "unchanged": true
+    },
+    {
+      "repetition": 1,
+      "mode": "paged",
+      "opened": {
+        "records": 99744,
+        "profile": 1
+      },
+      "read": {
+        "count": 99744,
+        "preparedInputs": 3191776,
+        "transformedSpans": 997430000,
+        "checksum": 2606331689,
+        "elapsedMs": 195.69999992847443
+      },
+      "before": {
+        "label": "opened-before-history-read",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226525184
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 296730624
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 122994688
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137510912
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99500032
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82526208
+          }
+        ],
+        "processRssSumBytes": 1066172416,
+        "jsHeapUsedBytes": 1574584,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "retained": {
+        "label": "history-result-retained-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226574336
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 311738368
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123027456
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137494528
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99500032
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82526208
+          }
+        ],
+        "processRssSumBytes": 1081245696,
+        "jsHeapUsedBytes": 1686120,
+        "jsHeapTotalBytes": 2686976,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "released": {
+        "label": "result-released-after-gc",
+        "processCount": 7,
+        "processes": [
+          {
+            "type": "browser",
+            "rssBytes": 226574336
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 100384768
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 311738368
+          },
+          {
+            "type": "renderer",
+            "rssBytes": 123027456
+          },
+          {
+            "type": "GPU",
+            "rssBytes": 137494528
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "rssBytes": 99500032
+          },
+          {
+            "type": "storage.mojom.StorageService",
+            "rssBytes": 82526208
+          }
+        ],
+        "processRssSumBytes": 1081245696,
+        "jsHeapUsedBytes": 1584600,
+        "jsHeapTotalBytes": 2424832,
+        "wasmLinearMemoryBytes": 24182784
+      },
+      "unchanged": true
+    }
+  ],
+  "caveats": [
+    "RSS sums may double-count shared pages; process topology and per-process samples are reported, not unique physical memory.",
+    "WASM linear memory is a nonshrinking allocation high-water mark. Explicit GC applies to JavaScript only.",
+    "Single machine instrumented observations are not a lower-hardware requirement or latency SLA.",
+    "Per-row JSON checksum traversal is common to full/paged modes; no-read mode intentionally avoids all record materialization."
+  ],
+  "passed": true
+}

@@ -6,8 +6,8 @@ preserving every operation record: no deletion, sampling or summary replacement.
 Lossless compression is separate postlaunch work in #165. Sid also approved
 recorded-history-only counts, explicit unknown pre-upgrade history and per-record
 numeric input/replacement deltas on October 29. He then approved the provisional
-100,000-row ceiling with the final 256 slots reserved for recovery. Legacy replay
-errors and the remaining accounting details below are still unapproved.
+100,000-row ceiling with the final 256 slots reserved for recovery. The legacy reused-ID error compatibility is now specified below; final conversation
+coordination and complete native/shared qualification remain open.
 
 ## Compatibility and transaction boundary
 
@@ -36,7 +36,7 @@ unchanged. The stronger password-reauthenticated 256 MiB backup envelope and bot
 password/recovery imports are preserved; inner-format changes do not restore the
 old weaker password wrapper.
 
-## Concrete choices still needing review
+## Approved bounds and technical contract
 
 ### Capacity and recovery
 
@@ -94,8 +94,9 @@ record unknown (`null`) time rather than inventing a historical clock. Legacy
 no-op bytes remain unchanged. A batch records one operation, its input-member
 count and replaced occurrences, including repeated values. Current policy saves
 also append a proposed `policy_change` row with zero input/span deltas and unknown
-time; combined review delegates to the same preparation path. These accounting
-details remain under technical compatibility review. A policy no-op stays byte-preserving.
+time; combined review delegates to the same preparation path. One row per explicitly saved batch and unknown time for older calls preserve the
+approved explicit-save boundary; compatibility tests cover their deltas and
+no-op behavior. A policy no-op stays byte-preserving.
 
 Counts describe **recorded covered history**, not all lifetime activity. Older
 vaults have unknown prior history, and successful legacy no-change preparations
@@ -110,12 +111,13 @@ transaction before that counter changes.
 
 ### Reused IDs
 
-Recommended: legacy APIs consistently retain `invalid_operation_id` for recognized
-reuses, while new explicit operation APIs return `operation_reused`. The existing
-candidate still has the older proposed split: legacy current-head/mapping/settings
-IDs return `invalid_operation_id`, but other retained historical IDs return
-`operation_reused`. That difference is not approved. Existing records are never
-silently forgotten. Older snapshots cannot reveal removed/unrecorded IDs; the
+Legacy APIs consistently retain `invalid_operation_id` for every recognized
+reuse, including current-head, mapping-issuance, settings and history-only IDs.
+New explicit operation APIs return `operation_reused` for those same IDs. This
+technical compatibility repair keeps the existing legacy error contract instead
+of leaking a new error merely because an ID now exists only in retained history.
+Every rejection preserves the complete saved bytes and head, including after
+reopening. Existing records are never silently forgotten. Older snapshots cannot reveal removed/unrecorded IDs; the
 runtime cannot reconstruct them or promise to detect unknowable replays.
 
 ## Proposed API and count definitions
@@ -220,8 +222,11 @@ harness, then run `node scripts/measure-workspace-operation-memory.mjs` and
 `node scripts/test-workspace-extension.mjs`. The latter rebuilds the harness and
 runs the full encrypted capacity and existing workflow regressions. Controlled
 measurement receipts include before/after/released JS, linear-memory, per-process
-RSS and process counts. Current working proof receipts remain explicitly marked
-dirty until the final committed-head rerun; they do not claim a release gate passed.
+RSS and process counts. [Checked-in approved-capacity receipts](evidence/workspace-operation-capacity/approved-100000/browser-capacity.json)
+qualify clean committed `4dc78bd2f3367df03fc5180dd8090d51327c7d7e` (dirty false),
+with native allocation and controlled browser measurements beside them. Later
+documentation-only changes do not alter those qualified SDK sources. These
+receipts do not claim the overall G3 or release gate has passed.
 
 ## Historical capacity experiments
 
@@ -258,16 +263,19 @@ large-history decode measurement.
 ## Verification and remaining gates
 
 Content-free metadata is still private vault data, not public telemetry, and is
-never automatically logged. The reconciliation adds an actual native-policy-v2 export fixture and tests exact
-v1/v2 read/no-op/discard/failed-save behavior before a staged v3 upgrade, preserving
-choices and permanent aliases. Existing Core policy, recall, protected coverage
-and operations suites pass on this integration work. All-feature workspace Rust tests, fmt/Clippy, all-SDK build/check/smoke, packed
-WASM/TypeScript and live 100-fixture SDK parity pass on the committed integration.
-The full encrypted MV3 regression suite passes before commit; its clean
-committed-head receipt and Small qualification remain to be refreshed.
+never automatically logged. Exact committed `4dc78bd2f3367df03fc5180dd8090d51327c7d7e`
+passes fmt/Clippy, all-feature workspace tests, all-SDK build/doctor/check/smoke,
+packed WASM/TypeScript, live 100-fixture SDK parity, the complete actual encrypted
+MV3 regression/capacity suite and all 12 actual Small-model extension proofs.
+All browser and allocation receipts report a clean source tree. A stale beta.1
+wheel initially prevented live-parity setup; preserving it separately and using
+the current built wheel passed without changing fixtures or product code.
 
-Before merge: implement and qualify the approved capacity/recovery bounds,
-approve remaining action/accounting semantics and legacy reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
-full installed/encrypted backup and native/browser qualification matrix. This
-draft does not complete C1/C3, freeze snapshot compatibility or authorize a beta.3
-release.
+Before merge: reconcile #148's final key9 format and G3's all-SDK contract.
+The recognized-ID error matrix, explicit saved-policy rows and batch deltas remain
+subject to ordinary technical review rather than a new retention/accounting decision. Native Python and
+Node operation/history/page implementations and their shared qualification are
+explicit prerequisites for complete X6/X7/X8 and C1/G3 claims. The approved
+capacity and full-record retention do not settle ordinary confirmation reservation
+for #148. This draft does not freeze snapshot compatibility or authorize a
+`0.5.0-beta.3` release.

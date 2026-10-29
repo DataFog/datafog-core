@@ -165,15 +165,13 @@ impl State {
             || self.entries.values().any(|entry| entry.issuance == id)
             || self.rules.values().any(|record| record.operation == id)
             || self.choices.values().any(|record| record.operation == id)
+            || self.operations.iter().any(|operation| operation.id == id)
         {
             return Err(error(if legacy {
                 ErrorCode::InvalidId
             } else {
                 ErrorCode::OperationReused
             }));
-        }
-        if self.operations.iter().any(|operation| operation.id == id) {
-            return Err(error(ErrorCode::OperationReused));
         }
         Ok(())
     }
