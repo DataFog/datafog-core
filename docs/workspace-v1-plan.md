@@ -51,7 +51,7 @@ If the file-upload investigation keeps CSV in V1, add:
 
 ## Detection, in parallel
 
-- **Browser model (D2).** 0.5.0-beta.1 uses the optional English GLiNER2.5 Small
+- **Browser model (D3).** 0.5.0-beta.1 uses the optional English GLiNER2.5 Small
   adapter exposed by `@datafog/wasm/models`. It runs pinned ONNX assets locally
   with no Python worker; importing the SDK does not activate it. Model/tokenizer
   files are about 297 MB and are provisioned separately. See
@@ -68,15 +68,15 @@ If the file-upload investigation keeps CSV in V1, add:
   costs are unacceptable. Community accuracy is warn-only; contract regressions
   block. Shared engine/Decima work is parallel, not a prerequisite for 0.5.0-beta.1.
 
-- **Free-text rules (D1).** Account numbers after a label, masked forms ("ending
+- **Additional free-text rules (D2).** Account numbers after a label, masked forms ("ending
   in 1234", `XXXX1234`), and a baseline street-address rule. Positive and negative
   tests per AGENTS.md. Size M.
 
-- **Test set and scoring (D4).** Synthetic pasted text (emails, notes, message
+- **Test set and scoring (G2).** Synthetic pasted text (emails, notes, message
   threads, forms) with planted values and a scoring script for the ADR 004 bar.
 
   **Scoring notes:**
-  - The D4 detection bar (ADR 004) requires at least 90% of names caught. Measure
+  - The G2 detection bar (ADR 004) requires at least 90% of names caught. Measure
     on the shipping browser model with its documented prompt/threshold.
   - PR #115 proposes name/street-address fixtures and evaluation, but remains
     unmerged. Its native GLiNER2 measurements are not Small qualification.
@@ -129,21 +129,28 @@ below are extension-side work.
 10. **End-to-end CI.** Paste → detect → approve → save → restart → recall →
     restore, against the pinned WASM build.
 
-## Betas
+## Prerelease scope
 
-| Beta | Ships after | Unblocks |
+The [requirements spreadsheet](https://docs.google.com/spreadsheets/d/1Z5bwpzXiyncgg4nC5tPehSoO3mvg6nTGh8gxI4Q-3y0/edit)
+is the source of truth for scope and numeric version assignments. This table
+summarizes the current plan; TBD is not an assigned release number.
+
+| Version | Sheet requirements | Extension use |
 |---|---|---|
-| A | This stack | Vault, handoff, restore, follow-ups, backup |
-| B | Core PRs 1–2 | Review highlights and recall |
-| C | Core PRs 3–4 | Remembered choices and a complete review screen |
-| D | Core PR 5 | Conversation records |
+| `0.5.0-beta.1` | W1–W5, P1–P6, D1/D3, R1/R2, B1, X1/X3–X5 | Workspace/vault integration, review and approved handoff, strict restore, follow-ups, backup and optional browser Small |
+| `0.5.0-beta.2` | D4/D5 | Finding-source review and workspace recall |
+| TBD | D6–D8 | Type rules, remembered choices and combined findings |
+| TBD | C1–C3, R3 | Operation/conversation provenance and conversation-aware restore |
+
+Other unassigned requirements and pilot/scope decisions retain their sheet's
+version or TBD value. Do not infer a release number from implementation order.
 
 ## Pilot gate
 
 Real text goes into a workspace only when all of these hold:
 
 - The model marker tests pass and the snapshot and WASM contract are frozen.
-- D4 meets the ADR 004 bar.
+- G2 meets the ADR 004 detection bar.
 - The backup round-trip covers every snapshot key.
 - The vault encryption review is done. **Open question for the review:** exported backup files carry the password-wrapped root key and can be brute-forced offline at the current Argon2id profile (64 MiB, t=3). Whether exports should use a stronger (slower) KDF profile is an open item.
 
@@ -155,7 +162,8 @@ GLiNER2.5 Small in the browser, which decides how many names are caught before r
 
 The release checklist is [issue #132](https://github.com/DataFog/datafog-core/issues/132).
 0.5.0-beta.1 is a developer integration package for synthetic Chrome extension tests;
-Later prereleases and the final pilot-format freeze are separate milestones. Pin the exact
+later prereleases and the final pilot-format freeze are separate milestones.
+Pin the exact
 package version and recreate provisional development vaults on upgrades unless a
 migration has been explicitly qualified.
 

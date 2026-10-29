@@ -141,13 +141,13 @@ every value they approved before; the person's selection catches anything the
 scanner and recall both missed. Recall targets `0.5.0-beta.2`; `0.5.0-beta.1` supports the
 scanner and explicit user selection without claiming that recall is implemented.
 
-**Detection bar (D4).** The synthetic pasted-text set, once it exists, should
+**Detection bar (G2).** The synthetic pasted-text set, once it exists, should
 measure:
 
 - No missed emails, phone numbers, card numbers, SSNs or account numbers (rules).
 - At least 90% of names caught before review, with no recall, using the shipping
   browser model's `person` prompt at its documented raw-score threshold.
-- Address recall is an open measurement. D4 fixtures and evaluation are proposed
+- Address recall is an open measurement. Detection fixtures and evaluation are proposed
   in PR #115 and must be reviewed before pilot qualification. Small's `ADDRESS`
   is a full-address span, distinct from the street-line `STREET_ADDRESS` gold
   labels. Define the scoring alignment and measure the actual browser adapter;
