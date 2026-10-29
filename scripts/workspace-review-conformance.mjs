@@ -45,6 +45,11 @@ export function verifyWorkspaceReview(api) {
   check(duplicate.candidates.length===1 && duplicate.candidates[0].sources.join()==="scanner,user" && duplicate.candidates[0].finding.needsReview,"exact duplicates merge origins and OR review");
   check(w.review(input("123-45-6789",[f("123-45-6789","PERSON",0,11),f("123-45-6789","SSN",0,11)])).conflicts.length===0,"Core corroborates equal-span native SSN");
   check(w.review(input("Jane",[f("Jane","PERSON",0,4),{...f("Jane","SSN",0,4),detectorName:"datafog-core/ssn"}])).conflicts.length===2,"spoofed native source does not settle type conflict");
+  for (const confidence of [NaN,Infinity,-Infinity]) {
+    const invalid={...f("Jane","PERSON",0,4),confidence};
+    reject(()=>w.prepare("Jane",[invalid],id(4)),"invalid_finding");
+    reject(()=>w.review(input("Jane",[invalid])),"invalid_finding");
+  }
   let getter=false;
   reject(()=>w.review({text,scannerFindings:[],get userSelections(){getter=true;return [];}}),"invalid_finding");check(!getter,"review transport rejects accessors");
   reject(()=>w.review(input(text,new Array(1))),"invalid_finding");
