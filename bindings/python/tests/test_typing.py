@@ -191,7 +191,9 @@ TransformResult()  # error
 """
 
 INVALID += """
-from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, TextRange
+from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, WorkspacePreparedChange, TextRange
+Workspace()  # error
+WorkspacePreparedChange()  # error
 Workspace.create("namespace", bytes(16))  # error
 WorkspaceHead("1", bytes(16))  # error
 WorkspaceHead(1, "commit")  # error

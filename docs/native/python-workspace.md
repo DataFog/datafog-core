@@ -37,12 +37,15 @@ traversed. Result dictionaries preserve the shared camelCase contract fields, wi
 precise Python integers for head revisions. `WorkspaceHead` exposes immutable
 `revision` and `commit_id` properties; IDs and snapshot exports are exact `bytes`.
 
-Each workspace allows 32 live pending changes. Discard/drop releases a slot; a
+Each workspace allows 32 live pending changes. A valid public discard/drop releases a slot; a
 changed-head activation invalidates and clears stale candidates immediately. A
 no-op activation preserves sibling candidates with the same saved head. Closing or
 dropping a workspace clears retained candidates and makes surviving handles fail
 with `closed_workspace`. Context-manager exits discard/close without suppressing
-exceptions. The GIL remains held during these bounded synchronous Core calls;
+exceptions. Public discard rejects consumed/closed plans; context and destructor
+cleanup remain idempotent. Native lock scopes return Rust-only results before any
+Python exception normalization or value conversion, so callbacks can reenter
+without deadlocking. The GIL remains held during these bounded synchronous Core calls;
 there are no native network, key-provider or persistence callbacks. Independent
 threads can open the same saved bytes into separate workspaces.
 

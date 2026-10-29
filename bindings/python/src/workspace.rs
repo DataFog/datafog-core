@@ -7,9 +7,43 @@ use serde_json::{Value, json};
 create_exception!(datafog_core, DataFogWorkspaceError, PyValueError);
 
 fn json_object(py: Python<'_>, value: &impl serde::Serialize) -> PyResult<Py<PyAny>> {
-    let text = serde_json::to_string(value)
+    let value = serde_json::to_value(value)
         .map_err(|_| PyRuntimeError::new_err("workspace result serialization failed"))?;
-    Ok(py.import("json")?.call_method1("loads", (text,))?.unbind())
+    json_value(py, value)
+}
+fn json_value(py: Python<'_>, value: Value) -> PyResult<Py<PyAny>> {
+    match value {
+        Value::Null => Ok(py.None()),
+        Value::Bool(value) => Ok(value.into_pyobject(py)?.to_owned().into_any().unbind()),
+        Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Ok(value.into_pyobject(py)?.into_any().unbind())
+            } else if let Some(value) = value.as_u64() {
+                Ok(value.into_pyobject(py)?.into_any().unbind())
+            } else if let Some(value) = value.as_f64() {
+                Ok(value.into_pyobject(py)?.into_any().unbind())
+            } else {
+                Err(PyRuntimeError::new_err(
+                    "workspace result number is invalid",
+                ))
+            }
+        }
+        Value::String(value) => Ok(pyo3::types::PyString::new(py, &value).into_any().unbind()),
+        Value::Array(values) => {
+            let values = values
+                .into_iter()
+                .map(|value| json_value(py, value))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(PyList::new(py, values)?.into_any().unbind())
+        }
+        Value::Object(values) => {
+            let result = PyDict::new(py);
+            for (key, value) in values {
+                result.set_item(key, json_value(py, value)?)?;
+            }
+            Ok(result.into_any().unbind())
+        }
+    }
 }
 fn issue_value(issue: &w::MarkerIssue) -> Value {
     json!({"kind":issue.kind.as_str(),"byteRange":issue.byte_range,
@@ -44,18 +78,19 @@ fn workspace_error(py: Python<'_>, error: w::WorkspaceError) -> PyErr {
         Err(error) => error,
     }
 }
-fn failure(py: Python<'_>, code: w::ErrorCode) -> PyErr {
-    workspace_error(
-        py,
-        w::WorkspaceError {
-            code,
-            finding_index: None,
-            input_index: None,
-            marker_issues: vec![],
-            review_conflicts: vec![],
-        },
-    )
+fn core_error(code: w::ErrorCode) -> w::WorkspaceError {
+    w::WorkspaceError {
+        code,
+        finding_index: None,
+        input_index: None,
+        marker_issues: vec![],
+        review_conflicts: vec![],
+    }
 }
+fn failure(py: Python<'_>, code: w::ErrorCode) -> PyErr {
+    workspace_error(py, core_error(code))
+}
+
 fn id(py: Python<'_>, bytes: &[u8]) -> PyResult<w::PublicId> {
     bytes
         .try_into()
@@ -377,10 +412,26 @@ impl WorkspaceReviewInput {
 type PlanCell = std::sync::Arc<std::sync::Mutex<w::PreparedChange>>;
 type WeakPlan = std::sync::Weak<std::sync::Mutex<w::PreparedChange>>;
 const MAX_LIVE_PLANS: usize = 32;
-fn lock<'a, T>(value: &'a std::sync::Mutex<T>) -> PyResult<std::sync::MutexGuard<'a, T>> {
-    value
-        .lock()
-        .map_err(|_| PyRuntimeError::new_err("workspace handle is unavailable"))
+enum NativeError {
+    Core(w::WorkspaceError),
+    Unavailable,
+}
+type NativeResult<T> = std::result::Result<T, NativeError>;
+impl From<w::WorkspaceError> for NativeError {
+    fn from(error: w::WorkspaceError) -> Self {
+        Self::Core(error)
+    }
+}
+impl NativeError {
+    fn into_python(self, py: Python<'_>) -> PyErr {
+        match self {
+            Self::Core(error) => workspace_error(py, error),
+            Self::Unavailable => PyRuntimeError::new_err("workspace handle is unavailable"),
+        }
+    }
+}
+fn lock<T>(value: &std::sync::Mutex<T>) -> NativeResult<std::sync::MutexGuard<'_, T>> {
+    value.lock().map_err(|_| NativeError::Unavailable)
 }
 #[pyclass(name = "WorkspacePreparedChange")]
 pub(super) struct WorkspacePreparedChange {
@@ -393,11 +444,16 @@ impl WorkspacePreparedChange {
         py: Python<'_>,
         call: impl FnOnce(&w::PreparedChange) -> std::result::Result<T, w::WorkspaceError>,
     ) -> PyResult<T> {
-        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
-            return Err(failure(py, w::ErrorCode::ClosedWorkspace));
-        }
-        let plan = lock(&self.inner)?;
-        call(&plan).map_err(|e| workspace_error(py, e))
+        // Python error normalization may execute user callbacks. Every native
+        // guard must drop before constructing exceptions or converting results.
+        let result = (|| -> NativeResult<T> {
+            if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(core_error(w::ErrorCode::ClosedWorkspace).into());
+            }
+            let plan = lock(&self.inner)?;
+            call(&plan).map_err(NativeError::from)
+        })();
+        result.map_err(|error| error.into_python(py))
     }
 }
 #[pymethods]
@@ -445,9 +501,17 @@ impl WorkspacePreparedChange {
         value.fill(0);
         Ok(result)
     }
-    fn discard(&self) -> PyResult<()> {
-        lock(&self.inner)?.discard();
-        Ok(())
+    fn discard(&self, py: Python<'_>) -> PyResult<()> {
+        let result = (|| -> NativeResult<()> {
+            if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(core_error(w::ErrorCode::ClosedWorkspace).into());
+            }
+            let mut plan = lock(&self.inner)?;
+            plan.expected_head()?;
+            plan.discard();
+            Ok(())
+        })();
+        result.map_err(|error| error.into_python(py))
     }
     fn __enter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
         slf.read(slf.py(), w::PreparedChange::expected_head)?;
@@ -455,12 +519,18 @@ impl WorkspacePreparedChange {
     }
     fn __exit__(
         &self,
+        py: Python<'_>,
         _kind: &Bound<'_, PyAny>,
         _value: &Bound<'_, PyAny>,
         _traceback: &Bound<'_, PyAny>,
     ) -> PyResult<bool> {
-        self.discard()?;
-        Ok(false)
+        let result = (|| -> NativeResult<()> {
+            lock(&self.inner)?.discard();
+            Ok(())
+        })();
+        result
+            .map(|()| false)
+            .map_err(|error| error.into_python(py))
     }
 }
 
@@ -511,14 +581,17 @@ impl Workspace {
             &self.inner.namespace().map_err(|e| workspace_error(py, e))?,
         ))
     }
-    fn close(&mut self) -> PyResult<()> {
-        self.closed
-            .store(true, std::sync::atomic::Ordering::Release);
-        self.inner.close();
-        for cell in lock(&self.plans)?.drain(..).filter_map(|p| p.upgrade()) {
-            lock(&cell)?.discard();
-        }
-        Ok(())
+    fn close(&mut self, py: Python<'_>) -> PyResult<()> {
+        let result = (|| -> NativeResult<()> {
+            self.closed
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.inner.close();
+            for cell in lock(&self.plans)?.drain(..).filter_map(|p| p.upgrade()) {
+                lock(&cell)?.discard();
+            }
+            Ok(())
+        })();
+        result.map_err(|error| error.into_python(py))
     }
     fn prepare(
         &self,
@@ -637,42 +710,48 @@ impl Workspace {
         expected_head: PyRef<'_, WorkspaceHead>,
         saved_head: PyRef<'_, WorkspaceHead>,
     ) -> PyResult<()> {
-        self.inner.head().map_err(|e| workspace_error(py, e))?;
-        let mut registry = lock(&self.plans)?;
-        let live: Vec<_> = registry.iter().filter_map(|weak| weak.upgrade()).collect();
-        let Some(position) = live
-            .iter()
-            .position(|cell| std::sync::Arc::ptr_eq(cell, &change.inner))
-        else {
-            return Err(failure(py, w::ErrorCode::WorkspaceConflict));
-        };
-        // Acquire/validate every handle before adoption, then cleanup cannot fail
-        // after the host's confirmed saved state has become active.
-        let mut plans = live
-            .iter()
-            .map(|cell| lock(cell))
-            .collect::<PyResult<Vec<_>>>()?;
-        let mut parents = Vec::with_capacity(plans.len());
-        for plan in &plans {
-            parents.push(match plan.expected_head() {
-                Ok(head) => Some(head),
-                Err(error) if error.code == w::ErrorCode::InactivePlan => None,
-                Err(error) => return Err(workspace_error(py, error)),
-            });
-        }
-        self.inner
-            .activate_saved(&mut plans[position], expected_head.inner, saved_head.inner)
-            .map_err(|e| workspace_error(py, e))?;
-        registry.clear();
-        for (index, (plan, parent)) in plans.iter_mut().zip(parents).enumerate() {
-            if index != position && parent == Some(saved_head.inner) {
-                registry.push(std::sync::Arc::downgrade(&live[index]));
-            } else {
-                plan.discard();
+        let result = (|| -> NativeResult<()> {
+            self.inner.head()?;
+            let mut registry = lock(&self.plans)?;
+            let live: Vec<_> = registry.iter().filter_map(|weak| weak.upgrade()).collect();
+            let Some(position) = live
+                .iter()
+                .position(|cell| std::sync::Arc::ptr_eq(cell, &change.inner))
+            else {
+                return Err(core_error(w::ErrorCode::WorkspaceConflict).into());
+            };
+            // Acquire/validate every handle before adoption, then cleanup cannot fail
+            // after the host's confirmed saved state has become active.
+            let mut plans = live
+                .iter()
+                .map(|cell| lock(cell))
+                .collect::<NativeResult<Vec<_>>>()?;
+            let mut parents = Vec::with_capacity(plans.len());
+            for plan in &plans {
+                parents.push(match plan.expected_head() {
+                    Ok(head) => Some(head),
+                    Err(error) if error.code == w::ErrorCode::InactivePlan => None,
+                    Err(error) => return Err(error.into()),
+                });
             }
-        }
-        Ok(())
+            self.inner.activate_saved(
+                &mut plans[position],
+                expected_head.inner,
+                saved_head.inner,
+            )?;
+            registry.clear();
+            for (index, (plan, parent)) in plans.iter_mut().zip(parents).enumerate() {
+                if index != position && parent == Some(saved_head.inner) {
+                    registry.push(std::sync::Arc::downgrade(&live[index]));
+                } else {
+                    plan.discard();
+                }
+            }
+            Ok(())
+        })();
+        result.map_err(|error| error.into_python(py))
     }
+
     fn restore(&self, py: Python<'_>, text: &str) -> PyResult<String> {
         self.inner.restore(text).map_err(|e| workspace_error(py, e))
     }
@@ -703,11 +782,12 @@ impl Workspace {
     }
     fn __exit__(
         &mut self,
+        py: Python<'_>,
         _kind: &Bound<'_, PyAny>,
         _value: &Bound<'_, PyAny>,
         _traceback: &Bound<'_, PyAny>,
     ) -> PyResult<bool> {
-        self.close()?;
+        self.close(py)?;
         Ok(false)
     }
 }
@@ -782,30 +862,31 @@ impl Workspace {
     ) -> PyResult<WorkspacePreparedChange> {
         // Core owns candidates; weak references let Python release a dropped plan
         // immediately and avoid keeping private candidates alive via the workspace.
-        self.inner.head().map_err(|e| workspace_error(py, e))?;
-        let mut registry = lock(&self.plans)?;
-        let mut active = Vec::with_capacity(registry.len());
-        for weak in registry.drain(..) {
-            if let Some(cell) = weak.upgrade() {
-                match lock(&cell)?.expected_head() {
-                    Ok(_) => active.push(weak),
-                    Err(error) if error.code == w::ErrorCode::InactivePlan => {}
-                    Err(error) => return Err(workspace_error(py, error)),
+        let result = (|| -> NativeResult<WorkspacePreparedChange> {
+            self.inner.head()?;
+            let mut registry = lock(&self.plans)?;
+            let mut active = Vec::with_capacity(registry.len());
+            for weak in registry.drain(..) {
+                if let Some(cell) = weak.upgrade() {
+                    match lock(&cell)?.expected_head() {
+                        Ok(_) => active.push(weak),
+                        Err(error) if error.code == w::ErrorCode::InactivePlan => {}
+                        Err(error) => return Err(error.into()),
+                    }
                 }
             }
-        }
-        *registry = active;
-        if registry.len() >= MAX_LIVE_PLANS {
-            return Err(failure(py, w::ErrorCode::ResourceLimit));
-        }
-        let inner = std::sync::Arc::new(std::sync::Mutex::new(
-            make().map_err(|e| workspace_error(py, e))?,
-        ));
-        registry.push(std::sync::Arc::downgrade(&inner));
-        Ok(WorkspacePreparedChange {
-            inner,
-            closed: std::sync::Arc::clone(&self.closed),
-        })
+            *registry = active;
+            if registry.len() >= MAX_LIVE_PLANS {
+                return Err(core_error(w::ErrorCode::ResourceLimit).into());
+            }
+            let inner = std::sync::Arc::new(std::sync::Mutex::new(make()?));
+            registry.push(std::sync::Arc::downgrade(&inner));
+            Ok(WorkspacePreparedChange {
+                inner,
+                closed: std::sync::Arc::clone(&self.closed),
+            })
+        })();
+        result.map_err(|error| error.into_python(py))
     }
 }
 impl Drop for Workspace {
