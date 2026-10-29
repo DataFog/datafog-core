@@ -44,7 +44,66 @@ async function fingerprint(page) {
     return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).join(",");
   });
 }
-export async function verifyBackups({fresh, prepare, status, close, launch, unlock, restored, control, paused, check}) {
+async function verifyCurrentFieldBackups({launch,close,unlock,status,check,fixture}) {
+  let page=await launch("backup-current-field-source");
+  const source=await page.evaluate(async({fixture,password})=>{
+    const {init,Workspace}=await import("./vendor/package/index.js");await init();
+    const {createVault}=await import("./vault.js");const {exportBackup}=await import("./backup.js");
+    const bytes=Uint8Array.from(fixture.current.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+    const workspace=Workspace.openBundle(bytes);
+    try {
+      const created=await createVault(password,workspace.namespace(),bytes,workspace.head());
+      return {bytes:Array.from(await exportBackup(created.vault,created.record,created.dataKey,password)),recoveryCode:created.recoveryCode};
+    } finally{workspace.close();bytes.fill(0);}
+  },{fixture,password});
+  const backup=Buffer.from(source.bytes);
+  check(![password,source.recoveryCode,...fixture.current.aliases.map(alias=>alias.value),...fixture.current.policy.choices.map(choice=>choice.value)].some(value=>backup.includes(Buffer.from(value))),"B2 current-state backup excludes plaintext values and credentials");
+  await close();
+  for(const [method,credential]of [["password",password],["recovery",source.recoveryCode]]) {
+    const profile=`backup-current-fields-${method}`;page=await launch(profile);
+    await review(page,backup,credential,method);await status(page,"backup_preview_ready");
+    await page.locator("#backup-approve").click();await status(page,"backup_restored_locked");
+    await close();page=await launch(profile);await unlock(page);
+    const proof=await page.evaluate(async({fixture,password})=>{
+      const {init,Workspace}=await import("./vendor/package/index.js");await init();
+      const {readRecords}=await import("./storage.js");const {openVault,toBase64url}=await import("./vault.js");
+      const {vault,workspace:record}=await readRecords();const opened=await openVault(password,vault,record);let workspace;
+      try {
+        workspace=Workspace.openBundle(opened.bundle);const recovered=workspace.exportBundle();
+        const original=Uint8Array.from(fixture.current.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+        const preserved=fixture.current.fields.filter(field=>field.key!==2).every(field=>recovered.length===original.length && recovered.slice(field.valueStart,field.valueEnd).every((value,index)=>value===original[field.valueStart+index]));
+        const aliases=fixture.current.aliases.every(alias=>workspace.restore(alias.marker)===alias.value);
+        const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+        const policy=workspace.policy();const settings=["snapshotVersion","defaultRule","rules","choices"].every(key=>JSON.stringify(canonical(policy[key]))===JSON.stringify(canonical(fixture.current.policy[key])));
+        const oldHead=fixture.current.head,newHead=workspace.head();
+        const freshHead=BigInt(newHead.revision)===BigInt(oldHead.revision)+1n && newHead.commitId.join(",")!==oldHead.commitId.join(",");
+        const envelope=Object.fromEntries(["vaultId","workspaceId","keyId","keyNonce","wrappedKey","nonce"].map(key=>[key,toBase64url(record[key])]));
+        const recall=workspace.recall("👋 i\u0307\tJANE");
+        return {preserved,aliases,settings,freshHead,envelope,recall:recall.findings.length===1 && recall.findings[0].finding.matchedText==="i\u0307\tJANE"};
+      } finally{workspace?.close();opened.bundle.fill(0);}
+    },{fixture,password});
+    check(proof.preserved && proof.aliases && proof.settings && proof.freshHead && proof.recall,"B2 supported field bytes, Unicode identities, settings and fresh recovery head survive restart");
+    check(freshWorkspaceKey(backup,source.recoveryCode,proof.envelope),"B2 independent native crypto confirms fresh destination workspace key");
+    await close();
+  }
+  page=await launch("backup-current-field-rejections");const baseline=await fingerprint(page);
+  for(const candidate of fixture.rejections.filter(candidate=>candidate.encryptedImport)) {
+    const file=await page.evaluate(async({fixture,candidate,password})=>{
+      const {init,Workspace}=await import("./vendor/package/index.js");await init();
+      const {createVault}=await import("./vault.js");const {exportBackup}=await import("./backup.js");
+      const original=Uint8Array.from(fixture.current.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+      const invalid=Uint8Array.from(candidate.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
+      const workspace=Workspace.openBundle(original);
+      try {const created=await createVault(password,workspace.namespace(),invalid,workspace.head());return Array.from(await exportBackup(created.vault,created.record,created.dataKey,password));}
+      finally{workspace.close();original.fill(0);invalid.fill(0);}
+    },{fixture,candidate,password});
+    await review(page,Buffer.from(file));await status(page,candidate.code);
+    check(await fingerprint(page)===baseline && await page.locator("#backup-approve").isDisabled() && await page.locator("#backup-preview").textContent()==="","B2 authenticated invalid current field writes nothing and exposes no usable preview");
+  }
+  await close();
+}
+
+export async function verifyBackups({fresh, prepare, status, close, launch, unlock, restored, control, paused, check, backupFields}) {
   let page = await fresh("backup-source");
   check(await page.locator("#recovery-created").count() === 1, "G1 vault creation supplies an offline recovery code");
   const recoveryCode = await page.locator("#recovery-created").inputValue();
@@ -397,4 +456,7 @@ export async function verifyBackups({fresh, prepare, status, close, launch, unlo
   }
   await unlock(page); await restored(page, output, "restored"); await close();
   console.log("PASS G4 restore approval, cancellation, atomic abort/lost acknowledgment and competing imports");
+  await verifyCurrentFieldBackups({launch,close,unlock,status,check,fixture:backupFields});
+  console.log("PASS B2 current snapshot fields, both credentials, fresh keys/head, reserved merge slot and authenticated missing-field rejection");
+
 }
