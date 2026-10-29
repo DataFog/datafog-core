@@ -25,12 +25,20 @@ function draftInputs() {
 }
 function showMarkerIssues(error) {
   clearMarkerIssues();
-  if (error.code !== "invalid_marker" || !error.markerIssues?.length) return;
+  const issues=error.code === "review_conflict" ? error.reviewConflicts : error.code === "invalid_marker" ? error.markerIssues : undefined;
+  if(!issues?.length)return;
+  // Equal-span type claims share a highlight; crossing issues may overlap.
+  const merged=[];
+  for(const issue of [...issues].sort((a,b)=>a.utf16Range.start-b.utf16Range.start || a.utf16Range.end-b.utf16Range.end)) {
+    const last=merged.at(-1);
+    if(last && issue.utf16Range.start<=last.utf16Range.end)last.utf16Range.end=Math.max(last.utf16Range.end,issue.utf16Range.end);
+    else merged.push({kind:issue.kind,utf16Range:{...issue.utf16Range}});
+  }
   const index = error.inputIndex ?? 0, text = draftInputs()[index]?.text;
   if (text === undefined) return;
   const preview = element("source-issue-preview");
   let cursor = 0;
-  for (const issue of error.markerIssues) {
+  for (const issue of merged) {
     const {start, end} = issue.utf16Range;
     if (start < cursor || end > text.length) { clearMarkerIssues(); return; }
     preview.append(document.createTextNode(text.slice(cursor, start)));
@@ -44,7 +52,7 @@ function showMarkerIssues(error) {
     element("select-source-issue").hidden = false;
     element("select-source-issue").onclick = () => {
       const source = element("source"); source.focus();
-      const range = error.markerIssues[0].utf16Range;
+      const range = merged[0].utf16Range;
       source.setSelectionRange(range.start, range.end);
     };
   }
@@ -82,7 +90,7 @@ async function perform(task) {
     if (g === generation) {
       status(safeCode(error));
       showMarkerIssues(error);
-      const guidance = error.code === "invalid_marker" ? " Edit the highlighted source markers or use the exact pseudonym from this unlocked workspace before retrying." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
+      const guidance = error.code === "review_conflict" ? " Overlapping detections need correction or an exact saved false-positive choice. Nothing was handed off. Edit the source and prepare a fresh preview." : error.code === "invalid_marker" ? " Edit the highlighted source markers or use the exact pseudonym from this unlocked workspace before retrying." : error.code === "workspace_conflict" ? " The workspace changed or this restore destination is not empty. No existing workspace was overwritten. Use an empty profile for backup restore." : error.code === "invalid_backup" ? " The backup is damaged or unsupported. Nothing was imported." : error.code === "recovery_unavailable" ? " This disposable older vault has no recovery slot. Backup export requires a newly created synthetic vault." : "";
       element("batch-error").textContent = (Number.isSafeInteger(error.inputIndex) ? `Input ${error.inputIndex + 1} rejected. Remove or correct it, then prepare a new preview.` : "") + guidance;
     }
   }
@@ -236,3 +244,4 @@ export function testCommand(command, value) { return broker.call("test", [comman
 /** Read-only local inspection for the synthetic integration proof. */
 export function workspacePolicy() { return broker.call("policy"); }
 export function workspaceRecall(text) { return broker.call("recall",[text]); }
+export function workspaceReview(input) { return broker.call("review",[input]); }

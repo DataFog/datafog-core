@@ -50,6 +50,21 @@ returns no partial plan and leaves committed mappings intact. Errors may carry
 `inputIndex` and an input-local `findingIndex`, without matched text. The existing
 CBOR schema and previously issued marker bytes are unchanged.
 
+## Combined review
+
+The reference host now prepares manual selections through `prepareReview`, with
+`userSelections` kept separate from model `scannerFindings`. Core adds committed
+recall, validates every supplied claim before policy, merges duplicate display
+origins, and blocks unresolved protected overlaps with original ranged
+`review_conflict` errors. The source view highlights conflicts; edit and prepare a
+fresh review before approval. Failed save cannot hand off or activate a mapping.
+Read-only review never returns sanitized handoff text or creates a plan.
+
+Legacy SDK `prepare`/`prepareBatch` still use explicitly supplied findings and now
+reject unsafe supplied overlaps. Omitted findings are never a clean-text verdict.
+The new reviewed path must also be integrated in the shipping extension (#132);
+this synthetic harness is not that integration.
+
 ## Crypto and persistence
 
 The host uses AES-256-GCM (fresh 96-bit nonces, 128-bit tags), random vault/workspace keys, and explicit libsodium Argon2id13: 16-byte salt, 32-byte result, 64 MiB and opslimit 3. Only the bounded development KDF profile is accepted; there is no weaker fallback. Password and workspace key wrappers have separate authenticated contexts. The snapshot AAD binds its vault, workspace, key ID and complete commit head.

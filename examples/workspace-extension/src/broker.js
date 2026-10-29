@@ -185,6 +185,12 @@ serve({
       const worker=await loaded(value,g);const result=await worker.call("recall",[text]);guard(g);return result;
     });
   },
+  review(input) {
+    return run(async()=>{
+      const value=active(),g=generation;await current(value,g);
+      const worker=await loaded(value,g);const result=await worker.call("review",[input]);guard(g);return result;
+    });
+  },
   preparePolicy(edits) {
     return run(async () => {
       const value=active(),g=generation;await current(value,g);
@@ -200,7 +206,8 @@ serve({
       await current(value, g);
       const worker = await loaded(value, g);
       if (pending) { const previous = pending; pending = undefined; await worker.call("discard", [previous.id]); guard(g); }
-      const next = await worker.call("prepareBatch", [inputs, randomId()]); guard(g);
+      const reviewed=inputs.map(input=>({text:input.text,scannerFindings:[],userSelections:input.findings}));
+      const next = await worker.call("prepareReview", [reviewed, randomId()]); guard(g);
       pending = { ...next, generation: g };
       return { id: next.id, previews: next.previews, format:next.format };
     });

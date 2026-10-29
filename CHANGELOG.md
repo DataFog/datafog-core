@@ -18,6 +18,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Workspace combined review merges scanner findings, committed-value recall and
+  manual selections, preserving source metadata and original coordinates. Unresolved
+  coverage/type conflicts block handoff with ranged review errors before a plan is
+  created; legacy supplied-finding preparation receives the same protection.
+
 - Core-owned workspace rules and exact remembered choices, including explicit
   protected-type false-positive corrections, with staged approval/save, recall
   enforcement and a warned, byte-preserving legacy-to-policy-v2 upgrade.

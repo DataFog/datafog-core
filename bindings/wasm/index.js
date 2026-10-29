@@ -33,7 +33,7 @@ export function init() {
 }
 
 export class DataFogError extends Error {
-  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues }) {
+  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues, reviewConflicts }) {
     super(message);
     this.name = "DataFogError";
     this.code = code;
@@ -42,6 +42,7 @@ export class DataFogError extends Error {
     this.findingIndex = findingIndex;
     this.inputIndex = inputIndex;
     this.markerIssues = markerIssues;
+    this.reviewConflicts = reviewConflicts;
   }
 }
 
@@ -296,6 +297,42 @@ function workspacePolicyJson(edits) {
   }
   try { return structuredJson(edits,true); } catch { throw workspaceFailure("invalid_policy"); }
 }
+function workspaceReviewJson(input) {
+  function object(value, fields, required) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || ![Object.prototype,null].includes(Object.getPrototypeOf(value))) throw workspaceFailure("invalid_finding");
+    const props=Object.getOwnPropertyDescriptors(value);
+    for (const name of Reflect.ownKeys(props)) if (typeof name !== "string" || !fields.includes(name) || !props[name].enumerable || !("value" in props[name])) throw workspaceFailure("invalid_finding");
+    for (const name of required) if (!props[name]) throw workspaceFailure("invalid_finding");
+    return Object.fromEntries(Object.entries(props).map(([name,property])=>[name,property.value]));
+  }
+  function array(value) {
+    if (!Array.isArray(value)) throw workspaceFailure("invalid_finding");
+    if (value.length>10000) throw workspaceFailure("resource_limit");
+    if (Reflect.ownKeys(value).length !== value.length+1) throw workspaceFailure("invalid_finding");
+    return value;
+  }
+  const fields=object(input,["text","scannerFindings","userSelections","corrections"],["text","scannerFindings","userSelections"]);
+  workspaceText(fields.text,1024*1024);
+  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections ?? []);
+  if (scanner.length+user.length+corrections.length>10000) throw workspaceFailure("resource_limit");
+  const scannerJson=workspaceFindingsJson(scanner), userJson=workspaceFindingsJson(user);
+  let budget=new TextEncoder().encode(scannerJson).length+new TextEncoder().encode(userJson).length+new TextEncoder().encode(JSON.stringify(fields.text)).length+128;
+  const corrected=[];
+  for(let index=0;index<corrections.length;index++) {
+    const item=Object.getOwnPropertyDescriptor(corrections,String(index));
+    if(!item?.enumerable || !("value" in item)) throw workspaceFailure("invalid_finding");
+    const correction=object(item.value,["candidateKey","replacement"],["candidateKey","replacement"]);
+    if(typeof correction.candidateKey !== "string" || !/^[a-f0-9]{64}$/.test(correction.candidateKey)) throw workspaceFailure("workspace_conflict");
+    const replacement=workspaceFindingsJson([correction.replacement]).slice(1,-1);
+    const part=`{"candidateKey":${JSON.stringify(correction.candidateKey)},"replacement":${replacement}}`;
+    budget+=new TextEncoder().encode(part).length+2;
+    if(budget>16*1024*1024) throw workspaceFailure("resource_limit");
+    corrected.push(part);
+  }
+  if(budget>16*1024*1024) throw workspaceFailure("resource_limit");
+  return `{"text":${JSON.stringify(fields.text)},"scannerFindings":${scannerJson},"userSelections":${userJson},"corrections":[${corrected.join(",")}]}`;
+}
+
 class PreparedWorkspaceChange {
   constructor(state, handle) { workspacePlans.set(this, { state, handle }); Object.freeze(this); }
   snapshotFormat() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state,"snapshot_format",handle)); }
@@ -337,6 +374,25 @@ export class Workspace {
     return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_policy_changes",json,operationId));
   }
   recall(text) { workspaceText(text, 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "recall", text)); }
+  /** Read-only review; returned candidates are never handoff permission. */
+  review(input) { return JSON.parse(workspaceCall(this.#state,"review",workspaceReviewJson(input))); }
+  prepareReview(inputs, operationId) {
+    workspaceBytes(operationId,16,true);
+    if(!Array.isArray(inputs) || inputs.length===0) throw workspaceFailure("invalid_batch");
+    if(inputs.length>32) throw workspaceFailure("resource_limit");
+    if(Reflect.ownKeys(inputs).length!==inputs.length+1) throw workspaceFailure("invalid_batch");
+    const parts=[];let budget=2;
+    for(let inputIndex=0;inputIndex<inputs.length;inputIndex++) {
+      try {
+        const item=Object.getOwnPropertyDescriptor(inputs,String(inputIndex));
+        if(!item?.enumerable || !("value" in item)) throw workspaceFailure("invalid_batch");
+        const part=workspaceReviewJson(item.value);budget+=new TextEncoder().encode(part).length+1;
+        if(budget>16*1024*1024) throw workspaceFailure("resource_limit");
+        parts.push(part);
+      } catch(error) { const failure=error instanceof DataFogError?error:workspaceFailure("invalid_finding");failure.inputIndex=inputIndex;throw failure; }
+    }
+    return new PreparedWorkspaceChange(this.#state,workspaceCall(this.#state,"prepare_review",`[${parts.join(",")}]`,operationId));
+  }
   prepareRecovery(operationId) {
     workspaceBytes(operationId, 16, true);
     return new PreparedWorkspaceChange(this.#state, workspaceCall(this.#state, "prepare_recovery", operationId));

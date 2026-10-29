@@ -94,6 +94,7 @@ export declare class DataFogError extends Error {
   readonly inputIndex?: number;
   /** Content-free source issue ranges when workspace preparation rejects marker text. */
   readonly markerIssues?: readonly WorkspaceMarkerIssue[];
+  readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
 }
 
 export interface TextRange {
@@ -289,6 +290,38 @@ export interface WorkspaceRestoreReport {
   readonly restoredMarkers: number;
   readonly issues: readonly WorkspaceMarkerIssue[];
 }
+export interface WorkspaceReviewInput {
+  readonly text: string;
+  /** Model/rule findings; caller source flags are ignored for channel attribution. */
+  readonly scannerFindings: readonly WorkspaceFinding[];
+  readonly userSelections: readonly WorkspaceFinding[];
+  readonly corrections?: readonly { readonly candidateKey: string; readonly replacement: WorkspaceFinding }[];
+}
+export interface WorkspaceReviewConflict {
+  readonly kind: "protected_coverage" | "type_conflict";
+  readonly findingIndex: number;
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+}
+export interface WorkspaceReviewCandidate {
+  /** Binds exact source/head/type/range; changes on source edits or saved-head changes. */
+  readonly key: string;
+  readonly finding: WorkspaceFinding;
+  readonly sources: readonly ("scanner" | "recall" | "user")[];
+  readonly byteRange: TextRange;
+  readonly codepointRange: TextRange;
+  readonly utf16Range: TextRange;
+  /** Committed policy requires this candidate to be hidden. */
+  readonly eligible: boolean;
+  /** Conflict-free selection only; false for every candidate while conflicts remain. Never handoff permission. */
+  readonly selected: boolean;
+}
+export interface WorkspaceReviewResult {
+  readonly head: WorkspaceHead;
+  readonly candidates: readonly WorkspaceReviewCandidate[];
+  readonly conflicts: readonly WorkspaceReviewConflict[];
+}
 export class Workspace {
   private constructor();
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
@@ -298,12 +331,16 @@ export class Workspace {
   exportBundle(): Uint8Array;
   /** Read committed values only, returning all overlaps in original coordinates. No aliases, plans or state changes. */
   recall(text: string): WorkspaceRecallResult;
+  /** Combine supplied scanner/manual findings with committed recall, without plans or state mutation. */
+  review(input: WorkspaceReviewInput): WorkspaceReviewResult;
+  /** Recompute review for every input. Any unresolved overlap rejects the whole batch before a plan exists. Approval and durable save remain required. */
+  prepareReview(inputs: readonly WorkspaceReviewInput[], operationId: Uint8Array): PreparedWorkspaceChange;
   policy(): WorkspacePolicy;
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
-  /** Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
+  /** Supplied findings only: omissions are never proof of PII-free input; use prepareReview for combined recall. Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** Atomic batch: preserves order, validates committed markers, and applies aggregate limits. */
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
