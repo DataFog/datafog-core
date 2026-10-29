@@ -55,7 +55,7 @@ export type DataFogErrorCode =
   | "invalid_batch"
   | "invalid_finding"
   | "review_conflict"
-  | "invalid_operation" | "operation_reused"
+  | "invalid_operation" | "operation_reused" | "invalid_policy"
   | "closed_workspace"
   | "inactive_plan"
   | "inactive_stream"
@@ -93,8 +93,8 @@ export declare class DataFogError extends Error {
   readonly code: DataFogErrorCode;
   readonly reason?: string;
   readonly path?: string;
-  readonly findingIndex?: number;
-  readonly inputIndex?: number;
+  readonly findingIndex?: number | null;
+  readonly inputIndex?: number | null;
   /** Content-free source issue ranges when workspace preparation rejects marker text. */
   readonly markerIssues?: readonly WorkspaceMarkerIssue[];
   readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
@@ -270,7 +270,7 @@ export interface WorkspacePolicyPreview {
   readonly choices: readonly {readonly entityType: string; readonly value: string; readonly before: WorkspaceChoiceDisposition | null; readonly after: WorkspaceChoiceDisposition | null}[];
 }
 export interface PreparedWorkspaceChange {
-  /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
+  /** Warn before a saved format upgrade: beta.1 cannot open v2, and beta.1/beta.2 cannot open v3. */
   snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
