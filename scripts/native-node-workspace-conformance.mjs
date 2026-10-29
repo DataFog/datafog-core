@@ -30,6 +30,15 @@ export async function verifyNativeWorkspace(api, counters) {
   Object.defineProperty(accessorEdits,"rules",{enumerable:true,get(){accessorCalls++;return [];}});
   throws(()=>workspace.preparePolicyChanges(accessorEdits,id(53)),"invalid_policy");
   assert.equal(accessorCalls,0,"policy transport must reject getters without executing them");
+  const emptyReview={text:"",scannerFindings:[],userSelections:[]};
+  for(const request of [emptyReview,{...emptyReview,corrections:[]}]) {
+    assert.equal(workspace.review(request).conflicts.length,0);
+    workspace.prepareReview([request],id(53)).discard();
+  }
+  const nullCorrections={...emptyReview,corrections:null};
+  throws(()=>workspace.review(nullCorrections),"invalid_finding");
+  throws(()=>workspace.prepareReview([nullCorrections],id(53)),"invalid_finding");
+  assert.throws(()=>workspace.prepareReview([emptyReview,nullCorrections],id(53)),error=>error.code==="invalid_finding" && error.inputIndex===1);
   const change=workspace.prepare(text,[finding],id(53));
   const heads=change.heads(), encoded=change.exportCandidateBundle();
   const output=change.preview().text;

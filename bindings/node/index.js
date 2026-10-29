@@ -558,7 +558,7 @@ function workspaceReviewJson(input) {
   }
   const fields=object(input,["text","scannerFindings","userSelections","corrections"],["text","scannerFindings","userSelections"]);
   workspaceText(fields.text,1024*1024);
-  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections ?? []);
+  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections === undefined ? [] : fields.corrections);
   if (scanner.length+user.length+corrections.length>10000) throw workspaceFailure("resource_limit");
   const scannerJson=workspaceFindingsJson(scanner), userJson=workspaceFindingsJson(user);
   let budget=new TextEncoder().encode(scannerJson).length+new TextEncoder().encode(userJson).length+new TextEncoder().encode(JSON.stringify(fields.text)).length+128;
