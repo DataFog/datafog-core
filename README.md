@@ -26,7 +26,9 @@ DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add DataFog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Prerelease:** [0.5.0-beta.1](https://github.com/DataFog/datafog-core/releases/tag/v0.5.0-beta.1)
+**Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Published prerelease:** [0.5.0-beta.2](https://github.com/DataFog/datafog-core/releases/tag/v0.5.0-beta.2)
+
+[0.5.0-beta.3 release candidate](docs/releases/0-5-0-beta-3.mdx) adds native workspace APIs, operation/conversation records and strict/progressive streaming. Publication and fresh registry verification are pending; see the [beta.3 integration guide](docs/extension-integration-0.5.0-beta.3.md).
 
 ## Quickstart
 

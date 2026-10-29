@@ -1,6 +1,7 @@
 # Launch API inventory — 0.5.0-beta.2 / 0.5.0-beta.3
 
-Status: **review draft, not the final G3 API or snapshot freeze**. This reconciles
+Status: **versioned 0.5.0-beta.3 release-candidate inventory, not a permanent API
+or snapshot freeze**. This reconciles
 [#143](https://github.com/DataFog/datafog-core/issues/143) with the actual committed
 SDK stack and prepares [#154](https://github.com/DataFog/datafog-core/issues/154).
 A declaration, merged document or local installed package is not a published SDK
@@ -16,8 +17,9 @@ release or proof that the shipping extension/server has passed qualification.
 | Core/WASM ledger, counts, coverage and paging | #162 merged into main at `699887e6d13164c9549494dd4ba8b0ec32ce8f6f`; awaiting beta.3 publication | Approved history implementation, not completion of all C1/C2 or a joint snapshot freeze |
 | Native Python operation adapter | [#186](https://github.com/DataFog/datafog-core/pull/186) merged at `aee4a415`; awaiting beta.3 publication | Same Core contract with native snake_case calls and exact Python values |
 | Native Node operation adapter | [#187](https://github.com/DataFog/datafog-core/pull/187) merged at `507b92b0`; awaiting beta.3 publication | Main now contains the combined Core/Python/Node operation surface; compile success still does not freeze/release it |
-| Conversation/send-intent scoped restoration | Committed Core/WASM #185 with reviewed Python #195 and Node #196 assembled by #197 into the #185 feature branch; #199 adds joint parity | Actual candidate methods and map11/key9 below; these methods are not on main or in published beta.2 at this candidate boundary |
-| CSV and provider qualification | #149 / #150 remain separate decisions/execution gates | No CSV/provider API or provider calls are introduced by this inventory |
+| Conversation/send-intent scoped restoration | Merged through #185 into main at `4bc69664`; combined SDKs #197, parity #199 and inventory #200 are included | Actual methods and map11/key9 below; planned for beta.3, absent from published beta.2 |
+| `0.5.0-beta.3` release candidate | Coordinated Cargo/npm `0.5.0-beta.3`, Python `0.5.0b3` | Publication and fresh registry verification pending; [integration guide](../extension-integration-0.5.0-beta.3.md) |
+| CSV and provider/product qualification | Deferred beyond the functional beta.3 release; tracked follow-up work remains open | No CSV/provider API, real provider-preservation result or shipping-host acceptance is implied |
 
 The adjacent [type inventory](launch-api-proposal.d.ts) imports actual WASM and
 Node declarations; it does not augment `Workspace`, emit code or invent future
@@ -378,12 +380,12 @@ Warn **before saving** that beta.1 and beta.2 cannot open the upgraded v3 vault.
 Keeping an old backup does not make later state readable by its old decoder.
 The old unshipped operation-v2 layout is rejected, not mistaken for policy-v2.
 
-This is an implemented candidate, not the final G3 freeze. The earlier unshipped
+This is the implemented beta.3 layout, not a permanent G3 freeze. The earlier unshipped
 map10 operation-only v3 is not accepted as map11 and is not a supported migration
 source. Four public-lifecycle map11 gold states, 42 malformed vectors and
 password/recovery-code encrypted recovery cover the current persisted fields;
-see the [field inventory](../verification/workspace-backup-fields.md). Joint
-acceptance and shipping-host review remain separate. Unknown fields are not
+see the [field inventory](../verification/workspace-backup-fields.md). Functional joint acceptance is complete; final release-artifact verification and
+shipping-host review remain separate. Unknown fields are not
 silently dropped; no fake contract-version export is introduced.
 
 The reference-host backup flow reauthenticates a freshly entered password for
@@ -476,28 +478,31 @@ Identity acquisition, trusted send observation, authenticated tenant/request
 association and durable saves remain host obligations. No manual-confirmation
 escape hatch, inferred remote receipt or automatic resend is added.
 
-CSV #149 scope and provider/model/sampling/denominator/execution choices under
-#150 remain pending. [G1 preparation #184](https://github.com/DataFog/datafog-core/pull/184)
-is an offline synthetic packet with zero provider runs and no preservation rate
-or G1 pass. Its gold/witness must be deliberately regenerated against the coordinated
-v3 source before future runs; no provider calls or CSV implementation follow from
-compiling this document.
+Sid approved shipping the functional beta.3 SDK without waiting for real-provider
+marker trials (G1), the extended shipping detection pilot (G2), Josh's product-host
+acceptance (G4), CSV #149 or a permanent G3 freeze/feedback period. Those remain
+follow-up work, not passed gates. Functional/security correctness, versioned
+artifacts, required CI and the native model publishing gate remain required.
+[G1 preparation #184](https://github.com/DataFog/datafog-core/pull/184) is an offline
+synthetic packet with zero provider runs and no preservation rate or G1 pass. Its
+gold/witness must be deliberately reconciled to the coordinated v3 source before
+any future trial. This inventory introduces no provider execution or CSV API.
 
 ## Remaining launch gates and compilation
 
 | Requirement | Implementation / remaining evidence |
 | --- | --- |
 | Released sources/recall/policy/combined review/rules/stronger backup | beta.2 release; #140/#141/#144/#145/#146/#142 |
-| C1/C3 recorded operations | #147/#162 with native #186/#187 and merged operation parity #188; joint candidate acceptance remains |
-| C2/R3 conversation/send intent/restore | #185 candidate with #197 combined SDKs; implemented reservation, binding and scoped restoration; final G3/host acceptance remains |
+| C1/C3 recorded operations | #147/#162 with native #186/#187 and operation parity #188; implemented/merged, release-artifact verification pending |
+| C2/R3 conversation/send intent/restore | #185/#197 merged with reservation, binding and scoped restoration; actual shipping-host observation remains a separate deferred acceptance |
 | X6 / X7 native bindings | #195/#196 implemented conversation adapters assembled by #197; actual installed packages and declarations qualified, not published beta.2 features |
-| R4 strict/progressive | #169/#176/#174/#175 implemented; native/host/provenance acceptance still joint work |
-| X8 workspace parity | #199 candidate executes four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16; final acceptance and production host applicability remain |
-| W6 / G4 server and vault | #170/#153; actual host ownership, keys/storage/admission/cancellation and shipping review |
-| B2 complete backup | #152/#181/#192 plus #185 map11 migration: four gold states, 42 malformed vectors and encrypted recovery; final joint acceptance remains |
-| G1 / G2 qualification | #150 real provider trials; #151 actual shipping model/rules/recall evidence |
-| D9 CSV | #149 if approved; no signature or implementation here |
-| G3 freeze | #154 only after full actual API/decoders/backup/native/parity/host qualification; this document does not close it |
+| R4 strict/progressive | #169/#176/#174/#175 and scoped #185 implemented/merged; actual native/browser/host parity passes |
+| X8 workspace parity | Merged #199 executes four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16; release-artifact checks retain that scope |
+| W6 / G4 server and vault | Reference-host functional proofs merged; actual shipping keys/storage/site observation remains separate, with Josh product-host acceptance deferred |
+| B2 complete backup | #152/#181/#192 plus #185 map11 migration covers all implemented fields: four gold states, 42 malformed vectors and encrypted recovery; rerun against release artifacts |
+| G1 / G2 qualification | #150 real provider trials and #151 extended shipping pilot deferred; native model integration remains a publishing check |
+| D9 CSV | #149 deferred beyond beta.3; no signature or implementation here |
+| G3 permanent freeze | #154 deferred beyond this functional release; the versioned API/snapshot is documented but remains provisional |
 
 TypeScript uses the pinned compiler without emitting or running these examples:
 

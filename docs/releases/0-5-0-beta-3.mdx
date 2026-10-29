@@ -1,0 +1,67 @@
+---
+title: "0.5.0 beta.3"
+description: "Native workspaces, bounded streaming, recorded operations and conversation-scoped restoration."
+icon: "tag"
+---
+
+`0.5.0-beta.3` is a functional developer SDK prerelease. Coordinated versions are
+Cargo/npm `0.5.0-beta.3` and Python `0.5.0b3`. This page accompanies the release
+candidate: publication and fresh registry verification must finish before these
+versions are treated as available.
+
+## What is included
+
+- Native Python and Node expose the shared workspace lifecycle, review, recall,
+  protected choices, saved activation, snapshots and recovery. They call Rust in
+  process; browser WASM is not the native runtime.
+- Strict buffered restoration and separate opt-in progressive restoration support
+  UTF-8 and UTF-16 chunks. Late progressive errors stop incomplete and preserve
+  counts for earlier returned chunks; they cannot retract earlier delivery.
+- Content-free operation records, recorded-history counts and explicit history
+  pages preserve every retained row. The provisional ceiling is 100,000 rows,
+  including 256 recovery-only slots; no records are evicted or sampled.
+- Conversation preparation saves mappings and a funded pending-send intent before
+  transport. A separate trusted observed-send save establishes scoped issuance
+  and can bind an initially unknown site ID once. Pending uncertainty pauses all
+  scoped restoration for that conversation without blocking other conversations.
+- Encrypted Python/Node reference hosts and the blocking four-SDK parity gate
+  exercise durable CAS, crashes, lost acknowledgments, scoped restoration and
+  bounded plan lifetimes. These are qualified reference paths, not a ready-made
+  provider adapter or production deployment.
+
+See the [beta.3 integration guide](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.3.md)
+for the calls, ownership boundaries and versioned contract. npm uses the `beta`
+channel; stable `latest` remains separate. After publication, pin exact versions:
+
+```bash
+npm install --save-exact @datafog/wasm@0.5.0-beta.3
+npm install --save-exact @datafog/node@0.5.0-beta.3
+python -m pip install datafog-core==0.5.0b3
+cargo add datafog-core@=0.5.0-beta.3
+```
+
+## Saved-vault compatibility
+
+This is the first published coordinated snapshot v3, including operation rows,
+conversation state and counts. Existing v1/v2 bundles read and re-export unchanged;
+reads, real no-ops, discarded candidates and failed saves do not upgrade them.
+A real approved saved mutation or destination recovery can stage v3. **Warn before
+saving: beta.1 and beta.2 cannot open an upgraded v3 vault.** Keep existing backups
+and preserve aliases through the ordinary approval/encrypt/complete-head-CAS/
+activation flow. Unshipped operation-only map10 v3 snapshots are not supported
+migration inputs. Snapshot v3 is distinct from the outer backup-file version.
+
+## Qualification and follow-up scope
+
+Release verification retains exact source/package/model identities, required CI,
+installed native SDKs, browser WASM, encrypted recovery and the native model
+publishing matrix. The shared workspace gate covers 45 cases / 600 steps; Python/
+Node conversation-host 16/66, CAS 9/28 and 16-cycle pressure proofs are counted
+separately. No functional or security-correctness failure is waived by this scope.
+
+The release does not wait for an additional feedback period. Real-provider marker
+trials (G1), the extended shipping detection pilot (G2), Josh's product-host
+acceptance (G4), CSV (D9) and a permanent API/snapshot freeze (G3) are deferred to
+follow-up betas. They remain open work, not passed gates. This SDK release does
+not establish a shipping site's successful-send observation, secure production
+key storage, a LiteLLM integration or approval for real-data deployment.
