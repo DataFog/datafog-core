@@ -221,14 +221,17 @@ def restore_text_chunks(store: EncryptedStore, expected: RequestContext, transpo
     def release(event):
         nonlocal accepted
         check_cancel()
+        next_accepted = dict(event["delivered"])
+        complete = event["complete"]
         try:
-            accept(event)
+            accept({"text":event["text"], "delivered":dict(next_accepted), "complete":complete})
         except Exception:
             # The transport may have sent the event before failing its acknowledgment.
             raise HostStreamFailure("delivery_uncertain", accepted,
                 core_delivered=core_delivered, transport_uncertain=True) from None
-        accepted = dict(event["delivered"])
-        checkpoint("after_accept")
+        accepted = next_accepted
+        if not complete:
+            checkpoint("after_accept")
 
     check_cancel()
     try:

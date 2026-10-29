@@ -305,6 +305,20 @@ class HostTests(unittest.TestCase):
                     self.assertEqual(observed,[]);self.assertEqual(error.accepted["bytes"],0)
                     self.assertEqual(error.core_delivered["bytes"],len("Ada Example"))
 
+    def test_final_acceptance_is_not_retracted_and_callback_views_are_owned(self):
+        marker=self.run_request()["text"];observed=[];cancelled=False
+        def accept(event):
+            nonlocal cancelled
+            observed.append(copy.deepcopy(event))
+            if event["complete"]:cancelled=True
+            event["delivered"]["bytes"]=999999
+            event["complete"]=False
+        result=restore_text_chunks(self.store,self.context,self.context,[marker.encode()],accept,
+            progressive=True,cancelled=lambda:cancelled)
+        self.assertTrue(result["complete"]);self.assertTrue(observed[-1]["complete"])
+        self.assertEqual(result["accepted"]["bytes"],len("Ada Example"))
+        self.assertTrue(cancelled)
+
     def test_failed_input_transport_does_not_report_completion_or_raw_errors(self):
         marker=self.run_request()["text"];observed=[]
         def interrupted():
