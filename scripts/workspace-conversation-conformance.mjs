@@ -59,6 +59,7 @@ export async function verifyWorkspaceConversations(api) {
     confirmation=workspace.prepareObservedSend(otherIntent,id(11),"synthetic_chat","thread_b",op(10));save(workspace,confirmation);
     const text=`👋 ${otherMarker}`,report=workspace.restoreReportInConversation(text,id(10));
     check(report.text===null && report.issues[0].kind==="not_issued_in_conversation","wrong context fails strict");
+    check(report.restoredMarkers===0,"unissued markers never count as resolvable in this context");
     check(report.issues[0].byteRange.start===5 && report.issues[0].codepointRange.start===2 && report.issues[0].utf16Range.start===3,"original Unicode issue ranges");
     const buffered=workspace.bufferedRestoreInConversation(id(10));buffered.feed(new TextEncoder().encode(text));check(buffered.finalize().text===null,"buffering publishes no partial text");buffered.close();
     const stream=workspace.progressiveRestoreInConversation(id(10));
