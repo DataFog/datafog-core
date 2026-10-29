@@ -1,0 +1,2 @@
+# Reference-host cryptography only; never an SDK dependency.
+cryptography==50.0.2
