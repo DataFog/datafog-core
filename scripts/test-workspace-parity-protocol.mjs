@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput} from "./test-workspace-parity.mjs";
+import {validateWorkspaceOutput,selectWorkspaceWheel,validateStreamingOutput,validateOperationOutput} from "./test-workspace-parity.mjs";
 import {runWorkspaceContract} from "./workspace-parity-runner.mjs";
 const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",commands:[{call:"restore",expectCode:"invalid_marker"}]}]};
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
@@ -47,4 +47,40 @@ test("streaming qualification requires both modes, every command and complete de
   for(const mutate of [v=>delete v.delivered,v=>delete v.markerIssues[0].utf16Range,v=>{v.text="partial private text";}]) {
     const invalid=structuredClone(failed);mutate(invalid.cases[0].modes.progressive.steps[0].error);assert.throws(()=>validateStreamingOutput(invalid,bad));
   }
+});
+
+const operationMethods=["createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage"];
+test("operation profile cannot skip missing native methods or its required calls",()=>{
+  for(const missing of operationMethods) {
+    let called=false;
+    class Workspace {static create(){called=true;}static createWithOperation(){called=true;}static openBundle(){}}
+    for(const method of operationMethods)if(method!=="createWithOperation")Workspace.prototype[method]=()=>{};
+    delete (missing==="createWithOperation"?Workspace:Workspace.prototype)[missing];
+    assert.throws(()=>runWorkspaceContract({Workspace},{schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"required",commands:[{call:"createWithOperation"}]}]}));
+    assert.equal(called,false);
+  }
+});
+test("operation output retains complete counts, unknown times, explicit pages and content-free rows",()=>{
+  const row={id:Array(16).fill(2),kind:"create",occurredAtMs:null,preparedInputs:0,transformedSpans:0};
+  const counts={operations:1,preparedInputs:0,transformedSpans:0,confirmedHandoffs:0,reportedBlockedAttempts:0};
+  const coverage={recordedHistoryOnly:true,preUpgradeHistory:"unknown"};
+  const source={schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"reads",commands:[{call:"operations",expectValue:[row]},{call:"counts",expectValue:counts},{call:"historyCoverage",expectValue:coverage},{call:"operationsPage",offset:0,limit:1}]}]};
+  const value={schemaVersion:1,profile:source.profile,cases:[{id:"reads",steps:[{call:"operations",ok:true,value:[row]},{call:"counts",ok:true,value:counts},{call:"historyCoverage",ok:true,value:coverage},{call:"operationsPage",ok:true,value:{records:[row],total:2,offset:0,nextOffset:1}}]}]};
+  assert.doesNotThrow(()=>validateOperationOutput(value,source));
+  for(const mutate of [
+    v=>{v.cases[0].steps[0].value[0].occurredAtMs=0;},
+    v=>{v.cases[0].steps[0].value[0].content="private input";},
+    v=>{delete v.cases[0].steps[1].value.reportedBlockedAttempts;},
+    v=>{v.cases[0].steps[2].value.preUpgradeHistory="not_applicable";},
+    v=>{v.cases[0].steps[3].value.nextOffset=null;},
+    v=>{v.cases[0].steps[3].value.records=[];},
+    v=>{v.cases[0].steps.pop();},
+  ]){const bad=structuredClone(value);mutate(bad);assert.throws(()=>validateOperationOutput(bad,source));}
+  assert.throws(()=>validateOperationOutput(value,{...source,requiredMethods:[]}));
+});
+test("read/discard/failed-save byte preservation is independently asserted",()=>{
+  const source={schemaVersion:1,profile:"protocol-test",cases:[{id:"saved",commands:[{call:"export",bundle:"before"},{call:"export",bundle:"after",sameBundleAs:"before"}]}]};
+  const result={schemaVersion:1,profile:source.profile,cases:[{id:"saved",steps:[{call:"export",ok:true,value:{bundleHex:"a10001"}},{call:"export",ok:true,value:{bundleHex:"a10001"}}]}]};
+  assert.doesNotThrow(()=>validateWorkspaceOutput(result,source));
+  result.cases[0].steps[1].value.bundleHex="a10002";assert.throws(()=>validateWorkspaceOutput(result,source));
 });
