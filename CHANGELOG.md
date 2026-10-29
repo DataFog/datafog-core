@@ -32,6 +32,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
   v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
   Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
   remaining event/replay accounting stays under review for `0.5.0-beta.3`.
+- The synthetic Node server host qualifies opt-in progressive response delivery,
+  late-failure incomplete status and cooperative cancellation against durable mappings.
+
 - Native Node exposes the shared workspace lifecycle, staged changes, policy,
   recall, combined review, strict buffered and opt-in progressive restoration
   without loading browser WASM. Streaming preserves Core error counts, encoding
