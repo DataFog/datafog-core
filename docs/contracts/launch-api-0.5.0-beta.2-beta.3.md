@@ -319,11 +319,14 @@ Policy-v2 is the authoritative main implementation targeting beta.2: keys 0–5 
 6 replaces the old `synthetic_v1` placeholder with validated policy, and key 7
 stores remembered choices. D4 metadata stays transient; recall adds no snapshot
 key. Strict canonical decoding and encrypted reopen/recovery tests are required.
-Unapproved operation-record proposal #162 currently uses a different v2 layout;
-it **must integrate the merged policy normally and choose a coherent subsequent
-version**, never ship different
-formats under the same version. Keys 8/9/10 below are future design allocations,
-not fields already present in policy-v2. Key 5 stays reserved for merges.
+Unapproved operation-record proposal #162 has integrated committed policy-v2
+and now proposes a distinct v3 layout, preserving policy fields at keys 1–7,
+adding the operation ledger at key 8 and counts at key 10, with key 9 reserved
+for conversations. It rejects its old unshipped v2 layout. Capacity, recovery
+reserve, numeric accounting and legacy replay-error choices remain review
+proposals; this does not freeze the future format. Keys 8/9/10 below remain
+future design allocations, not fields already present in policy-v2. Key 5 stays
+reserved for merges.
 
 [#154](https://github.com/DataFog/datafog-core/issues/154) freezes the complete
 Rust/WASM/native Python/native Node contract and supported snapshot versions only

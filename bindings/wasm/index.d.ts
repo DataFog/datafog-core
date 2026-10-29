@@ -55,6 +55,7 @@ export type DataFogErrorCode =
   | "invalid_batch"
   | "invalid_finding"
   | "review_conflict"
+  | "invalid_operation" | "operation_reused"
   | "closed_workspace"
   | "inactive_plan"
   | "inactive_stream"
@@ -258,7 +259,7 @@ export interface WorkspacePolicyEdits {
   readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
 }
 export interface WorkspacePolicy {
-  readonly snapshotVersion: 1 | 2;
+  readonly snapshotVersion: 1 | 2 | 3;
   readonly defaultRule: "hide";
   readonly protectedTypes: readonly string[];
   readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
@@ -270,7 +271,7 @@ export interface WorkspacePolicyPreview {
 }
 export interface PreparedWorkspaceChange {
   /** Warn before saving a v1-to-v2 upgrade; beta.1 cannot open v2. */
-  snapshotFormat(): {readonly currentVersion: 1 | 2; readonly candidateVersion: 1 | 2};
+  snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
   /** Requires a single-input plan. */
@@ -327,6 +328,30 @@ export interface WorkspaceReviewResult {
   readonly candidates: readonly WorkspaceReviewCandidate[];
   readonly conflicts: readonly WorkspaceReviewConflict[];
 }
+export interface WorkspaceOperation { readonly id: Uint8Array; readonly occurredAtMs: number; }
+export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocked_input" | "restore_blocked";
+export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
+export interface WorkspaceOperationRecord {
+  readonly id: readonly number[];
+  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | WorkspaceOutcomeKind;
+  readonly occurredAtMs: number | null;
+  readonly preparedInputs: number;
+  readonly transformedSpans: number;
+}
+export interface WorkspaceOperationPage {
+  readonly records: readonly WorkspaceOperationRecord[];
+  readonly total: number;
+  readonly offset: number;
+  readonly nextOffset: number | null;
+}
+export interface WorkspaceHistoryCoverage {
+  readonly recordedHistoryOnly: true;
+  readonly preUpgradeHistory: "unknown" | "not_applicable";
+}
+export interface WorkspaceCounts {
+  readonly operations: number; readonly preparedInputs: number; readonly transformedSpans: number;
+  readonly confirmedHandoffs: number; readonly reportedBlockedAttempts: number;
+}
 export type WorkspaceRestoreEncoding = "utf8" | "utf16";
 export interface WorkspaceRestoreProgress {
   readonly bytes: number;
@@ -356,6 +381,7 @@ export interface WorkspaceProgressiveRestore {
 }
 export class Workspace {
   private constructor();
+  static createWithOperation(namespace: Uint8Array, operation: WorkspaceOperation): Workspace;
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
   static openBundle(bytes: Uint8Array): Workspace;
   head(): WorkspaceHead;
@@ -371,6 +397,15 @@ export class Workspace {
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
+  operations(): readonly WorkspaceOperationRecord[];
+  /** Explicit read-only window. Offset may equal total; limit must be 1..100000. Full operations() is unchanged. */
+  operationsPage(offset: number, limit: number): WorkspaceOperationPage;
+  counts(): WorkspaceCounts;
+  historyCoverage(): WorkspaceHistoryCoverage;
+  prepareRecoveryWithOperation(operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareWithOperation(text: string, findings: readonly WorkspaceFinding[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareBatchWithOperation(inputs: readonly WorkspaceInput[], operation: WorkspaceOperation): PreparedWorkspaceChange;
+  prepareOutcome(outcome: WorkspaceOutcome, operation: WorkspaceOperation): PreparedWorkspaceChange;
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
   /** Supplied findings only: omissions are never proof of PII-free input; use prepareReview for combined recall. Committed full markers pass through; damaged/unknown markers and bare committed codes reject with markerIssues before a plan is created. Findings must not overlap markers. */
   prepare(text: string, findings: readonly WorkspaceFinding[], operationId: Uint8Array): PreparedWorkspaceChange;

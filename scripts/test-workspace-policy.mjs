@@ -49,9 +49,9 @@ export async function verifyPolicyHost({fresh,status,close,launch,unlock,restore
   await control(page,"configure",{abortSave:true});await page.locator("#approve").click();await status(page,"storage_failure");
   check((await policy(page)).snapshotVersion === 1,"D7 failed real save does not upgrade");
   await control(page,"configure",{abortSave:false});await page.locator("#approve").click();await status(page,"saved");
-  check((await policy(page)).snapshotVersion === 2,"D7 approved real save upgrades");
+  check((await policy(page)).snapshotVersion === 3,"D7 approved real save upgrades");
   await close();page=await launch("policy-upgrade");await unlock(page);
-  check((await policy(page)).snapshotVersion === 2,"D7 upgraded encrypted vault reopens");
+  check((await policy(page)).snapshotVersion === 3,"D7 upgraded encrypted vault reopens");
   await restored(page,counters.high.marker,"restored");check(await page.locator("#restored").textContent() === "Jane","D7 upgrade keeps legacy aliases");
   await close();
   for(const [method,credential] of [["password",password],["recovery",legacyRecoveryCode]]) {
@@ -61,7 +61,7 @@ export async function verifyPolicyHost({fresh,status,close,launch,unlock,restore
   await page.locator("#backup-credential").fill(credential);await page.locator("#backup-review").click();await status(page,"backup_preview_ready");
   check(await page.locator("#backup-format-upgrade").isVisible() && (await page.locator("#backup-format-upgrade").textContent()).includes("0.5.0-beta.1"),"D7 legacy recovery warns before its saved upgrade");
   await page.locator("#backup-approve").click();await status(page,"backup_restored_locked");
-  await unlock(page);check((await policy(page)).snapshotVersion === 2,"D7 legacy recovery stages and saves v2");
+  await unlock(page);check((await policy(page)).snapshotVersion === 3,"D7 legacy recovery stages and saves proposed v3");
   await restored(page,counters.high.marker,"restored");check(await page.locator("#restored").textContent() === "Jane","D7 legacy backup upgrade preserves alias");
   await close();
   }

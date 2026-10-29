@@ -27,7 +27,7 @@
       <label>Export-time backup credential <input id="backup-credential" type="password" autocomplete="off" maxlength="1024"></label>
       <button id="backup-review">Review backup locally</button>
       <pre id="backup-preview"></pre>
-      <p id="backup-format-upgrade" hidden>Saving this restored workspace upgrades its saved format. DataFog 0.5.0-beta.1 cannot open the upgraded vault. Your existing backup is unchanged.</p>
+      <p id="backup-format-upgrade" hidden>Saving this restored workspace upgrades its saved format. DataFog 0.5.0-beta.1 and 0.5.0-beta.2 cannot open the upgraded vault. Your existing backup is unchanged.</p>
       <p>The export time describes this saved copy and does not prove freshness. Later aliases and settings may be missing. Restore does not send anything and leaves the vault locked.</p>
       <button id="backup-approve" disabled>Approve restore into this empty profile</button>
     </section>
@@ -56,7 +56,7 @@
       <button id="select-source-issue" hidden>Select issue in input</button>
     </section>
     <button id="prepare">Prepare local preview</button><button id="cancel">Cancel</button>
-    <p id="format-upgrade" hidden>Saving this change upgrades the vault’s saved format. DataFog 0.5.0-beta.1 cannot open the upgraded vault. Your existing backups are unchanged.</p>
+    <p id="format-upgrade" hidden>Saving this change upgrades the vault’s saved format. DataFog 0.5.0-beta.1 and 0.5.0-beta.2 cannot open the upgraded vault. Your existing backups are unchanged.</p>
     <h2>Local preview</h2><pre id="preview"></pre><button id="approve" disabled>Approve and save</button>
     <h2>Approved local handoff sink</h2><pre id="sink"></pre>
     <h2>Local restoration</h2>

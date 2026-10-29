@@ -3,6 +3,12 @@
 //! Callers supply findings and fresh public random IDs. The host owns credentials,
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
+mod operations;
+pub use operations::{
+    MAX_OPERATION_TIME_MS, MAX_OPERATIONS, MAX_ORDINARY_OPERATIONS, OperationContext,
+    OperationCounts, OperationHistoryCoverage, OperationKind, OperationOutcome, OperationPage,
+    OperationRecord, OutcomeKind, PreUpgradeHistory, RESERVED_RECOVERY_OPERATIONS,
+};
 mod policy;
 pub use policy::{
     ChoiceDisposition, ChoiceEditPreview, ChoiceView, MAX_POLICY_EDITS, MAX_POLICY_ITEMS,
@@ -66,6 +72,8 @@ pub enum ErrorCode {
     InvalidId,
     InvalidPolicy,
     ResourceLimit,
+    InvalidOperation,
+    OperationReused,
 }
 
 impl ErrorCode {
@@ -84,6 +92,8 @@ impl ErrorCode {
             Self::InvalidId => "invalid_operation_id",
             Self::InvalidPolicy => "invalid_policy",
             Self::ResourceLimit => "resource_limit",
+            Self::InvalidOperation => "invalid_operation",
+            Self::OperationReused => "operation_reused",
         }
     }
 }
@@ -296,6 +306,8 @@ fn identity_key(value: &str) -> String {
 #[derive(Clone)]
 struct State {
     snapshot_version: u8,
+    operations: Vec<OperationRecord>,
+    operation_counts: OperationCounts,
     rules: BTreeMap<String, policy::RuleRecord>,
     choices: BTreeMap<Identity, policy::ChoiceRecord>,
     namespace: PublicId,
@@ -397,8 +409,17 @@ impl Workspace {
     }
     /// IDs must come from the host OS CSPRNG. Shape checks cannot prove entropy.
     pub fn create(namespace: PublicId, operation_id: PublicId) -> Result<Self> {
+        let operations = vec![OperationRecord {
+            id: operation_id,
+            kind: OperationKind::Create,
+            occurred_at_ms: None,
+            prepared_inputs: 0,
+            transformed_spans: 0,
+        }];
         Self::from_state(State {
-            snapshot_version: 2,
+            snapshot_version: 3,
+            operation_counts: operations::summarize(&operations)?,
+            operations,
             rules: BTreeMap::new(),
             choices: BTreeMap::new(),
             namespace,
@@ -545,10 +566,18 @@ impl Workspace {
     /// The host must reject destination conflicts and durably save before activation.
     /// Recovery has no text previews and grants no permission to release content.
     pub fn prepare_recovery(&self, operation_id: PublicId) -> Result<PreparedChange> {
+        self.prepare_recovery_internal(operation_id, None, true)
+    }
+    fn prepare_recovery_internal(
+        &self,
+        operation_id: PublicId,
+        occurred_at_ms: Option<u64>,
+        legacy: bool,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
-        ensure_fresh_operation(state, operation_id)?;
+        state.validate_operation_id(operation_id, legacy)?;
+        state.admit_record(true)?;
         let mut candidate = state.clone();
-        candidate.snapshot_version = 2;
         candidate.head = Head {
             revision: state
                 .head
@@ -557,7 +586,14 @@ impl Workspace {
                 .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
             commit_id: operation_id,
         };
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        candidate.record_operation(OperationRecord {
+            id: operation_id,
+            kind: OperationKind::Recovery,
+            occurred_at_ms,
+            prepared_inputs: 0,
+            transformed_spans: 0,
+        })?;
+        let bundle = Zeroizing::new(codec::encode_for_record(&candidate, true)?);
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
@@ -589,6 +625,15 @@ impl Workspace {
         inputs: &[WorkspaceInput<'_>],
         operation_id: PublicId,
     ) -> Result<PreparedChange> {
+        self.prepare_batch_internal(inputs, operation_id, None, false)
+    }
+    fn prepare_batch_internal(
+        &self,
+        inputs: &[WorkspaceInput<'_>],
+        operation_id: PublicId,
+        occurred_at_ms: Option<u64>,
+        explicit: bool,
+    ) -> Result<PreparedChange> {
         let state = self.state()?;
         if inputs.is_empty() {
             return Err(error(ErrorCode::InvalidBatch));
@@ -611,7 +656,10 @@ impl Workspace {
                 });
             }
         }
-        ensure_fresh_operation(state, operation_id)?;
+        state.validate_operation_id(operation_id, !explicit)?;
+        if explicit {
+            state.admit_record(false)?;
+        }
         let committed = marker_lookup(state);
         let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
         let mut candidate = state.clone();
@@ -643,8 +691,7 @@ impl Workspace {
             }
             previews.push(preview);
         }
-        if candidate.entries.len() != state.entries.len() {
-            candidate.snapshot_version = 2;
+        if explicit || candidate.entries.len() != state.entries.len() {
             candidate.head = Head {
                 revision: state
                     .head
@@ -653,8 +700,22 @@ impl Workspace {
                     .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
                 commit_id: operation_id,
             };
+            candidate.record_operation(OperationRecord {
+                id: operation_id,
+                kind: OperationKind::Prepare,
+                occurred_at_ms,
+                prepared_inputs: inputs.len() as u64,
+                transformed_spans: previews
+                    .iter()
+                    .map(|p| p.transformations.len() as u64)
+                    .sum(),
+            })?;
         }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(if candidate.head != state.head {
+            codec::encode_for_record(&candidate, false)?
+        } else {
+            codec::encode(&candidate)?
+        });
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),
@@ -1162,23 +1223,7 @@ pub fn byte_range_from_utf16(text: &str, range: TextRange) -> Result<TextRange> 
 }
 
 fn ensure_fresh_operation(state: &State, operation: PublicId) -> Result<()> {
-    if state.head.commit_id == operation
-        || state
-            .entries
-            .values()
-            .any(|record| record.issuance == operation)
-        || state
-            .rules
-            .values()
-            .any(|record| record.operation == operation)
-        || state
-            .choices
-            .values()
-            .any(|record| record.operation == operation)
-    {
-        return Err(error(ErrorCode::InvalidId));
-    }
-    Ok(())
+    state.validate_operation_id(operation, true)
 }
 
 fn adapt_findings<'a>(

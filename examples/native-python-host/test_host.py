@@ -141,7 +141,7 @@ class HostTests(unittest.TestCase):
         with store.open() as unchanged:self.assertEqual(unchanged.export_bundle(),raw)
         result=prepare_and_handoff(store,context,text,[finding(text)],approved=True,acknowledge_upgrade=True)
         with store.open() as upgraded:
-            self.assertEqual(upgraded.policy()["snapshotVersion"],2)
+            self.assertEqual(upgraded.policy()["snapshotVersion"],3)
             self.assertEqual(upgraded.restore(result["text"]),text)
 
     def test_only_explicit_boolean_approval_can_save_and_release(self):

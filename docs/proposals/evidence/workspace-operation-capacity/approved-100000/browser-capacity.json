@@ -1,0 +1,139 @@
+{
+  "qualifiedCommit": "4dc78bd2f3367df03fc5180dd8090d51327c7d7e",
+  "sourceDirty": false,
+  "scope": "synthetic actual packed MV3; no beta.3 release or whole C1/G3 completion claim",
+  "browser": "151.0.7922.34",
+  "platform": "darwin",
+  "arch": "arm64",
+  "capacity": {
+    "passed": true,
+    "phases": [
+      {
+        "name": "ordinary",
+        "records": 99744,
+        "ordinaryWrite": "resource_limit",
+        "readRestoreExport": true,
+        "noOp": true
+      },
+      {
+        "name": "ordinary-password",
+        "records": 99745,
+        "retainedPrefix": true,
+        "profile": 2,
+        "reopened": true
+      },
+      {
+        "name": "ordinary-recovery",
+        "records": 99745,
+        "retainedPrefix": true,
+        "profile": 2,
+        "reopened": true
+      },
+      {
+        "name": "last-recovery",
+        "records": 99999,
+        "ordinaryWrite": "resource_limit",
+        "readRestoreExport": true,
+        "noOp": true
+      },
+      {
+        "name": "last-recovery-password",
+        "records": 100000,
+        "retainedPrefix": true,
+        "profile": 2,
+        "reopened": true
+      },
+      {
+        "name": "last-recovery-recovery",
+        "records": 100000,
+        "retainedPrefix": true,
+        "profile": 2,
+        "reopened": true
+      },
+      {
+        "name": "hard",
+        "records": 100000,
+        "ordinaryWrite": "resource_limit",
+        "readRestoreExport": true,
+        "noOp": true
+      }
+    ],
+    "fixtureDigests": {
+      "hard": {
+        "bytes": 3299356,
+        "file": "hard.cbor",
+        "records": 100000,
+        "sha256": "213b0ee0db83f4d18c5e391b8d0668e5da9b82407f6ae708ab2f283439b5aafe"
+      },
+      "last-recovery": {
+        "bytes": 3299326,
+        "file": "last-recovery.cbor",
+        "records": 99999,
+        "sha256": "bfe5c5abd8826a80f4c5cbd0e77f3be9cef486fcab02ba3e454d9504b3fd2d97"
+      },
+      "ordinary": {
+        "bytes": 3291676,
+        "file": "ordinary.cbor",
+        "records": 99744,
+        "sha256": "1289d1d4ecc2e4990aada1faa1f125018693005557776089b9d1bd2ae912dfdd"
+      }
+    }
+  },
+  "smallModel": {
+    "passed": true,
+    "tests": [
+      "candidate npm tarball and bundled local model load under MV3 CSP",
+      "actual GLiNER2.5 Small findings and all offset units match synthetic source",
+      "single-flight inference and close-during-inference fail explicitly",
+      "scanner review metadata and input-local highlight ranges survive packed-SDK workspace preparation",
+      "model findings prepare encrypted durable save before activation; failed save releases nothing; strict restore is atomic",
+      "idempotent close, closed-session rejection and explicit warm reopen",
+      "browser restart recalls committed model values without a model session and preserves approved-save-before-handoff",
+      "actual MV3 recall measures representative Unicode-safe matcher bounds and rejects index/result/work exhaustion atomically",
+      "browser process restart loses model session and rehydrates encrypted mappings",
+      "bad-model returns sanitized load failure under extension CSP",
+      "missing-wasm returns sanitized load failure under extension CSP",
+      "candidate includes source-marker preflight and stale-plan reclamation"
+    ],
+    "model": {
+      "repository": "nicolasembleton/gliner2.5-small-v1-onnx",
+      "revision": "5e2e3f51adfb0eeb7c1f83464400b4d498d41659",
+      "files": {
+        "onnx/model.onnx": {
+          "bytes": 288521577,
+          "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+        },
+        "tokenizer.json": {
+          "bytes": 8341713,
+          "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+        },
+        "tokenizer_config.json": {
+          "bytes": 646,
+          "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+        }
+      }
+    },
+    "browser": {
+      "version": "151.0.7922.34",
+      "channel": "Playwright bundled Chromium",
+      "extensionOrigin": "chrome-extension://aflmbaddeklgcpehabfbimifimafmgig"
+    }
+  },
+  "qualification": {
+    "fmt": "passed",
+    "clippyAllTargetsAllFeatures": "passed",
+    "workspaceTestsAllFeatures": "passed",
+    "dfvBuild": "20261029T101436Z",
+    "dfvCheck": "20261029T101450Z",
+    "dfvSmoke": "20261029T101527Z",
+    "dfvLiveParity100": "20261029T101623Z"
+  },
+  "receiptSha256": {
+    "mv3-integration.json": "720b96d7c8a9450008e1e002a3178ec1ec3c849d6dc8202caa463db810665f20",
+    "mv3-artifacts.json": "dbfaf52ca0bd8d53bb4a975acbc395a9df526a47e015d120ffa5a49e034aa5f1",
+    "small-report.json": "1f39224dd16a612a40dcacc6e17c2b4d128d6f1a6b95278d52cb21b2d9b7790d",
+    "native-capacity.json": "94ae9fdcdd89dd906bf9f25f55328996023e169300aba7a0d15ba825aa06d834",
+    "controlled-browser-memory.json": "e6dea9376cf940276cecf5628eb273222f8ee628697036194615f06cb8a340ea"
+  },
+  "installedParitySetupNote": "First live parity stopped before scans because two historical version wheels were present. Old beta1 wheel was preserved under ignored historical-wheels; retry with the current built beta2 wheel passed all100. No fixture or product behavior changed."
+}

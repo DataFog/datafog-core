@@ -83,6 +83,7 @@ fn representative_current_snapshot_preserves_every_supported_field_and_live_iden
         vec![("ACCOUNT_NUMBER".into(), 1), ("PERSON".into(), 2)]
     );
     let mut recovery = workspace.prepare_recovery([47; 16]).unwrap();
+    let candidate_version = recovery.snapshot_format().unwrap().candidate_version;
     let parent = recovery.expected_head().unwrap();
     let saved = recovery.candidate_head().unwrap();
     assert_ne!(parent, saved);
@@ -91,10 +92,10 @@ fn representative_current_snapshot_preserves_every_supported_field_and_live_iden
         .unwrap();
     let recovered = workspace.export_bundle().unwrap();
     assert_eq!(counters(&recovered), counters(&bytes));
-    assert_eq!(
-        serde_json::to_value(workspace.policy().unwrap()).unwrap(),
-        view
-    );
+    let mut recovered_policy = serde_json::to_value(workspace.policy().unwrap()).unwrap();
+    assert_eq!(recovered_policy["snapshotVersion"], candidate_version);
+    recovered_policy["snapshotVersion"] = view["snapshotVersion"].clone();
+    assert_eq!(recovered_policy, view);
     for operation in [43, 44, 45, 46] {
         assert_eq!(
             workspace

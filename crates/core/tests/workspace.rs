@@ -810,7 +810,7 @@ fn snapshot_decoder_rejects_noncanonical_truncated_and_duplicate_fields() {
     duplicate[3] = 0;
     assert!(Workspace::open_bundle(&duplicate).is_err());
     let mut unsupported = bytes.clone();
-    unsupported[2] = 3;
+    unsupported[2] = 255;
     assert!(Workspace::open_bundle(&unsupported).is_err());
     let mut allocation_attack = vec![0xbf];
     allocation_attack.extend_from_slice(&bytes[1..]);

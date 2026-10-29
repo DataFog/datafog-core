@@ -3,8 +3,9 @@
 Implementation work for [X7 / #168](https://github.com/DataFog/datafog-core/issues/168),
 integrating released beta.2 main and the approved Core streaming candidate #176. This is an in-process
 Rust N-API binding. It does not load browser WASM or implement a persistence host.
-Only methods present in the committed shared Core are exposed; provenance,
-and conversation methods join once their compatible Core contracts land.
+The reviewed lifecycle and streaming calls are exposed. Operation records/counts
+and conversation methods remain native/all-SDK follow-up to the Rust/WASM #147
+and future #148 drafts; they are not represented by fake native APIs.
 The package is not released by this draft.
 
 ## Calls, ownership and representations
@@ -15,7 +16,7 @@ The package is not released by this draft.
 | `head`, `namespace`, `exportBundle` | `head`, `namespace`, `export_bundle` | Independent output copies; revision is a canonical decimal string, never a JS number |
 | `prepare`, `prepareBatch`, `prepareReview` | corresponding Core prepare methods | Opaque plan belongs to exactly one workspace instance; no committed mutation |
 | `review`, `recall`, `policy` | corresponding read-only Core methods | Complete original byte/codepoint/UTF-16 coordinates; no allocation of aliases or host approval |
-| `preparePolicyChanges`, `prepareRecovery` | Core staged metadata/recovery methods | Exact approved policy and v1/v2 upgrade behavior; no handoff permission |
+| `preparePolicyChanges`, `prepareRecovery` | Core staged metadata/recovery methods | Exact approved policy and warned v1/v2-to-v3 draft upgrades; no handoff permission |
 | Plan `preview(s)`, `heads`, `policyPreview`, `snapshotFormat`, `exportCandidateBundle` | Core prepared-change getters | Sensitive local reads, copied output; export is plaintext for host encryption |
 | Plan `discard` | `PreparedChange::discard` | Consume pending plan; release its native storage; garbage collection also releases orphaned plan slots |
 | `activateSaved` | `Workspace::activate_saved` | Host first confirms durable complete-head CAS; rejects cross-instance/stale/consumed plans |

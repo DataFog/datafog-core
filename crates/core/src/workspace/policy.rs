@@ -357,7 +357,6 @@ impl Workspace {
         let mut candidate = state.clone();
         let (preview, changed) = apply(&mut candidate, edits, operation)?;
         if changed {
-            candidate.snapshot_version = 2;
             candidate.head = Head {
                 revision: state
                     .head
@@ -366,8 +365,19 @@ impl Workspace {
                     .ok_or_else(|| error(ErrorCode::ResourceLimit))?,
                 commit_id: operation,
             };
+            candidate.record_operation(OperationRecord {
+                id: operation,
+                kind: OperationKind::PolicyChange,
+                occurred_at_ms: None,
+                prepared_inputs: 0,
+                transformed_spans: 0,
+            })?;
         }
-        let bundle = Zeroizing::new(codec::encode(&candidate)?);
+        let bundle = Zeroizing::new(if changed {
+            codec::encode_for_record(&candidate, false)?
+        } else {
+            codec::encode(&candidate)?
+        });
         Ok(PreparedChange {
             pending: Some(Pending {
                 lifetime: Arc::clone(&self.lifetime),

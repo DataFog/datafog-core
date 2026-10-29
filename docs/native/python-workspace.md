@@ -16,7 +16,7 @@ binding does not freeze beta.3 operation or conversation proposals.
 | recall | Core normalized exact recall | Installed Unicode/case fixture passes; shared X8 corpus pending |
 | policy/prepare_policy_changes | Core protected rules and exact choices | Installed explicit-null/protected/cyclic-input tests pass |
 | prepare_recovery | Core staged recovery | Installed restored aliases/settings/fresh-head test passes |
-| provenance/counts/conversations | Not implemented in current Core candidate | Await approved, committed #147/#148 contracts |
+| operation records/counts/conversations | Not yet exposed by this native slice | Rust/WASM operation draft #147 and conversation #148 require native/all-SDK follow-up |
 | strict/progressive streaming | `buffered_restore` / `progressive_restore` with owned response handles | Installed split-encoding, late-failure, terminal-count, resource and lifetime tests pass |
 
 The compiled PyO3 classes own Core handles directly. Preparing, querying and

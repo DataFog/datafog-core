@@ -71,10 +71,49 @@ async function verifyCurrentFieldBackups({launch,close,unlock,status,check,fixtu
       try {
         workspace=Workspace.openBundle(opened.bundle);const recovered=workspace.exportBundle();
         const original=Uint8Array.from(fixture.current.bundleHex.match(/../g),pair=>Number.parseInt(pair,16));
-        const preserved=fixture.current.fields.filter(field=>field.key!==2).every(field=>recovered.length===original.length && recovered.slice(field.valueStart,field.valueEnd).every((value,index)=>value===original[field.valueStart+index]));
+        // Inspect actual CBOR value spans; recovery may add fields or widen the head.
+        // This test decoder supports the definite primitive/container forms in canonical workspace fixtures.
+        function fields(bytes) {
+          let position=0;
+          function item() {
+            const start=position,initial=bytes[position++],major=initial>>5,info=initial&31;
+            let value=info;
+            if(info>=24&&info<=27) {
+              const width=2**(info-24);value=0;
+              for(let index=0;index<width;index++) value=value*256+bytes[position++];
+            } else if(info>=28) throw new Error("unexpected indefinite fixture item");
+            if(major===2||major===3) position+=value;
+            else if(major===4) for(let index=0;index<value;index++) item();
+            else if(major===5) for(let index=0;index<value*2;index++) item();
+            else if(![0,1,7].includes(major)) throw new Error("unexpected fixture type");
+            if(position>bytes.length) throw new Error("truncated fixture");
+            return {major,value,start,end:position};
+          }
+          const initial=bytes[position++];
+          if(initial>>5!==5||(initial&31)>=24) throw new Error("unexpected fixture map");
+          const values=new Map();
+          for(let index=0;index<(initial&31);index++) {
+            const key=item();if(key.major!==0||values.has(key.value)) throw new Error("unexpected fixture key");
+            const value=item();values.set(key.value,bytes.slice(value.start,value.end));
+          }
+          if(position!==bytes.length) throw new Error("trailing fixture data");
+          return values;
+        }
+        const originalFields=fields(original),recoveredFields=fields(recovered);
+        const preserved=[1,3,4,5,6,7].every(key=>{
+          const before=originalFields.get(key),after=recoveredFields.get(key);
+          return before&&after&&before.length===after.length&&after.every((value,index)=>value===before[index]);
+        });
         const aliases=fixture.current.aliases.every(alias=>workspace.restore(alias.marker)===alias.value);
         const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
-        const policy=workspace.policy();const settings=["snapshotVersion","defaultRule","rules","choices"].every(key=>JSON.stringify(canonical(policy[key]))===JSON.stringify(canonical(fixture.current.policy[key])));
+        const policy=workspace.policy();
+        const sourceWorkspace=Workspace.openBundle(original);
+        let expectedVersion;
+        try {
+          const staged=sourceWorkspace.prepareRecovery(new Uint8Array(16).fill(49));
+          try {expectedVersion=staged.snapshotFormat().candidateVersion;}finally{staged.discard();}
+        } finally{sourceWorkspace.close();}
+        const settings=policy.snapshotVersion===expectedVersion && ["defaultRule","rules","choices"].every(key=>JSON.stringify(canonical(policy[key]))===JSON.stringify(canonical(fixture.current.policy[key])));
         const oldHead=fixture.current.head,newHead=workspace.head();
         const freshHead=BigInt(newHead.revision)===BigInt(oldHead.revision)+1n && newHead.commitId.join(",")!==oldHead.commitId.join(",");
         const envelope=Object.fromEntries(["vaultId","workspaceId","keyId","keyNonce","wrappedKey","nonce"].map(key=>[key,toBase64url(record[key])]));

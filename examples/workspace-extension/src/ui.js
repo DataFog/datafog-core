@@ -157,7 +157,7 @@ element("backup-review").addEventListener("click", () => {
       const result = await broker.call("prepareImport", [bytes, credential, method]);
       if (g !== generation) return;
       importPlan = {...result, generation: g};
-      element("backup-format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
+      element("backup-format-upgrade").hidden=!(result.format?.currentVersion < 3 && result.format?.candidateVersion === 3);
       element("backup-preview").textContent = `Saved workspace ${result.workspaceTag}\nExported ${result.exportedAt}\nSaved revision ${result.revision}\nRestore saved mappings/settings into this empty profile.`;
       status("backup_preview_ready");
     } finally { bytes.fill(0); }
@@ -190,7 +190,7 @@ element("prepare").addEventListener("click", () => perform(async g => {
   const inputs = draftInputs();
   const result = await broker.call("prepare", [inputs]);
   if (g !== generation) return;
-  element("format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
+  element("format-upgrade").hidden=!(result.format?.currentVersion < 3 && result.format?.candidateVersion === 3);
   plan = result.id; element("preview").textContent = showInputs(result.previews.map(preview => preview.text)); element("approve").disabled = false; status("preview_ready");
 }));
 for (const id of ["policy-kind","policy-type","policy-value","policy-choice","policy-rule"]) {
@@ -214,7 +214,7 @@ element("policy-prepare").addEventListener("click",()=>perform(async g=>{
     ...result.policyPreview.rules.map(row=>`${row.entityType}: ${labels[String(row.after)]}`),
     ...result.policyPreview.choices.map(row=>`${row.entityType} ${JSON.stringify(row.value)}: ${labels[String(row.after)]}`),
   ].join("\n");
-  element("format-upgrade").hidden=!(result.format?.currentVersion === 1 && result.format?.candidateVersion === 2);
+  element("format-upgrade").hidden=!(result.format?.currentVersion < 3 && result.format?.candidateVersion === 3);
   plan=result.id;element("approve").disabled=false;status("policy_preview_ready");
 }));
 element("approve").addEventListener("click", () => perform(async g => {

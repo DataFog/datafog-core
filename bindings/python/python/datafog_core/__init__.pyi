@@ -586,8 +586,8 @@ class _WorkspacePreview(TypedDict):
     text: str
     transformations: list[_WorkspaceTransformation]
 class _WorkspaceSnapshotFormat(TypedDict):
-    currentVersion: Literal[1, 2]
-    candidateVersion: Literal[1, 2]
+    currentVersion: Literal[1, 2, 3]
+    candidateVersion: Literal[1, 2, 3]
 class _WorkspaceRuleEdit(TypedDict):
     entityType: str
     rule: Literal["hide", "keep"] | None
@@ -606,7 +606,7 @@ class _WorkspaceChoice(TypedDict):
     value: str
     disposition: Literal["keep", "not_sensitive"]
 class _WorkspacePolicy(TypedDict):
-    snapshotVersion: Literal[1, 2]
+    snapshotVersion: Literal[1, 2, 3]
     defaultRule: Literal["hide"]
     protectedTypes: list[str]
     rules: list[_WorkspaceRule]

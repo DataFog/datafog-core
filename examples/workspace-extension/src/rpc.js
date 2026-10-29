@@ -28,7 +28,7 @@ export class HostError extends Error {
 }
 const known = new Set([
   "closed_workspace", "inactive_plan", "workspace_conflict", "invalid_batch", "invalid_finding", "invalid_marker", "review_conflict",
-  "invalid_policy", "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
+  "invalid_operation", "operation_reused", "invalid_policy", "invalid_snapshot", "invalid_operation_id", "resource_limit", "invalid_credentials", "invalid_envelope",
   "storage_failure", "save_uncertain", "locked", "stale_approval", "cancelled", "already_exists", "not_found", "internal_error",
   "invalid_backup", "recovery_unavailable", "kdf_unavailable",
 ]);

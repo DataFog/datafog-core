@@ -80,6 +80,9 @@ function writeConsumerFiles() {
     `
 import {
   init,
+  type WorkspaceOperation,
+  type WorkspaceCounts,
+  type WorkspaceOperationRecord,
   scan,
   scanAndTransform,
   restore,
@@ -109,6 +112,22 @@ ModelSession.open();
 // @ts-expect-error Threshold is numeric.
 ModelSession.open({modelBaseUrl: "/models/", threshold: "high"});
 void modelTypes;
+function operationTypes() {
+  const context: WorkspaceOperation = {id: new Uint8Array(16), occurredAtMs: 0};
+  const workspace = Workspace.createWithOperation(new Uint8Array(16), context);
+  const counts: WorkspaceCounts = workspace.counts();
+  const records: readonly WorkspaceOperationRecord[] = workspace.operations();
+  workspace.prepareWithOperation("", [], context).discard();
+  workspace.prepareBatchWithOperation([{text: "", findings: []}], context).discard();
+  workspace.prepareRecoveryWithOperation(context).discard();
+  workspace.prepareOutcome({kind: "blocked_input", issueCount: 1}, context).discard();
+  // @ts-expect-error Raw content is forbidden in an outcome.
+  workspace.prepareOutcome({kind: "blocked_input", issueCount: 1, text: "secret"}, context);
+  // @ts-expect-error A host timestamp is required on the explicit operation call.
+  workspace.prepareWithOperation("", [], {id: new Uint8Array(16)});
+  return {counts, records};
+}
+void operationTypes;
 const ready: Promise<void> = init();
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
@@ -181,11 +200,11 @@ workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsRevie
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
 void findingSource; void needsReview;
 const currentPolicy = workspace.policy();
-const snapshotVersion: 1 | 2 = currentPolicy.snapshotVersion;
+const snapshotVersion: 1 | 2 | 3 = currentPolicy.snapshotVersion;
 const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
 const settingPreview = policyChange.policyPreview();
 const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
-const currentFormat: 1 | 2 = policyChange.snapshotFormat().currentVersion;
+const currentFormat: 1 | 2 | 3 = policyChange.snapshotFormat().currentVersion;
 // @ts-expect-error Choices use a closed disposition set.
 workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
 // @ts-expect-error Review flags cannot grant an exception through a settings edit.
@@ -859,8 +878,9 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
 
   await page.evaluate(async () => {
     const workspaceApi = await import("/node_modules/@datafog/wasm/index.js");
-    const { verifyWorkspace } = await import("/workspace-conformance.mjs");
+    const { verifyWorkspace, verifyWorkspaceOperations } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
+    await verifyWorkspaceOperations(workspaceApi);
     const {verifyWorkspacePolicy} = await import("/workspace-policy-conformance.mjs");
     await verifyWorkspacePolicy(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     const {verifyWorkspaceBackupFields}=await import("/workspace-backup-fields-conformance.mjs");

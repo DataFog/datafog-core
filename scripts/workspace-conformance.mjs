@@ -10,6 +10,7 @@ export async function verifyWorkspace(api, counters) {
   const id = value => new Uint8Array(16).fill(value);
   const isMarker = (text, label) => new RegExp(`^\\[\\[${label}_[0-9A-HJKMNP-TV-Z]{6}\\]\\]$`).test(text ?? "");
   await api.init();
+
   const reviewMeasurements=verifyWorkspaceReview(api);
   const recallWorkspace = api.Workspace.create(id(21), id(22));
   const approvedValue = "İ Jane";
@@ -250,4 +251,65 @@ export async function verifyWorkspace(api, counters) {
   throws(() => change.preview(), "closed_workspace");
   reopened.close();
   return {reviewMeasurements};
+}
+
+/** Proposed operation profile: mandatory for SDKs exposing these new calls. */
+export async function verifyWorkspaceOperations(api) {
+  const check=(condition,label)=>{if(!condition)throw new Error(label);};
+  const throws=(callback,code)=>{try{callback();}catch(error){check(error.code===code,`workspace error category: ${code}`);check(error.message===code,"content-free workspace error");return;}throw new Error(`missing workspace rejection: ${code}`);};
+  const equal=(a,b)=>a.length===b.length&&a.every((value,index)=>value===b[index]);
+  const id=value=>new Uint8Array(16).fill(value);
+  await api.init();
+  const records = api.Workspace.createWithOperation(id(201), {id: id(202), occurredAtMs: 0});
+  check(records.operations().length === 1 && records.operations()[0].occurredAtMs === 0 && records.counts().operations === 1, "timed creation records no invented historical time");
+  const recordBefore = records.exportBundle();
+  for (const occurredAtMs of [-1, 0.5, NaN, Infinity, 253402300800000, "0", null]) throws(() => records.prepareWithOperation("", [], {id: id(203), occurredAtMs}), "invalid_operation");
+  throws(() => records.prepareWithOperation("", [], {id: new Uint8Array(15), occurredAtMs: 0}), "invalid_operation_id");
+  throws(() => records.prepareWithOperation("", [], {id: id(203), occurredAtMs: 0, text: "forbidden"}), "invalid_operation");
+  let operationGetterRead = false;
+  throws(() => records.prepareWithOperation("", [], {get id() {operationGetterRead = true; return id(203);}, occurredAtMs: 0}), "invalid_operation");
+  check(!operationGetterRead, "operation accessors are rejected without invoking them");
+  throws(() => records.prepareOutcome({kind: "blocked_input", issueCount: 0}, {id: id(203), occurredAtMs: 0}), "invalid_operation");
+  throws(() => records.prepareOutcome({kind: "unknown", issueCount: 0}, {id: id(203), occurredAtMs: 0}), "invalid_operation");
+  throws(() => records.prepareOutcome({kind: "copy_confirmed", issueCount: 0, text: "forbidden"}, {id: id(203), occurredAtMs: 0}), "invalid_operation");
+  const recorded = records.prepareBatchWithOperation([{text: "Jane", findings: [{entityType: "PERSON", matchedText: "Jane", range: {unit: "utf8_bytes", start: 0, end: 4}}]}, {text: "ordinary", findings: []}], {id: id(203), occurredAtMs: 253402300799999});
+  const candidateRecords = api.Workspace.openBundle(recorded.exportCandidateBundle());
+  check(records.counts().operations === 1 && equal(records.exportBundle(), recordBefore), "previews/candidate export never increment committed counts");
+  check(candidateRecords.counts().operations === 2 && candidateRecords.counts().preparedInputs === 2 && candidateRecords.counts().transformedSpans === 1, "atomic batch counts inputs and transformed occurrences");
+  const recordHeads = recorded.heads();
+  throws(() => records.activateSaved(recorded, recordHeads.expectedHead, {...recordHeads.candidateHead, revision: "999"}), "workspace_conflict");
+  check(records.counts().operations === 1, "failed activation leaves counts unchanged");
+  records.activateSaved(recorded, recordHeads.expectedHead, recordHeads.candidateHead);
+  const outcome = records.prepareOutcome({kind: "restore_blocked", issueCount: 2}, {id: id(204), occurredAtMs: 0});
+  records.activateSaved(outcome, outcome.heads().expectedHead, outcome.heads().candidateHead);
+  check(records.counts().reportedBlockedAttempts === 1 && records.counts().confirmedHandoffs === 0, "blocked outcomes are explicit host assertions and not handoff counts");
+  throws(() => records.prepareOutcome({kind: "user_cancelled", issueCount: 0}, {id: id(203), occurredAtMs: 0}), "operation_reused");
+  check(JSON.stringify(records.historyCoverage()) === JSON.stringify({recordedHistoryOnly:true,preUpgradeHistory:"not_applicable"}), "new history is recorded-only without an invented legacy prefix");
+  const recordsSaved = records.exportBundle();
+  const discardRecord = records.prepareWithOperation("", [], {id: id(205), occurredAtMs: 0}); discardRecord.discard();
+  const duplicateRead = records.operations(); duplicateRead[0].id[0] = 7;
+  check(equal(records.exportBundle(), recordsSaved) && records.operations()[0].id[0] === 202, "discard and mutated read results cannot change persisted records");
+  const pages = [records.operationsPage(0, 2), records.operationsPage(2, 2)];
+  check(JSON.stringify(pages.flatMap(page => page.records)) === JSON.stringify(records.operations()) && pages[0].nextOffset === 2 && pages[1].nextOffset === null && pages.every(page => page.total === 3), "explicit history pages retain every ordered record and report their end");
+  check(records.operationsPage(3, 1).records.length === 0 && records.operationsPage(3, 1).nextOffset === null, "page at end is explicitly empty");
+  for (const [offset, limit] of [[-1,1],[0,0],[4,1],[0,100001],[NaN,1],[0,1.5],[null,1],[0,undefined],[4294967296,1]]) throws(() => records.operationsPage(offset,limit), "resource_limit");
+  pages[0].records[0].id[0] = 8;
+  check(records.operations()[0].id[0] === 202 && equal(records.exportBundle(), recordsSaved), "paged results are owned copies with no hidden saved mutation");
+  check(!JSON.stringify({records: records.operations(), counts: records.counts()}).includes("Jane"), "records/counts contain no raw values");
+  const reopenedRecords = api.Workspace.openBundle(recordsSaved);
+  check(JSON.stringify(reopenedRecords.counts()) === JSON.stringify(records.counts()), "records/counts survive snapshot reopen");
+  const recoverRecord = reopenedRecords.prepareRecoveryWithOperation({id: id(205), occurredAtMs: 1});
+  reopenedRecords.activateSaved(recoverRecord, recoverRecord.heads().expectedHead, recoverRecord.heads().candidateHead);
+  check(reopenedRecords.operations().at(-1).kind === "recovery" && reopenedRecords.counts().operations === 4, "timed recovery adds one content-free record");
+  for (const value of [202, 203, 204]) {
+    throws(() => records.prepare("", [], id(value)), "invalid_operation_id");
+    throws(() => records.prepareBatch([{text:"ordinary",findings:[]}], id(value)), "invalid_operation_id");
+    throws(() => records.prepareRecovery(id(value)), "invalid_operation_id");
+    throws(() => records.preparePolicyChanges({rules:[],choices:[]}, id(value)), "invalid_operation_id");
+    throws(() => records.prepareWithOperation("", [], {id:id(value),occurredAtMs:0}), "operation_reused");
+    throws(() => records.prepareRecoveryWithOperation({id:id(value),occurredAtMs:0}), "operation_reused");
+  }
+  check(equal(records.exportBundle(), recordsSaved), "all reused-ID failures preserve saved bytes and head");
+  records.close(); candidateRecords.close(); reopenedRecords.close();
+
 }

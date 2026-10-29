@@ -9,7 +9,7 @@ export async function verifyWorkspacePolicy(api, counters) {
   const save=(w,p)=>{const h=p.heads();w.activateSaved(p,h.expectedHead,h.candidateHead);};
   const w=api.Workspace.create(id(1),id(2));
   const initial=w.exportBundle();
-  check(w.policy().snapshotVersion === 2,"new workspaces use candidate v2");
+  check(w.policy().snapshotVersion === 3,"new workspaces use proposed v3");
   check(w.policy().defaultRule === "hide" && w.policy().protectedTypes.includes("PERSON"),"Core policy descriptor");
   throws(()=>w.preparePolicyChanges(edit("PERSON","May","keep"),id(3)),"invalid_policy");
   throws(()=>w.preparePolicyChanges(edit("URL","https://example.test","keep"),id(3)),"invalid_policy");
@@ -58,7 +58,7 @@ export async function verifyWorkspacePolicy(api, counters) {
   const noOp=legacy.prepare("ordinary",[],id(201));
   check(noOp.snapshotFormat().currentVersion === 1 && noOp.snapshotFormat().candidateVersion === 1,"legacy no-op does not upgrade");noOp.discard();
   p=legacy.preparePolicyChanges(edit("PERSON","Jane","not_sensitive"),id(201));
-  check(p.snapshotFormat().currentVersion === 1 && p.snapshotFormat().candidateVersion === 2,"upgrade metadata supports warning before save");
+  check(p.snapshotFormat().currentVersion === 1 && p.snapshotFormat().candidateVersion === 3,"upgrade metadata supports warning before save");
   const candidate=api.Workspace.openBundle(p.exportCandidateBundle());
   check(candidate.restore(counters.high.marker) === "Jane" && candidate.recall("Jane").findings.length === 0,"staged upgrade keeps aliases and settings");
   p.discard();check(equal(legacy.exportBundle(),legacyBytes),"discarded upgrade preserves legacy bytes");

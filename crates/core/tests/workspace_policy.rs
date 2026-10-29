@@ -558,8 +558,8 @@ fn legacy_v1_read_and_noop_are_byte_exact_until_a_saved_mutation_upgrades() {
         )
         .unwrap();
     let candidate = plan.export_candidate_bundle().unwrap();
-    assert_eq!(candidate[0], 0xa8);
-    assert_eq!(candidate[2], 2);
+    assert_eq!(candidate[0], 0xaa);
+    assert_eq!(candidate[2], 3);
     let imported = Workspace::open_bundle(candidate).unwrap();
     assert_eq!(
         imported
@@ -575,7 +575,7 @@ fn legacy_v1_read_and_noop_are_byte_exact_until_a_saved_mutation_upgrades() {
         &choice("PERSON", "Jane", Some(ChoiceDisposition::NotSensitive)),
         201,
     );
-    assert_eq!(workspace.export_bundle().unwrap()[2], 2);
+    assert_eq!(workspace.export_bundle().unwrap()[2], 3);
 }
 
 #[test]

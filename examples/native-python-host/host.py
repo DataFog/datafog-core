@@ -157,7 +157,7 @@ def prepare_and_handoff(store: EncryptedStore, context: RequestContext, text: st
             checkpoint("prepared")
             if approved is not True or cancelled(): raise HostError("cancelled")
             version=change.snapshot_format()
-            if version["currentVersion"]==1 and version["candidateVersion"]==2 and acknowledge_upgrade is not True:
+            if version["currentVersion"] < version["candidateVersion"] and acknowledge_upgrade is not True:
                 raise HostError("upgrade_notice_required")
             released_text = change.preview()["text"]
             parent, saved = change.expected_head(), change.candidate_head()

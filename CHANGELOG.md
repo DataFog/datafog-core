@@ -28,6 +28,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Proposed content-free workspace records and recorded-history counts use staged
+  v3 saves, with 100,000 retained rows and the final 256 slots reserved for recovery.
+  Read-only pages expose every retained row without requiring a full JSON view.
+  Legacy reads/no-ops preserve bytes and explicitly report unknown earlier history;
+  coordinated native/conversation qualification continues for `0.5.0-beta.3`.
 - `cargo dfv parity --workspace` compares deterministic workspace workflows across
   Rust, installed native Python/Node and browser WASM, retaining exact inner
   snapshots, source/package hashes and failures without skipping missing runtimes.
