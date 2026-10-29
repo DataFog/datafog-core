@@ -1,11 +1,10 @@
 # Launch API inventory — 0.5.0-beta.2 / 0.5.0-beta.3
 
-Status: **versioned 0.5.0-beta.3 release-candidate inventory, not a permanent API
+Status: **versioned 0.5.0-beta.3 inventory, not a permanent API
 or snapshot freeze**. This reconciles
 [#143](https://github.com/DataFog/datafog-core/issues/143) with the actual committed
-SDK stack and prepares [#154](https://github.com/DataFog/datafog-core/issues/154).
-A declaration, merged document or local installed package is not a published SDK
-release or proof that the shipping extension/server has passed qualification.
+SDK stack. The permanent freeze remains [#154](https://github.com/DataFog/datafog-core/issues/154).
+SDK publication does not establish shipping extension/server qualification.
 
 ## Release, main and candidate boundaries
 
@@ -13,20 +12,20 @@ release or proof that the shipping extension/server has passed qualification.
 | --- | --- | --- |
 | `0.5.0-beta.1` | Earlier released integration baseline | Historical [integration guide](../extension-integration-0.5.0-beta.1.md) |
 | `0.5.0-beta.2` | [Published October 29](https://github.com/DataFog/datafog-core/releases/tag/v0.5.0-beta.2), source `2121cbb90be58f2c81d453dfa0b06d40a22c4c52` | Sources, recall, protected choices, combined review, scoped rules and stronger reference-host backup profile; [release guide](../releases/0-5-0-beta-2.mdx) |
-| Native workspace/streaming foundations, reference server hosts and four-SDK foundation/stream parity | Merged after the beta.2 release: #174/#175/#176/#177/#178/#179 | Build the pinned checkout; these are not retroactive capabilities of the published beta.2 packages |
-| Core/WASM ledger, counts, coverage and paging | #162 merged into main at `699887e6d13164c9549494dd4ba8b0ec32ce8f6f`; awaiting beta.3 publication | Approved history implementation, not completion of all C1/C2 or a joint snapshot freeze |
-| Native Python operation adapter | [#186](https://github.com/DataFog/datafog-core/pull/186) merged at `aee4a415`; awaiting beta.3 publication | Same Core contract with native snake_case calls and exact Python values |
-| Native Node operation adapter | [#187](https://github.com/DataFog/datafog-core/pull/187) merged at `507b92b0`; awaiting beta.3 publication | Main now contains the combined Core/Python/Node operation surface; compile success still does not freeze/release it |
-| Conversation/send-intent scoped restoration | Merged through #185 into main at `4bc69664`; combined SDKs #197, parity #199 and inventory #200 are included | Actual methods and map11/key9 below; planned for beta.3, absent from published beta.2 |
-| `0.5.0-beta.3` release candidate | Coordinated Cargo/npm `0.5.0-beta.3`, Python `0.5.0b3` | Publication and fresh registry verification pending; [integration guide](../extension-integration-0.5.0-beta.3.md) |
+| Native workspace/streaming foundations, reference server hosts and four-SDK foundation/stream parity | Included in beta.3: #174/#175/#176/#177/#178/#179 | These are not retroactive capabilities of published beta.2 packages |
+| Core/WASM ledger, counts, coverage and paging | #162 merged at `699887e6d13164c9549494dd4ba8b0ec32ce8f6f`; included in beta.3 | Recorded-history counts do not invent pre-upgrade totals; a permanent snapshot freeze remains separate |
+| Native Python operation adapter | [#186](https://github.com/DataFog/datafog-core/pull/186) merged at `aee4a415`; included in beta.3 | Same Core contract with native snake_case calls and exact Python values |
+| Native Node operation adapter | [#187](https://github.com/DataFog/datafog-core/pull/187) merged at `507b92b0`; included in beta.3 | Combined Core/Python/Node operation surface; permanence remains separate |
+| Conversation/send-intent scoped restoration | Included through #185/#197, parity #199 and inventory #200 | Actual methods and map11/key9 below are published in beta.3, absent from beta.2 |
+| `0.5.0-beta.3` | [Published October 29](https://github.com/DataFog/datafog-core/releases/tag/v0.5.0-beta.3), source `8cf399b98c3a7819878929ed56a15541f2ae5270`; Cargo/npm `0.5.0-beta.3`, Python `0.5.0b3` | Pin the published versions; [integration guide](../extension-integration-0.5.0-beta.3.md) |
 | CSV and provider/product qualification | Deferred beyond the functional beta.3 release; tracked follow-up work remains open | No CSV/provider API, real provider-preservation result or shipping-host acceptance is implied |
 
 The adjacent [type inventory](launch-api-proposal.d.ts) imports actual WASM and
 Node declarations; it does not augment `Workspace`, emit code or invent future
-methods. The conversation aliases refer to actual committed candidate declarations. [TypeScript examples](launch-api-examples.ts) cover the
+methods. The conversation aliases refer to actual beta.3 declarations. [TypeScript examples](launch-api-examples.ts) cover the
 shared JavaScript surface and [Python examples](launch-api-python-example.py)
-cover the real native names. Read them against this candidate, not an older
-registry package. The SDKs remain thin; Core owns normalization, offsets, markers,
+cover the real native names. Read them against the exact beta.3 package versions.
+The SDKs remain thin; Core owns normalization, offsets, markers,
 recall, policy, protected coverage, snapshots and transaction semantics.
 
 ## Shared ownership and lifecycle
@@ -488,19 +487,19 @@ synthetic packet with zero provider runs and no preservation rate or G1 pass. It
 gold/witness must be deliberately reconciled to the coordinated v3 source before
 any future trial. This inventory introduces no provider execution or CSV API.
 
-## Remaining launch gates and compilation
+## Delivered beta.3 scope, follow-ups and compilation
 
 | Requirement | Implementation / remaining evidence |
 | --- | --- |
 | Released sources/recall/policy/combined review/rules/stronger backup | beta.2 release; #140/#141/#144/#145/#146/#142 |
-| C1/C3 recorded operations | #147/#162 with native #186/#187 and operation parity #188; implemented/merged, release-artifact verification pending |
+| C1/C3 recorded operations | #147/#162 with native #186/#187 and operation parity #188; fresh beta.3 registry consumers pass |
 | C2/R3 conversation/send intent/restore | #185/#197 merged with reservation, binding and scoped restoration; actual shipping-host observation remains a separate deferred acceptance |
-| X6 / X7 native bindings | #195/#196 implemented conversation adapters assembled by #197; actual installed packages and declarations qualified, not published beta.2 features |
+| X6 / X7 native bindings | #195/#196 conversation adapters assembled by #197; fresh beta.3 registry installs and declarations pass, not retroactive beta.2 features |
 | R4 strict/progressive | #169/#176/#174/#175 and scoped #185 implemented/merged; actual native/browser/host parity passes |
-| X8 workspace parity | Merged #199 executes four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16; release-artifact checks retain that scope |
+| X8 workspace parity | Fresh registry consumers pass four SDKs 45/600 plus separate conversation hosts 16/66, CAS 9/28 and pressure16 from #199 |
 | W6 / G4 server and vault | Reference-host functional proofs merged; actual shipping keys/storage/site observation remains separate, with Josh product-host acceptance deferred |
-| B2 complete backup | #152/#181/#192 plus #185 map11 migration covers all implemented fields: four gold states, 42 malformed vectors and encrypted recovery; rerun against release artifacts |
-| G1 / G2 qualification | #150 real provider trials and #151 extended shipping pilot deferred; native model integration remains a publishing check |
+| B2 complete backup | #152/#181/#192 plus #185 map11 migration covers all implemented fields: four gold states, 42 malformed vectors and encrypted recovery; fresh registry browser recovery passes |
+| G1 / G2 qualification | #150 real provider trials and #151 extended shipping pilot deferred; the released source passed all twelve required native model publishing jobs |
 | D9 CSV | #149 deferred beyond beta.3; no signature or implementation here |
 | G3 permanent freeze | #154 deferred beyond this functional release; the versioned API/snapshot is documented but remains provisional |
 
