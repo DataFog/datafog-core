@@ -123,6 +123,7 @@ export interface ScanAndTransformConfig {
 
 export type DataFogErrorCode =
   | "closed_workspace" | "inactive_plan" | "workspace_conflict" | "invalid_batch"
+  | "invalid_encoding" | "inactive_stream"
   | "invalid_marker" | "invalid_snapshot" | "invalid_operation_id" | "invalid_policy" | "resource_limit"
   | "invalid_configuration"
   | "invalid_finding"
@@ -153,6 +154,8 @@ export declare class DataFogError extends Error {
   readonly inputIndex?: number | null;
   readonly markerIssues?: readonly WorkspaceMarkerIssue[];
   readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
+  readonly delivered?: WorkspaceRestoreProgress;
+  readonly complete?: false;
 }
 
 export interface KeyProviderRequest {
@@ -374,6 +377,33 @@ export interface WorkspaceReviewResult {
   readonly candidates: readonly WorkspaceReviewCandidate[];
   readonly conflicts: readonly WorkspaceReviewConflict[];
 }
+export type WorkspaceRestoreEncoding = "utf8" | "utf16";
+export interface WorkspaceRestoreProgress {
+  readonly bytes: number;
+  readonly codepoints: number;
+  readonly utf16: number;
+  readonly restoredMarkers: number;
+}
+export interface WorkspaceRestoreChunk {
+  readonly text: string;
+  readonly delivered: WorkspaceRestoreProgress;
+  /** Only successful finalization is complete; prior chunks cannot be retracted. */
+  readonly complete: boolean;
+}
+export interface WorkspaceBufferedRestore {
+  feed(bytes: Uint8Array): void;
+  feedUtf16(units: Uint16Array): void;
+  finalize(): WorkspaceRestoreReport;
+  reset(): void;
+  close(): void;
+}
+export interface WorkspaceProgressiveRestore {
+  feed(bytes: Uint8Array): WorkspaceRestoreChunk;
+  feedUtf16(units: Uint16Array): WorkspaceRestoreChunk;
+  finalize(): WorkspaceRestoreChunk;
+  reset(): void;
+  close(): void;
+}
 export class Workspace {
   private constructor();
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
@@ -399,6 +429,8 @@ export class Workspace {
   /** The trusted host must confirm atomic persistence first. Success consumes this plan and drops retained plans based on older heads; failure preserves current plans. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
   /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
+  bufferedRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceBufferedRestore;
+  progressiveRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
   restore(text: string): string;
   /** All-or-nothing restoration that locates every unknown, damaged or unbracketed marker. */
   restoreReport(text: string): WorkspaceRestoreReport;

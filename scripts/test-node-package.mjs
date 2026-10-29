@@ -49,6 +49,8 @@ import { verifyEmailContext } from "./email-context-conformance.mjs";
 import { verifyUuid, verifyUuidProviders } from "./uuid-conformance.mjs";
 import { verifyCredentialUri, verifyCredentialUriProviders } from "./credential-uri-conformance.mjs";
 import { verifyUsRoutingNumber, verifyUsRoutingNumberProviders } from "./us-routing-number-conformance.mjs";
+import { verifyStreetAddress } from "./street-address-conformance.mjs";
+import { verifyAccountNumber } from "./account-number-conformance.mjs";
 import { verifyNpi, verifyNpiProviders } from "./npi-conformance.mjs";
 import { verifyGerman, verifyGermanProviders } from "./german-conformance.mjs";
 import { verifyCredentialOverlaps } from "./credential-overlap-conformance.mjs";
@@ -57,9 +59,11 @@ import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
 import {verifyNodeWorkspaceHost} from "./node-workspace-host-conformance.mjs";
+import {verifyWorkspaceStreaming} from "./workspace-streaming-conformance.mjs";
 import * as germanApi from "@datafog/node";
 const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
 await verifyNativeWorkspace(germanApi,workspaceCounters);
+await verifyWorkspaceStreaming(germanApi, JSON.parse(readFileSync(path.join(process.argv[2],"workspace/streaming-contract-v1.json"),"utf8")));
 const hostProof=await verifyNodeWorkspaceHost();
 console.log("Native Node host proof passed: "+JSON.stringify(hostProof));
 verifyCoverageConflicts(germanApi);
@@ -135,6 +139,11 @@ verifyCredentialUri(germanApi,credential_uriRecords);
 verifyUsRoutingNumber(germanApi,us_routing_numberRecords);
 const npiRecords = readFileSync(path.join(fixturesDirectory,"npi.jsonl"),"utf8").trim().split("\\n").map(JSON.parse);
 verifyNpi(germanApi,npiRecords);
+verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
+verifyStreetAddress(germanApi, readFileSync(path.join(fixturesDirectory,"street-address.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
+
+
+verifyAccountNumber(germanApi, readFileSync(path.join(fixturesDirectory,"masked-account-number.jsonl"),"utf8").trim().split("\\n").map(JSON.parse));
 verifyGerman(germanApi,germanRecords);
 verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
 verifyJwt(germanApi,jwtRecords);
@@ -653,7 +662,18 @@ const policy: WorkspacePolicy=workspace.policy();
 const plan: PreparedWorkspaceChange=workspace.prepareReview([{text:"Jane",scannerFindings:[finding],userSelections:[]}],new Uint8Array(16));
 const head: WorkspaceHead=plan.heads().candidateHead;
 const revision: string=head.revision;
-plan.policyPreview();plan.snapshotFormat();plan.discard();workspace.close();
+plan.policyPreview();plan.snapshotFormat();plan.discard();
+const buffered=workspace.bufferedRestore("utf16");buffered.feedUtf16(new Uint16Array());buffered.finalize();buffered.close();
+const progressive=workspace.progressiveRestore();
+const chunk: import("@datafog/node").WorkspaceRestoreChunk=progressive.feed(new Uint8Array());
+const progress: import("@datafog/node").WorkspaceRestoreProgress=chunk.delivered;
+// @ts-expect-error UTF16 units are not UTF8 bytes.
+progressive.feed(new Uint16Array());
+// @ts-expect-error strict buffering does not release chunks.
+const impossibleChunk: import("@datafog/node").WorkspaceRestoreChunk=buffered.feed(new Uint8Array());
+// @ts-expect-error raw stream capabilities are private.
+import {NativeRestoreStream} from "@datafog/node";
+void progress;void impossibleChunk;progressive.close();workspace.close();
 // @ts-expect-error raw native plan handles are not public package declarations.
 import {NativeWorkspace} from "@datafog/node";
 // @ts-expect-error revisions cannot use lossy JavaScript numbers.
@@ -752,8 +772,10 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
+  for (const file of ["workspace-streaming-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();

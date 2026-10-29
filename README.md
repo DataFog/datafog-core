@@ -125,12 +125,14 @@ Python and Node.js packages include prebuilt native binaries for Linux x64 and A
 | --- | --- | --- |
 | Personal and financial data | `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, `ZIP_CODE` | On by default |
 | Credentials | [`API_KEY`](docs/reference/api-keys.mdx), [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), [`JWT`](docs/reference/jwt.mdx), [`PRIVATE_KEY`](docs/reference/private-keys.mdx), [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx) | On by default |
+| Labeled street addresses | [`STREET_ADDRESS`](docs/reference/street-address.mdx) | On by default; bounded English street-line rule |
+| Labeled accounts | [`ACCOUNT_NUMBER`](docs/reference/account-number.mdx) | On by default; bounded lexical rule |
 | Labeled US identifiers | [`US_ROUTING_NUMBER`](docs/reference/us-routing-number.mdx), [`NPI`](docs/reference/npi.mdx) | On by default; requires a supported text label |
 | German identifiers | IBAN, VAT ID, tax ID, social security number, postal code, passport number, residence permit number | Explicit [German locale](docs/reference/german-entities.mdx) |
 | UUIDs | [`UUID`](docs/reference/uuid.mdx) | Explicit `detect_uuid` setting |
 | Names in JSON fields | `PERSON` | [Structured scans](docs/guides/person-discovery.mdx), using name-field aliases or explicit JSON Pointer mappings |
 
-Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, or [local models](#local-models-beta) to detect names and street addresses in prose.
+Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, or [local models](#local-models-beta) to detect names and unlabelled street addresses in prose.
 
 Each finding includes its entity type, matched text, byte and code-point ranges, optional confidence, and detector name/version. Ranges are zero-based and end-exclusive. Node.js and WASM also provide UTF-16 ranges for JavaScript `slice`. Rule-based findings have no confidence score. [Findings and ranges →](docs/concepts/findings-and-ranges.mdx)
 

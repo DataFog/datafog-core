@@ -33,7 +33,7 @@ export function init() {
 }
 
 export class DataFogError extends Error {
-  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues, reviewConflicts }) {
+  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues, reviewConflicts, delivered, complete }) {
     super(message);
     this.name = "DataFogError";
     this.code = code;
@@ -43,6 +43,8 @@ export class DataFogError extends Error {
     this.inputIndex = inputIndex;
     this.markerIssues = markerIssues;
     this.reviewConflicts = reviewConflicts;
+    this.delivered = delivered;
+    this.complete = complete;
   }
 }
 
@@ -257,7 +259,7 @@ function workspaceFindingsJson(findings) {
     for (const field of ["detectorName", "detectorVersion"]) if (f[field] !== undefined && f[field] !== null) string(f[field]);
     if (f.source !== undefined) string(f.source);
     if (f.needsReview !== undefined && typeof f.needsReview !== "boolean") throw workspaceFailure("invalid_finding");
-    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && typeof f.confidence !== "number")) throw workspaceFailure("invalid_finding");
+    if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || (f.confidence !== undefined && f.confidence !== null && (typeof f.confidence !== "number" || !Number.isFinite(f.confidence)))) throw workspaceFailure("invalid_finding");
     if (budget > maximum) throw workspaceFailure("resource_limit");
   }
   try { return structuredJson(findings, true); }
@@ -313,7 +315,7 @@ function workspaceReviewJson(input) {
   }
   const fields=object(input,["text","scannerFindings","userSelections","corrections"],["text","scannerFindings","userSelections"]);
   workspaceText(fields.text,1024*1024);
-  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections ?? []);
+  const scanner=array(fields.scannerFindings), user=array(fields.userSelections), corrections=array(fields.corrections === undefined ? [] : fields.corrections);
   if (scanner.length+user.length+corrections.length>10000) throw workspaceFailure("resource_limit");
   const scannerJson=workspaceFindingsJson(scanner), userJson=workspaceFindingsJson(user);
   let budget=new TextEncoder().encode(scannerJson).length+new TextEncoder().encode(userJson).length+new TextEncoder().encode(JSON.stringify(fields.text)).length+128;
@@ -342,6 +344,31 @@ class PreparedWorkspaceChange {
   heads() { const {state, handle} = workspacePlans.get(this); return JSON.parse(workspaceCall(state, "plan_heads", handle)); }
   exportCandidateBundle() { const {state, handle} = workspacePlans.get(this); return workspaceCall(state, "export_candidate_bundle", handle); }
   discard() { const {state, handle} = workspacePlans.get(this); workspaceCall(state, "discard", handle); }
+}
+
+// Native adapters own parsing, head pins and private storage. This wrapper only
+// validates typed-array transport and preserves structured terminal failures.
+class WorkspaceRestoreStream {
+  #native;
+  constructor(native) { this.#native = native; Object.freeze(this); }
+  #call(method, ...args) {
+    try { return this.#native[method](...args); }
+    catch (error) {
+      if (error && typeof error === "object" && typeof error.code === "string" && typeof error.message === "string") throw new DataFogError(error);
+      throw normalizeError(error, "internal_error");
+    }
+  }
+  feed(bytes) {
+    if (!(bytes instanceof Uint8Array)) return this.#call("reject_encoding");
+    return this.#call("feed", bytes);
+  }
+  feedUtf16(units) {
+    if (!(units instanceof Uint16Array)) return this.#call("reject_encoding");
+    return this.#call("feed_utf16", units);
+  }
+  finalize() { return this.#call("finalize"); }
+  reset() { this.#call("reset"); }
+  close() { this.#native.close(); }
 }
 
 /** Provisional reversible-workspace API. Credentials and durable storage remain host-owned. */
@@ -448,6 +475,16 @@ export class Workspace {
     try { expected = structuredJson(expectedHead); saved = structuredJson(savedHead); }
     catch { throw workspaceFailure("workspace_conflict"); }
     workspaceCall(this.#state, "activate_saved", plan.handle, expected, saved);
+  }
+  /** Strict default: feeds return no text, finalization returns the R2 report. */
+  bufferedRestore(encoding = "utf8") {
+    if (encoding !== "utf8" && encoding !== "utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state, "buffered_restore", encoding));
+  }
+  /** Explicit irreversible delivery; late failures retain prior delivered counts. */
+  progressiveRestore(encoding = "utf8") {
+    if (encoding !== "utf8" && encoding !== "utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state, "progressive_restore", encoding));
   }
   restore(text) { workspaceText(text, 16 * 1024 * 1024); return workspaceCall(this.#state, "restore", text); }
   restoreReport(text) { workspaceText(text, 16 * 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "restore_report", text)); }

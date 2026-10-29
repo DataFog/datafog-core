@@ -67,7 +67,7 @@ export class ModelSession {
 }
 
 export class DataFogError extends Error {
-  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues, reviewConflicts }) {
+  constructor({ code, reason, message, path, findingIndex, inputIndex, markerIssues, reviewConflicts, delivered, complete }) {
     super(message);
     this.name = "DataFogError";
     this.code = code;
@@ -77,6 +77,8 @@ export class DataFogError extends Error {
     this.inputIndex = inputIndex;
     this.markerIssues = markerIssues;
     this.reviewConflicts = reviewConflicts;
+    this.delivered = delivered;
+    this.complete = complete;
   }
 }
 
@@ -589,6 +591,31 @@ class PreparedWorkspaceChange {
   discard() { const {state, handle} = workspacePlan(this); workspaceCall(state, "discard", handle); workspaceFinalizer.unregister(this); }
 }
 
+// The native child owns parser state. Transport copies cannot mutate caller buffers.
+class WorkspaceRestoreStream {
+  #native;
+  constructor(native) { this.#native = native; Object.freeze(this); }
+  #call(method, ...args) {
+    try { const result = JSON.parse(this.#native[method](...args)); return result === null ? undefined : result; }
+    catch (error) { throw normalizeError(error, "internal_error"); }
+  }
+  feed(bytes) {
+    if (!(bytes instanceof Uint8Array)) return this.#call("reject_encoding");
+    let copied;
+    try { copied = Buffer.from(bytes); } catch { return this.#call("reject_encoding"); }
+    try { return this.#call("feed", copied); } finally { copied.fill(0); }
+  }
+  feedUtf16(units) {
+    if (!(units instanceof Uint16Array)) return this.#call("reject_encoding");
+    let copied;
+    try { copied = new Uint16Array(units); } catch { return this.#call("reject_encoding"); }
+    try { return this.#call("feed_utf16", copied); } finally { copied.fill(0); }
+  }
+  finalize() { return this.#call("finalize"); }
+  reset() { this.#call("reset"); }
+  close() { this.#native.close(); }
+}
+
 /** Provisional reversible-workspace API. Credentials and durable storage remain host-owned. */
 export class Workspace {
   #state;
@@ -693,6 +720,16 @@ export class Workspace {
     catch { throw workspaceFailure("workspace_conflict"); }
     workspaceCall(this.#state, "activate_saved", plan.handle, expected, saved);
     workspaceFinalizer.unregister(change);
+  }
+  /** Strict buffered default: feeds release no text. */
+  bufferedRestore(encoding = "utf8") {
+    if (encoding !== "utf8" && encoding !== "utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state,"buffered_restore",encoding));
+  }
+  /** Explicit irreversible delivery; terminal failures preserve prior delivered counts. */
+  progressiveRestore(encoding = "utf8") {
+    if (encoding !== "utf8" && encoding !== "utf16") throw workspaceFailure("invalid_encoding");
+    return new WorkspaceRestoreStream(workspaceCall(this.#state,"progressive_restore",encoding));
   }
   restore(text) { workspaceText(text, 16 * 1024 * 1024); return workspaceCall(this.#state, "restore", text); }
   restoreReport(text) { workspaceText(text, 16 * 1024 * 1024); return JSON.parse(workspaceCall(this.#state, "restore_report", text)); }

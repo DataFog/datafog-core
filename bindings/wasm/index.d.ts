@@ -57,6 +57,8 @@ export type DataFogErrorCode =
   | "review_conflict"
   | "closed_workspace"
   | "inactive_plan"
+  | "inactive_stream"
+  | "invalid_encoding"
   | "workspace_conflict"
   | "invalid_marker"
   | "invalid_snapshot"
@@ -95,6 +97,9 @@ export declare class DataFogError extends Error {
   /** Content-free source issue ranges when workspace preparation rejects marker text. */
   readonly markerIssues?: readonly WorkspaceMarkerIssue[];
   readonly reviewConflicts?: readonly WorkspaceReviewConflict[];
+  /** Present on terminal progressive errors; counts only prior successful calls. */
+  readonly delivered?: WorkspaceRestoreProgress;
+  readonly complete?: false;
 }
 
 export interface TextRange {
@@ -207,9 +212,9 @@ export interface WorkspaceFinding {
   readonly entityType: string;
   readonly matchedText: string;
   readonly range: TextRange & { readonly unit: "utf8_bytes" };
-  readonly confidence?: number;
-  readonly detectorName?: string;
-  readonly detectorVersion?: string;
+  readonly confidence?: number | null;
+  readonly detectorName?: string | null;
+  readonly detectorVersion?: string | null;
   /** Defaults to scanner for existing callers; not inferred from detectorName. */
   readonly source?: WorkspaceFindingSource;
   /** Defaults to true. False does not waive host approval/save/activation. */
@@ -322,6 +327,33 @@ export interface WorkspaceReviewResult {
   readonly candidates: readonly WorkspaceReviewCandidate[];
   readonly conflicts: readonly WorkspaceReviewConflict[];
 }
+export type WorkspaceRestoreEncoding = "utf8" | "utf16";
+export interface WorkspaceRestoreProgress {
+  readonly bytes: number;
+  readonly codepoints: number;
+  readonly utf16: number;
+  readonly restoredMarkers: number;
+}
+export interface WorkspaceRestoreChunk {
+  readonly text: string;
+  readonly delivered: WorkspaceRestoreProgress;
+  /** Only successful finalization is complete; prior chunks cannot be retracted. */
+  readonly complete: boolean;
+}
+export interface WorkspaceBufferedRestore {
+  feed(bytes: Uint8Array): void;
+  feedUtf16(units: Uint16Array): void;
+  finalize(): WorkspaceRestoreReport;
+  reset(): void;
+  close(): void;
+}
+export interface WorkspaceProgressiveRestore {
+  feed(bytes: Uint8Array): WorkspaceRestoreChunk;
+  feedUtf16(units: Uint16Array): WorkspaceRestoreChunk;
+  finalize(): WorkspaceRestoreChunk;
+  reset(): void;
+  close(): void;
+}
 export class Workspace {
   private constructor();
   static create(namespace: Uint8Array, operationId: Uint8Array): Workspace;
@@ -346,6 +378,10 @@ export class Workspace {
   prepareBatch(inputs: readonly WorkspaceInput[], operationId: Uint8Array): PreparedWorkspaceChange;
   /** The trusted host must confirm atomic persistence first. Success consumes this plan and drops retained plans based on older heads; failure preserves current plans. */
   activateSaved(change: PreparedWorkspaceChange, expectedHead: WorkspaceHead, savedHead: WorkspaceHead): void;
+  /** Strict R2-compatible default, including literal EOF handling. */
+  bufferedRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceBufferedRestore;
+  /** Explicit irreversible delivery; unfinished/oversized possible markers stop incomplete. */
+  progressiveRestore(encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
   /** All-or-nothing; throws `invalid_marker` when `restoreReport` would list an issue. */
   restore(text: string): string;
   /** All-or-nothing restoration that locates every unknown, damaged or unbracketed marker. */

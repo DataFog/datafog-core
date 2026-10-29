@@ -71,10 +71,26 @@ export async function verifyNativeWorkspace(api, counters) {
       worker.postMessage({bundle:workspace.exportBundle(),text:output});
     });
     assert.equal(result.text,text);
+    assert.equal(result.streamed,text,"worker uses independent native streaming");
     assert.deepEqual(result.head,workspace.head(),"worker reopens independent committed state");
     assert.equal(result.closedCode,"closed_workspace");
     assert.equal(workspace.restore(output),text,"worker close does not close the original handle");
   } finally { await worker.terminate(); }
+  // Same-head saves must not invalidate children; changing the head and parent close do.
+  const buffered=workspace.bufferedRestore(), live=workspace.progressiveRestore();
+  const sourceBytes=new TextEncoder().encode(output);
+  const retained=sourceBytes.slice();buffered.feed(sourceBytes);
+  assert.deepEqual(sourceBytes,retained,"native transport must preserve caller bytes");
+  const noop=workspace.prepare("",[],id(114));
+  workspace.activateSaved(noop,noop.heads().expectedHead,noop.heads().candidateHead);
+  assert.equal(buffered.finalize().text,text,"same-head activation preserves strict streams");
+  assert.equal(live.feed(sourceBytes).text,text,"same-head activation preserves progressive streams");
+  assert.equal(live.finalize().complete,true);
+  const oversized=workspace.progressiveRestore();
+  const previous=oversized.feed(new TextEncoder().encode("safe ")).delivered;
+  assert.throws(()=>oversized.feed(new Uint8Array(16*1024*1024+1)),error=>{assert.equal(error.code,"resource_limit");assert.equal(error.complete,false);assert.deepEqual(error.delivered,previous);return true;});
+  throws(()=>oversized.finalize(),"inactive_stream");
+  oversized.close();buffered.close();live.close();
   workspace.close();other.close();
   throws(()=>change.preview(),"closed_workspace");
   return {shared, nativeOwnership:true, workerReopen:true};

@@ -82,6 +82,8 @@ impl Activation {
 }
 
 struct Detector {
+    // Partial rules add coverage without taking the entity away from models.
+    replaces_model: bool,
     labels: Vec<Label>,
     activation: Activation,
     detect: fn(&str, &mut Vec<Candidate>),
@@ -98,6 +100,7 @@ impl Detector {
 
     fn single(label: Label, detect: fn(&str, &mut Vec<Candidate>), activation: Activation) -> Self {
         Self {
+            replaces_model: true,
             labels: vec![label],
             activation,
             detect,
@@ -108,6 +111,18 @@ impl Detector {
 static REGISTRY: LazyLock<Vec<Detector>> = LazyLock::new(|| {
     use Activation::{Default, Uuid};
     vec![
+        Detector {
+            labels: vec![Label::AccountNumber],
+            activation: Default,
+            detect: crate::account_number::detect,
+            replaces_model: false,
+        },
+        Detector {
+            labels: vec![Label::StreetAddress],
+            activation: Default,
+            detect: crate::street_address::detect,
+            replaces_model: false,
+        },
         Detector::single(Label::BearerToken, crate::bearer_token::detect, Default),
         Detector::single(Label::ApiKey, crate::api_key::detect, Default),
         Detector::single(Label::CredentialUri, crate::credential_uri::detect, Default),
@@ -127,6 +142,7 @@ static REGISTRY: LazyLock<Vec<Detector>> = LazyLock::new(|| {
         Detector::single(Label::IpAddress, crate::detect_ip_address, Default),
         Detector::single(Label::PrivateKey, crate::private_key::detect, Default),
         Detector {
+            replaces_model: true,
             labels: german::labels(),
             activation: Activation::German,
             detect: german::detect,
@@ -159,6 +175,13 @@ pub(super) fn text_entity_supported(entity: &str) -> bool {
     REGISTRY
         .iter()
         .any(|detector| detector.labels.iter().any(|label| label.as_str() == entity))
+}
+
+// Existing rule types retain exclusive routing; partial additions preserve models.
+pub(super) fn rules_replace_model(entity: &str) -> bool {
+    REGISTRY.iter().any(|detector| {
+        detector.replaces_model && detector.labels.iter().any(|label| label.as_str() == entity)
+    })
 }
 
 pub(super) fn detect(text: &str, config: &ScanConfig, candidates: &mut Vec<Candidate>) {

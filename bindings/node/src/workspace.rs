@@ -1,3 +1,4 @@
+mod stream;
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,
     WorkspaceInput,
@@ -8,6 +9,7 @@ use napi_derive::napi;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeMap;
+pub use stream::NativeRestoreStream;
 
 fn range_value(range: datafog_core::TextRange) -> serde_json::Value {
     json!({"start": range.start, "end": range.end})
@@ -241,6 +243,7 @@ pub struct NativeWorkspace {
     inner: Workspace,
     plans: BTreeMap<u32, PreparedChange>,
     next_plan: u32,
+    streams: stream::Registry,
 }
 
 #[napi]
@@ -256,6 +259,7 @@ impl NativeWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     #[napi(factory, js_name = "open_bundle")]
@@ -265,6 +269,7 @@ impl NativeWorkspace {
             inner,
             plans: BTreeMap::new(),
             next_plan: 1,
+            streams: stream::Registry::default(),
         })
     }
     #[napi(js_name = "head")]
@@ -557,7 +562,18 @@ impl NativeWorkspace {
             .map_err(from_error)?;
         self.plans
             .retain(|retained, _| *retained != handle && parents.get(retained) == Some(&saved));
+        if expected != saved {
+            self.streams.close();
+        }
         Ok(())
+    }
+    #[napi(js_name = "buffered_restore")]
+    pub fn buffered_restore(&mut self, encoding: String) -> Result<NativeRestoreStream, Error> {
+        self.streams.buffered(&self.inner, &encoding)
+    }
+    #[napi(js_name = "progressive_restore")]
+    pub fn progressive_restore(&mut self, encoding: String) -> Result<NativeRestoreStream, Error> {
+        self.streams.progressive(&self.inner, &encoding)
     }
     #[napi(js_name = "restore")]
     pub fn restore(&self, text: String) -> Result<String, Error> {
@@ -576,8 +592,14 @@ impl NativeWorkspace {
     }
     #[napi(js_name = "close")]
     pub fn close(&mut self) {
+        self.streams.close();
         self.plans.clear();
         self.inner.close();
+    }
+}
+impl Drop for NativeWorkspace {
+    fn drop(&mut self) {
+        self.streams.close();
     }
 }
 impl NativeWorkspace {
