@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Native Python workspace handles expose Core preparation, combined review,
+  recall, protected choices and recovery with typed errors, explicit saved-state
+  activation and bounded pending-plan lifetimes.
+
 - Workspace combined review merges scanner findings, committed-value recall and
   manual selections, preserving source metadata and original coordinates. Unresolved
   coverage/type conflicts block handoff with ranged review errors before a plan is

@@ -17,6 +17,7 @@ import uuid_conformance
 import credential_uri_conformance
 import us_routing_number_conformance
 import npi_conformance
+import workspace_conformance
 
 from datafog_core import (
     DataFogConfigurationError,
@@ -588,6 +589,7 @@ def verify_ssn_person_priority() -> None:
 
 
 if __name__ == "__main__":
+    workspace_conformance.verify_workspace()
     verify_model_engine_selection()
     verify_ssn_person_priority()
     main()

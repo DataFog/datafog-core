@@ -477,3 +477,185 @@ def transform_structured(
 def scan_and_transform_structured(
     data: _JsonDocument, config: _StructuredScanAndTransformConfig
 ) -> StructuredTransformResult: ...
+
+# Workspace result dictionaries retain the shared contract's camelCase fields.
+# Revisions are Python integers and preserve the full Core uint64 range.
+class _WorkspaceRange(TypedDict):
+    start: int
+    end: int
+class _WorkspaceHeadValue(TypedDict):
+    revision: int
+    commitId: list[int]
+class _WorkspaceMarkerIssue(TypedDict):
+    kind: Literal["unknown", "damaged", "unbracketed"]
+    byteRange: _WorkspaceRange
+    codepointRange: _WorkspaceRange
+    utf16Range: _WorkspaceRange
+class _WorkspaceReviewConflict(TypedDict):
+    kind: Literal["protected_coverage", "type_conflict"]
+    findingIndex: int
+    byteRange: _WorkspaceRange
+    codepointRange: _WorkspaceRange
+    utf16Range: _WorkspaceRange
+class DataFogWorkspaceError(ValueError):
+    code: str
+    finding_index: int | None
+    input_index: int | None
+    marker_issues: list[_WorkspaceMarkerIssue]
+    review_conflicts: list[_WorkspaceReviewConflict]
+@final
+class WorkspaceHead:
+    def __init__(self, revision: int, commit_id: bytes) -> None: ...
+    @property
+    def revision(self) -> int: ...
+    @property
+    def commit_id(self) -> bytes: ...
+    def __eq__(self, other: object) -> bool: ...
+@final
+class WorkspaceFinding:
+    def __init__(self, entity_type: str, matched_text: str, byte_range: TextRange, *, confidence: float | None = None, detector_name: str | None = None, detector_version: str | None = None, source: Literal["scanner", "user", "recall"] = "scanner", needs_review: bool = True) -> None: ...
+    @staticmethod
+    def from_finding(finding: Finding) -> WorkspaceFinding: ...
+    @property
+    def entity_type(self) -> str: ...
+    @property
+    def matched_text(self) -> str: ...
+    @property
+    def byte_range(self) -> TextRange: ...
+    @property
+    def confidence(self) -> float | None: ...
+    @property
+    def detector_name(self) -> str | None: ...
+    @property
+    def detector_version(self) -> str | None: ...
+    @property
+    def source(self) -> Literal["scanner", "user", "recall"]: ...
+    @property
+    def needs_review(self) -> bool: ...
+@final
+class WorkspaceInput:
+    def __init__(self, text: str, findings: list[WorkspaceFinding]) -> None: ...
+@final
+class WorkspaceReviewCorrection:
+    def __init__(self, candidate_key: str, replacement: WorkspaceFinding) -> None: ...
+@final
+class WorkspaceReviewInput:
+    def __init__(self, text: str, *, scanner_findings: list[WorkspaceFinding] | None = None, user_selections: list[WorkspaceFinding] | None = None, corrections: list[WorkspaceReviewCorrection] | None = None) -> None: ...
+class _WorkspaceTransformation(TypedDict):
+    source: Literal["scanner", "user", "recall"]
+    needsReview: bool
+    sourceByteRange: _WorkspaceRange
+    sourceCodepointRange: _WorkspaceRange
+    sourceUtf16Range: _WorkspaceRange
+    outputByteRange: _WorkspaceRange
+    outputCodepointRange: _WorkspaceRange
+    outputUtf16Range: _WorkspaceRange
+class _WorkspacePreview(TypedDict):
+    text: str
+    transformations: list[_WorkspaceTransformation]
+class _WorkspaceSnapshotFormat(TypedDict):
+    currentVersion: Literal[1, 2]
+    candidateVersion: Literal[1, 2]
+class _WorkspaceRuleEdit(TypedDict):
+    entityType: str
+    rule: Literal["hide", "keep"] | None
+class _WorkspaceChoiceEdit(TypedDict):
+    entityType: str
+    value: str
+    disposition: Literal["keep", "not_sensitive"] | None
+class _WorkspacePolicyEdits(TypedDict):
+    rules: list[_WorkspaceRuleEdit]
+    choices: list[_WorkspaceChoiceEdit]
+class _WorkspaceRule(TypedDict):
+    entityType: str
+    rule: Literal["hide", "keep"]
+class _WorkspaceChoice(TypedDict):
+    entityType: str
+    value: str
+    disposition: Literal["keep", "not_sensitive"]
+class _WorkspacePolicy(TypedDict):
+    snapshotVersion: Literal[1, 2]
+    defaultRule: Literal["hide"]
+    protectedTypes: list[str]
+    rules: list[_WorkspaceRule]
+    choices: list[_WorkspaceChoice]
+class _WorkspaceRulePreview(TypedDict):
+    entityType: str
+    before: Literal["hide", "keep"] | None
+    after: Literal["hide", "keep"] | None
+class _WorkspaceChoicePreview(TypedDict):
+    entityType: str
+    value: str
+    before: Literal["keep", "not_sensitive"] | None
+    after: Literal["keep", "not_sensitive"] | None
+class _WorkspacePolicyPreview(TypedDict):
+    rules: list[_WorkspaceRulePreview]
+    choices: list[_WorkspaceChoicePreview]
+class _WorkspaceFindingRange(_WorkspaceRange):
+    unit: Literal["utf8_bytes"]
+class _WorkspaceFindingValue(TypedDict):
+    entityType: str
+    matchedText: str
+    range: _WorkspaceFindingRange
+    confidence: float | None
+    detectorName: str | None
+    detectorVersion: str | None
+    source: Literal["scanner", "user", "recall"]
+    needsReview: bool
+class _WorkspaceRecallFinding(TypedDict):
+    finding: _WorkspaceFindingValue
+    byteRange: _WorkspaceRange
+    codepointRange: _WorkspaceRange
+    utf16Range: _WorkspaceRange
+class _WorkspaceRecall(TypedDict):
+    head: _WorkspaceHeadValue
+    complete: Literal[True]
+    findings: list[_WorkspaceRecallFinding]
+class _WorkspaceReviewCandidate(_WorkspaceRecallFinding):
+    key: str
+    sources: list[Literal["scanner", "user", "recall"]]
+    eligible: bool
+    selected: bool
+class _WorkspaceReview(TypedDict):
+    head: _WorkspaceHeadValue
+    candidates: list[_WorkspaceReviewCandidate]
+    conflicts: list[_WorkspaceReviewConflict]
+class _WorkspaceRestoreReport(TypedDict):
+    text: str | None
+    restoredMarkers: int
+    issues: list[_WorkspaceMarkerIssue]
+@final
+class WorkspacePreparedChange:
+    def preview(self) -> _WorkspacePreview: ...
+    def previews(self) -> list[_WorkspacePreview]: ...
+    def expected_head(self) -> WorkspaceHead: ...
+    def candidate_head(self) -> WorkspaceHead: ...
+    def snapshot_format(self) -> _WorkspaceSnapshotFormat: ...
+    def policy_preview(self) -> _WorkspacePolicyPreview | None: ...
+    def export_candidate_bundle(self) -> bytes: ...
+    def discard(self) -> None: ...
+    def __enter__(self) -> WorkspacePreparedChange: ...
+    def __exit__(self, kind: object, value: object, traceback: object) -> bool: ...
+@final
+class Workspace:
+    @staticmethod
+    def create(namespace: bytes, operation_id: bytes) -> Workspace: ...
+    @staticmethod
+    def open_bundle(bundle: bytes) -> Workspace: ...
+    def export_bundle(self) -> bytes: ...
+    def head(self) -> WorkspaceHead: ...
+    def namespace(self) -> bytes: ...
+    def prepare(self, text: str, findings: list[WorkspaceFinding], operation_id: bytes) -> WorkspacePreparedChange: ...
+    def prepare_batch(self, inputs: list[WorkspaceInput], operation_id: bytes) -> WorkspacePreparedChange: ...
+    def review(self, input: WorkspaceReviewInput) -> _WorkspaceReview: ...
+    def prepare_review(self, inputs: list[WorkspaceReviewInput], operation_id: bytes) -> WorkspacePreparedChange: ...
+    def prepare_recovery(self, operation_id: bytes) -> WorkspacePreparedChange: ...
+    def policy(self) -> _WorkspacePolicy: ...
+    def prepare_policy_changes(self, edits: _WorkspacePolicyEdits, operation_id: bytes) -> WorkspacePreparedChange: ...
+    def activate_saved(self, change: WorkspacePreparedChange, expected_head: WorkspaceHead, saved_head: WorkspaceHead) -> None: ...
+    def restore(self, text: str) -> str: ...
+    def restore_report(self, text: str) -> _WorkspaceRestoreReport: ...
+    def recall(self, text: str) -> _WorkspaceRecall: ...
+    def close(self) -> None: ...
+    def __enter__(self) -> Workspace: ...
+    def __exit__(self, kind: object, value: object, traceback: object) -> bool: ...
