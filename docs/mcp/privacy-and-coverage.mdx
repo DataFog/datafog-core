@@ -8,7 +8,9 @@ icon: "shield-halved"
 
 Default checks cover email, SSN, credit cards, labeled US routing numbers and
 NPIs, and supported credentials. Phone, date, ZIP code, and IP address checks
-are available but off by default. Plain-text names and street addresses are not detected.
+are available but off by default. Plain-text names and unlabelled street addresses need a model or user review.
+The bounded labelled street-line rule uses `STREET_ADDRESS`; full model `ADDRESS`
+remains distinct.
 
 An explicit `entity_types` selection **replaces the defaults**. Include every
 type you want to check or transform. A clean scan means no selected detectors

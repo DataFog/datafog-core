@@ -23,6 +23,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Detect bounded English street lines after explicit street/shipping/billing
+  address labels across SDKs, retaining broader model address coverage.
+
+
 - Detect explicitly account-labelled four-digit endings and bounded X/asterisk
   masks without inferring hidden digits or changing workspace literal identity.
 
