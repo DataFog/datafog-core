@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "state": "unapproved_trial_proposal",
+  "recommendedDecision": "Authorize only the bounded five-task Claude Desktop pilot described in docs/proposals/g1-claude-desktop-initial-trial.md after collector review and execution prerequisites pass.",
+  "provider": "claude",
+  "executionSurface": "desktop",
+  "sourceCommit": "e0c5b64771ad96a1288952a375d8abb1a14ac0c4",
+  "fixtureManifestSha256": "b5995aca1d6ead3e96f0b2e1a1a48f3d166f88babf5c2bcb2227c7c3e41dc50a",
+  "scorecardSha256": "87a0cce9a3535a0539cffb21275c850bb052b9e5484a3bab0910e80dc6791392",
+  "visibleIdentityRequired": "Model: Fable 5.1 High",
+  "providerSendBudget": 5,
+  "freshChatBudget": 5,
+  "responsesPerTask": 1,
+  "retries": 0,
+  "regenerations": 0,
+  "editedPrompts": 0,
+  "automaticResends": 0,
+  "automaticContinues": 0,
+  "providerSignupAllowed": false,
+  "subscriptionUpgradeAllowed": false,
+  "apiCallsAllowed": false,
+  "additionalSpendingAllowed": false,
+  "taskOrder": [
+    {
+      "id": "summarize",
+      "promptPath": "prompts/summarize.txt",
+      "promptSha256": "10b091ae710dce8c818004fb8e3be9bb91efc5bff2134926b88a0f99f7f3965c",
+      "requiredReferences": 50,
+      "inlineFollowupOnly": false
+    },
+    {
+      "id": "reply",
+      "promptPath": "prompts/reply.txt",
+      "promptSha256": "b4a3b668196ab3a6dfaa824202758a49eb8d89f07987dc33b488d005b042a106",
+      "requiredReferences": 30,
+      "inlineFollowupOnly": false
+    },
+    {
+      "id": "table",
+      "promptPath": "prompts/table.txt",
+      "promptSha256": "0424ffce84f9e99586986bc3c7666445a7de66dd9003fee0206362715102d535",
+      "requiredReferences": 50,
+      "inlineFollowupOnly": false
+    },
+    {
+      "id": "rewrite",
+      "promptPath": "prompts/rewrite.txt",
+      "promptSha256": "d85e2d9ca2f2f792add898ddef38405fbbac87360ad69fd84079c0204943e7d4",
+      "requiredReferences": 20,
+      "inlineFollowupOnly": false
+    },
+    {
+      "id": "followup",
+      "promptPath": "prompts/followup.txt",
+      "promptSha256": "d99bf3326c09e5923be9259f8cb56a6ed8462cdfc3d72fe63ac499c5846f30e7",
+      "requiredReferences": 20,
+      "inlineFollowupOnly": true
+    }
+  ],
+  "requiredReferenceSlots": 170,
+  "openPrerequisites": [
+    "Explicit human trial authorization",
+    "Root and independent review of additive desktop capture module/schema and offline proofs; historical web/api collector stays frozen",
+    "Reobserve exact app/model setting in each fresh chat; stop if identity changes or is unavailable",
+    "Verify normal chat UI without tools/search/connectors or custom project instructions; do not modify prompts to compensate",
+    "Existing access works without login, permission expansion, subscription upgrade or extra charge"
+  ],
+  "unapprovedScope": [
+    "ChatGPT/Gemini execution",
+    "different model or effort settings",
+    "repetitions/aggregation/99percent model or provider decision",
+    "true multi-turn sequence",
+    "additional prompts or retries"
+  ],
+  "providerRunsExecuted": 0,
+  "preservationRate": null,
+  "g1Pass": false,
+  "collectorModule": "scripts.provider_markers.capture",
+  "collectorSchema": "scripts/provider_markers/capture-with-desktop.schema.json",
+  "toolsDisabledVerified": false
+}
