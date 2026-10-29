@@ -56,9 +56,12 @@ import { verifyCoverageConflicts, verifyCoverageProviderCalls } from "./coverage
 import { verifyJwt, verifyJwtProviders } from "./jwt-conformance.mjs";
 import { verifyBearerToken, verifyBearerTokenProviders } from "./bearer-token-conformance.mjs";
 import {verifyNativeWorkspace} from "./native-node-workspace-conformance.mjs";
+import {verifyNodeWorkspaceHost} from "./node-workspace-host-conformance.mjs";
 import * as germanApi from "@datafog/node";
 const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
 await verifyNativeWorkspace(germanApi,workspaceCounters);
+const hostProof=await verifyNodeWorkspaceHost();
+console.log("Native Node host proof passed: "+JSON.stringify(hostProof));
 verifyCoverageConflicts(germanApi);
 await verifyCoverageProviderCalls(germanApi);
 import { DataFogError, PrivacyManager, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured } from "@datafog/node";
@@ -750,7 +753,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs"]) {
+  for (const file of ["workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();
@@ -773,7 +776,7 @@ try {
     temporaryDirectory,
   );
 
-  run(process.execPath,["--expose-gc","native-node-workspace-gc.mjs"],temporaryDirectory);
+  run(process.execPath,["--expose-gc","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"],temporaryDirectory);
 
   run(
     process.execPath,
