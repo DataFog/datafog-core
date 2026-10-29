@@ -18,6 +18,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Labelled `ACCOUNT_NUMBER` detection for bounded contiguous numeric formats in
+  Rust, Python, Node and WASM, preserving configured models’ broader account coverage.
+
 - Encrypted workspace backup and restore in the synthetic browser workflow, using
   the vault password or an offline recovery code. Imports require local approval,
   reject occupied destinations, and preserve aliases under fresh workspace keys

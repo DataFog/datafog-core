@@ -125,6 +125,7 @@ Python and Node.js packages include prebuilt native binaries for Linux x64 and A
 | --- | --- | --- |
 | Personal and financial data | `EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, `ZIP_CODE` | On by default |
 | Credentials | [`API_KEY`](docs/reference/api-keys.mdx), [`BEARER_TOKEN`](docs/reference/bearer-token.mdx), [`JWT`](docs/reference/jwt.mdx), [`PRIVATE_KEY`](docs/reference/private-keys.mdx), [`CREDENTIAL_URI`](docs/reference/credential-uri.mdx) | On by default |
+| Labeled accounts | [`ACCOUNT_NUMBER`](docs/reference/account-number.mdx) | On by default; bounded lexical rule |
 | Labeled US identifiers | [`US_ROUTING_NUMBER`](docs/reference/us-routing-number.mdx), [`NPI`](docs/reference/npi.mdx) | On by default; requires a supported text label |
 | German identifiers | IBAN, VAT ID, tax ID, social security number, postal code, passport number, residence permit number | Explicit [German locale](docs/reference/german-entities.mdx) |
 | UUIDs | [`UUID`](docs/reference/uuid.mdx) | Explicit `detect_uuid` setting |

@@ -239,7 +239,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -257,6 +257,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"uuid-conformance.mjs"), readFileSync(path.join(root,"scripts/uuid-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"us-routing-number-conformance.mjs"), readFileSync(path.join(root,"scripts/us-routing-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"credential-uri-conformance.mjs"), readFileSync(path.join(root,"scripts/credential-uri-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
   const serverInfo = await startServer(temporaryDirectory);
   server = serverInfo.server;
@@ -326,6 +327,19 @@ try {
     const {verifyNpi} = await import("/npi-conformance.mjs");
     const npiRecords = (await fetch("/npi.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse);
     verifyNpi(germanApi,npiRecords);
+    const {verifyAccountNumber} = await import("/account-number-conformance.mjs");
+    verifyAccountNumber(germanApi, (await fetch("/account-number.jsonl").then(r => r.text())).trim().split("\n").map(JSON.parse));
+    const accountContract = new BrowserModelContract({"bank account":"ACCOUNT_NUMBER"});
+    try {
+      for (const text of ["👋 account number: 12345678", "👋 12345678"]) {
+        const config = {entities:["ACCOUNT_NUMBER"]};
+        if (!accountContract.needs_model(text, config)) throw new Error("partial account rule skipped model");
+        const start = new TextEncoder().encode(text.slice(0,text.indexOf("12345678"))).length;
+        const result = accountContract.complete(text, [{native_label:"bank account", start, end:start+8, coordinate_unit:"utf8_byte"}], config);
+        if (result.findings.length !== 1 || result.findings[0].matchedText !== "12345678") throw new Error("model account coverage lost");
+        if (result.evidence[0].sources.length !== (text.includes("account number:") ? 2 : 1)) throw new Error("account evidence lost");
+      }
+    } finally { accountContract.free(); }
     verifyGerman(germanApi,germanRecords);
     verifyCredentialOverlaps(germanApi,credentialOverlapRecords);
     verifyJwt(germanApi,jwtRecords);
