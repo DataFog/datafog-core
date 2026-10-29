@@ -12,7 +12,7 @@ on:
       - 'fixtures/workspace/**'
       - 'fixtures/browser-detection/**'
       - 'scripts/*browser-detection*.mjs'
-      - 'baselines/browser-detection-small-preparation.*'
+      - 'baselines/browser-detection-small-*'
       - '.github/workflows/workspace-integration.yml'
   pull_request:
     paths:
@@ -24,7 +24,7 @@ on:
       - 'fixtures/workspace/**'
       - 'fixtures/browser-detection/**'
       - 'scripts/*browser-detection*.mjs'
-      - 'baselines/browser-detection-small-preparation.*'
+      - 'baselines/browser-detection-small-*'
       - '.github/workflows/workspace-integration.yml'
 
 permissions:
