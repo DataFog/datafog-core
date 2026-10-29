@@ -9,7 +9,8 @@ on 2026-10-28 (America/Los_Angeles). This branch does not merge or publish a rel
 All types default to hide. Protected types reject generic `keep` at both the
 per-type and per-value levels. The protected catalog covers every built-in PII
 type and the native/model names and addresses (`PERSON`, `FIRST_NAME`,
-`LAST_NAME`, `ADDRESS`, `STREET_ADDRESS`, `ACCOUNT_NUMBER`, `CUSTOMER_ID`). Valid
+`LAST_NAME`, `ADDRESS`, `STREET_ADDRESS`, `ACCOUNT_NUMBER`, `CUSTOMER_ID`) plus
+Small's fixed `IDENTIFICATION_NUMBER`, `URL` and `USERNAME` types. Valid
 custom types may use an explicit keep rule or keep choice; they still default to
 hide. The versioned `protected_v1` catalog is available through `policy()`.
 

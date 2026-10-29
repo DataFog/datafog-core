@@ -60,6 +60,14 @@ fn every_builtin_and_model_name_address_type_is_protected() {
     ) {
         assert!(protected_type(&label), "{label}");
     }
+    for label in datafog_core::model_scan::ModelScanContract::gliner25_small(None)
+        .unwrap()
+        .describe()
+        .labels
+        .values()
+    {
+        assert!(protected_type(label), "Small default {label}");
+    }
     assert!(!protected_type("PRODUCT_CODE"));
     let workspace = Workspace::create([1; 16], [2; 16]).unwrap();
     assert_eq!(workspace.policy().unwrap().default_rule, TypeRule::Hide);
