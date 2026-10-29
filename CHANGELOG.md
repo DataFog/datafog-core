@@ -69,6 +69,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Native SSN findings retain their type when a semantic PERSON finding covers
+  exactly the same span, after entity selection and allowlists are applied.
+
 - Live SDK parity now fails on missing bindings, failed scans, malformed responses, invalid offsets, or missing fixtures; reports identify the failed SDK and validate JavaScript UTF-16 ranges.
 
 - WASM workspace activation drops retained plans whose parent head is stale,

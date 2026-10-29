@@ -485,6 +485,21 @@ let restoreRejected = false;
 try { restoreStructured({}, {scope:"test"}); } catch(e) { restoreRejected=e.code === "unsupported_strategy"; }
 if (!restoreRejected) throw new Error("structured restore accepted in WASM");
 
+    const overlapText = "👋 José: 123-45-6789";
+    const nativeSsn = scan(overlapText).find(finding => finding.entityType === "SSN");
+    if (!nativeSsn) throw new Error("SSN overlap fixture was not detected");
+    const semanticPerson = {...nativeSsn, entityType: "PERSON", detectorName: "semantic-person", confidence: 1};
+    for (const findings of [[nativeSsn, semanticPerson], [semanticPerson, nativeSsn]]) {
+      const protectedCopy = transform(overlapText, findings, {default: {strategy: "redact"}});
+      if (protectedCopy.text !== "👋 José: [SSN]" || protectedCopy.transformations[0].entityType !== "SSN") {
+        throw new Error("Native SSN lost equal-span PERSON precedence");
+      }
+      const allowedCopy = transform(overlapText, findings, {
+        default: {strategy: "redact"}, allow: {exact: {SSN: [nativeSsn.matchedText]}}
+      });
+      if (allowedCopy.text !== "👋 José: [PERSON]") throw new Error("SSN allowlist suppressed PERSON protection");
+    }
+
     const selectionText = "👋 jane@example.com SSN 123-45-6789";
     const selectedTextFindings = scan(selectionText, {entities: ["EMAIL"]});
     const expectedSelected = scan(selectionText).filter(item => item.entityType === "EMAIL");

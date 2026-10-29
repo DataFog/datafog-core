@@ -528,6 +528,25 @@ def main() -> None:
     print("Installed datafog_core wheel matches fixtures and transform contracts.")
 
 
+def verify_ssn_person_priority() -> None:
+    text = "👋 José: 123-45-6789"
+    ssn = next(finding for finding in scan(text) if finding.entity_type == "SSN")
+    person = Finding(
+        "PERSON", ssn.matched_text, ssn.byte_range, ssn.codepoint_range,
+        "semantic-person", 1.0,
+    )
+    for findings in ([ssn, person], [person, ssn]):
+        protected = transform(text, findings, {"default": {"strategy": "redact"}})
+        assert protected.text == "👋 José: [SSN]"
+        assert protected.transformations[0].entity_type == "SSN"
+        allowed = transform(text, findings, {
+            "default": {"strategy": "redact"},
+            "allow": {"exact": {"SSN": [ssn.matched_text]}},
+        })
+        assert allowed.text == "👋 José: [PERSON]"
+
+
 if __name__ == "__main__":
     verify_model_engine_selection()
+    verify_ssn_person_priority()
     main()
