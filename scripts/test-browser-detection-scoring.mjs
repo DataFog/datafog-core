@@ -49,3 +49,27 @@ test("the committed receipt reproduces scores and binds the scorer and corpus", 
   assert.equal(summary.sourceDirty, false);
   assert.equal(summary.passedContracts, true);
 });
+
+test("the current merged-feature receipt preserves raw scoring and separate approved-value recall", async () => {
+  const root=new URL("../",import.meta.url);
+  const summary=JSON.parse(await readFile(new URL("baselines/browser-detection-small-current.json",root)));
+  const raw=await readFile(new URL("baselines/browser-detection-small-current.jsonl",root));
+  const digest=value=>createHash("sha256").update(value).digest("hex");
+  assert.equal(digest(raw),summary.observationsSha256);
+  for(const file of ["scripts/browser-detection-scoring.mjs","fixtures/browser-detection/qualification-v1.json"])assert.equal(digest(await readFile(new URL(file,root))),summary.inputs[file]);
+  const corpus=JSON.parse(await readFile(new URL("fixtures/browser-detection/qualification-v1.json",root)));
+  const observations=raw.toString().trim().split("\n").map(line=>JSON.parse(line));
+  const scores=scoreCorpus(corpus,observations);
+  for(const [view,modes] of Object.entries(scores))for(const [mode,value] of Object.entries(modes))assert.deepEqual(value.totals,summary.scores[view][mode]);
+  assert.equal(summary.sourceDirty,false);assert.equal(summary.passedContracts,true);assert.equal(summary.qualificationComplete,false);
+  assert.equal(summary.workspaceWorkflow.passed,true);
+  assert.equal(summary.workspaceWorkflow.recall.length,6);
+  const expected=corpus.records.reduce((sum,record)=>sum+record.gold.length,0);
+  const positive=corpus.records.filter(record=>record.gold.length).length;
+  for(const phase of summary.workspaceWorkflow.recall) {
+    assert.equal(phase.checked,expected);assert.equal(phase.restoredRecords,positive);
+    assert.deepEqual(phase.misses,[]);assert.equal(phase.readOnly,true);
+  }
+  const account=observations.find(record=>record.id==="account-number-gap");
+  assert(account.findings.some(f=>f.entityType==="ACCOUNT_NUMBER"&&f.detectorName==="datafog-core/account-number"));
+});

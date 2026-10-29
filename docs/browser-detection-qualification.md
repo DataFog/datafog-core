@@ -198,3 +198,13 @@ remaining DE_IBAN miss makes that distinction concrete. Either agree that bounde
 scope for the pilot or file/qualify the broader capability. Do not reinterpret a
 manual approval or later recall as automatic first-pass detection, lower the bar,
 or tune solely to these examples. **G2 remains open.**
+
+The current clean source run is `20a8ea1fa4dbf008b8455a467ef5150d5b5ce3dd`.
+Its [current summary](../baselines/browser-detection-small-current.json) and
+[paired raw observations](../baselines/browser-detection-small-current.jsonl)
+preserve package/runtime/model identities and the six read-only recall/recovery
+phases. The full local receipt is retained under
+`target/browser-detection/2026-10-29T08-50-59-736Z/receipt.json`.
+CI recomputes both historical and current metrics from their unchanged gold and
+raw observations; neither fixture-approved recall nor unscored entity predictions
+can improve the detection totals.
