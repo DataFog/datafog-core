@@ -1,0 +1,504 @@
+{
+  "kind": "shipping-adapter-preparation-baseline",
+  "qualificationComplete": false,
+  "pendingFinalWorkflow": [
+    141,
+    144,
+    145,
+    146
+  ],
+  "syntheticOnly": true,
+  "sourceCommit": "d23ceb9bd6ae1e09dc09dcf413b87e588a723b69",
+  "sourceDirty": false,
+  "inputs": {
+    "scripts/qualify-browser-detection.mjs": "6dd91ecf45514aa2c9307887a861c9326d1ad11f3dada4fdb5e286baf8b2bea1",
+    "scripts/browser-detection-scoring.mjs": "ccaa7367269e2c81e42a8687b61b739ba95fbb253d4c642efdc315cacd7c48e8",
+    "scripts/test-browser-detection-scoring.mjs": "6a70756beeab4503997ee6eb772b8ed6a9fc85b7b8c46998e3e0aa75f80eb60f",
+    "fixtures/browser-detection/qualification-v1.json": "9c5353809eaccc85f5927fbd04b919ad976fd96e1826d3fcb97b5acf34a1cadb",
+    "bindings/wasm/models/model.mjs": "ace90f7c73b48cf6346a72bdbcecab57c1fd41d4e04dfe11fa80da38ba5dbf39",
+    "bindings/wasm/package-lock.json": "994938f65361b4341f2126c0d72c030917e13acf44a826fec55c439d181d43b0",
+    "examples/workspace-extension/package-lock.json": "fabba853fb2faa16b13db5d8cf30a33bb64f90a5681715bde23ea16afa2503ce"
+  },
+  "model": {
+    "repository": "nicolasembleton/gliner2.5-small-v1-onnx",
+    "revision": "5e2e3f51adfb0eeb7c1f83464400b4d498d41659",
+    "files": {
+      "onnx/model.onnx": {
+        "bytes": 288521577,
+        "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+      },
+      "tokenizer.json": {
+        "bytes": 8341713,
+        "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+      },
+      "tokenizer_config.json": {
+        "bytes": 646,
+        "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+      }
+    }
+  },
+  "package": {
+    "file": "datafog-wasm-0.5.0-beta.1.tgz",
+    "bytes": 823690,
+    "sha256": "ad376f3e8e7d4ffde0f9bb015c3ec0c225dd0470046558f12681575b9a32cce2"
+  },
+  "versions": {
+    "@datafog/wasm": "0.5.0-beta.1",
+    "onnxruntime-web": "1.31.1",
+    "@huggingface/tokenizers": "0.2.0"
+  },
+  "consumerLockSha256": "d3a6a8351408839d3165df264895a01f48567662ce26dae3342c2b8b3e656911",
+  "assets": {
+    "models/onnx/model.onnx": {
+      "bytes": 288521577,
+      "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+    },
+    "models/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "models/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+    },
+    "ort/ort-wasm-simd-threaded.mjs": {
+      "bytes": 24738,
+      "sha256": "30ed0b5cd1182ede931fea448afb567d4dc705ec957af09f108a2be5f770dac3"
+    },
+    "ort/ort-wasm-simd-threaded.wasm": {
+      "bytes": 14848852,
+      "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+    },
+    "dist/datafog_wasm_bg.wasm": {
+      "bytes": 2452055,
+      "sha256": "b6fb414c9e76e551c36add25c4245179a81814cbc0b3df1651852dec47024cb4"
+    }
+  },
+  "extensionFiles": {
+    "artifacts.json": {
+      "bytes": 4299,
+      "sha256": "69b023757259d4240c0465693e25f1e2013ed3e896aa1d83302ec6f91610e62c"
+    },
+    "background.js": {
+      "bytes": 109,
+      "sha256": "5c634d4e88bf2b50206d880844ca5a4ccd69a827466cce01a527d9c31e875943"
+    },
+    "backup.js": {
+      "bytes": 5236,
+      "sha256": "36f5a045fdb894589763f48e9cea6afb236d44c7d148387c50e6e3d979cb0d63"
+    },
+    "bad-model/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "bad-model/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "7ade9818f65ad7d4df551155baa0d23685187e21d7a76e37a663849c68d64d6d"
+    },
+    "broker.js": {
+      "bytes": 11587,
+      "sha256": "a2f0c999ef9c0bb1c0d5d334cb1f5ea2655617a750240fa639fef443f68cf53b"
+    },
+    "core-worker.js": {
+      "bytes": 1773,
+      "sha256": "c049f46e594c20577704336d4c7757e09f5d8877611e1f92005df26a1805332b"
+    },
+    "dist/datafog_wasm.d.ts": {
+      "bytes": 7113,
+      "sha256": "6305fe60a51955740eeb70b0990a27b815f26752ea556db8bdfa3bfa2deee685"
+    },
+    "dist/datafog_wasm.js": {
+      "bytes": 35972,
+      "sha256": "f7e8c7e211aa85561b7d082eb544017f13edef1c36404ce0a46f465de4447832"
+    },
+    "dist/datafog_wasm_bg.wasm": {
+      "bytes": 2452055,
+      "sha256": "b6fb414c9e76e551c36add25c4245179a81814cbc0b3df1651852dec47024cb4"
+    },
+    "dist/datafog_wasm_bg.wasm.d.ts": {
+      "bytes": 3956,
+      "sha256": "5d3cf0435f3b734c380625f82c17e10330b88bdd1486c6f49feb9c2d826ac9f6"
+    },
+    "index.html": {
+      "bytes": 4347,
+      "sha256": "9630d8256ebb7908e950414f383a3af1322c7a463a31ac63963d47a994f1eb64"
+    },
+    "kdf-worker.js": {
+      "bytes": 576545,
+      "sha256": "b1d13751b3d45033ae65a0c953f4b5bbc7cc80a31bf4d8c4700eb952c04af286"
+    },
+    "manifest.json": {
+      "bytes": 510,
+      "sha256": "d8cbcca7998972bb15e42f541e5f7984b3bb25629dda89db048c49abbf6dfae0"
+    },
+    "model-background.js": {
+      "bytes": 112,
+      "sha256": "b69e65e62fc1f2094ce91be4b75e6f09c5b90b71688e8924f30035c9ffed5e09"
+    },
+    "model-chunk-CGCYFE6J.js": {
+      "bytes": 1404,
+      "sha256": "626628010737eb0c606f5829ebac4ec3eafb40b05e860529711e161c657c213b"
+    },
+    "model-chunk-QMEWMJ7L.js": {
+      "bytes": 390,
+      "sha256": "923a7e2b68604a951d771624dfb1ed7b5ef3ae9afd7823a07a5939c7798016d8"
+    },
+    "model-model-Q5UX754C.js": {
+      "bytes": 185,
+      "sha256": "1a9e53cd07a4bafbc8158f273f3ec7c5295e033e142b288f871e790fd22f4a18"
+    },
+    "model-page.html": {
+      "bytes": 417,
+      "sha256": "15621f9e19d0e04f5b0f8d4769c0bde06b89b2593ff5295edffd61c4249bb50f"
+    },
+    "model-page.js": {
+      "bytes": 63926,
+      "sha256": "5b46f62e7476001fdcc1ce5f8269c5831e7f3e31f0ef4905c8caa9d09681cbe8"
+    },
+    "model-session-TOOJJ7OF.js": {
+      "bytes": 212424,
+      "sha256": "09c7d0f79401e34a3ea363fc10811de824133bbc27f7bc4d4dfdb2caf75b169a"
+    },
+    "models/onnx/model.onnx": {
+      "bytes": 288521577,
+      "sha256": "12dda5cf4b0e9ed3af17596cef1cdbd22185a32fcc230af4f476353b5e4ade1f"
+    },
+    "models/tokenizer.json": {
+      "bytes": 8341713,
+      "sha256": "cbc8ae6037812709c9c26f2a160f8dc48b0440bcb79c8141804259ae2d6adac3"
+    },
+    "models/tokenizer_config.json": {
+      "bytes": 646,
+      "sha256": "fd4a31dc2f1f17e31638c5f0e783b81cdb2fbe6bddd116a8d9e5d50d78148cf1"
+    },
+    "ort/ort-wasm-simd-threaded.mjs": {
+      "bytes": 24738,
+      "sha256": "30ed0b5cd1182ede931fea448afb567d4dc705ec957af09f108a2be5f770dac3"
+    },
+    "ort/ort-wasm-simd-threaded.wasm": {
+      "bytes": 14848852,
+      "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+    },
+    "rpc.js": {
+      "bytes": 3513,
+      "sha256": "5f9890e93b6d8807eb85750ef54d171de96013bfe95e4ca4ba60e0cd6c37b455"
+    },
+    "storage.js": {
+      "bytes": 4303,
+      "sha256": "4b1fc5465fc8e6fe64b97bdf3ba47d735b043128dbd6152f4d2ab3ab9b0c42cf"
+    },
+    "style.css": {
+      "bytes": 540,
+      "sha256": "1f5f6d854fa94a629a623a814a8422f2fdc8eb513c7ef69f6fd71de98a3fc6f0"
+    },
+    "ui.js": {
+      "bytes": 11543,
+      "sha256": "233b56e545d09081362f04f4a8c3da050cf1426ac2ed4910c3a204bc061a3221"
+    },
+    "vault.js": {
+      "bytes": 10258,
+      "sha256": "097da4820bd4846e2fb3ab9fcc964bb2dcf6472cc910be85e1a7260dec781699"
+    },
+    "vendor/package/dist/datafog_wasm.d.ts": {
+      "bytes": 7113,
+      "sha256": "6305fe60a51955740eeb70b0990a27b815f26752ea556db8bdfa3bfa2deee685"
+    },
+    "vendor/package/dist/datafog_wasm.js": {
+      "bytes": 35972,
+      "sha256": "f7e8c7e211aa85561b7d082eb544017f13edef1c36404ce0a46f465de4447832"
+    },
+    "vendor/package/dist/datafog_wasm_bg.wasm": {
+      "bytes": 2452055,
+      "sha256": "b6fb414c9e76e551c36add25c4245179a81814cbc0b3df1651852dec47024cb4"
+    },
+    "vendor/package/dist/datafog_wasm_bg.wasm.d.ts": {
+      "bytes": 3956,
+      "sha256": "5d3cf0435f3b734c380625f82c17e10330b88bdd1486c6f49feb9c2d826ac9f6"
+    },
+    "vendor/package/index.d.ts": {
+      "bytes": 10933,
+      "sha256": "93772fefdd7d7fe7a565822340e154f0d2ca0c0c38c3a9b7ab3b870916e4be73"
+    },
+    "vendor/package/index.js": {
+      "bytes": 17155,
+      "sha256": "c143bd041a552c1c9e1a864e56c43b61ad7f9f3d591177c1d0673d6d9d0a21ea"
+    },
+    "vendor/package/models/THIRD_PARTY_NOTICES.md": {
+      "bytes": 1763,
+      "sha256": "74903c2f1f06e5fd5c29bd67b072517dbbd1b4c957c167a9879aa2b72ce03a65"
+    },
+    "vendor/package/models/decode.mjs": {
+      "bytes": 4087,
+      "sha256": "2f0457ce1d18583e70a5eca6495951d11d53afdaa635946e0d73c3d0261001da"
+    },
+    "vendor/package/models/index.d.ts": {
+      "bytes": 2157,
+      "sha256": "62760b834a2be241708e7723fa188dab8c85d1d5920bd62229591e1fc3412789"
+    },
+    "vendor/package/models/index.js": {
+      "bytes": 5175,
+      "sha256": "a8d42f1e567c7a20e3ae500636cb0d383e0a37d5d29110c168e2ede4bcd3d1ce"
+    },
+    "vendor/package/models/model.mjs": {
+      "bytes": 1364,
+      "sha256": "ace90f7c73b48cf6346a72bdbcecab57c1fd41d4e04dfe11fa80da38ba5dbf39"
+    },
+    "vendor/package/models/preprocessor.mjs": {
+      "bytes": 1818,
+      "sha256": "1c7860ccbc4f4d8e10859595506d8a322837b80df2e07921e4081b03ed5fba7b"
+    },
+    "vendor/package/models/session.mjs": {
+      "bytes": 4996,
+      "sha256": "1b7b08d979a9d4f6f4569baa560f4a2a2cbc084720d14f2dffea735406d61607"
+    },
+    "vendor/package/package.json": {
+      "bytes": 1249,
+      "sha256": "3da502340a06e707d6df1418ca7b410b1b24138f4c33a873f331f44f1c08439e"
+    },
+    "workspace-conformance.mjs": {
+      "bytes": 16901,
+      "sha256": "921ec7893a4a0d02d4a517a4c3b4c86271fee9a50ce2d275438b42de83fac17a"
+    }
+  },
+  "qualificationEntrySha256": "0d3d48c622f8e98c04db7005c354091f069a8a3ee955c7a10139e9f194d4a887",
+  "options": {
+    "threshold": 0.5,
+    "numThreads": 1,
+    "labels": {
+      "person": "PERSON",
+      "address": "ADDRESS",
+      "email": "EMAIL",
+      "phone number": "PHONE",
+      "identification number": "IDENTIFICATION_NUMBER",
+      "url": "URL",
+      "username": "USERNAME"
+    }
+  },
+  "config": {},
+  "matching": {
+    "exact": "same type and both byte boundaries",
+    "overlap": "same type and positive byte overlap; maximum one-to-one matching; diagnostic, not full-span coverage"
+  },
+  "addressContract": "ADDRESS is full-span shipping gold. STREET_ADDRESS is a separate street-line diagnostic using untrimmed ADDRESS predictions; it does not change adapter labels.",
+  "excludedFromScoring": "Predictions outside corpus.scoredTypes are retained in observations but have no complete gold annotation in this scoped set.",
+  "hardware": {
+    "cpu": "Apple M5 Pro",
+    "platform": "darwin",
+    "arch": "arm64",
+    "totalMemoryBytes": 51539607552
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "passedContracts": true,
+  "browser": {
+    "version": "151.0.7922.34",
+    "channel": "Playwright Chromium",
+    "extension": true,
+    "manifest": {
+      "action": {
+        "default_title": "Open synthetic workspace"
+      },
+      "background": {
+        "service_worker": "model-background.js",
+        "type": "module"
+      },
+      "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"
+      },
+      "description": "Local synthetic-only workspace integration harness; not the production extension.",
+      "manifest_version": 3,
+      "name": "DataFog synthetic MV3 model proof",
+      "version": "0.0.1"
+    }
+  },
+  "descriptor": {
+    "backend": "gliner25_onnx_web",
+    "model": "nicolasembleton/gliner2.5-small-v1-onnx@5e2e3f51adfb0eeb7c1f83464400b4d498d41659",
+    "adapter_version": "gliner25-onnx-web-v1",
+    "labels": {
+      "address": "ADDRESS",
+      "email": "EMAIL",
+      "identification number": "IDENTIFICATION_NUMBER",
+      "person": "PERSON",
+      "phone number": "PHONE",
+      "url": "URL",
+      "username": "USERNAME"
+    },
+    "score_scale": "gliner25_pair_sigmoid"
+  },
+  "observationsSha256": "44d952bffe7f19c895b5651c92a166714ba6d892e3efa237b9d227fe2050295a",
+  "scores": {
+    "shipping": {
+      "exact": {
+        "PERSON": {
+          "tp": 26,
+          "fp": 7,
+          "fn": 2,
+          "precision": 0.7878787878787878,
+          "recall": 0.9285714285714286,
+          "f1": 0.8524590163934426
+        },
+        "ADDRESS": {
+          "tp": 8,
+          "fp": 15,
+          "fn": 5,
+          "precision": 0.34782608695652173,
+          "recall": 0.6153846153846154,
+          "f1": 0.4444444444444444
+        },
+        "EMAIL": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "PHONE": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "CREDIT_CARD": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "SSN": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "DE_IBAN": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        },
+        "US_ROUTING_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "ACCOUNT_NUMBER": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        }
+      },
+      "overlap": {
+        "PERSON": {
+          "tp": 28,
+          "fp": 5,
+          "fn": 0,
+          "precision": 0.8484848484848485,
+          "recall": 1,
+          "f1": 0.9180327868852459
+        },
+        "ADDRESS": {
+          "tp": 9,
+          "fp": 14,
+          "fn": 4,
+          "precision": 0.391304347826087,
+          "recall": 0.6923076923076923,
+          "f1": 0.5
+        },
+        "EMAIL": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "PHONE": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "CREDIT_CARD": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "SSN": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "DE_IBAN": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        },
+        "US_ROUTING_NUMBER": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        },
+        "ACCOUNT_NUMBER": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0,
+          "f1": 0
+        }
+      }
+    },
+    "streetLineDiagnostic": {
+      "exact": {
+        "STREET_ADDRESS": {
+          "tp": 0,
+          "fp": 9,
+          "fn": 13,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0
+        }
+      },
+      "overlap": {
+        "STREET_ADDRESS": {
+          "tp": 9,
+          "fp": 0,
+          "fn": 4,
+          "precision": 1,
+          "recall": 0.6923076923076923,
+          "f1": 0.8181818181818182
+        }
+      }
+    }
+  }
+}
