@@ -122,6 +122,49 @@ for error in (DataFogConfigurationError(), DataFogFindingError(), DataFogInterna
     assert_type(error.finding_index, int | None)
 """
 
+VALID += """
+from datafog_core import (
+    Workspace, WorkspaceHead, WorkspaceFinding, WorkspaceInput,
+    WorkspaceReviewInput, WorkspaceReviewCorrection, WorkspacePreparedChange,
+    DataFogWorkspaceError,
+)
+workspace = Workspace.create(bytes(16), bytes(16))
+assert_type(workspace.head(), WorkspaceHead)
+assert_type(workspace.head().revision, int)
+assert_type(workspace.head().commit_id, bytes)
+assert_type(workspace.namespace(), bytes)
+workspace_finding = WorkspaceFinding("PERSON", "Jane", TextRange(0, 4), source="user")
+assert_type(WorkspaceFinding.from_finding(manual), WorkspaceFinding)
+with workspace.prepare("Jane", [workspace_finding], bytes(16)) as pending:
+    assert_type(pending, WorkspacePreparedChange)
+    assert_type(pending.preview()["text"], str)
+    assert_type(pending.previews()[0]["transformations"][0]["sourceUtf16Range"]["start"], int)
+    assert_type(pending.export_candidate_bundle(), bytes)
+    assert_type(pending.expected_head(), WorkspaceHead)
+    assert_type(pending.candidate_head(), WorkspaceHead)
+    workspace.activate_saved(pending, pending.expected_head(), pending.candidate_head())
+assert_type(workspace.prepare_batch([WorkspaceInput("Jane", [workspace_finding])], bytes(16)), WorkspacePreparedChange)
+review_input = WorkspaceReviewInput("Jane", scanner_findings=[workspace_finding])
+reviewed = workspace.review(review_input)
+assert_type(reviewed["head"]["revision"], int)
+assert_type(reviewed["candidates"][0]["finding"]["matchedText"], str)
+assert_type(reviewed["conflicts"][0]["findingIndex"], int)
+correction = WorkspaceReviewCorrection(reviewed["candidates"][0]["key"], workspace_finding)
+corrected = WorkspaceReviewInput("Jane", scanner_findings=[workspace_finding], corrections=[correction])
+assert_type(workspace.prepare_review([corrected], bytes(16)), WorkspacePreparedChange)
+assert_type(workspace.recall("Jane")["findings"][0]["utf16Range"]["end"], int)
+assert_type(workspace.restore("text"), str)
+assert_type(workspace.restore_report("text")["text"], str | None)
+assert_type(workspace.export_bundle(), bytes)
+assert_type(workspace.prepare_recovery(bytes(16)), WorkspacePreparedChange)
+assert_type(workspace.prepare_policy_changes({"rules": [], "choices": [{"entityType": "PERSON", "value": "May", "disposition": "not_sensitive"}]}, bytes(16)), WorkspacePreparedChange)
+assert_type(workspace.policy()["protectedTypes"], list[str])
+workspace_error = DataFogWorkspaceError()
+assert_type(workspace_error.input_index, int | None)
+assert_type(workspace_error.review_conflicts[0]["findingIndex"], int)
+assert_type(workspace_error.marker_issues[0]["byteRange"]["start"], int)
+"""
+
 # Each line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
@@ -145,6 +188,20 @@ PrivacyManager(object())  # error
 PrivacyManager().restore("text")  # error
 PrivacyManager().restore("text", {"scope": 12})  # error
 TransformResult()  # error
+"""
+
+INVALID += """
+from datafog_core import Workspace, WorkspaceHead, WorkspaceFinding, WorkspacePreparedChange, TextRange
+Workspace()  # error
+WorkspacePreparedChange()  # error
+Workspace.create("namespace", bytes(16))  # error
+WorkspaceHead("1", bytes(16))  # error
+WorkspaceHead(1, "commit")  # error
+WorkspaceFinding("PERSON", "Jane", TextRange(0, 4), source="automatic")  # error
+Workspace.create(bytes(16), bytes(16)).prepare("Jane", ["bad"], bytes(16))  # error
+Workspace.create(bytes(16), bytes(16)).prepare_policy_changes({"rules": [{"entityType": "CUSTOM"}], "choices": []}, bytes(16))  # error
+Workspace.create(bytes(16), bytes(16)).prepare_policy_changes({"rules": [], "choices": [{"entityType": "PERSON", "value": "May", "disposition": "notSensitive"}]}, bytes(16))  # error
+Workspace.create(bytes(16), bytes(16)).head().revision = 3  # error
 """
 
 
