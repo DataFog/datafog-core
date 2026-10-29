@@ -3,8 +3,10 @@
 Draft for #147 / `0.5.0-beta.3`, reconciling #143/#158 with the committed
 policy-v2 implementation. **Do not merge or publish this draft yet.** Sid approved
 preserving every operation record: no deletion, sampling or summary replacement.
-Lossless compression is separate postlaunch work in #165. The lifetime capacity,
-accounting and legacy replay-error choices below remain unapproved.
+Lossless compression is separate postlaunch work in #165. Sid also approved
+recorded-history-only counts, explicit unknown pre-upgrade history and per-record
+numeric input/replacement deltas on October 29. Lifetime capacity/recovery, legacy
+replay errors and the remaining accounting details below are still unapproved.
 
 ## Compatibility and transaction boundary
 
@@ -65,10 +67,13 @@ substituted for retaining every record during these betas.
 
 ### Accounting
 
-Recommended: retain per-record numeric `preparedInputs` and `transformedSpans`
-deltas so the decoder can independently recompute the totals. These extend #158's
-three-field row and require approval. No source value, identity key, URL, arbitrary
-message or free-form context enters the row.
+**Approved October 29:** retain per-record numeric `preparedInputs` and
+`transformedSpans` deltas so the decoder can independently recompute the totals.
+These extend #158's three-field proposal. Counts cover only actually recorded
+actions; older vaults explicitly have unknown pre-upgrade history, not invented
+lifetime totals. No source value, identity key, URL, arbitrary message or free-form
+context enters the row. This approval does not choose the specific action/kind,
+timestamp, replay, capacity or recovery behaviors discussed below.
 
 The candidate keeps legacy no-op bytes and uses explicit timed calls to record a
 successful no-change preparation. Real legacy preparation/recovery mutations
@@ -177,8 +182,8 @@ WASM/TypeScript and live 100-fixture SDK parity pass on the committed integratio
 The full encrypted MV3 regression suite passes before commit; its clean
 committed-head receipt and Small qualification remain to be refreshed.
 
-Before merge: approve capacity/recovery behavior, numeric accounting and legacy
-reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
+Before merge: approve capacity/recovery behavior, remaining action/accounting
+semantics and legacy reuse errors; reconcile #148's final format and G3's all-SDK contract; rerun the
 full installed/encrypted backup and native/browser qualification matrix. This
 draft does not complete C1/C3, freeze snapshot compatibility or authorize a beta.3
 release.
