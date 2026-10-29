@@ -219,3 +219,5 @@ The first executable contract data is
 It specifies expected future behavior only. Current SDKs do not execute these
 commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualification
 before claiming acceptance or freezing the API.
+
+The separate [ordinary confirmation-capacity decision packet](conversation-confirmation-capacity.md) explains the lifetime-limit gap and the proposed reservation alternative. It is not approved or implemented.
