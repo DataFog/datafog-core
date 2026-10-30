@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://datafog.ai"><img src="docs/favicon.svg" width="72" height="72" alt="DataFog"></a>
+  <a href="https://datafog.ai"><img src="docs/favicon.svg" width="72" height="72" alt="datafog"></a>
 </p>
 
-<h1 align="center">DataFog Core</h1>
+<h1 align="center">datafog core</h1>
 
 <p align="center"><strong>Find and transform sensitive data in your application.</strong></p>
 
 <p align="center">
-  <a href="https://pypi.org/project/datafog-core/"><img src="https://img.shields.io/pypi/v/datafog-core?style=flat-square&amp;color=E8A84C" alt="PyPI version"></a>
-  <a href="https://www.npmjs.com/package/@datafog/node"><img src="https://img.shields.io/npm/v/%40datafog%2Fnode?style=flat-square&amp;color=E8A84C" alt="npm version"></a>
-  <a href="https://crates.io/crates/datafog-core"><img src="https://img.shields.io/crates/v/datafog-core?style=flat-square&amp;color=E8A84C" alt="crates.io version"></a>
+  <a href="https://pypi.org/project/datafog-core/"><img src="https://img.shields.io/pypi/v/datafog-core?style=flat-square&amp;color=C0362C" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/@datafog/node"><img src="https://img.shields.io/npm/v/%40datafog%2Fnode?style=flat-square&amp;color=C0362C" alt="npm version"></a>
+  <a href="https://crates.io/crates/datafog-core"><img src="https://img.shields.io/crates/v/datafog-core?style=flat-square&amp;color=C0362C" alt="crates.io version"></a>
   <a href="https://github.com/DataFog/datafog-core/actions/workflows/rust-quality.yml"><img src="https://github.com/DataFog/datafog-core/actions/workflows/rust-quality.yml/badge.svg?branch=main" alt="Rust CI status"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-E8A84C?style=flat-square" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C0362C?style=flat-square" alt="MIT license"></a>
 </p>
 
 <p align="center">
@@ -22,9 +22,9 @@
   <a href="#documentation-and-development">Documentation</a>
 </p>
 
-DataFog Core is a Rust library with Python, Node.js, and browser WebAssembly bindings. Scan text or JSON for personal data and credentials, then redact, mask, remove, pseudonymize, or tokenize matched values. Findings use a consistent format across the bindings.
+datafog core is a Rust library with Python, Node.js, and browser WebAssembly bindings. Scan text or JSON for personal data and credentials, then redact, mask, remove, pseudonymize, or tokenize matched values. Findings use a consistent format across the bindings.
 
-Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add DataFog and GLiNER2 support in Rust, Python, and Node.js.
+Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
 **Stable:** [0.4.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.4) · **Published prerelease:** [0.5.0-beta.3](https://github.com/DataFog/datafog-core/releases/tag/v0.5.0-beta.3)
 
@@ -138,7 +138,7 @@ Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON f
 
 Each finding includes its entity type, matched text, byte and code-point ranges, optional confidence, and detector name/version. Ranges are zero-based and end-exclusive. Node.js and WASM also provide UTF-16 ranges for JavaScript `slice`. Rule-based findings have no confidence score. [Findings and ranges →](docs/concepts/findings-and-ranges.mdx)
 
-For scanning files from AI agents, use [DataFog MCP](https://github.com/DataFog/datafog-mcp).
+For scanning files from AI agents, use [datafog MCP](https://github.com/DataFog/datafog-mcp).
 
 <details>
 <summary><strong>Detection settings</strong></summary>
@@ -184,7 +184,7 @@ npm install --save-exact @datafog/wasm@0.5.0-beta.1
 
 ## Local models (beta)
 
-[0.4.5-beta.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.4) adds local sessions for the DataFog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
+[0.4.5-beta.4](https://github.com/DataFog/datafog-core/releases/tag/v0.4.5-beta.4) adds local sessions for the datafog PII model and GLiNER2 in Rust, Python, and Node.js on all five native platforms.
 
 Install `0.5.0-beta.3` (Python `0.5.0b3`) for the current native prerelease:
 
@@ -202,7 +202,7 @@ python -m pip install 'datafog-core[gliner2]==0.5.0b3'
 
 GLiNER2 supports the PII checkpoint and compatible general-purpose span models with caller-defined labels. The GLiNER2 runner ships in the Python package and also serves Node.js and Rust callers. Download and verify model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support.
 
-[DataFog setup and session API →](docs/model-sessions.md) · [GLiNER2 setup →](docs/gliner2-model.md)
+[datafog setup and session API →](docs/model-sessions.md) · [GLiNER2 setup →](docs/gliner2-model.md)
 
 ## Documentation and development
 
@@ -230,4 +230,4 @@ See the [development guide](docs/development.mdx) for the repository layout and 
 
 ## License
 
-[MIT](LICENSE). Built by [DataFog](https://datafog.ai).
+[MIT](LICENSE). Built by [datafog](https://datafog.ai).
