@@ -38,8 +38,8 @@ def main():
     before = identity()
     checks, failure = [], None
     try:
-        node = json.loads(args.node_report.read_text())
-        python = json.loads(args.python_report.read_text())
+        node = json.loads(args.node_report.read_text(encoding="utf-8"))
+        python = json.loads(args.python_report.read_text(encoding="utf-8"))
         spec = importlib.util.spec_from_file_location("language_gate", ROOT / "scripts/verify-fogvault-languages.py")
         gate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gate)
