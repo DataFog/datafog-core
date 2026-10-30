@@ -1,9 +1,16 @@
 # Optional native Python Core–FogVault owner
 
-`datafog_fogvault` is a separate, unpublished `1.0.0` candidate ABI3 extension for Python
+`datafog_fogvault` is a separate `1.0.0` ABI3 extension for Python
 3.10+. It delegates persistence, session authority and save/activation to the
 existing Rust `datafog-fogvault-native::Owner`; it does not load browser WASM,
 duplicate encryption, or change the existing `datafog_core` Python package.
+
+Install `datafog-fogvault==1.0.0` from PyPI. The Linux x64 wheel requires glibc
+2.34 or later; native macOS ARM64 and Windows x64 wheels are also qualified.
+
+```sh
+python -m pip install datafog-fogvault==1.0.0
+```
 Its qualification build uses Rust 1.94.1, while Core keeps its Rust 1.88 floor.
 
 ## Create, save and reopen
@@ -48,7 +55,7 @@ vault; it never silently opens existing files. `open_existing` requires both
 existing stores. Failed creation can leave an empty newly created control
 namespace; no existing vault is deleted or overwritten to repair it.
 
-This candidate supports **password-only** admission with the existing baseline
+This release supports **password-only** admission with the existing baseline
 KDF, 16 MiB payloads, 88-byte binding metadata and 64 records. Those are explicit
 host admission settings, not a hardware guarantee. `profile` defaults to
 `password_only`; other profiles reject `unsupported_profile` before creation.
@@ -123,7 +130,7 @@ future v1 snapshot bytes. No recovered result grants transport permission.
 The public stub lists the current subset: ordinary/batch/combined review,
 policy changes, recovery, conversation preparation/confirmation, scoped/unscoped
 reports and streams, counts/history/operations, and reconciliation. The original
-Core Python SDK remains available for other Core operations; this candidate does
+Core Python SDK remains available for other Core operations; this package does
 not claim every Rust Owner convenience method is exposed yet.
 
 ## Build and installed proof
@@ -132,7 +139,7 @@ Use the declared toolchain and build an actual wheel, then install it into a
 Core-owned isolated environment:
 
 ```sh
-RUSTUP_TOOLCHAIN=1.94.1 maturin build --locked \
+RUSTUP_TOOLCHAIN=1.94.1 maturin build --release --locked \
   --manifest-path integrations/fogvault-python/Cargo.toml \
   --out integrations/fogvault-python/dist
 python3 -m venv target/fogvault-python-venv

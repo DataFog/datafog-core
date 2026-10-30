@@ -12,7 +12,7 @@ readme = "README.md"
 [dependencies]
 datafog-fogvault-migration = { version = "1.0.0", path = "../fogvault-migration" }
 datafog-core = { version = "1.0.0", path = "../../crates/core", default-features = false }
-fogvault-native = { version = "0.1.0", git = "https://github.com/DataFog/fogvault.git", rev = "220aaec145fe67f4c96d468d6858445020b88cd3", default-features = false }
+fogvault-native = { version = "0.1.0", git = "https://github.com/DataFog/fogvault.git", rev = "f4dc492549b70f0bc44f5c6bf82fe3022353030f", default-features = false }
 zeroize = "=1.9.1"
 
 [dev-dependencies]
