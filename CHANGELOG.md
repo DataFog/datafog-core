@@ -18,6 +18,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Environment diagnosis uses the installed, pinned Playwright package and checks
+  that the Chromium executable exists. Missing tools fail with local setup
+  instructions rather than invoking an implicit package-download fallback.
 - Update the documentation site with the Redacted line identity, self-hosted Geist
   fonts, lowercase product names, and matching light and dark themes.
 
