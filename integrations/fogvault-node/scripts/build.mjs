@@ -1,0 +1,11 @@
+import {spawnSync} from 'node:child_process';
+import {copyFileSync,mkdirSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const target=process.env.CARGO_TARGET_DIR??path.resolve(root,'../../target/fogvault-language');
+mkdirSync(target,{recursive:true});
+const result=spawnSync('cargo',['+1.94.1','build','--release','--manifest-path',path.join(root,'Cargo.toml'),'--locked'],{stdio:'inherit',env:{...process.env,CARGO_TARGET_DIR:target,CARGO_PROFILE_DEV_DEBUG:'0',CARGO_INCREMENTAL:'0'}});
+if(result.status!==0)process.exit(result.status??1);
+const filename=process.platform==='darwin'?'libdatafog_fogvault_node.dylib':process.platform==='win32'?'datafog_fogvault_node.dll':'libdatafog_fogvault_node.so';
+copyFileSync(path.join(target,'release',filename),path.join(root,'addon.node'));

@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin==1.14.1"]
+build-backend = "maturin"
+
+[project]
+name = "datafog-fogvault"
+version = "0.0.0"
+description = "Optional native FogVault persistence owner for DataFog Core workspaces"
+requires-python = ">=3.10"
+license = "MIT"
+
+[tool.maturin]
+module-name = "datafog_fogvault"
