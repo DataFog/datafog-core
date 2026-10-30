@@ -114,3 +114,21 @@ seven new integration rows. Record their accepted scope under G4/G2 or as linked
 release checklist entries. G1–G4 still require their real external/host evidence;
 the integrations implemented here do not close all 20 issues or certify a fully
 qualified public release.
+
+## Supported reference encrypted archives
+
+The optional `fogvault-legacy-browser` reader covers the Core example's
+`datafog-workspace-backup` envelopes v1/profile1 and v2/profile2, with both
+password and recovery-code authentication. These envelope versions are separate
+from supported Core snapshot decoder versions. It preserves the source archive,
+authenticates unused credential slots and complete metadata, and delegates fresh
+destination recovery/publication to the maintained browser adapter. No legacy
+credential slots or encryption keys are transplanted.
+
+`cargo dfv check --fogvault` requires its eight named installed-browser cases and
+all four envelope/credential combinations on the selected browser, in addition
+to existing native and browser checks. Native-only checks require no JavaScript
+importer dependencies. The example is explicitly non-shipping: compatibility
+with the actual production extension's archives still requires identified source
+artifacts. Final G3/v1 format migration and independent shipping security approval
+remain open; reference-format test results do not close them.

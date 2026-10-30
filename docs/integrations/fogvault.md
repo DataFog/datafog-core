@@ -1,7 +1,7 @@
 # Using Core with FogVault
 
-Core now has optional native Rust, Node, Python and browser integration candidates. They keep
-Core preparation separate from persistence and activate only after the exact
+Core now has optional native Rust, Node, Python and browser integration
+candidates. They keep Core preparation separate from persistence and activate only after the exact
 candidate has been saved. Core's existing 0.5.0-beta.3 packages and Rust 1.88
 minimum are unchanged. These new integration packages remain unpublished 0.0.0
 candidates; this change does not freeze the v1 API or approve a production host.
@@ -12,6 +12,7 @@ candidates; this change does not freeze the v1 API or approve a production host.
 - Native Node: [installed addon, tenant boundaries and lifecycle](../../integrations/fogvault-node/README.md).
 - Native Python: [installed wheel, thread boundaries and lifecycle](../../integrations/fogvault-python/README.md).
 - Native Rust: [registered SQLite owner and recovery](../../integrations/fogvault-native/README.md).
+- Legacy backups: [authenticated reference-format importer](../../integrations/fogvault-legacy-browser/README.md).
 - Migration: [authenticated/decrypted bundle recovery staging](../../integrations/fogvault-migration/README.md).
 - Shared [record and save/lifetime contract](fogvault-contract.md).
 - [Compatibility, backup differences and open-issue reconciliation](fogvault-compatibility.md).
@@ -131,3 +132,17 @@ one-active-preparation limit. Combined browser memory, installed-language copy
 costs, device floors, real power loss and every OS/browser remain unqualified. Resolve the
 documented FogVault registry dependency-distribution blockers before publishing
 both products as 1.0.0.
+
+The browser portion of `cargo dfv check --fogvault --engine ENGINE` also requires
+an installed import-only reader for the supported **reference** encrypted backup
+v1/v2 envelopes. `cargo dfv build --fogvault` explicitly prepares its pinned worker
+build dependencies. The check authenticates actual legacy files using both
+password and recovery paths, validates Core identity/head, and publishes only
+approved recovery into a fresh FogVault destination. It tests real cancellation,
+uncertain publication with cleanup failure, and fresh reconciliation/reopen.
+Named evidence is retained as `legacy.json` beside `browser.json`.
+
+This covers the non-shipping reference-host format; it does not establish the
+archive provenance or format of Josh's shipping extension. Final v1 schema
+compatibility and production security review remain open gates. See the
+[reader scope and resource limits](../../integrations/fogvault-legacy-browser/README.md).
