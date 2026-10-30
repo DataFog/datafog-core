@@ -119,20 +119,27 @@ jobs:
       - name: Verify assembled package and native dependency
         working-directory: bindings/node
         run: npm run test:package -- --prebuilt --platform-package npm/linux-x64-gnu
-      - name: Check all package contents without publishing
-        working-directory: bindings/node
+      - name: Freeze native platform archives and the root archive
+        run: python3 scripts/stage-publication.py node
+      - name: Check the exact archives without publishing
+        working-directory: target/publication-node
         run: |
-          tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
-          for package in npm/*; do
-            (cd "$package" && npm publish --dry-run --ignore-scripts --tag "$tag")
-          done
-          npm publish --dry-run --ignore-scripts --tag "$tag"
-      - name: Publish
+          sha256sum --check SHA256SUMS
+          tag="$(cat npm-tag.txt)"
+          while IFS= read -r archive; do
+            npm publish "$archive" --dry-run --ignore-scripts --access public --tag "$tag"
+          done < publication-order.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: node-publication-inputs
+          path: target/publication-node/
+          if-no-files-found: error
+      - name: Publish the retained platform archives before the root archive
         if: github.event_name == 'push' || !inputs.dry_run
-        working-directory: bindings/node
+        working-directory: target/publication-node
         run: |
-          tag="$(node -p 'require("./package.json").publishConfig.tag || "latest"')"
-          for package in npm/*; do
-            (cd "$package" && npm publish --ignore-scripts --tag "$tag")
-          done
-          npm publish --ignore-scripts --tag "$tag"
+          sha256sum --check SHA256SUMS
+          tag="$(cat npm-tag.txt)"
+          while IFS= read -r archive; do
+            npm publish "$archive" --ignore-scripts --access public --tag "$tag"
+          done < publication-order.txt

@@ -39,6 +39,13 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: rustfmt, clippy
       - run: cargo publish --package datafog-core --locked --dry-run
+      - name: Retain the exact Cargo upload input
+        run: python3 scripts/stage-publication.py rust
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: rust-publication-inputs
+          path: target/publication-rust/
+          if-no-files-found: error
       - run: cargo publish --package datafog-core --locked
         if: github.event_name == 'push' || !inputs.dry_run
         env:

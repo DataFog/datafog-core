@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Retain exact base SDK publication archives and SHA-256 receipts before upload;
+  npm publishes those same archives with lifecycle hooks disabled.
+
 - Build and install the optional Python FogVault wheel with the optimized release
   profile during qualification, so the tested wheel is the publication artifact.
 
