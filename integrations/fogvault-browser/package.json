@@ -24,6 +24,6 @@
     "@datafog/fogvault-browser": "0.0.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test --test-reporter=tap test/*.test.mjs"
   }
 }
