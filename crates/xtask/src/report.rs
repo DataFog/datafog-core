@@ -113,6 +113,24 @@ fn discover_workspace_root(start: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+pub fn create_run_directory() -> std::io::Result<PathBuf> {
+    let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let run_dir = workspace_root()
+        .join("target")
+        .join("dfv")
+        .join("runs")
+        .join(&timestamp);
+    fs::create_dir_all(&run_dir)?;
+
+    let metadata = RunMetadata::collect();
+    let metadata_path = run_dir.join("metadata.json");
+    if let Ok(json) = serde_json::to_string_pretty(&metadata) {
+        let _ = fs::write(&metadata_path, json);
+    }
+
+    Ok(run_dir)
+}
+
 #[cfg(test)]
 mod workspace_tests {
     use super::discover_workspace_root;
@@ -143,22 +161,4 @@ mod workspace_tests {
         assert_eq!(discover_workspace_root(&path), Some(path.clone()));
         fs::remove_dir_all(path).unwrap();
     }
-}
-
-pub fn create_run_directory() -> std::io::Result<PathBuf> {
-    let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-    let run_dir = workspace_root()
-        .join("target")
-        .join("dfv")
-        .join("runs")
-        .join(&timestamp);
-    fs::create_dir_all(&run_dir)?;
-
-    let metadata = RunMetadata::collect();
-    let metadata_path = run_dir.join("metadata.json");
-    if let Ok(json) = serde_json::to_string_pretty(&metadata) {
-        let _ = fs::write(&metadata_path, json);
-    }
-
-    Ok(run_dir)
 }
