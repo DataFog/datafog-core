@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DataFog/datafog-core.git"
+  },
   "description": "Optional Core-owned Workspace adapter for the maintained FogVault browser owner",
   "exports": {
     ".": {

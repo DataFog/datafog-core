@@ -6,6 +6,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Identify the source repository in optional Core–FogVault npm package metadata
+  so registry provenance resolves to the owning public project.
+
+## [1.0.0] - 2026-10-30
+
 ### Security
 
 - Update locked Tokio to 1.53.3 for RUSTSEC-2026-0386 (AsyncFd I/O safety);
