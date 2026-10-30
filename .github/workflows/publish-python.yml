@@ -95,4 +95,4 @@ jobs:
         if: github.event_name == 'push' || !inputs.dry_run
         with:
           packages-dir: dist
-          skip-existing: true
+          skip-existing: false

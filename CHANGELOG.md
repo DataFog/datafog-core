@@ -6,6 +6,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Python publication rejects existing distribution files instead of silently
+  accepting them on retry. Partial releases require comparing public checksums
+  and selecting only missing, qualified artifacts.
+
 ### Changed
 
 - Identify the source repository in optional Core–FogVault npm package metadata
