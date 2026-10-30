@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 module = runpy.run_path(str(Path(__file__).with_name("check-model-integration.py")))
 check = module["check"]
-platforms = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-14", "macos-15-intel", "windows-latest")
+platforms = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-latest")
 
 
 class PublicationCheck(unittest.TestCase):
