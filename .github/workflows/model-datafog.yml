@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         backend: [datafog, gliner2, gliner2-general]
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-latest]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-latest]
         include:
           - os: ubuntu-24.04
             platform: linux-x86_64
@@ -30,7 +30,7 @@ jobs:
           - os: ubuntu-24.04-arm
             platform: linux-aarch64
             npm_platform: linux-arm64-gnu
-          - os: macos-14
+          - os: macos-15
             platform: macos-arm64
             npm_platform: darwin-arm64
           - os: macos-15-intel

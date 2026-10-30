@@ -21,7 +21,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
             manylinux: "2_28"
             node_args: "--use-napi-cross"
-          - os: macos-14
+          - os: macos-15
             platform: macos-arm64
             target: aarch64-apple-darwin
             node_args: ""

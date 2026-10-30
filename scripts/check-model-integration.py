@@ -16,7 +16,7 @@ def api(repository, endpoint):
     ))
 
 
-REQUIRED_PLATFORMS = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-14", "windows-latest")
+REQUIRED_PLATFORMS = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "windows-latest")
 REQUIRED_JOBS = {f"installed-model ({backend}, {platform})"
                  for backend in ("datafog", "gliner2", "gliner2-general") for platform in REQUIRED_PLATFORMS}
 

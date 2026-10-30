@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("release_gate", Path(__file__).with_name("check-fogvault-release.py"))
 gate = importlib.util.module_from_spec(spec)
@@ -161,6 +162,46 @@ class ReleaseEvidenceTests(unittest.TestCase):
             self.assertNotIn("if:", step)
             self.assertIn("GH_TOKEN: ${{ github.token }}", step)
             self.assertLess(text.index("scripts/check-fogvault-release.py"), text.index("scripts/check-model-integration.py"))
+
+
+class NativeModelPlatformTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("native_model_gate", Path(__file__).with_name("check-model-integration.py"))
+        cls.model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.model)
+
+    def run_gate(self, names):
+        def fetch(repository, endpoint):
+            self.assertEqual(repository, REPOSITORY)
+            if endpoint == f"actions/workflows/model-datafog.yml/runs?head_sha={REVISION}&per_page=1":
+                return [{"workflow_runs": [{"id": 1, "head_sha": REVISION,
+                    "status": "completed", "conclusion": "success", "html_url": "https://example.test/model"}]}]
+            self.assertEqual(endpoint, "actions/runs/1/jobs?per_page=100")
+            return [{"jobs": [{"name": name, "conclusion": "success"} for name in names]}]
+        with mock.patch.object(self.model, "api", fetch), mock.patch("builtins.print"):
+            self.model.check(REPOSITORY, REVISION)
+
+    def test_current_apple_silicon_runner_retains_all_twelve_required_scopes(self):
+        self.assertEqual(set(self.model.REQUIRED_PLATFORMS), {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "windows-latest"})
+        self.assertEqual(len(self.model.REQUIRED_JOBS), 12)
+        self.run_gate(self.model.REQUIRED_JOBS)
+        for backend in ("datafog", "gliner2", "gliner2-general"):
+            with self.subTest(backend=backend), self.assertRaises(SystemExit):
+                self.run_gate(self.model.REQUIRED_JOBS - {f"installed-model ({backend}, macos-15)"})
+
+    def test_retired_runner_results_cannot_replace_current_apple_silicon_scope(self):
+        with self.assertRaises(SystemExit):
+            self.run_gate({name.replace("macos-15)", "macos-14)") for name in self.model.REQUIRED_JOBS})
+
+    def test_model_and_publish_builds_use_current_runner_for_same_arm64_target(self):
+        for workflow in ("model-candidates", "publish-node", "publish-python"):
+            source = (gate.ROOT / f".github/workflows/{workflow}.yml").read_text(encoding="utf-8")
+            self.assertNotIn("macos-14", source)
+            self.assertRegex(source, r"- os: macos-15\s+(?:platform: macos-arm64\s+)?target: aarch64-apple-darwin")
+        source = (gate.ROOT / ".github/workflows/model-datafog.yml").read_text(encoding="utf-8")
+        self.assertNotIn("macos-14", source)
+        self.assertIn("- os: macos-15\n            platform: macos-arm64", source)
 
 
 if __name__ == "__main__":
