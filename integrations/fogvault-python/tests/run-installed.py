@@ -105,7 +105,7 @@ def main():
         if versions["maturin"] != "maturin 1.14.1":
             raise ValueError("Install repository-declared maturin 1.14.1 before building")
         run("wheel-metadata-regressions", [sys.executable, str(PACKAGE / "tests/test_wheel_metadata.py")], 30)
-        run("wheel-build", [sys.executable, "-m", "maturin", "build", "--locked", "--manifest-path", str(PACKAGE/"Cargo.toml"),
+        run("wheel-build", [sys.executable, "-m", "maturin", "build", "--release", "--locked", "--manifest-path", str(PACKAGE/"Cargo.toml"),
             "--out", str(wheels), "--interpreter", sys.executable])
         artifacts = list(wheels.glob("*.whl"))
         if len(artifacts) != 1:

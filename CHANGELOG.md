@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Build and install the optional Python FogVault wheel with the optimized release
+  profile during qualification, so the tested wheel is the publication artifact.
+
 - Python publication rejects existing distribution files instead of silently
   accepting them on retry. Partial releases require comparing public checksums
   and selecting only missing, qualified artifacts.
