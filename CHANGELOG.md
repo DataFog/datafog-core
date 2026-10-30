@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Optional native Node and Python FogVault owners expose approved save/reopen,
+  recovery, conversation and restore-stream flows through the shared Rust owner.
+  `cargo dfv build --fogvault-languages` and `check --fogvault-languages` verify
+  installed npm/wheel candidates and Node–Python shared-vault interoperability.
+
 - Optional Core-owned native Rust and browser FogVault integration candidates
   save exact Workspace bundles before activation, bind complete heads and record
   identity, revoke Core handles on lock, and require fresh review after uncertain

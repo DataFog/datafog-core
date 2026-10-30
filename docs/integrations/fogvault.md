@@ -1,6 +1,6 @@
 # Using Core with FogVault
 
-Core now has optional native Rust and browser integration candidates. Both keep
+Core now has optional native Rust, Node, Python and browser integration candidates. They keep
 Core preparation separate from persistence and activate only after the exact
 candidate has been saved. Core's existing 0.5.0-beta.3 packages and Rust 1.88
 minimum are unchanged. These new integration packages remain unpublished 0.0.0
@@ -9,6 +9,8 @@ candidates; this change does not freeze the v1 API or approve a production host.
 ## Start here
 
 - Browser: [typed owner, runnable example and installed-package proof](../../integrations/fogvault-browser/README.md).
+- Native Node: [installed addon, tenant boundaries and lifecycle](../../integrations/fogvault-node/README.md).
+- Native Python: [installed wheel, thread boundaries and lifecycle](../../integrations/fogvault-python/README.md).
 - Native Rust: [registered SQLite owner and recovery](../../integrations/fogvault-native/README.md).
 - Migration: [authenticated/decrypted bundle recovery staging](../../integrations/fogvault-migration/README.md).
 - Shared [record and save/lifetime contract](fogvault-contract.md).
@@ -53,10 +55,34 @@ Python gate directly for a Rust-only host with its explicitly installed native
 prerequisites. A native subset is not browser qualification.
 
 The native integration has its own Rust 1.94.1 qualification toolchain and a
-tested minimum of Rust 1.89. Core itself stays on 1.88. Python/Node Workspace
-bindings remain available, but this change does not expose the new FogVault
-native owner through those bindings. Their optional host bindings need separate
-installed-consumer proof before being advertised.
+tested minimum of Rust 1.89. Core itself stays on 1.88. Optional native Node and
+Python packages wrap that same Rust owner. They are separate from the existing
+Core SDKs, support password-only admission, and retain literal approval,
+complete-head save, lock/reopen and uncertain-outcome rules. Tenant/thread checks
+catch host routing errors; the application still owns authentication, path
+permissions and an independently protected native control namespace.
+
+Prepare and check the native language packages separately:
+
+```sh
+cargo dfv build --fogvault-languages
+cargo dfv check --fogvault-languages
+```
+
+This selected scope diagnoses its own pinned native build tools and does not
+require unrelated original SDK outputs. Setup installs the declared Node build
+tools; checking never installs dependencies. It builds an actual npm tarball and
+Python wheel, installs each in a fresh consumer, runs named behavioral cases and
+type checks, then runs Node → Python → Node against the same registered SQLite
+vault and control namespace. Logs, package identities, source hashes and reports
+are retained in `target/fogvault-language/check-*/`. CI qualifies this installed
+path on Linux, macOS and Windows. It does not qualify production tenant routing,
+physical providers, power cuts or every Python/Node version.
+
+Both `--fogvault` and `--fogvault-languages` are required joint qualification
+scopes for changes that affect all maintained integrations. Neither publishes
+packages or changes the existing Core beta.3 minimum. The optional packages stay
+unpublished `0.0.0` candidates until the remaining v1 gates close.
 
 ## Browser extension handoff
 
