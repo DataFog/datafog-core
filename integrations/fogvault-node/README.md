@@ -91,6 +91,13 @@ claims.
 
 ## Lifecycle, restoration and recovery
 
+Each owner admits one active prepared change. A second preparation returns
+`resource_limit` before cloning Core state; read-only review remains available.
+Discard, confirmed consumption, collection of an abandoned handle, or owner
+lock/close releases admission. Keep explicit discard/close in application code;
+garbage collection has no timing guarantee. This per-owner bound does not provide
+aggregate server, model, stream or device memory admission.
+
 `PreparedChange` and restore streams are opaque, owner-bound handles. The addon
 uses the existing Rust Owner for all save, complete-head/record CAS, activation,
 lock and uncertain-outcome authority. Raw Workspace/Vault handles, plaintext

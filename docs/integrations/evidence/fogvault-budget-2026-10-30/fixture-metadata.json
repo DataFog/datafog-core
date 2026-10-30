@@ -1,0 +1,43 @@
+{
+  "arch": "aarch64",
+  "notes": "One optimized native process, example-only counting allocator. Requested bytes exclude allocator overhead. No browser peak/low-hardware SLA, production host admission or actual site-observation qualification is claimed. Full history includes real confirmed member rows with no invented alias-count relationship.",
+  "os": "macos",
+  "profiles": [
+    {
+      "afterDropAdditionalRequestedBytes": 0,
+      "contexts": 49870,
+      "lastContextLookupMs": 0.236958,
+      "openMs": 70.213458,
+      "openNetRequestedBytes": 14451670,
+      "openPeakAdditionalRequestedBytes": 30966374,
+      "peakPlansAdditionalRequestedBytes": 831316250,
+      "pendingPlans": 32,
+      "prepareMs": 2651.137625,
+      "profile": "near-ordinary",
+      "retainedPlansAdditionalRequestedBytes": 814801088,
+      "rows": 99742,
+      "sha256": "9731e5fc14d8275c33760dcb1e2bc966960ca890b4af6de108d61ee6c46e0cb1",
+      "wireBytes": 7369524
+    },
+    {
+      "afterDropAdditionalRequestedBytes": 0,
+      "contexts": 49871,
+      "lastContextLookupMs": 0.21108300000000002,
+      "openMs": 60.262459,
+      "openNetRequestedBytes": 14466296,
+      "openPeakAdditionalRequestedBytes": 30981000,
+      "peakPlansAdditionalRequestedBytes": 0,
+      "pendingPlans": 0,
+      "prepareMs": 0.0,
+      "profile": "hard",
+      "retainedPlansAdditionalRequestedBytes": 0,
+      "rows": 100000,
+      "sha256": "731d942cfddd01096c1797987e663cd5e9b259ae90d23493452b29f3e24551fb",
+      "wireBytes": 7377352
+    }
+  ],
+  "rust": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+  "sourceCommit": "ef15b5979e88161838ea2ce8e1e62a0e8d209754",
+  "sourceDirty": false,
+  "syntheticOnly": true
+}

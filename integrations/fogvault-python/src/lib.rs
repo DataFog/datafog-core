@@ -50,7 +50,7 @@ fn native_error(py: Python<'_>, error: Error) -> PyErr {
         Error::DestinationOccupied => ("occupied_destination", None),
         Error::ForeignChange => ("foreign_plan", None),
         Error::ReopenRequired => ("owner_closed", None),
-        Error::RevisionExhausted => ("resource_limit", None),
+        Error::RevisionExhausted | Error::PreparationLimit => ("resource_limit", None),
         Error::SavedButNotActivated { request_id } => {
             ("saved_but_not_activated", Some(*request_id))
         }

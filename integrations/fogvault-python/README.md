@@ -153,3 +153,10 @@ children are revoked. The best-effort error has `code="outcome_unknown"`, the
 exact `request_id`, and `requires_reopen=True`; reconcile the request and reopen
 instead of retrying the change. Tests cover ordinary confirmed saves and reopen;
 they do not force allocation exhaustion or guarantee reporting after process OOM.
+
+Only one prepared change may be active per integrated owner. A second preparation
+returns `resource_limit` before Core clones its state. Discarding, dropping or
+consuming the change releases the slot even if an older wrapper remains retained;
+closing the owner revokes all its authority. Read-only review and restore streams
+remain available. This is a per-owner plan limit, not a global memory budget; see
+[combined resource observations](../../docs/integrations/fogvault-resource-budget.md).

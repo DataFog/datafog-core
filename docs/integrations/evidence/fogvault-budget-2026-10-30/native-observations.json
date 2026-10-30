@@ -1,0 +1,410 @@
+{
+  "schema": "datafog-fogvault-combined-budget-probe/v1",
+  "synthetic": true,
+  "pass": true,
+  "source_stable": true,
+  "source_commit": "ef15b5979e88161838ea2ce8e1e62a0e8d209754",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "physical_ram_bytes": 51539607552,
+  "rust": "rustc 1.94.1 (e408947bf 2026-03-25)",
+  "source_inputs": {
+    "crates/core/Cargo.toml": "02aba8f16390634f2023358bfadcbf091e0c5c4f1cbf75a6ab0ff76de1ceed6e",
+    "crates/core/examples/german_benchmark.rs": "2e4a0b40b88920da53f6aec19a0f0c635107ee5b48f8e40931b1fdb4948bf761",
+    "crates/core/examples/scan_benchmark.rs": "cbddf8ee908987ee6176caa2a5726a7d28a9f0375d9c575a8ae478acafe4ad7e",
+    "crates/core/examples/workspace_backup_operation_fields.rs": "9f6c3ae4b031398b1823c6cbe2978b200968717ec61b00e6fd57e8e04655ee52",
+    "crates/core/examples/workspace_contract.rs": "316acbf4c3aeee4c0c976a21a69f4072fa6763d5578210e29dded4bca5892f95",
+    "crates/core/examples/workspace_contract/conversation.rs": "48967b9c94389c038998e6abffdf4c2e49733e540fe8e4c018b0afaa0bfc302c",
+    "crates/core/examples/workspace_conversation_capacity.rs": "fcefe99b98159a29f7c41eeca17148058fc01fa7831473239c8596a7c12402e7",
+    "crates/core/examples/workspace_operation_capacity.rs": "f0f5a708d79262f60b92111f8e0fecdfe7de89fedf8b01e695809670536c29de",
+    "crates/core/examples/workspace_operation_cost.rs": "f94f759c17a74d191747b02e51f70b3754b23a5f3b1bc46f747349ec29581842",
+    "crates/core/examples/workspace_streaming_contract.rs": "4fccc4c1a1d943ca6df14f5005fa90cf62966939c1ce7d336e98323981507caf",
+    "crates/core/src/account_number.rs": "5d798adfdce4152d1a215fad3382cfd164855caea30b1ea72dab706d53409753",
+    "crates/core/src/api_key.rs": "2219aaf98fbccaae6185abfc312cf9c60d1e7f9955f902506fb49cd83aacf011",
+    "crates/core/src/bearer_token.rs": "48391cbe3c579c83ccf7649cc06d3a5228e95bfc710702273b6490d834d726c2",
+    "crates/core/src/capabilities.rs": "ebb6221807572362627f9c264deedf888b0d69e98d16fac869d87735aa12c769",
+    "crates/core/src/coverage.rs": "bc00f5a20ef7a531152144f215e97ca1ef04099f6feda2a5e9353f67fcc33139",
+    "crates/core/src/credential_uri.rs": "fbe0f4b81853164351880d92c500a88ef28c9c28c6f361f9a08ef16e7a9b6b30",
+    "crates/core/src/email_context.rs": "2e05ab398ecc1ca1ec0eb5b0dc5c4169847e59439658a4b12356fa7184aca998",
+    "crates/core/src/german.rs": "c7e6d7f0081ff6786714cfbf4b3d84e28fe6d2f77812d48c04014ffc383e7353",
+    "crates/core/src/jwt.rs": "28869c02da8ddf36ffeb9ef1ff98c330d87599eb3e7fdd980fc77ce8d7460a63",
+    "crates/core/src/lib.rs": "b1f2c9e6aa6c8d57868b4b8675bd344aeb953720d6f679af917f389c3a02244d",
+    "crates/core/src/model_scan.rs": "ad59156a2005d9e1811b4341a31d514a7420eaef1ebdd737383a5a80bb1446cc",
+    "crates/core/src/models.rs": "4b5c6fff5c53c043a4bdcad37e19a1ad88661b093b8a61bb610be0833e0cfb9a",
+    "crates/core/src/models/gliner2-lock.json": "c2159593c277187a0e26c51c242043166080f8975b523260ba907570ba7bdec2",
+    "crates/core/src/models/gliner2.rs": "25f5ccedb2ec92a54e61b3a31b7576ed07d2885c7308fcd013b475577bdb8d21",
+    "crates/core/src/models/process.rs": "2de666e4a61565245575ffb85675dbfee9194c9f96c77a6f696fee1d1cccd991",
+    "crates/core/src/models/tests.rs": "24823f46a3637fd5d0c72d707186840b1b338a6d2b0b788ca6ad550b9abc2e1e",
+    "crates/core/src/npi.rs": "afac6eb949ca0f6d4656554b55aa4c883f8cabce7f6f47b8863f9e0949edacf7",
+    "crates/core/src/offsets.rs": "31e5a9ba27beb85b20b0e65dbc8911badaac2d6d85231e3ee2fa53696a93b82a",
+    "crates/core/src/private_key.rs": "74738b3aaed96b89ce6810452e295064c35348a7c6e369f4787d9170ce5b68a5",
+    "crates/core/src/scan_selection_tests.rs": "175a88f5153bc4f38aa2771edc0f4934c9edd90c782c50b1eba2f31e7e591c53",
+    "crates/core/src/selection_tests.rs": "2e055c8587a1aadb667bac5ddc1ede55467e8b8b91ceded53f736a52107ed751",
+    "crates/core/src/street_address.rs": "0424d1d9bbd483143cab2f70451da78ee651584c4640c284e3b90d98aab58ac9",
+    "crates/core/src/structured.rs": "893f7563f1beeee6a05ff2eabca356b394e22420474d874ce1f879f6de88667d",
+    "crates/core/src/us_routing_number.rs": "98814d0056efbd0dd20616ca49ccf8bd524b3715550c0d6e01da6ac794c897c9",
+    "crates/core/src/uuid.rs": "d21022539f7d56994c5574afe9e1d9a129c22b4d35020fce213bc2c8ff91d752",
+    "crates/core/src/workspace.rs": "bc0246c2e61a75e21b1631c8d62db1c094ff681f0157a158b26d2392e897a836",
+    "crates/core/src/workspace/buffered_restore.rs": "7b0df77be8e4cdf50462b8728954b9900c8f6018a8298028d753e7acab021de7",
+    "crates/core/src/workspace/codec.rs": "d0f1f26623fa45429ffdce77e6b278e92883850223bda1e602b901ae5fc13cde",
+    "crates/core/src/workspace/conversation.rs": "2327b2ca791e4ea959640a35040997e795a53d92dc26ca6acb28275162313ae8",
+    "crates/core/src/workspace/operations.rs": "0e3371f4d20996d48061caaa5a039c365ff2476124ea15d014b93f71086cbbb1",
+    "crates/core/src/workspace/policy.rs": "8a67a068de263981cd2dde2d61fcc7bd3540b6f8fce2562eb4f3a62ccf3c1d60",
+    "crates/core/src/workspace/private_bytes.rs": "c54847030e0eeebb2d038d55effd47d1617a2ec11602945415ee6cc580204446",
+    "crates/core/src/workspace/progressive_restore.rs": "033bf62fcfb7af7606237400e05ebde8d11fb9833fbd25a2f0dedb3666e3c19e",
+    "crates/core/src/workspace/recall.rs": "4f0d8729138e489f162d5b547877f63d4f9f39dd3315b4d3c414438cb839d2fe",
+    "crates/core/src/workspace/review.rs": "9819219dfaf029395f45b0b9a08b092e1a4dcf1e041ed36f1b638432ee7c729c",
+    "crates/core/tests/account_number.rs": "275664edd988502c691af0805541c8b71a78fbfc183a5db878c1c5f6f89e9527",
+    "crates/core/tests/api_key.rs": "c5f6f92afb1e9a7f7fb9811959e977903f194707a627d22b238e01c2c693ac28",
+    "crates/core/tests/bearer_token.rs": "e2457c4bc014e3bb0f43269084a71b7f2e4c5a1245a965eb3398d18e1c265ff3",
+    "crates/core/tests/capabilities.rs": "56f67b7e350835b9900168d5bc9470b4cfcadff1e70be9ccd6e0db104b35fabf",
+    "crates/core/tests/credential_overlaps.rs": "666f1f1397b709c2a8b79d25d1771be6865676ee3cbf4196ac702f80f3e3a98b",
+    "crates/core/tests/credential_uri.rs": "64ce44580f1d915682b6f1578748e3b18a8f1f76d6bc1cf7e881660b2fb80729",
+    "crates/core/tests/email_context.rs": "ec25380a2580c25f959ce44672acb62328770a8dc47a45181274f31aa564b139",
+    "crates/core/tests/german.rs": "c6d8efe8f1a85e16cd5eb5ab52fdf779ac0afcf8daa141fffe1b8f0d92a0cf24",
+    "crates/core/tests/jwt.rs": "a347e5e4b63ec50a9695ee4137ad5fecff8c44c101afb64701c89d3c611eafcd",
+    "crates/core/tests/model_datafog.rs": "fe46f2c584ca62fad442ef4fa4fd7ce7479f9b8d1673eb864bc4062201c78686",
+    "crates/core/tests/model_gliner2_entity_count.rs": "900f379b0bbda2b51b3ff059a5906f21243af6f6ee79f429f89715bcd8eb53ff",
+    "crates/core/tests/npi.rs": "26eff6e4812daba421ebbbad2b73482eff17e7b7c28f79285fba4fee0bef2590",
+    "crates/core/tests/private_key.rs": "a3bd0080a6f3cbb43a81b9cc7e676af429967399f051b66b4bdc2babeecc8a73",
+    "crates/core/tests/street_address.rs": "670ca223b43d79239ba5abf2995ceef8a2f5c5e66881201bcb4fd42b130f7df6",
+    "crates/core/tests/support/synthetic_fixtures.rs": "541d957a3467f19fa8eb56e89323d0c9f42252eff43f26f641d7bf3ca505f4d7",
+    "crates/core/tests/us_routing_number.rs": "150d30281f622d2ae3c02e8c4a3050f63cfb1828214bd492a0f4b09a75f8d9d9",
+    "crates/core/tests/uuid.rs": "da68a68ac01229535aaf44f87829019478b321ddc6ee2341036dcc05b8e807e7",
+    "crates/core/tests/workspace.rs": "563400f976af72a51b7e9f2ea4b521c8bcd77bbfd12af9348f2db789d7488423",
+    "crates/core/tests/workspace_backup_fields.rs": "2dec832cf0e60c2633d79748b2516a072021fe02abbd76a32afa16bdc75c3e00",
+    "crates/core/tests/workspace_backup_operation_fields.rs": "1856f15d7563fc0be567ed73b03c00ec40a2822828a849404224e8360bbab93c",
+    "crates/core/tests/workspace_buffered_restore.rs": "9f8137fd5beea909a950199059f1bfd1a11b87d4f1aa2a73fcdfb78d5b52d479",
+    "crates/core/tests/workspace_conversation_dense.rs": "3e4e58a6aedc23ae48f691094b7c7aa71dbd5855ab46dcc5e4646df7fda9de6f",
+    "crates/core/tests/workspace_conversations.rs": "7c3afed9b771ad3a325ed52a5861333fba93631a32d0b106ddce6ea50d276fc6",
+    "crates/core/tests/workspace_operations.rs": "593a6e7a506b8ba80ec1efd08ab563daeda04514546f26d207a317be20aaa240",
+    "crates/core/tests/workspace_policy.rs": "9bcd10fe49f7616204ffc617c9771138fb990a5e2c5e4cb85fd2aff001c6950f",
+    "crates/core/tests/workspace_progressive_restore.rs": "5dd1d594622b506579c3823f312d3818b470bdc31d06ecdea8a72bd6866b1d64",
+    "crates/core/tests/workspace_recall.rs": "9751334e71ecc6cb6b43c44652740f9c4d0b6be4ceb97ce390330d8909d79826",
+    "crates/core/tests/workspace_review.rs": "8e723206e2803f990c7948f101ac76c4df4f02cde9c4b1b920ee2f76a01119f2",
+    "crates/core/tests/workspace_snapshot_buffer_cleanup.rs": "ac33f573941b37ebee6f094c8e29f35eed4f7130de8ab230c59526d81c845277",
+    "integrations/fogvault-migration/.gitignore": "306fd52e74fca6746e12acc750f232de15e71da917756a1270d74c91f5eb7368",
+    "integrations/fogvault-migration/Cargo.lock": "cdce07356200b7be8ffaadef572a94ef6ebeae4095a4de6166f852217d7e4d13",
+    "integrations/fogvault-migration/Cargo.toml": "703e0437d60848676fd5578347c165f53e59f6969f79594c32c197c97cdd757c",
+    "integrations/fogvault-migration/LICENSE": "ce1ff3fa2e2167f504b4c9b6ca3875cecc7e69ce072b4e1dcf61028781fa75bc",
+    "integrations/fogvault-migration/README.md": "5a3f5d4ea2040eef12613b07ce5112554f98d890622a9c89b80966e82a479fa7",
+    "integrations/fogvault-migration/src/lib.rs": "e5318efbb39d7e747d2c763dc5ec866a9e9cc525ed2487a163cbea8247cef452",
+    "integrations/fogvault-migration/tests/recovery.rs": "714d1121c3f74b87687e689434846841cd61f6a0b5d27d4ceb70fc704708552a",
+    "integrations/fogvault-native/.gitignore": "306fd52e74fca6746e12acc750f232de15e71da917756a1270d74c91f5eb7368",
+    "integrations/fogvault-native/Cargo.lock": "2cf60c1e617e55c3b54ed6ae6252598f2736c5ded2a42d25fc804faeb72c6bba",
+    "integrations/fogvault-native/Cargo.toml": "ab54e13c40c1d9c5cd990e15d3a1710d80a70d5c67810196f5aca4de9f942533",
+    "integrations/fogvault-native/LICENSE": "ce1ff3fa2e2167f504b4c9b6ca3875cecc7e69ce072b4e1dcf61028781fa75bc",
+    "integrations/fogvault-native/README.md": "05c175630926b7ef027bf5d42f532ecd54ebfe82991f22c3c69db5d0d2a567db",
+    "integrations/fogvault-native/examples/measure.rs": "27ae7316e1a19ef7088761058e9fbdbcd1a4561e3bc02a04cd3c20b26b20ef33",
+    "integrations/fogvault-native/rust-toolchain.toml": "f53198ae4fdecfd87da36fe431c771b54c51e975d01c0e99f653bc14d5d48211",
+    "integrations/fogvault-native/src/lib.rs": "43ea7dae6e4827c7a16bdb94ee3f66b1074eba371d07b6bc3e5a4290267e51dc",
+    "integrations/fogvault-native/tests/native.rs": "b14a52ceb35b053ae4f8bbba10202421652262d534a18f2d1b3cbface1e0fcff"
+  },
+  "binary": {
+    "path": "target/fogvault-language/release/fogvault-combined-memory-probe",
+    "sha256": "75ed9a1f7eaa364ef772b5acf119053f162811c5dd1219e2ca1fc903fc2eb8f7"
+  },
+  "harness_source_sha256": "f7e85490702906c6bbc28e671bf26bc754f578dad07ab8cb685e4f3e6e5355d6",
+  "harness_lock_sha256": "6a5d878d22f64aa13fd082c91530fd6fd65c4af3a5cd72789ebe4a1d4318a1c5",
+  "fixture_sha256": "9731e5fc14d8275c33760dcb1e2bc966960ca890b4af6de108d61ee6c46e0cb1",
+  "profiles": [
+    {
+      "id": "mappings-1",
+      "executed": true,
+      "pass": true,
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "fogvault-combined-memory-probe",
+        "mappings",
+        "1",
+        "1"
+      ],
+      "output": "mappings-1-final.json",
+      "output_sha256": "7705d66064c8530e166fa0c5d51809cf935c2c1ceee9e68c0dbbc853cecb53ee",
+      "os_time": "mappings-1-final-os-time.txt",
+      "os_time_sha256": "f35aba50bee37cdd2293cde79a70b9c6f3fc43c4b7539b1bb151584755a34a26",
+      "peak_rss_bytes": 71729152,
+      "result": {
+        "candidate_bytes": 190,
+        "confirmed_handoffs": 0,
+        "elapsed_ms": 284.656791,
+        "input": "1",
+        "mode": "mappings",
+        "pending": 1,
+        "phase_points": [
+          {
+            "phase": "initial",
+            "rss_bytes": 1851392
+          },
+          {
+            "candidate_bytes_each": 190,
+            "pending": 1,
+            "phase": "pending_plans",
+            "rss_bytes": 71565312
+          },
+          {
+            "phase": "confirmed_save_other_plans_retained",
+            "rss_bytes": 71630848
+          },
+          {
+            "phase": "locked_and_dropped",
+            "rss_bytes": 71630848
+          },
+          {
+            "phase": "authenticated_reopen_and_read",
+            "rows": 2,
+            "rss_bytes": 71696384
+          }
+        ],
+        "rows_after_commit": 2,
+        "scope": "Actual Rust Core + registered FogVault native SQLite/KDF in one isolated process. Includes native runtime/allocator overhead. Excludes Node/Python foreign copies and browser/Worker processes. Process peak supplied independently by OS time.",
+        "source_bytes": 0,
+        "synthetic": true
+      }
+    },
+    {
+      "id": "mappings-1000",
+      "executed": true,
+      "pass": true,
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "fogvault-combined-memory-probe",
+        "mappings",
+        "1000",
+        "1"
+      ],
+      "output": "mappings-1000-final.json",
+      "output_sha256": "1ce4f95591e1cf2382d17116b7898acb793237164f8a8da1a99dcc3354c93513",
+      "os_time": "mappings-1000-final-os-time.txt",
+      "os_time_sha256": "d21bf75cb4c4849d50c0bb948302f449eac38234b50f9c3f56324b42eb1e7aa7",
+      "peak_rss_bytes": 74039296,
+      "result": {
+        "candidate_bytes": 60744,
+        "confirmed_handoffs": 0,
+        "elapsed_ms": 262.8845,
+        "input": "1000",
+        "mode": "mappings",
+        "pending": 1,
+        "phase_points": [
+          {
+            "phase": "initial",
+            "rss_bytes": 1851392
+          },
+          {
+            "candidate_bytes_each": 60744,
+            "pending": 1,
+            "phase": "pending_plans",
+            "rss_bytes": 73367552
+          },
+          {
+            "phase": "confirmed_save_other_plans_retained",
+            "rss_bytes": 73531392
+          },
+          {
+            "phase": "locked_and_dropped",
+            "rss_bytes": 73531392
+          },
+          {
+            "phase": "authenticated_reopen_and_read",
+            "rows": 2,
+            "rss_bytes": 73990144
+          }
+        ],
+        "rows_after_commit": 2,
+        "scope": "Actual Rust Core + registered FogVault native SQLite/KDF in one isolated process. Includes native runtime/allocator overhead. Excludes Node/Python foreign copies and browser/Worker processes. Process peak supplied independently by OS time.",
+        "source_bytes": 0,
+        "synthetic": true
+      }
+    },
+    {
+      "id": "mappings-5000",
+      "executed": true,
+      "pass": true,
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "fogvault-combined-memory-probe",
+        "mappings",
+        "5000",
+        "1"
+      ],
+      "output": "mappings-5000-final.json",
+      "output_sha256": "b671e30d81310473f8625e0dcbf43911a25c6f41b0c1fb96a1143f471a89aafb",
+      "os_time": "mappings-5000-final-os-time.txt",
+      "os_time_sha256": "6a7b95e34ba48aab53eafeae3b2fe5d41829d80cce0108277d9faef66d09e704",
+      "peak_rss_bytes": 81494016,
+      "result": {
+        "candidate_bytes": 308744,
+        "confirmed_handoffs": 0,
+        "elapsed_ms": 282.041125,
+        "input": "5000",
+        "mode": "mappings",
+        "pending": 1,
+        "phase_points": [
+          {
+            "phase": "initial",
+            "rss_bytes": 1851392
+          },
+          {
+            "candidate_bytes_each": 308744,
+            "pending": 1,
+            "phase": "pending_plans",
+            "rss_bytes": 79544320
+          },
+          {
+            "phase": "confirmed_save_other_plans_retained",
+            "rss_bytes": 80642048
+          },
+          {
+            "phase": "locked_and_dropped",
+            "rss_bytes": 80642048
+          },
+          {
+            "phase": "authenticated_reopen_and_read",
+            "rows": 2,
+            "rss_bytes": 81461248
+          }
+        ],
+        "rows_after_commit": 2,
+        "scope": "Actual Rust Core + registered FogVault native SQLite/KDF in one isolated process. Includes native runtime/allocator overhead. Excludes Node/Python foreign copies and browser/Worker processes. Process peak supplied independently by OS time.",
+        "source_bytes": 0,
+        "synthetic": true
+      }
+    },
+    {
+      "id": "history-1",
+      "executed": true,
+      "pass": true,
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "fogvault-combined-memory-probe",
+        "history",
+        "core-fixtures/near-ordinary.cbor",
+        "1"
+      ],
+      "output": "history-1-final.json",
+      "output_sha256": "49eaf6478ba214b128db5a83d1c1fd32e1c78d361e1ac112f60a029f7523bb58",
+      "os_time": "history-1-final-os-time.txt",
+      "os_time_sha256": "ae74a698e0851d2a25b2575540b3f1e1399e056a0ada56715856db196dfd1a47",
+      "peak_rss_bytes": 207241216,
+      "result": {
+        "candidate_bytes": 7369632,
+        "confirmed_handoffs": 49870,
+        "elapsed_ms": 692.012417,
+        "input": "core-fixtures/near-ordinary.cbor",
+        "mode": "history",
+        "pending": 1,
+        "phase_points": [
+          {
+            "phase": "initial",
+            "rss_bytes": 1851392
+          },
+          {
+            "candidate_bytes": 7369546,
+            "phase": "source_and_recovery_candidate",
+            "rows": 99742,
+            "rss_bytes": 103972864,
+            "source_bytes": 7369524
+          },
+          {
+            "phase": "import_with_source_core_and_candidate_retained",
+            "rss_bytes": 133873664
+          },
+          {
+            "candidate_bytes_each": 7369632,
+            "pending": 1,
+            "phase": "pending_plans",
+            "rss_bytes": 133873664
+          },
+          {
+            "phase": "confirmed_save_other_plans_retained",
+            "rss_bytes": 133922816
+          },
+          {
+            "phase": "locked_and_dropped",
+            "rss_bytes": 133922816
+          },
+          {
+            "phase": "authenticated_reopen_and_read",
+            "rows": 99744,
+            "rss_bytes": 201146368
+          }
+        ],
+        "rows_after_commit": 99744,
+        "scope": "Actual Rust Core + registered FogVault native SQLite/KDF in one isolated process. Includes native runtime/allocator overhead. Excludes Node/Python foreign copies and browser/Worker processes. Process peak supplied independently by OS time.",
+        "source_bytes": 7369524,
+        "synthetic": true
+      }
+    },
+    {
+      "id": "history-32",
+      "executed": true,
+      "pass": true,
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "fogvault-combined-memory-probe",
+        "history",
+        "core-fixtures/near-ordinary.cbor",
+        "32"
+      ],
+      "output": "history-32-final.json",
+      "output_sha256": "a046df8dcca89252fb78a5e8e0832d7e780f6457fbe802227b888aea87b1c0ee",
+      "os_time": "history-32-final-os-time.txt",
+      "os_time_sha256": "0d63f66f2d6a7f5404bff8cad3b3cc7365d8db1d86d0b5768c45f7c94d19456f",
+      "peak_rss_bytes": 907427840,
+      "result": {
+        "candidate_bytes": 7369632,
+        "confirmed_handoffs": 49870,
+        "elapsed_ms": 1663.2654169999998,
+        "input": "core-fixtures/near-ordinary.cbor",
+        "mode": "history",
+        "pending": 32,
+        "phase_points": [
+          {
+            "phase": "initial",
+            "rss_bytes": 1851392
+          },
+          {
+            "candidate_bytes": 7369546,
+            "phase": "source_and_recovery_candidate",
+            "rows": 99742,
+            "rss_bytes": 104022016,
+            "source_bytes": 7369524
+          },
+          {
+            "phase": "import_with_source_core_and_candidate_retained",
+            "rss_bytes": 133988352
+          },
+          {
+            "candidate_bytes_each": 7369632,
+            "pending": 32,
+            "phase": "pending_plans",
+            "rss_bytes": 837599232
+          },
+          {
+            "phase": "confirmed_save_other_plans_retained",
+            "rss_bytes": 881967104
+          },
+          {
+            "phase": "locked_and_dropped",
+            "rss_bytes": 500580352
+          },
+          {
+            "phase": "authenticated_reopen_and_read",
+            "rows": 99744,
+            "rss_bytes": 556728320
+          }
+        ],
+        "rows_after_commit": 99744,
+        "scope": "Actual Rust Core + registered FogVault native SQLite/KDF in one isolated process. Includes native runtime/allocator overhead. Excludes Node/Python foreign copies and browser/Worker processes. Process peak supplied independently by OS time.",
+        "source_bytes": 7369524,
+        "synthetic": true
+      }
+    }
+  ],
+  "qualification": "Synthetic isolated macOS arm64 native process peak RSS; no browser/Worker/process-tree memory or shipping-host/device SLA; Node/Python copies excluded. OS time peak RSS includes all phases, allocator caches and native KDF. Phase ps RSS points are not phase peaks.",
+  "qualification_phase": "Before integrated-owner one-preparation admission; source ef15b59. These are observations, not support budgets."
+}

@@ -86,25 +86,37 @@ test('installed_node_abandoned_handles_release_native_capacity',async()=>{
  assert.equal(typeof global.gc,'function','installed proof must enable explicit GC');
  const f=fixture();let owner=f.owner();
  try{
-  async function abandonAndRecover(make,release){
+  const pending=owner.prepareRecovery(t,id());
+  const unchanged=owner.head(t);
+  assert.throws(()=>owner.prepareRecovery(t,id()),code('resource_limit'));
+  assert.throws(()=>owner.commit(t,pending,false,id()),code('approval_required'));
+  assert.throws(()=>owner.prepareReview(t,[review()],id()),code('resource_limit'));
+  assert.deepEqual(owner.head(t),unchanged);
+  assert.ok(pending.heads(t).candidate);
+  pending.discard(t);
+  const consumed=owner.prepareRecovery(t,id());
+  owner.commit(t,consumed,true,id());
+  const next=owner.prepareRecovery(t,id());next.discard(t);
+  assert.throws(()=>consumed.previews(t),code('inactive_plan'));
+  async function abandonAndRecover(make,release,capacity){
    const weak=[];
    // Fill the bounded native registry while keeping no JavaScript handles.
-   for(let i=0;i<32;i++){let child=make();weak.push(new WeakRef(child));child=null;}
+   for(let i=0;i<capacity;i++){let child=make();weak.push(new WeakRef(child));child=null;}
    let recovered=[];
    // GC and finalization run on separate turns. Retry capacity, rather than
    // assuming that a finalizer must have run immediately after global.gc().
    for(let attempt=0;attempt<100;attempt++){
     await new Promise(resolve=>setImmediate(resolve));global.gc();
     await new Promise(resolve=>setImmediate(resolve));
-    try{while(recovered.length<32)recovered.push(make());}catch(e){assert.equal(e.code,'resource_limit');}
-    if(recovered.length===32)break;
+    try{while(recovered.length<capacity)recovered.push(make());}catch(e){assert.equal(e.code,'resource_limit');}
+    if(recovered.length===capacity)break;
    }
    assert.equal(weak.filter(ref=>ref.deref()!==undefined).length,0,'abandoned wrappers must be collected');
-   assert.equal(recovered.length,32,'all abandoned native handle slots must become reusable');
+   assert.equal(recovered.length,capacity,'all abandoned native handle slots must become reusable');
    for(const child of recovered)release(child);
   }
-  await abandonAndRecover(()=>owner.prepareRecovery(t,id()),p=>p.discard(t));
-  await abandonAndRecover(()=>owner.bufferedRestore(t),s=>s.close(t));
+  await abandonAndRecover(()=>owner.prepareRecovery(t,id()),p=>p.discard(t),1);
+  await abandonAndRecover(()=>owner.bufferedRestore(t),s=>s.close(t),32);
   const child=owner.prepareRecovery(t,id()),stream=owner.bufferedRestore(t),weakOwner=new WeakRef(owner);
   owner=null;
   for(let i=0;i<3;i++){await new Promise(resolve=>setImmediate(resolve));global.gc();}

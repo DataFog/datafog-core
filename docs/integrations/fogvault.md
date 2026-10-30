@@ -125,7 +125,9 @@ false-positive dispositions rather than declaring them closed.
 
 Recovery staging validates separately authenticated/decrypted source bundles and
 uses Core recovery; it does not decrypt legacy encrypted backup files or invent
-future v1 schema bytes. Measured growth samples are advisory: they do not cover
-peak memory, device floors, real power loss or every OS/browser. Resolve the
+future v1 schema bytes. [Resource observations](fogvault-resource-budget.md)
+include isolated native process peak RSS and support the integrated owners'
+one-active-preparation limit. Combined browser memory, installed-language copy
+costs, device floors, real power loss and every OS/browser remain unqualified. Resolve the
 documented FogVault registry dependency-distribution blockers before publishing
 both products as 1.0.0.

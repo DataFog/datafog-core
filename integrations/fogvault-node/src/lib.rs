@@ -37,7 +37,9 @@ fn mapped(error: bridge::Error) -> Error {
         bridge::Error::BindingMismatch => json!({"code":"binding_mismatch"}),
         bridge::Error::ForeignChange => json!({"code":"foreign_change"}),
         bridge::Error::ReopenRequired => json!({"code":"reopen_required","requiresReopen":true}),
-        bridge::Error::RevisionExhausted => json!({"code":"resource_limit"}),
+        bridge::Error::RevisionExhausted | bridge::Error::PreparationLimit => {
+            json!({"code":"resource_limit"})
+        }
     };
     Error::new(Status::GenericFailure, value.to_string())
 }

@@ -25,6 +25,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Integrated FogVault owners admit one active prepared change per owner before
+  cloning Core state. Discard, drop, confirmed consumption and close release the
+  slot; another preparation returns `resource_limit` without changing saved state.
+  Near-capacity native observations document memory costs without claiming a
+  device floor or production memory SLA.
+
 - Environment diagnosis uses the installed, pinned Playwright package and checks
   that the Chromium executable exists. Missing tools fail with local setup
   instructions rather than invoking an implicit package-download fallback.

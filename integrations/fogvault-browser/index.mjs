@@ -9,6 +9,10 @@ const randomId = () => {
   return value;
 };
 const clear = record => { record?.metadata?.fill(0); record?.payload?.fill(0); };
+function discardPrepared(prepared) {
+  try { prepared.discard(); }
+  catch (error) { if (error?.code !== 'inactive_plan') throw error; }
+}
 function receipt(value) {
   if (!value || typeof value.generation !== 'bigint' || value.generation < 0n ||
       !(value.head_digest instanceof Uint8Array) || value.head_digest.length !== 32 ||
@@ -20,9 +24,9 @@ function receipt(value) {
 
 /** Local preview access does not grant transport or save authority. */
 class WorkspaceVaultPlan {
-  constructor(token, owner, prepared, check) {
+  constructor(token, owner, prepared, check, release) {
     if (token !== constructorToken) throw new WorkspaceVaultError('foreign_plan');
-    plans.set(this, {owner, prepared, active: true, check});
+    plans.set(this, {owner, prepared, expected: head(prepared.heads().expectedHead), active: true, check, release});
   }
   #call(method) {
     const state = plans.get(this);
@@ -37,14 +41,14 @@ class WorkspaceVaultPlan {
   sendIntents() { return this.#call('sendIntents'); }
   discard() {
     const state = plans.get(this);
-    state.check(this); state.prepared.discard(); state.active = false;
+    state.check(this); state.prepared.discard(); state.release(this);
   }
 }
 
 /** Own both handles exclusively. Core is revoked synchronously before async vault cleanup. */
 export class FogVaultWorkspace {
   #Workspace; #vault; #workspace; #recordId; #namespace; #recordRevision = 0n;
-  #receipt; #closed = false; #busy = false; #epoch = 0;
+  #receipt; #closed = false; #busy = false; #epoch = 0; #pendingPlan;
 
   constructor(token, Workspace, vault, recordId, workspace) {
     if (token !== constructorToken) throw new WorkspaceVaultError('invalid_owner');
@@ -130,6 +134,12 @@ export class FogVaultWorkspace {
 
   #invalidate() {
     this.#epoch++; this.#closed = true;
+    const pending = this.#pendingPlan?.reference.deref();
+    if (pending) {
+      const entry = plans.get(pending);
+      if (entry) entry.active = false;
+    }
+    this.#pendingPlan = undefined;
     this.#workspace.close();
   }
   #checkEpoch(epoch) {
@@ -146,11 +156,40 @@ export class FogVaultWorkspace {
     this.#check();
     const entry = plans.get(plan);
     if (!entry || entry.owner !== this || !entry.active) throw new WorkspaceVaultError('foreign_or_consumed_plan');
+    if (!sameHead(this.#workspace.head(), entry.expected)) {
+      discardPrepared(entry.prepared); this.#releasePlan(plan);
+      throw new WorkspaceVaultError('stale_plan');
+    }
     return entry;
+  }
+  #releasePlan(plan) {
+    const entry = plans.get(plan);
+    if (entry) entry.active = false;
+    if (this.#pendingPlan?.reference.deref() === plan) this.#pendingPlan = undefined;
   }
   #prepare(method, args) {
     this.#check();
-    return new WorkspaceVaultPlan(constructorToken, this, this.#workspace[method](...args), plan => this.#checkPlan(plan));
+    const pending = this.#pendingPlan?.reference.deref();
+    if (this.#pendingPlan && !pending) {
+      // Raw Core keeps its candidate until explicit discard/activate/close,
+      // even after the JS wrapper is collected. Reclaim before another clone.
+      discardPrepared(this.#pendingPlan.prepared); this.#pendingPlan = undefined;
+    }
+    if (pending && plans.get(pending)?.active) {
+      const entry = plans.get(pending);
+      if (sameHead(this.#workspace.head(), entry.expected)) {
+        throw new WorkspaceVaultError('resource_limit');
+      }
+      discardPrepared(entry.prepared); this.#releasePlan(pending);
+    }
+    // Admission precedes Core preparation, which clones the workspace. The weak
+    // wrapper plus one cleanup handle cannot retain abandoned wrappers or grant
+    // save/handoff authority through a GC callback.
+    const prepared = this.#workspace[method](...args);
+    const plan = new WorkspaceVaultPlan(constructorToken, this, prepared,
+      plan => this.#checkPlan(plan), plan => this.#releasePlan(plan));
+    this.#pendingPlan = {reference: new WeakRef(plan), prepared};
+    return plan;
   }
   #read(method, args) { this.#check(); return this.#workspace[method](...args); }
   #stream(method, args) {
@@ -234,7 +273,7 @@ export class FogVaultWorkspace {
       const accepted = await this.#save(payload, expected, saved, request, epoch);
       this.#checkEpoch(epoch);
       this.#workspace.activateSaved(entry.prepared, expected, saved);
-      entry.active = false;
+      this.#releasePlan(plan);
       this.#checkEpoch(epoch);
       return {previews, head: head(saved), recordRevision: this.#recordRevision, receipt: accepted};
     } catch (error) {

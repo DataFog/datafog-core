@@ -91,12 +91,28 @@ class InstalledOwnerTests(unittest.TestCase):
     def test_only_literal_true_approves_and_rejection_preserves_pending_plan(self):
         owner = self.create()
         text = "Email alice@example.test"
+        before = owner.head(TENANT)
+        discarded = owner.prepare(TENANT, text, [finding(text)], identity())
+        self.rejected(lambda: owner.prepare(TENANT, text, [finding(text)], identity()), "resource_limit")
+        self.assertEqual(owner.head(TENANT).revision, before.revision)
+        self.assertEqual(owner.record_revision(TENANT), 1)
+        self.assertTrue(owner.review(TENANT, {"text": text, "scannerFindings": [finding(text)], "userSelections": []})["candidates"])
+        discarded.discard(TENANT)
+        dropped = owner.prepare(TENANT, text, [finding(text)], identity())
+        del discarded
+        gc.collect()
+        self.rejected(lambda: owner.prepare(TENANT, text, [finding(text)], identity()), "resource_limit")
+        del dropped
+        gc.collect()
         plan = owner.prepare(TENANT, text, [finding(text)], identity())
         for approved in [False, 1, "true", None, object()]:
             self.rejected(lambda: owner.commit(TENANT, plan, approved, identity()), "approval_required")
         self.assertEqual(owner.record_revision(TENANT), 1)
         owner.commit(TENANT, plan, True, identity())
         self.rejected(lambda: owner.commit(TENANT, plan, True, identity()))
+        # A retained consumed wrapper does not hold the active preparation slot.
+        next_plan = owner.prepare(TENANT, text, [finding(text)], identity())
+        next_plan.discard(TENANT)
 
     def test_tenant_and_thread_boundaries_are_controlled(self):
         owner = self.create()

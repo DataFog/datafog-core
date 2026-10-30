@@ -162,6 +162,51 @@ fn create_approve_save_lock_reopen_restore_and_lifetime() {
     let namespace = id();
     let mut owner = Owner::create(vault, token, record, namespace, id(), id()).unwrap();
     let source = "alice@example.test";
+    let prior = owner.head().unwrap();
+    let mut discarded = owner.prepare(source, &[finding(source)], id()).unwrap();
+    assert!(matches!(
+        owner.prepare(
+            source,
+            &[WorkspaceFinding::new(
+                "EMAIL",
+                source,
+                TextRange {
+                    start: 0,
+                    end: source.len() + 1
+                }
+            )],
+            id()
+        ),
+        Err(Error::PreparationLimit)
+    ));
+    assert_eq!(owner.head().unwrap(), prior);
+    assert_eq!(owner.record_revision().unwrap(), 1);
+    assert_eq!(owner.counts().unwrap().operations, 1);
+    discarded.discard();
+    let dropped = owner.prepare(source, &[finding(source)], id()).unwrap();
+    // Dropping an older discarded wrapper must not release the current lease.
+    drop(discarded);
+    assert!(matches!(
+        owner.prepare(source, &[finding(source)], id()),
+        Err(Error::PreparationLimit)
+    ));
+    drop(dropped);
+    // A failed Core preparation must release its pre-acquired admission lease.
+    assert!(matches!(
+        owner.prepare(
+            source,
+            &[WorkspaceFinding::new(
+                "EMAIL",
+                source,
+                TextRange {
+                    start: 0,
+                    end: source.len() + 1
+                }
+            )],
+            id()
+        ),
+        Err(Error::Core(_))
+    ));
     let mut change = owner.prepare(source, &[finding(source)], id()).unwrap();
     assert!(matches!(
         owner.commit(&mut change, false, id()),

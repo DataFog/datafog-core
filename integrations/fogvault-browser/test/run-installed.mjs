@@ -117,6 +117,10 @@ try {
     return route.continue();
   });
   const page = await context.newPage();
+  if (engine !== 'firefox') {
+    const cdp = await context.newCDPSession(page);
+    await page.exposeFunction('__datafogCollectBrowserGarbage', () => cdp.send('HeapProfiler.collectGarbage'));
+  }
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin);
