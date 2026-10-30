@@ -1,0 +1,7 @@
+# Unified archives compare reviewed package bytes across all three CI runners.
+index.mjs text eol=lf
+index.d.ts text eol=lf
+native-loader.mjs text eol=lf
+package.json text eol=lf
+README.md text eol=lf
+LICENSE text eol=lf

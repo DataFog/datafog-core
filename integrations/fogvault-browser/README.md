@@ -134,7 +134,7 @@ pinned Core WASM/Playwright tools and both candidate tarballs:
 ```sh
 node integrations/fogvault-browser/test/run-installed.mjs \
   --core-tarball target/fogvault-integration/artifacts/datafog-wasm-0.5.0-beta.3.tgz \
-  --vault-tarball target/fogvault-integration/artifacts/datafog-fogvault-browser-0.0.0.tgz \
+  --vault-tarball target/fogvault-integration/artifacts/datafog-fogvault-browser-0.1.0.tgz \
   --output target/fogvault-integration/browser-proof.json
 ```
 

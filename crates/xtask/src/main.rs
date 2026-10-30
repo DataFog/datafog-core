@@ -1,6 +1,7 @@
 mod bench;
 mod build;
 mod check;
+mod core_sdk;
 mod doctor;
 mod engines;
 mod eval;
@@ -38,7 +39,9 @@ fn main() -> ExitCode {
             }
         }
         "check" => {
-            if args[1..]
+            if args[1..].iter().any(|arg| arg == "--core-sdk") {
+                core_sdk::run(&args[1..])
+            } else if args[1..]
                 .iter()
                 .any(|arg| arg == "--fogvault" || arg == "--fogvault-languages")
             {
@@ -95,6 +98,8 @@ OPTIONS:
     --dry-run        Print commands without executing
 
 CHECK OPTIONS:
+    --core-sdk       Qualify installed SDK contracts and approved-value recall
+                     Requires explicitly provisioned pinned browser model assets
     --fogvault       Verify maintained native/browser Core–FogVault integration
                      Prepare candidates first: cargo dfv build --fogvault
     --fogvault-languages  Verify installed native Node/Python owners and interoperability

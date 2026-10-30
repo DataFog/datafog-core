@@ -917,7 +917,7 @@ impl PreparedChange {
 
 #[pymodule(gil_used = true)]
 fn datafog_fogvault(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.0.0")?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add(
         "FogVaultWorkspaceError",
         m.py().get_type::<FogVaultWorkspaceError>(),

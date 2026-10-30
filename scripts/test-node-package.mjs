@@ -729,6 +729,36 @@ import {NativeRestoreStream} from "@datafog/node";
 void progress;void impossibleChunk;progressive.close();workspace.close();
 // @ts-expect-error raw native plan handles are not public package declarations.
 import {NativeWorkspace} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {prepareScanAndTransform} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {prepareStructuredScanAndTransform} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {requiredKeySelectors} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {requiredRestoreItems} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {requiredTokenizationItems} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {restoreWithResults} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredRequiredKeySelectors} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredRequiredRestoreItems} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredRequiredTokenizationItems} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredRestoreWithResults} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredScanAndTransform} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredTransform} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {structuredTransformWithProviderResults} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {transformWithProviderResults} from "@datafog/node";
+// @ts-expect-error private transport helper has no root runtime export.
+import {transformWithResolvedKeys} from "@datafog/node";
 // @ts-expect-error revisions cannot use lossy JavaScript numbers.
 const invalidHead: WorkspaceHead={revision:9007199254740993,commitId:[]};
 void review;void policy;void revision;void invalidHead;

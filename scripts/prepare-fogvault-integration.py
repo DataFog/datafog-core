@@ -10,7 +10,7 @@ import sys
 from fogvault_inputs import core_build_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
-REV = "6c6176a3a9df320447ba42b924b26de7ac4d693a"
+REV = "220aaec145fe67f4c96d468d6858445020b88cd3"
 BASE = ROOT / "target/fogvault-integration"
 
 
@@ -40,6 +40,9 @@ def prepare():
     has_working_files = any(path.name != ".git" for path in source.iterdir())
     if has_working_files and subprocess.check_output(["git", "status", "--porcelain"], cwd=source).strip():
         raise RuntimeError("Pinned dependency checkout is dirty; refusing to overwrite it")
+    # Explicit preparation can upgrade an existing pinned checkout; its original
+    # clone may not contain a later reviewed revision. Never fetch during check.
+    run(["git", "fetch", "--no-tags", "origin", REV], source, BASE / "fetch.log")
     run(["git", "checkout", "--detach", REV], source, BASE / "checkout.log")
     if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != REV:
         raise RuntimeError("Wrong FogVault revision")
@@ -79,8 +82,9 @@ def prepare():
     run(["node", "node_modules/playwright/cli.js", "install", "chromium"],
         ROOT / "bindings/wasm", BASE / "playwright-install.log")
     core_version = json.loads((ROOT / "bindings/wasm/package.json").read_text())["version"]
+    vault_version = json.loads((source / "packages/browser/package.json").read_text())["version"]
     paths = {"core_tarball": artifacts / f"datafog-wasm-{core_version}.tgz",
-             "vault_tarball": artifacts / "datafog-fogvault-browser-0.0.0.tgz"}
+             "vault_tarball": artifacts / f"datafog-fogvault-browser-{vault_version}.tgz"}
     report = {"schema": "datafog-fogvault-preparation/v1", "pass": True,
               "fogvault_commit": REV,
               "fogvault_lock_sha256": sha(pinned_lock),

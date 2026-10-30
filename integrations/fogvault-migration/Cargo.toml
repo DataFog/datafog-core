@@ -1,16 +1,16 @@
 [package]
 name = "datafog-fogvault-migration"
-version = "0.0.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
-publish = false
 license = "MIT"
 description = "Validated Core bundle recovery staging for the optional FogVault integration"
+readme = "README.md"
 
 [workspace]
 
 [dependencies]
-datafog-core = { version = "=0.5.0-beta.3", path = "../../crates/core", default-features = false }
+datafog-core = { version = "1.0.0", path = "../../crates/core", default-features = false }
 zeroize = "1"
 
 [dev-dependencies]

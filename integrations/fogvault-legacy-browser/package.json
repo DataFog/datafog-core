@@ -1,7 +1,6 @@
 {
   "name": "@datafog/core-fogvault-legacy-browser",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Import-only reader for the supported non-shipping Core reference backup formats",
@@ -24,8 +23,8 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "peerDependencies": {
-    "@datafog/wasm": "0.5.0-beta.3",
-    "@datafog/core-fogvault-browser": "0.0.0"
+    "@datafog/wasm": "^0.5.0-beta.3 || ^1.0.0",
+    "@datafog/core-fogvault-browser": "1.0.0"
   },
   "devDependencies": {
     "libsodium-wrappers-sumo": "0.8.4",
@@ -36,5 +35,9 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest"
   }
 }

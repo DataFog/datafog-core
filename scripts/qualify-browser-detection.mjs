@@ -16,7 +16,8 @@ const {chromium} = requireHarness("playwright");
 const {build} = requireHarness("esbuild");
 const corpusPath = path.join(root, "fixtures/browser-detection/qualification-v1.json");
 const corpus = JSON.parse(await readFile(corpusPath));
-const output = path.join(root, "target/browser-detection", new Date().toISOString().replaceAll(/[:.]/g, "-"));
+const coreSdk = process.env.DATAFOG_CORE_SDK_QUALIFICATION === "1";
+const output = process.env.DATAFOG_QUALIFICATION_OUTPUT || path.join(root, "target/browser-detection", new Date().toISOString().replaceAll(/[:.]/g, "-"));
 await mkdir(output, {recursive: true});
 for (const record of corpus.records) for (const gold of [...record.gold, ...record.streetLineGold]) validateSpan(record.text, gold);
 execFileSync("npm", ["run", "build:model", "--prefix", harness], {stdio: "inherit"});
@@ -63,6 +64,12 @@ const receipt = {
   hardware: {cpu: os.cpus()[0]?.model, platform: process.platform, arch: process.arch, totalMemoryBytes: os.totalmem()},
   observations: [], externalRequests: [], pageErrors: [], passedContracts: false,
 };
+if (coreSdk) {
+  receipt.kind = "core-sdk-browser-current-measurement";
+  receipt.scope = "Fresh packed Core SDK in a synthetic Chromium MV3 reference host; not shipping-extension acceptance";
+  receipt.pendingReview = ["Shipping extension corpus, accuracy targets, and product acceptance belong to the extension release"];
+  receipt.extensionAcceptance = false;
+}
 const profile = await mkdtemp(path.join(os.tmpdir(), "datafog-browser-detection-"));
 let context;
 try {

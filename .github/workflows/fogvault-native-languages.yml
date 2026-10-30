@@ -34,6 +34,7 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_TEST_DEBUG: '0'
       CARGO_INCREMENTAL: '0'
+      DATAFOG_NODE_RUNNER_SCOPE: ${{ matrix.os }}
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/fogvault-language
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -75,6 +76,14 @@ jobs:
       # Direct invocation avoids requiring unrelated original SDK build outputs.
       - name: Verify installed packages and shared-vault interoperability
         run: python scripts/verify-fogvault-languages.py 2>&1 | tee target/fogvault-language/ci/verification.log
+      - name: Stage the qualified target binary and manifest
+        run: node integrations/fogvault-node/scripts/assemble.mjs stage --report target/fogvault-language/check-*/node.json --output target/fogvault-language/native-distribution
+      - name: Retain qualified native target for unified assembly
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: core-fogvault-node-binary-${{ matrix.os }}
+          path: target/fogvault-language/native-distribution/
+          if-no-files-found: error
       - name: Retain candidate and installed-consumer evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -100,4 +109,44 @@ jobs:
             target/fogvault-language/check-*/python-consumer-*/*.log
             target/fogvault-language/check-*/python-consumer-*/artifacts/*.whl
             target/fogvault-language-interop/interop-*/*.log
+          if-no-files-found: error
+
+  assemble-node:
+    name: Core–FogVault unified Node archive
+    needs: installed-native-languages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-fogvault-node-binary-*
+          path: target/native-assembly-inputs
+      - run: npm ci --ignore-scripts --prefix integrations/fogvault-node
+      - name: Prove distribution failure handling
+        run: node --test integrations/fogvault-node/test/distribution.test.mjs
+      - name: Assemble only exact-head qualified native targets
+        run: node integrations/fogvault-node/scripts/assemble.mjs assemble --input target/native-assembly-inputs --output target/native-assembly --revision "$GITHUB_SHA"
+      - name: Test the assembled archive without rebuilding its binaries
+        run: node integrations/fogvault-node/test/run-installed.mjs --archive target/native-assembly/*.tgz --binary-root target/native-assembly/package --output target/native-assembly/installed.json
+      - name: Retain unified archive and its qualification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: core-fogvault-node-unified
+          path: |
+            target/native-assembly/*.tgz
+            target/native-assembly/assembly.json
+            target/native-assembly/installed.json
+            target/native-assembly/package/native-artifacts.json
+            target/native-assembly/node-installed-*/*.log
+            target/native-assembly/node-installed-*/consumer/package-lock.json
           if-no-files-found: error

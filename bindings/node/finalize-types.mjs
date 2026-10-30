@@ -7,4 +7,27 @@ for (const name of ["NativeWorkspace", "NativeRestoreStream"]) {
   if ([...source.matchAll(rawClass)].length !== 1) throw new Error(`native ${name} declaration generation changed`);
   source = source.replace(rawClass, "");
 }
+// These are Rust transport helpers consumed privately by index.js, never root exports.
+// Fail on generator drift rather than leaking unsupported runtime declarations.
+for (const name of [
+  "prepareScanAndTransform",
+  "prepareStructuredScanAndTransform",
+  "requiredKeySelectors",
+  "requiredRestoreItems",
+  "requiredTokenizationItems",
+  "restoreWithResults",
+  "structuredRequiredKeySelectors",
+  "structuredRequiredRestoreItems",
+  "structuredRequiredTokenizationItems",
+  "structuredRestoreWithResults",
+  "structuredScanAndTransform",
+  "structuredTransform",
+  "structuredTransformWithProviderResults",
+  "transformWithProviderResults",
+  "transformWithResolvedKeys"
+]) {
+  const declaration = new RegExp(`^export declare function ${name}\\([^\\n]*\\n`, "gm");
+  if ([...source.matchAll(declaration)].length !== 1) throw new Error(`native ${name} declaration generation changed`);
+  source = source.replace(declaration, "");
+}
 await writeFile(file, source);

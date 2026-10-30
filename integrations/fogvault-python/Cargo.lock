@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-core"
-version = "0.5.0-beta.3"
+version = "1.0.0"
 dependencies = [
  "base64",
  "hmac 0.12.1",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-migration"
-version = "0.0.0"
+version = "1.0.0"
 dependencies = [
  "datafog-core",
  "zeroize",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-native"
-version = "0.0.0"
+version = "1.0.0"
 dependencies = [
  "datafog-core",
  "datafog-fogvault-migration",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-python"
-version = "0.0.0"
+version = "1.0.0"
 dependencies = [
  "datafog-core",
  "datafog-fogvault-migration",
@@ -279,8 +279,8 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "fogvault"
-version = "0.0.0"
-source = "git+https://github.com/DataFog/fogvault.git?rev=6c6176a3a9df320447ba42b924b26de7ac4d693a#6c6176a3a9df320447ba42b924b26de7ac4d693a"
+version = "0.1.0"
+source = "git+https://github.com/DataFog/fogvault.git?rev=220aaec145fe67f4c96d468d6858445020b88cd3#220aaec145fe67f4c96d468d6858445020b88cd3"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -293,8 +293,8 @@ dependencies = [
 
 [[package]]
 name = "fogvault-native"
-version = "0.0.0"
-source = "git+https://github.com/DataFog/fogvault.git?rev=6c6176a3a9df320447ba42b924b26de7ac4d693a#6c6176a3a9df320447ba42b924b26de7ac4d693a"
+version = "0.1.0"
+source = "git+https://github.com/DataFog/fogvault.git?rev=220aaec145fe67f4c96d468d6858445020b88cd3#220aaec145fe67f4c96d468d6858445020b88cd3"
 dependencies = [
  "fogvault",
  "rusqlite",

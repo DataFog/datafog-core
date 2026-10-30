@@ -9,6 +9,12 @@ use napi::{Env, Error, Status, Unknown};
 use napi_derive::napi;
 use std::collections::BTreeMap;
 
+/// Workspace API contract implemented by this compiled Core.
+#[napi]
+pub fn workspace_contract_version() -> u32 {
+    datafog_core::workspace::WORKSPACE_CONTRACT_VERSION
+}
+
 #[napi(object)]
 pub struct TextRange {
     #[napi(readonly)]

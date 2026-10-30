@@ -4,10 +4,14 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import process from 'node:process';
+import {nativeTarget,artifactFile,validateArtifacts} from '../native-loader.mjs';
 const packageRoot=fileURLToPath(new URL('../',import.meta.url));
 const coreRoot=path.resolve(packageRoot,'../..');
-const args=process.argv.slice(2);if(args.length!==2||args[0]!=='--output')throw Error('usage: node test/run-installed.mjs --output FILE');
-const output=path.resolve(args[1]);mkdirSync(path.dirname(output),{recursive:true});
+const args=process.argv.slice(2),options={};
+for(let i=0;i<args.length;i+=2){if(!['--output','--archive','--binary-root'].includes(args[i])||!args[i+1]||options[args[i]])throw Error('usage: --output FILE [--archive TGZ --binary-root DIRECTORY]');options[args[i]]=args[i+1];}
+if(!options['--output']||Boolean(options['--archive'])!==Boolean(options['--binary-root']))throw Error('output and paired archive/binary-root required');
+const binaryRoot=options['--binary-root']?path.resolve(options['--binary-root']):packageRoot;
+const output=path.resolve(options['--output']);mkdirSync(path.dirname(output),{recursive:true});
 const run=mkdtempSync(path.join(path.dirname(output),'node-installed-'));
 const sha=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
 const commands=[];
@@ -19,7 +23,7 @@ function command(id,cmd,argv,options={}){
 }
 function sourceIdentity(){
  const result={};
- function scan(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(['target','node_modules','.git'].includes(entry.name)||entry.name==='addon.node'||entry.name.endsWith('.tgz'))continue;const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('source symlink rejected');if(entry.isDirectory())scan(file);else if(entry.isFile())result[path.relative(coreRoot,file).split(path.sep).join('/')]=sha(file);}}
+ function scan(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(['target','node_modules','.git'].includes(entry.name)||entry.name.endsWith('.node')||entry.name==='native-artifacts.json'||entry.name.endsWith('.tgz'))continue;const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('source symlink rejected');if(entry.isDirectory())scan(file);else if(entry.isFile())result[path.relative(coreRoot,file).split(path.sep).join('/')]=sha(file);}}
  for(const dir of ['integrations/fogvault-node','integrations/fogvault-native','integrations/fogvault-migration','crates/core','fixtures/fogvault'])scan(path.join(coreRoot,dir));
  return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b)));
 }
@@ -27,7 +31,7 @@ const sourceBefore=sourceIdentity();
 const git=(argv)=>spawnSync('git',argv,{cwd:coreRoot,encoding:'utf8'}).stdout.trim();
 const proof={schema:'datafog-fogvault-node-installed/v1',pass:false,executed:true,recordedAtUtc:new Date().toISOString(),source:{commit:git(['rev-parse','HEAD']),ref:git(['branch','--show-current']),dirty:!!git(['status','--porcelain']),inputs:sourceBefore},tools:{node:process.version,platform:process.platform,arch:process.arch},commands,cases:[]};
 try{
- command('build',process.execPath,[path.join(packageRoot,'scripts/build.mjs')]);
+ if(!options['--archive'])command('build',process.execPath,[path.join(packageRoot,'scripts/build.mjs')]);
  const cargoEnv={CARGO_TARGET_DIR:path.join(coreRoot,'target/fogvault-language'),CARGO_PROFILE_TEST_DEBUG:'0',CARGO_PROFILE_DEV_DEBUG:'0',CARGO_INCREMENTAL:'0'};
  const rust=command('rust-boundary-tests','cargo',['+1.94.1','test','--manifest-path',path.join(packageRoot,'Cargo.toml'),'--lib','--locked'],{env:cargoEnv});
  for(const name of ['tests::native_binding_preserves_u64_and_unknown_request_error','tests::native_binding_rejects_wrong_thread_before_owner_access']){if(!rust.includes(`test ${name} ... ok`))throw Error(`missing Rust case ${name}`);proof.cases.push({id:name,status:'pass',executed:true});}
@@ -41,16 +45,21 @@ try{
  if(proof.tools.typescript!==`Version ${JSON.parse(readFileSync(path.join(packageRoot,'package.json'))).devDependencies.typescript}`)throw Error('installed TypeScript pin mismatch');
  const fixture=command('authenticated-source-fixture','cargo',['+1.94.1','run','--release','--manifest-path',path.join(packageRoot,'Cargo.toml'),'--example','source-fixture','--locked'],{env:cargoEnv});
  const fixturePath=path.join(run,'authenticated-source.json');writeFileSync(fixturePath,fixture);
- const packed=JSON.parse(command('pack',process.execPath,[npmCli,'pack','--ignore-scripts','--json','--pack-destination',run]));
- if(packed.length!==1)throw Error('expected one package');const tarball=path.join(run,packed[0].filename);
+ let tarball;
+ if(options['--archive'])tarball=path.resolve(options['--archive']);
+ else {const packed=JSON.parse(command('pack',process.execPath,[npmCli,'pack','--ignore-scripts','--json','--pack-destination',run]));if(packed.length!==1)throw Error('expected one package');tarball=path.join(run,packed[0].filename);}
+ const nativeManifest=validateArtifacts(JSON.parse(readFileSync(path.join(binaryRoot,'native-artifacts.json'))),JSON.parse(readFileSync(path.join(packageRoot,'package.json'))).version);
+ const nativeArtifact=nativeManifest.artifacts.find(row=>row.target===nativeTarget());if(!nativeArtifact)throw Error('missing current host artifact');
+ const nativeFilename=artifactFile(nativeArtifact.target);
  const consumer=path.join(run,'consumer');mkdirSync(path.join(consumer,'test'),{recursive:true});
  writeFileSync(path.join(consumer,'package.json'),JSON.stringify({name:'synthetic-core-fogvault-node-consumer',private:true,type:'module'}));
  command('install',process.execPath,[npmCli,'install','--ignore-scripts','--no-audit','--no-fund','--offline',tarball],{cwd:consumer});
  for(const name of ['consumer.mjs','worker.mjs','types.ts'])copyFileSync(path.join(packageRoot,'test',name),path.join(consumer,'test',name));
  const installed=path.join(consumer,'node_modules/@datafog/core-fogvault-node');
- proof.artifacts={tarball:{path:tarball,sha256:sha(tarball)},sourceAddon:{path:path.join(packageRoot,'addon.node'),sha256:sha(path.join(packageRoot,'addon.node'))},installedAddon:{path:path.join(installed,'addon.node'),sha256:sha(path.join(installed,'addon.node'))},consumerPath:consumer,packageVersion:JSON.parse(readFileSync(path.join(installed,'package.json'))).version};
+ proof.artifacts={tarball:{path:tarball,sha256:sha(tarball)},sourceAddon:{path:path.join(binaryRoot,nativeFilename),sha256:sha(path.join(binaryRoot,nativeFilename))},installedAddon:{path:path.join(installed,nativeFilename),sha256:sha(path.join(installed,nativeFilename))},consumerPath:consumer,packageVersion:JSON.parse(readFileSync(path.join(installed,'package.json'))).version};
  if(proof.artifacts.sourceAddon.sha256!==proof.artifacts.installedAddon.sha256)throw Error('installed addon mismatch');
- for(const name of ['index.mjs','index.d.ts','LICENSE','README.md','package.json'])if(sha(path.join(packageRoot,name))!==sha(path.join(installed,name)))throw Error(`installed file mismatch ${name}`);
+ proof.nativeArtifact=nativeArtifact;
+ for(const name of ['index.mjs','index.d.ts','native-loader.mjs','LICENSE','README.md','package.json'])if(sha(path.join(packageRoot,name))!==sha(path.join(installed,name)))throw Error(`installed file mismatch ${name}`);
  command('typescript',process.execPath,[path.join(packageRoot,'node_modules/typescript/bin/tsc'),'--noEmit','--strict','--module','nodenext','--target','es2022','--lib','es2022,dom',path.join(consumer,'test/types.ts')],{cwd:consumer});
  proof.installedTypesVerified=true;
  const stdout=command('installed-consumer',process.execPath,['--expose-gc','--test','--test-reporter=tap',path.join(consumer,'test/consumer.mjs')],{cwd:consumer,env:{DATAFOG_FOGVAULT_NODE_IMPORT:'@datafog/core-fogvault-node',DATAFOG_NODE_TEST_TMP:path.join(run,'sqlite-fixtures'),DATAFOG_NODE_AUTHENTICATED_FIXTURE:fixturePath}});

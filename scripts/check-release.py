@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 import sys
+import subprocess
 import tomllib
 
 root = Path(__file__).resolve().parent.parent
@@ -37,6 +38,8 @@ normalized = {name: logical_version(value) for name,value in versions.items()}
 if len(set(normalized.values())) != 1:
     raise SystemExit(f"Release versions do not match: {versions}")
 version = next(iter(normalized.values()))
+if int(version.split(".")[0]) >= 1:
+    subprocess.run([sys.executable, str(root / "scripts/check-core-contract.py")], check=True)
 if "-beta." in version:
     python_version = version.replace("-beta.", "b")
     for relative in ("bindings/python/pyproject.toml",):
@@ -46,6 +49,11 @@ if "-beta." in version:
         package = json.loads((root / f"bindings/{binding}/package.json").read_text())
         if package.get("publishConfig",{}).get("tag") != "beta":
             raise SystemExit(f"Beta publication must use npm beta dist-tag: {binding}")
+if "-" not in version:
+    for binding in ("node", "wasm"):
+        package = json.loads((root / f"bindings/{binding}/package.json").read_text())
+        if package.get("publishConfig", {}).get("tag") != "latest":
+            raise SystemExit(f"Stable publication must use npm latest dist-tag: {binding}")
 if os.environ.get("GITHUB_REF_TYPE") == "tag":
     expected = f"{sys.argv[1]}-v{version}"
     if os.environ.get("GITHUB_REF_NAME") != expected:

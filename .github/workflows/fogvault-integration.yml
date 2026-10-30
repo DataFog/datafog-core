@@ -119,6 +119,9 @@ jobs:
       # ignored target tree. It does not alter the maintained FogVault repository.
       - name: Prepare pinned installed candidates
         run: cargo dfv build --fogvault 2>&1 | tee target/fogvault-integration/ci/candidate-preparation.log
+      - name: Qualify registry-native Core and FogVault archives
+        if: matrix.engine == 'chromium'
+        run: python scripts/qualify-native-registry.py 2>&1 | tee target/fogvault-integration/ci/registry-qualification.log
       - name: Verify Core environment and binding freshness
         run: cargo dfv doctor --save-report 2>&1 | tee target/fogvault-integration/ci/doctor.log
       - name: Prove verifier failure handling
@@ -135,6 +138,11 @@ jobs:
             target/dfv/runs/*/doctor.json
             target/fogvault-integration/ci/*.log
             target/fogvault-integration/*.log
+            target/native-registry-*/report.json
+            target/native-registry-*/run/*.log
+            target/native-registry-*/run/registry/*.crate
+            target/native-registry-*/run/workspace/target/package/*.crate
+            target/native-registry-*/run/consumer/Cargo.lock
             target/fogvault-integration/prepared.json
             target/fogvault-integration/artifacts/*.tgz
             target/fogvault-integration/check-*/*.json

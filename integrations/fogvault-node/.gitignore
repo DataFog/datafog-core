@@ -1,4 +1,1 @@
-/target/
-/addon.node
-/node_modules/
-/*.tgz
+native-artifacts.json

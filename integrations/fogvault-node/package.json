@@ -1,7 +1,6 @@
 {
   "name": "@datafog/core-fogvault-node",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
   "description": "Optional native Core\u2013FogVault integration candidate",
   "license": "MIT",
@@ -17,9 +16,11 @@
   "files": [
     "index.mjs",
     "index.d.ts",
-    "addon.node",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "native-loader.mjs",
+    "native-artifacts.json",
+    "datafog-fogvault.*.node"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -28,5 +29,9 @@
   },
   "devDependencies": {
     "typescript": "7.0.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest"
   }
 }

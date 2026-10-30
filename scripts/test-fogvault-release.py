@@ -41,7 +41,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_beta3_is_explicitly_nonrequired_and_does_not_fetch(self):
         self.assertEqual(run({}, "0.5.0-beta.3")["required"], False)
 
-    def test_exact_completed_stable_and_manual_runs_pass_all_nine_scopes(self):
+    def test_exact_completed_stable_and_manual_runs_pass_all_eleven_scopes(self):
         for event in ("push", "workflow_dispatch"):
             for version in ("1.0.0", "1.0.0-beta.1", "2.0.0"):
                 data = fixture()
@@ -50,8 +50,47 @@ class ReleaseEvidenceTests(unittest.TestCase):
                         pages[0]["workflow_runs"][0]["event"] = event
                 result = run(data, version)
                 self.assertTrue(result["required"])
-                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 9)
+                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 11)
                 self.assertTrue(all(p["head_sha"] == REVISION for p in result["proofs"]))
+
+    def test_browser_sdk_extraction_is_required_at_exact_head(self):
+        self.assertEqual(gate.REQUIRED["browser-model.yml"], {"extraction"})
+        data = fixture()
+        key = f"actions/workflows/browser-model.yml/runs?head_sha={REVISION}&per_page=1"
+        data[key][0]["workflow_runs"][0]["head_sha"] = "b" * 40
+        with self.assertRaises(ValueError):
+            run(data)
+
+    def test_browser_extraction_executes_the_sdk_gate_and_retains_its_evidence(self):
+        text = (gate.ROOT / ".github/workflows/browser-model.yml").read_text()
+        marker = "      - name: Qualify installed SDK contracts and approved-value recall\n"
+        self.assertEqual(text.count(marker), 1)
+        step = text.split(marker, 1)[1].split("      - ", 1)[0]
+        self.assertIn("run: cargo dfv check --core-sdk --json", step)
+        self.assertIn("working-directory: .", step)
+        self.assertNotIn("if:", step)
+        self.assertNotIn("continue-on-error", step)
+        self.assertIn("target/core-sdk-qualification/", text)
+        self.assertIn("target/dfv/runs/", text)
+        self.assertIn("workflow_dispatch:", text)
+        for source in ("bindings/**", "integrations/**", "crates/**", "scripts/**", "fixtures/**", "docs/contracts/**"):
+            self.assertEqual(text.count(f'      - "{source}"'), 2)
+
+    def test_archive_and_unified_node_proofs_are_part_of_required_jobs(self):
+        joint = (gate.ROOT / ".github/workflows/fogvault-integration.yml").read_text(encoding="utf-8")
+        step = joint.split("      - name: Qualify registry-native Core and FogVault archives\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("if: matrix.engine == 'chromium'", step)
+        self.assertIn("python scripts/qualify-native-registry.py", step)
+        self.assertNotIn("continue-on-error", step)
+        self.assertIn("target/native-registry-*/run/registry/*.crate", joint)
+        self.assertNotIn("consumer-cargo-home", joint)
+        self.assertIn("Core–FogVault unified Node archive", gate.REQUIRED["fogvault-native-languages.yml"])
+        native = (gate.ROOT / ".github/workflows/fogvault-native-languages.yml").read_text(encoding="utf-8")
+        assembly = native.split("  assemble-node:\n", 1)[1]
+        self.assertIn("needs: installed-native-languages", assembly)
+        self.assertIn("--revision \"$GITHUB_SHA\"", assembly)
+        self.assertIn("--archive target/native-assembly/*.tgz --binary-root", assembly)
+        self.assertNotIn("continue-on-error", assembly)
 
     def test_each_missing_os_or_browser_scope_blocks(self):
         for workflow, names in gate.REQUIRED.items():

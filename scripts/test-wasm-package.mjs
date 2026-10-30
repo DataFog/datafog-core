@@ -80,6 +80,7 @@ function writeConsumerFiles() {
     `
 import {
   init,
+  workspaceContractVersion,
   type WorkspaceOperation,
   type WorkspaceCounts,
   type WorkspaceOperationRecord,
@@ -129,6 +130,8 @@ function operationTypes() {
 }
 void operationTypes;
 const ready: Promise<void> = init();
+const workspaceContractId: number = workspaceContractVersion();
+void workspaceContractId;
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
 // @ts-expect-error Entity selection must be an array.
@@ -369,7 +372,7 @@ try {
   });
 
   await page.evaluate(async () => {
-    const { DataFogError, init, restore, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured, restoreStructured } = await import(
+    const { DataFogError, init, workspaceContractVersion, restore, scan, scanAndTransform, transform, scanStructured, discoverFields, transformStructured, scanAndTransformStructured, restoreStructured } = await import(
       "/node_modules/@datafog/wasm/index.js"
     );
 
@@ -386,7 +389,9 @@ try {
     }
 
     expectThrows(() => scan("Email jane@example.com"), "Error");
+    expectThrows(() => workspaceContractVersion(), "Error");
     await Promise.all([init(), init()]);
+    if (workspaceContractVersion() !== 1) throw new Error("Installed WASM Workspace contract mismatch");
     const {BrowserModelContract} = await import("/node_modules/@datafog/wasm/dist/datafog_wasm.js");
     const contract = new BrowserModelContract(JSON.parse('{"company":"COMPANY","__proto__":"PERSON"}'));
     try {

@@ -43,6 +43,9 @@ use std::sync::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
+/// Stable workspace API/behavior identifier; independent of package and snapshot versions.
+pub const WORKSPACE_CONTRACT_VERSION: u32 = 1;
+
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_FINDINGS: usize = 10_000;
 pub const MAX_INPUTS: usize = 32;

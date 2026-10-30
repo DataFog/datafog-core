@@ -6,7 +6,18 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Security
+
+- Update locked Tokio to 1.53.3 for RUSTSEC-2026-0386 (AsyncFd I/O safety);
+  retain the Rust 1.88 support floor.
+
 ### Added
+
+- The Core v1 candidate exposes a Rust-backed Workspace contract identifier in
+  every SDK and checks a reviewed API/type/snapshot inventory alongside installed
+  parity. Current v3 writes and v1/v2 reads keep their existing semantics.
+- `cargo dfv check --core-sdk` qualifies actual packed SDK contracts and
+  approved-value recall while retaining separate model accuracy measurements.
 
 - Optional native Node and Python FogVault owners expose approved save/reopen,
   recovery, conversation and restore-stream flows through the shared Rust owner.
@@ -29,6 +40,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
   candidates, including the exact published Core beta.3 regression.
 
 ### Changed
+
+- Native FogVault Node candidates use checked platform binaries and a single
+  assembled archive; Python wheels include their README and MIT license. Core
+  release qualification also verifies real Rust registry-style archives.
+
+- Prepare aligned Core SDK and integration package versions for 1.0.0 without
+  publishing. The exact published beta.3 compatibility regression is retained.
+- Node's public declarations omit private transport functions that were never
+  exported by its public runtime; generated declarations and installed type
+  tests enforce that boundary.
 
 - Integrated FogVault owners admit one active prepared change per owner before
   cloning Core state. Discard, drop, confirmed consumption and close release the

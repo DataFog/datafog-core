@@ -63,7 +63,18 @@ jobs:
       - name: Stage native candidates
         run: |
           mkdir -p candidate
-          cp dist/*.whl bindings/node/*.node candidate/
+          python - <<'PYTHON'
+          from pathlib import Path
+          import shutil
+          import tomllib
+          version = tomllib.loads(Path("bindings/python/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          wheels = list(Path("dist").glob("datafog_core-" + version + "-*.whl"))
+          binaries = list(Path("bindings/node").glob("*.node"))
+          if len(wheels) != 1 or len(binaries) != 1:
+              raise ValueError("Require exactly the current wheel and this runner's native binary")
+          for source in wheels + binaries:
+              shutil.copy2(source, Path("candidate") / source.name)
+          PYTHON
       - uses: actions/upload-artifact@v4
         with:
           name: native-candidates-${{ matrix.platform }}
@@ -80,7 +91,8 @@ jobs:
         run: |
           mkdir -p common
           cargo package -p datafog-core --locked --allow-dirty
-          cp target/package/*.crate common/
+          core_version="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("crates/core/Cargo.toml").read_text(encoding="utf-8"))["package"]["version"])')"
+          cp "target/package/datafog-core-${core_version}.crate" common/
       - uses: actions/upload-artifact@v4
         if: matrix.platform == 'linux-x86_64'
         with:

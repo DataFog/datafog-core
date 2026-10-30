@@ -72,6 +72,77 @@ jobs:
         with:
           name: node-model-candidates
           path: candidate-node
+      - name: Select and verify exact current candidate archives
+        id: candidate-artifacts
+        env:
+          NPM_PLATFORM: ${{ matrix.npm_platform }}
+        run: |
+          python - <<'PYTHON'
+          from email.parser import Parser
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import tarfile
+          import tomllib
+          from zipfile import ZipFile
+
+          def exact(directory, filename):
+              path = Path(directory) / filename
+              if not path.is_file() or path.is_symlink():
+                  raise ValueError("Missing exact candidate artifact: " + str(path))
+              return path
+
+          def wheel_for(directory, version):
+              candidates = [p for p in Path(directory).glob("datafog_core-" + version + "-*.whl") if p.is_file() and not p.is_symlink()]
+              if len(candidates) != 1:
+                  raise ValueError("Require exactly one wheel for current Python version " + version)
+              path = candidates[0]
+              with ZipFile(path) as archive:
+                  metadata = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+                  if len(metadata) != 1:
+                      raise ValueError("Wheel metadata is missing or ambiguous")
+                  value = Parser().parsestr(archive.read(metadata[0]).decode("utf-8"))
+                  if value["Name"].replace("_", "-").lower() != "datafog-core" or value["Version"] != version:
+                      raise ValueError("Wheel filename and metadata disagree")
+              return path
+
+          def npm_for(directory, name, version):
+              path = exact(directory, name.removeprefix("@").replace("/", "-") + "-" + version + ".tgz")
+              with tarfile.open(path, "r:gz") as archive:
+                  members = [member for member in archive.getmembers() if member.name == "package/package.json"]
+                  if len(members) != 1 or not members[0].isfile():
+                      raise ValueError("npm package metadata is missing or ambiguous")
+                  value = json.load(archive.extractfile(members[0]))
+                  if value["name"] != name or value["version"] != version:
+                      raise ValueError("npm filename and metadata disagree")
+              return path
+
+          node_version = json.loads(Path("bindings/node/package.json").read_text(encoding="utf-8"))["version"]
+          python_version = tomllib.loads(Path("bindings/python/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          core_version = tomllib.loads(Path("crates/core/Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", node_version):
+              raise ValueError("Invalid candidate package version")
+          if node_version != core_version or re.sub(r"^(\d+\.\d+\.\d+)b(\d+)$", r"\1-beta.\2", python_version) != core_version:
+              raise ValueError("Core, Node and Python candidate versions disagree")
+          crate = exact("candidate-common", "datafog-core-" + core_version + ".crate")
+          crate_directory = "datafog-core-" + core_version
+          with tarfile.open(crate, "r:gz") as archive:
+              metadata = archive.getmembers()
+              members = [member for member in metadata if member.name == crate_directory + "/Cargo.toml"]
+              if len(members) != 1 or not members[0].isfile():
+                  raise ValueError("Rust package metadata missing or ambiguous")
+              package = tomllib.loads(archive.extractfile(members[0]).read().decode("utf-8"))["package"]
+              if package["name"] != "datafog-core" or package["version"] != core_version:
+                  raise ValueError("Rust filename and metadata disagree")
+          paths = {"crate": crate, "crate_directory": crate_directory,
+                   "wheel": wheel_for("candidate-native", python_version),
+                   "node": npm_for("candidate-node", "@datafog/node", node_version),
+                   "node_platform": npm_for("candidate-node", "@datafog/node-" + os.environ["NPM_PLATFORM"], node_version)}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for name, value in paths.items():
+                  output.write(name + "=" + str(value).replace("\\", "/") + "\n")
+          PYTHON
       - name: Install build and explicit provisioning tools
         run: python -m pip install 'huggingface_hub==1.27.0' 'psutil==7.2.2'
       - name: Restore pinned model assets
@@ -174,27 +245,27 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             "$WORKER_PYTHON" -m pip install 'torch==2.12.0' --index-url https://download.pytorch.org/whl/cpu
           fi
-          worker_wheel="$(find candidate-native -name '*.whl')"
+          worker_wheel="${{ steps.candidate-artifacts.outputs.wheel }}"
           "$WORKER_PYTHON" -m pip install "${worker_wheel}[gliner2]"
           mkdir -p dist
           "$WORKER_PYTHON" -m pip freeze > dist/worker-environment.txt
       - name: Execute packaged Rust model integration
         run: |
           package_root="$(mktemp -d)"
-          tar -xf candidate-common/datafog-core-*.crate -C "$package_root"
-          package_manifest="$(find "$package_root" -maxdepth 2 -name Cargo.toml | head -1)"
+          tar -xf "${{ steps.candidate-artifacts.outputs.crate }}" -C "$package_root"
+          package_manifest="$package_root/${{ steps.candidate-artifacts.outputs.crate_directory }}/Cargo.toml"
           cargo test --manifest-path "$package_manifest" --features models --test model_datafog --release -- --ignored
       - name: Verify installed Python wheel
         run: |
           mkdir -p dist
-          python -m pip install --force-reinstall candidate-native/*.whl
+          python -m pip install --force-reinstall "${{ steps.candidate-artifacts.outputs.wheel }}"
           python -I -X utf8 scripts/model-qualification.py "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json
           python bindings/python/tests/test_installed.py
       - name: Verify final assembled Node artifacts
         run: |
           mkdir -p "$RUNNER_TEMP/model-node-consumer"
-          package="$(find candidate-node -maxdepth 1 -name 'datafog-node-0*.tgz')"
-          platform_package="$(find candidate-node -maxdepth 1 -name 'datafog-node-${{ matrix.npm_platform }}-*.tgz')"
+          package="${{ steps.candidate-artifacts.outputs.node }}"
+          platform_package="${{ steps.candidate-artifacts.outputs.node_platform }}"
           npm install --ignore-scripts --prefix "$RUNNER_TEMP/model-node-consumer" "$GITHUB_WORKSPACE/$package" "$GITHUB_WORKSPACE/$platform_package"
           node scripts/model-node-conformance.mjs "$DATAFOG_MODEL_CONFIG" dist/model-evidence.json "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"
           UV_THREADPOOL_SIZE=1 node scripts/model-node-scheduling.mjs "$DATAFOG_MODEL_CONFIG" "$RUNNER_TEMP/model-node-consumer/node_modules/@datafog/node/index.js"

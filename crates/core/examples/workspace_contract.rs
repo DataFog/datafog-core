@@ -640,6 +640,7 @@ fn run(fixture: Value) -> Run<Value> {
     Ok(json!({"schemaVersion":1,"profile":fixture["profile"],"cases":cases}))
 }
 fn main() {
+    assert_eq!(datafog_core::workspace::WORKSPACE_CONTRACT_VERSION, 1);
     let result = std::env::args()
         .nth(1)
         .ok_or(Failure::Fixture)

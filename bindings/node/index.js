@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import {
   NativeWorkspace,
+  workspaceContractVersion as nativeWorkspaceContractVersion,
   openModelSession as nativeOpenModelSession,
   structuredTransform as nativeStructuredTransform,
   structuredScanAndTransform as nativeStructuredScanAndTransform,
@@ -24,6 +25,9 @@ import {
 } from "./native.js";
 
 export { ModelCancellation, ModelSessionNative, openModelSession } from "./native.js";
+
+/** Workspace behavior contract of the loaded native Core, independent of package version. */
+export function workspaceContractVersion() { return nativeWorkspaceContractVersion(); }
 
 // An unknown option, such as a misspelled `config`, would otherwise be ignored.
 function modelScanOptions(options, allowed) {

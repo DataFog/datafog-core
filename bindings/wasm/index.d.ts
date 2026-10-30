@@ -1,3 +1,6 @@
+/** Workspace API contract identifier; WASM requires initialized Core. */
+export declare function workspaceContractVersion(): number;
+
 /** Canonical built-in values are uppercase, but custom detectors may add values. */
 export type EntityType = string;
 export type TransformationStrategy = "redact" | "mask" | "remove" | "tokenize";
