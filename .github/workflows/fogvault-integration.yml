@@ -68,7 +68,11 @@ jobs:
           if-no-files-found: error
 
   joint:
-    name: Core–FogVault joint / Chromium
+    name: Core–FogVault joint / ${{ matrix.engine }}
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, msedge]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -109,8 +113,8 @@ jobs:
           } | tee target/fogvault-integration/ci/environment.log
       - name: Build Core bindings
         run: cargo dfv build 2>&1 | tee target/fogvault-integration/ci/core-bindings-build.log
-      - name: Install Chromium system prerequisites
-        run: node bindings/wasm/node_modules/playwright/cli.js install-deps chromium
+      - name: Install browser prerequisites
+        run: node bindings/wasm/node_modules/playwright/cli.js install --with-deps ${{ matrix.engine }}
       # Explicit setup builds the exact pinned FogVault checkout inside Core's
       # ignored target tree. It does not alter the maintained FogVault repository.
       - name: Prepare pinned installed candidates
@@ -120,12 +124,12 @@ jobs:
       - name: Prove verifier failure handling
         run: python scripts/test-fogvault-verifier.py 2>&1 | tee target/fogvault-integration/ci/verifier-tests.log
       - name: Verify joint native and installed browser consumers
-        run: cargo dfv check --fogvault 2>&1 | tee target/fogvault-integration/ci/joint-check.log
+        run: cargo dfv check --fogvault --engine ${{ matrix.engine }} 2>&1 | tee target/fogvault-integration/ci/joint-check.log
       - name: Retain joint reports, candidates and provenance
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: core-fogvault-joint-chromium
+          name: core-fogvault-joint-${{ matrix.engine }}
           path: |
             target/dfv/runs/*/build.json
             target/dfv/runs/*/doctor.json
