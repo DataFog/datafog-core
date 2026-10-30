@@ -39,13 +39,13 @@ DataFog Core detects PII and credentials using rule-based detectors and optional
 
 | Entity | Detector | Notes |
 |--------|----------|-------|
-| GERMAN_IBAN | Rule | German IBAN format |
-| GERMAN_VAT_ID | Rule | German VAT ID |
-| GERMAN_TAX_ID | Rule | German tax ID |
-| GERMAN_SOCIAL_SECURITY | Rule | German SSN |
-| GERMAN_POSTAL_CODE | Rule | German postal codes |
-| GERMAN_PASSPORT | Rule | German passport numbers |
-| GERMAN_RESIDENCE_PERMIT | Rule | German residence permit numbers |
+| DE_IBAN | Rule | German IBAN format |
+| DE_VAT_ID | Rule | German VAT ID |
+| DE_TAX_ID | Rule | German tax ID |
+| DE_SOCIAL_SECURITY_NUMBER | Rule | German SSN |
+| DE_POSTAL_CODE | Rule | German postal codes |
+| DE_PASSPORT_NUMBER | Rule | German passport numbers |
+| DE_RESIDENCE_PERMIT_NUMBER | Rule | German residence permit numbers |
 
 ### Optional entities (require explicit config)
 
