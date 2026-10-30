@@ -16,6 +16,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Identify the source repository in optional Core–FogVault npm package metadata
   so registry provenance resolves to the owning public project.
+- Document exact Core 1.0 and FogVault 0.1 installation paths, supported package
+  targets and the separate publication/extension-acceptance boundaries.
 
 ## [1.0.0] - 2026-10-30
 
