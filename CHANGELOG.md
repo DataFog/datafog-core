@@ -8,6 +8,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- An optional import-only browser reader authenticates supported v1/v2 Core
+  reference backups and migrates them into fresh FogVault destinations after
+  approval. It preserves source archives and uses the existing legacy crypto;
+  compatibility with an unidentified shipping extension is not established.
+
 - Optional Core-owned native Rust and browser FogVault integration candidates
   save exact Workspace bundles before activation, bind complete heads and record
   identity, revoke Core handles on lock, and require fresh review after uncertain

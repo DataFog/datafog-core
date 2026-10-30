@@ -54,6 +54,8 @@ def prepare():
     pinned_lock = source / "crates/fogvault-wasm/Cargo.lock"
     generated_lock = source.parent / "Cargo.lock"
     shutil.copy2(pinned_lock, generated_lock)
+    run(["npm", "ci", "--legacy-peer-deps", "--ignore-scripts"],
+        ROOT / "integrations/fogvault-legacy-browser", BASE / "legacy-npm-ci.log")
     core_inputs = core_build_inputs(ROOT)
     run(["cargo", "dfv", "build", "--sdk", "wasm"], ROOT, BASE / "core-build.log")
     run(["npm", "pack", "--ignore-scripts", "--pack-destination", str(artifacts)],

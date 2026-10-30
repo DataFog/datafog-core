@@ -141,5 +141,6 @@ jobs:
             target/fogvault-integration/check-*/*.log
             target/fogvault-integration/check-*/browser-consumer-*/*.log
             target/fogvault-integration/check-*/browser-consumer-*/artifacts/*.tgz
+            target/fogvault-integration/check-*/browser-consumer-*/reference/kdf-worker.js
             target/fogvault-integration/check-*/browser-consumer-*/package-lock.json
           if-no-files-found: error

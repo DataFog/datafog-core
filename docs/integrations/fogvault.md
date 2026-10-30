@@ -97,3 +97,17 @@ future v1 schema bytes. Measured growth samples are advisory: they do not cover
 peak memory, device floors, real power loss or every OS/browser. Resolve the
 documented FogVault registry dependency-distribution blockers before publishing
 both products as 1.0.0.
+
+The browser portion of `cargo dfv check --fogvault --engine ENGINE` also requires
+an installed import-only reader for the supported **reference** encrypted backup
+v1/v2 envelopes. `cargo dfv build --fogvault` explicitly prepares its pinned worker
+build dependencies. The check authenticates actual legacy files using both
+password and recovery paths, validates Core identity/head, and publishes only
+approved recovery into a fresh FogVault destination. It tests real cancellation,
+uncertain publication with cleanup failure, and fresh reconciliation/reopen.
+Named evidence is retained as `legacy.json` beside `browser.json`.
+
+This covers the non-shipping reference-host format; it does not establish the
+archive provenance or format of Josh's shipping extension. Final v1 schema
+compatibility and production security review remain open gates. See the
+[reader scope and resource limits](../../integrations/fogvault-legacy-browser/README.md).
