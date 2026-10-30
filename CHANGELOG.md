@@ -6,6 +6,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Security
+
+- Update locked Tokio to 1.53.3 for RUSTSEC-2026-0386 (AsyncFd I/O safety);
+  retain the Rust 1.88 support floor.
+
 ### Added
 
 - The Core v1 candidate exposes a Rust-backed Workspace contract identifier in
