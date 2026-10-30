@@ -27,6 +27,8 @@ BROWSER_CASES = {
     "authenticated_bundle_recovery_preserves_aliases_and_refuses_occupied_destination",
     "whole_bundle_growth_samples_and_payload_admission",
     "occupied_creation_rejects_exact_duplicate_request_without_overwrite",
+    "async_open_expectations_and_creation_request_ids_are_snapshotted",
+    "authenticated_import_rejects_unrelated_occupied_vault_without_mutation",
 }
 RUST_CASES = {
     "migration": {

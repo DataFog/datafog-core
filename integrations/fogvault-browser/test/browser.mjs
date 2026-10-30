@@ -25,6 +25,20 @@ async function make() {
   const owner = await FogVaultWorkspace.create({Workspace, vault, recordId, namespace});
   return {vault, owner, name, recordId, namespace};
 }
+function receiptBarrier(vault) {
+  let entered, release, first = true;
+  const arrived = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const proxy = new Proxy(vault, {get(target, property) {
+    if (property === 'receipt') return async () => {
+      if (first) { first = false; entered(); await gate; }
+      return target.receipt();
+    };
+    const value = Reflect.get(target, property, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  }});
+  return {vault: proxy, arrived, release: () => release()};
+}
 async function record(id, run) {
   const started = performance.now();
   try { await run(); cases.push({id, status: 'pass', executed: true, duration_ms: performance.now() - started}); }
@@ -97,6 +111,33 @@ window.coreFogVaultDone = (async () => {
       await f.vault.save(f.recordId, raw.metadata, raw.payload, {expectedRevision: raw.revision});
       await rejected(() => FogVaultWorkspace.open({Workspace, vault: f.vault, recordId: f.recordId}), 'binding_mismatch');
       clearRecord(raw); await f.owner.close();
+    });
+    await record('async_open_expectations_and_creation_request_ids_are_snapshotted', async () => {
+      const f = await make(), savedHead = f.owner.head();
+      await f.owner.lock(); await f.vault.unlock(password);
+      const wrongNamespace = randomId(), wrongHead = {revision: savedHead.revision, commitId: Array.from(randomId())};
+      const barrier = receiptBarrier(f.vault);
+      const pending = FogVaultWorkspace.open({Workspace, vault: barrier.vault, recordId: f.recordId,
+        expectedNamespace: wrongNamespace, expectedHead: wrongHead});
+      const failed = rejected(() => pending, 'binding_mismatch');
+      await barrier.arrived; wrongNamespace.set(f.namespace); wrongHead.commitId.splice(0, 16, ...savedHead.commitId);
+      barrier.release(); await failed;
+      const namespace = f.namespace.slice(), expected = {revision: savedHead.revision, commitId: [...savedHead.commitId]};
+      const positive = receiptBarrier(f.vault);
+      const opening = FogVaultWorkspace.open({Workspace, vault: positive.vault, recordId: f.recordId,
+        expectedNamespace: namespace, expectedHead: expected});
+      await positive.arrived; namespace.fill(0); expected.revision = '18446744073709551615'; expected.commitId.fill(0);
+      positive.release(); const opened = await opening;
+      require(same(opened.namespace(), f.namespace), 'caller mutation changed trusted open expectations');
+      await opened.close();
+
+      const raw = new FogVault(options); owners.add(raw);
+      const name = 'datafog-SYNTHETIC-joint-' + crypto.randomUUID(); names.push(name); await raw.create(name, password);
+      const requestId = randomId(), expectedRequest = requestId.slice(), creation = receiptBarrier(raw);
+      const creating = FogVaultWorkspace.create({Workspace, vault: creation.vault, recordId: randomId(), namespace: randomId(), requestId});
+      await creation.arrived; requestId.fill(0); creation.release(); const created = await creating;
+      require(same((await raw.receipt()).request_id, expectedRequest), 'caller mutation changed creation request identity');
+      await created.close();
     });
     await record('lost_save_reply_reconciles_without_handoff_or_old_approval', async () => {
       const NativeWorker = globalThis.Worker;
@@ -191,6 +232,18 @@ window.coreFogVaultDone = (async () => {
       await rejected(() => FogVaultWorkspace.importAuthenticatedBundle(parameters), 'occupied_destination');
       require(imported.restore(saved.previews[0].text) === text, 'occupied import damaged existing destination');
       clearRecord(source); await imported.close(); await f.owner.close();
+    });
+    await record('authenticated_import_rejects_unrelated_occupied_vault_without_mutation', async () => {
+      const source = await make(), destination = await make(), recordId = randomId();
+      const sourceRecord = await source.vault.read(source.recordId), before = await destination.vault.read(destination.recordId);
+      const prior = await destination.vault.receipt();
+      await rejected(() => FogVaultWorkspace.importAuthenticatedBundle({Workspace, vault: destination.vault, recordId,
+        bundle: sourceRecord.payload, expectedNamespace: source.namespace, expectedHead: source.owner.head(), approved: true}), 'occupied_destination');
+      const after = await destination.vault.read(destination.recordId);
+      require(before.revision === after.revision && same(before.metadata, after.metadata) && same(before.payload, after.payload), 'recovery changed unrelated destination record');
+      require(same(prior.head_digest, (await destination.vault.receipt()).head_digest), 'recovery advanced occupied vault');
+      await rejected(() => destination.vault.read(recordId), 'NotFound');
+      clearRecord(sourceRecord); clearRecord(before); clearRecord(after); await source.owner.close(); await destination.owner.close();
     });
     await record('whole_bundle_growth_samples_and_payload_admission', async () => {
       for (const count of [1, 100, 1000]) {

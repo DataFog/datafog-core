@@ -86,12 +86,31 @@ fn is_git_dirty() -> bool {
 }
 
 pub fn workspace_root() -> PathBuf {
+    // A shared Cargo target can reuse a binary compiled in another worktree.
+    // Resolve the caller's checkout first so source metadata and tested inputs
+    // cannot silently refer to different checkouts.
+    if let Ok(current) = std::env::current_dir() {
+        if let Some(root) = discover_workspace_root(&current) {
+            return root;
+        }
+    }
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir)
         .ancestors()
         .nth(2)
         .expect("workspace root")
         .to_path_buf()
+}
+
+fn discover_workspace_root(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|root| {
+            root.join("Cargo.toml").is_file()
+                && root.join("crates/core/Cargo.toml").is_file()
+                && root.join("crates/xtask/Cargo.toml").is_file()
+        })
+        .map(Path::to_path_buf)
 }
 
 pub fn create_run_directory() -> std::io::Result<PathBuf> {
@@ -110,4 +129,36 @@ pub fn create_run_directory() -> std::io::Result<PathBuf> {
     }
 
     Ok(run_dir)
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::discover_workspace_root;
+    use std::fs;
+
+    #[test]
+    fn current_nested_worktree_wins_over_the_outer_checkout() {
+        let path = std::env::temp_dir().join(format!(
+            "dfv-worktree-root-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let nested = path.join(".worktrees/feature");
+        for root in [&path, &nested] {
+            for relative in [
+                "Cargo.toml",
+                "crates/core/Cargo.toml",
+                "crates/xtask/Cargo.toml",
+            ] {
+                let file = root.join(relative);
+                fs::create_dir_all(file.parent().unwrap()).unwrap();
+                fs::write(file, "synthetic workspace sentinel").unwrap();
+            }
+        }
+        let caller = nested.join("integrations/example");
+        fs::create_dir_all(&caller).unwrap();
+        assert_eq!(discover_workspace_root(&caller), Some(nested));
+        assert_eq!(discover_workspace_root(&path), Some(path.clone()));
+        fs::remove_dir_all(path).unwrap();
+    }
 }
