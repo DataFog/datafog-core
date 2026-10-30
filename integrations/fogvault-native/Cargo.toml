@@ -1,0 +1,25 @@
+[package]
+name = "datafog-fogvault-native"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+description = "Optional native persistence integration for DataFog Core workspaces"
+
+[workspace]
+
+[dependencies]
+datafog-fogvault-migration = { path = "../fogvault-migration" }
+datafog-core = { path = "../../crates/core", default-features = false }
+fogvault-native = { git = "https://github.com/DataFog/fogvault.git", rev = "6c6176a3a9df320447ba42b924b26de7ac4d693a", default-features = false }
+zeroize = "=1.9.1"
+
+[dev-dependencies]
+published-beta3 = { package = "datafog-core", version = "=0.5.0-beta.3", default-features = false }
+serde_json = "1"
+getrandom = "=0.4.3"
+tempfile = "3"
+
+[profile.test]
+opt-level = 2

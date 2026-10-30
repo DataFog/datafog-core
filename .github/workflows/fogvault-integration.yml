@@ -1,0 +1,145 @@
+name: Core and FogVault integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# PRs, main pushes and manual runs retain separate scopes. No path filters leave
+# required checks waiting forever when a change only affects documentation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native:
+    name: Core–FogVault native / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.88.0'
+          components: rustfmt, clippy
+      - name: Install isolated FogVault integration toolchain
+        run: rustup toolchain install 1.94.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.14'
+      - name: Record native environment
+        run: |
+          mkdir -p target/fogvault-integration/ci
+          {
+            git rev-parse HEAD
+            rustc +1.88.0 --version
+            rustc +1.94.1 --version
+            python --version
+          } | tee target/fogvault-integration/ci/environment.log
+      - name: Verify maintained native consumers
+        run: python scripts/verify-fogvault-integration.py --native-only 2>&1 | tee target/fogvault-integration/ci/native-check.log
+      - name: Retain native reports and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: core-fogvault-native-${{ matrix.os }}
+          path: |
+            target/fogvault-integration/ci/*.log
+            target/fogvault-integration/check-*/*.json
+            target/fogvault-integration/check-*/*.log
+          if-no-files-found: error
+
+  joint:
+    name: Core–FogVault joint / ${{ matrix.engine }}
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, msedge]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.88.0'
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - name: Install isolated FogVault integration toolchain
+        run: rustup toolchain install 1.94.1 --profile minimal --target wasm32-unknown-unknown --component rustfmt --component clippy
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '25.8.2'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.14'
+      - name: Install binding build tools
+        run: |
+          python -m pip install maturin==1.14.1
+          cargo +1.94.1 install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Record joint environment
+        run: |
+          mkdir -p target/fogvault-integration/ci
+          {
+            git rev-parse HEAD
+            rustc +1.88.0 --version
+            rustc +1.94.1 --version
+            python --version
+            node --version
+            wasm-bindgen --version
+          } | tee target/fogvault-integration/ci/environment.log
+      - name: Build Core bindings
+        run: cargo dfv build 2>&1 | tee target/fogvault-integration/ci/core-bindings-build.log
+      - name: Install browser prerequisites
+        run: node bindings/wasm/node_modules/playwright/cli.js install --with-deps ${{ matrix.engine }}
+      # Explicit setup builds the exact pinned FogVault checkout inside Core's
+      # ignored target tree. It does not alter the maintained FogVault repository.
+      - name: Prepare pinned installed candidates
+        run: cargo dfv build --fogvault 2>&1 | tee target/fogvault-integration/ci/candidate-preparation.log
+      - name: Verify Core environment and binding freshness
+        run: cargo dfv doctor --save-report 2>&1 | tee target/fogvault-integration/ci/doctor.log
+      - name: Prove verifier failure handling
+        run: python scripts/test-fogvault-verifier.py 2>&1 | tee target/fogvault-integration/ci/verifier-tests.log
+      - name: Verify joint native and installed browser consumers
+        run: cargo dfv check --fogvault --engine ${{ matrix.engine }} 2>&1 | tee target/fogvault-integration/ci/joint-check.log
+      - name: Retain joint reports, candidates and provenance
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: core-fogvault-joint-${{ matrix.engine }}
+          path: |
+            target/dfv/runs/*/build.json
+            target/dfv/runs/*/doctor.json
+            target/fogvault-integration/ci/*.log
+            target/fogvault-integration/*.log
+            target/fogvault-integration/prepared.json
+            target/fogvault-integration/artifacts/*.tgz
+            target/fogvault-integration/check-*/*.json
+            target/fogvault-integration/check-*/*.log
+            target/fogvault-integration/check-*/browser-consumer-*/*.log
+            target/fogvault-integration/check-*/browser-consumer-*/artifacts/*.tgz
+            target/fogvault-integration/check-*/browser-consumer-*/package-lock.json
+          if-no-files-found: error
