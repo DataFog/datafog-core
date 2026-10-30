@@ -1,6 +1,6 @@
-import {createRequire} from 'node:module';
+import {loadNative} from './native-loader.mjs';
 import {types} from 'node:util';
-const {NativeOwner}=createRequire(import.meta.url)('./addon.node');
+const {NativeOwner}=loadNative();
 const owners=new WeakMap(), changes=new WeakMap(), streams=new WeakMap();
 // Held values retain the owner, never their target. Cleanup only releases
 // abandoned handles; it cannot save, activate or approve a candidate.

@@ -31,6 +31,7 @@ export function canonicalWorkspaceValue(value) {
   return value;
 }
 export function runWorkspaceContract(api,fixture) {
+  if(typeof api.workspaceContractVersion!=="function" || api.workspaceContractVersion()!==1)bad();
   if(fixture.schemaVersion!==1 || !Array.isArray(fixture.cases) || fixture.cases.length===0)bad();
   if(typeof api.Workspace?.create!=="function" || typeof api.Workspace?.openBundle!=="function" || !Array.isArray(fixture.requiredMethods))bad();
   for(const method of fixture.requiredMethods) {

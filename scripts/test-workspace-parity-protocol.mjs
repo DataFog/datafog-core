@@ -8,7 +8,7 @@ const fixture={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",comma
 const valid={schemaVersion:1,profile:"protocol-test",cases:[{id:"strict",steps:[{call:"restore",ok:false,error:{code:"invalid_marker",inputIndex:null,findingIndex:null,markerIssues:[],reviewConflicts:[]}}]}]};
 test("missing runtime methods fail before any workspace operation",()=>{
   let called=false;
-  assert.throws(()=>runWorkspaceContract({Workspace:{create(){called=true;},openBundle(){},prototype:{}}},{schemaVersion:1,requiredMethods:["prepareReview"],cases:[{id:"required",commands:[{call:"create"}]}]}));
+  assert.throws(()=>runWorkspaceContract({workspaceContractVersion:()=>1,Workspace:{create(){called=true;},openBundle(){},prototype:{}}},{schemaVersion:1,requiredMethods:["prepareReview"],cases:[{id:"required",commands:[{call:"create"}]}]}));
   assert.equal(called,false);
 });
 test("malformed, missing and unlike operation results cannot qualify",()=>{
@@ -31,6 +31,8 @@ test("retained historical wheels do not replace or ambiguate the authoritative c
   for(const names of [[],[old],[current,'datafog_core-0.5.0b2-cp310-abi3-manylinux_2_17_x86_64.whl']]) assert.throws(()=>selectWorkspaceWheel(names,project));
   for(const invalid of ["",'[tool.maturin]\nversion = "0.5.0b2"',project.replace('version = "0.5.0b2"','version = "0.5.0b2"\nversion = "0.5.0b1"')]) assert.throws(()=>selectWorkspaceWheel([current],invalid));
   assert.deepEqual(selectWorkspaceWheel([current],"[project]\nname='datafog-core'\nversion='0.5.0b2'\n"),{filename:current,version:"0.5.0b2"});
+  const stable="datafog_core-1.0.0-cp310-abi3-macosx_11_0_arm64.whl";
+  assert.deepEqual(selectWorkspaceWheel([old,current,stable],'[project]\nname="datafog-core"\nversion="1.0.0"\n'),{filename:stable,version:"1.0.0"});
 });
 
 test("streaming qualification requires both modes, every command and complete delivery/range metadata",()=>{
@@ -58,7 +60,7 @@ test("operation profile cannot skip missing native methods or its required calls
     class Workspace {static create(){called=true;}static createWithOperation(){called=true;}static openBundle(){}}
     for(const method of operationMethods)if(method!=="createWithOperation")Workspace.prototype[method]=()=>{};
     delete (missing==="createWithOperation"?Workspace:Workspace.prototype)[missing];
-    assert.throws(()=>runWorkspaceContract({Workspace},{schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"required",commands:[{call:"createWithOperation"}]}]}));
+    assert.throws(()=>runWorkspaceContract({workspaceContractVersion:()=>1,Workspace},{schemaVersion:1,profile:"workspace-operations-v1",requiredMethods:operationMethods,cases:[{id:"required",commands:[{call:"createWithOperation"}]}]}));
     assert.equal(called,false);
   }
 });
@@ -212,7 +214,7 @@ test("conversation plan metadata requires exact full heads, bytes and owned inte
 });
 test("missing conversation runtime methods cannot fall back to compatibility restoration",()=>{
   let touched=false;
-  const api={Workspace:{create(){touched=true;},openBundle(){},prototype:{restore(){touched=true;}}}};
+  const api={workspaceContractVersion:()=>1,Workspace:{create(){touched=true;},openBundle(){},prototype:{restore(){touched=true;}}}};
   assert.throws(()=>runWorkspaceContract(api,{schemaVersion:1,requiredMethods:["prepareConversationSend"],cases:[{id:"required",commands:[{call:"create"}]}]}));
   assert.equal(touched,false);
 });
@@ -225,4 +227,13 @@ test("JavaScript heads reject numeric SDK revisions before representation normal
   }
   assert.deepEqual(verifyActualJavaScriptHeadRejection({head}),{actualHeads:1,numericRevisionRejected:true});
   assert.throws(()=>verifyActualJavaScriptHeadRejection({}));
+});
+
+test("workspace contract identifier must come from the installed SDK before operations",()=>{
+  for(const getter of [undefined,()=>0,()=>2,()=>"1"]) {
+    let touched=false;
+    const api={workspaceContractVersion:getter,Workspace:{create(){touched=true;},openBundle(){},prototype:{}}};
+    assert.throws(()=>runWorkspaceContract(api,{schemaVersion:1,requiredMethods:[],cases:[{id:"version",commands:[{call:"create"}]}]}));
+    assert.equal(touched,false);
+  }
 });

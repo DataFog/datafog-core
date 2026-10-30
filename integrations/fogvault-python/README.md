@@ -1,6 +1,6 @@
 # Optional native Python Core–FogVault owner
 
-`datafog_fogvault` is a separate, unpublished `0.0.0` ABI3 extension for Python
+`datafog_fogvault` is a separate, unpublished `1.0.0` candidate ABI3 extension for Python
 3.10+. It delegates persistence, session authority and save/activation to the
 existing Rust `datafog-fogvault-native::Owner`; it does not load browser WASM,
 duplicate encryption, or change the existing `datafog_core` Python package.

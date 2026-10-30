@@ -18,8 +18,9 @@ cargo +1.94.1 run --manifest-path integrations/fogvault-native/Cargo.toml --prof
 ```
 
 The integration has its own workspace, lockfile and Rust 1.94.1 qualification
-toolchain. Its declared minimum is Rust 1.89, verified with the same eleven tests
-on Rust 1.89.0; Core itself remains at Rust 1.88.
+toolchain. Its declared minimum is Rust 1.89. The native gate runs ten external
+consumer tests and one internal lost-acknowledgment test; the registry archive
+consumer runs the ten external tests. Core itself remains at Rust 1.88.
 Invoking Cargo with `--manifest-path` from Core's root does not select the nested
 toolchain, so the explicit `+1.94.1` matters. Core's Rust 1.88 baseline remains
 unchanged. The current Core dependency is a repository-relative path; FogVault is

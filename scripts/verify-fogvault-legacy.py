@@ -8,7 +8,7 @@ import sys
 from fogvault_inputs import core_build_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
-REV = "6c6176a3a9df320447ba42b924b26de7ac4d693a"
+REV = "220aaec145fe67f4c96d468d6858445020b88cd3"
 
 def validate(path):
     data = json.loads(path.read_text())

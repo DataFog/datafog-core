@@ -1272,10 +1272,17 @@ fn scan_and_transform_structured(
     structured_transform_result(py, result)
 }
 
+/// Workspace API contract implemented by this compiled Core.
+#[pyfunction]
+fn workspace_contract_version() -> u32 {
+    core::workspace::WORKSPACE_CONTRACT_VERSION
+}
+
 #[pymodule]
 fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     models::register(module)?;
     workspace::register(module)?;
+    module.add_function(wrap_pyfunction!(workspace_contract_version, module)?)?;
     module.add(
         "DataFogConfigurationError",
         module.py().get_type::<DataFogConfigurationError>(),

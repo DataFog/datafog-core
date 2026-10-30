@@ -1,27 +1,40 @@
 name: Browser model
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "spike/gliner2-browser/**"
-      - "bindings/wasm/**"
-      - "crates/core/**"
+      - "bindings/**"
+      - "integrations/**"
+      - "crates/**"
+      - "scripts/**"
+      - "fixtures/**"
+      - "docs/contracts/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".nvmrc"
+      - ".cargo/**"
       - ".github/workflows/browser-model.yml"
       - "examples/workspace-extension/**"
-      - "scripts/test-model-extension.mjs"
   push:
     branches: [main]
     paths:
       - "spike/gliner2-browser/**"
-      - "bindings/wasm/**"
-      - "crates/core/**"
+      - "bindings/**"
+      - "integrations/**"
+      - "crates/**"
+      - "scripts/**"
+      - "fixtures/**"
+      - "docs/contracts/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".nvmrc"
+      - ".cargo/**"
       - ".github/workflows/browser-model.yml"
       - "examples/workspace-extension/**"
-      - "scripts/test-model-extension.mjs"
 
 permissions:
   contents: read
@@ -33,7 +46,7 @@ concurrency:
 jobs:
   extraction:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: spike/gliner2-browser
@@ -55,7 +68,13 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo install wasm-bindgen-cli --version "$(../../scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix ../../bindings/wasm
-      - run: npm run build --prefix ../../bindings/wasm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install maturin==1.14.1
+      - name: Build current Core SDK candidates for verifier prerequisites
+        working-directory: .
+        run: cargo dfv build
       - run: npm ci
       - run: npm run download-model
       - run: npx playwright install --with-deps chromium
@@ -63,6 +82,17 @@ jobs:
       - run: npm ci --prefix ../../examples/workspace-extension
       - name: Verify candidate tarball in an unpacked MV3 extension
         run: npm run test:model-extension --prefix ../../examples/workspace-extension
+      - name: Qualify installed SDK contracts and approved-value recall
+        working-directory: .
+        run: cargo dfv check --core-sdk --json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-sdk-qualification
+          path: |
+            target/core-sdk-qualification/
+            target/dfv/runs/
+          retention-days: 30
       - if: always()
         uses: actions/upload-artifact@v4
         with:

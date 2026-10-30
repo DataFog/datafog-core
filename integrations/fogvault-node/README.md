@@ -1,7 +1,7 @@
 # Optional native Node Core–FogVault integration candidate
 
 `@datafog/core-fogvault-node` owns the Rust Core–FogVault adapter in a native
-N-API addon. The current package is private/unpublished `0.0.0`, for source and
+N-API addon. The current package is unpublished `1.0.0` candidate, for source and
 packed-candidate evaluation. It is not a production qualification or v1 freeze.
 Existing `@datafog/node` remains independent and retains its Rust 1.88 floor.
 This optional isolated package builds with Rust 1.94.1 and uses Node 24+.
@@ -19,8 +19,21 @@ That command builds a fresh release addon, runs Rust boundary tests, packs it,
 installs the tarball into an isolated consumer without install scripts, compiles
 positive/negative TypeScript usage, and executes the real installed addon against
 synthetic SQLite/control namespaces. Source/tool/log, tarball and installed-addon
-hashes are retained with the report. A candidate tarball contains only the
-current machine's addon: cross-platform registry distribution remains separate.
+hashes are retained with the report. A local build packs one explicitly tagged
+native binary and a checksum manifest. CI retains the actually qualified binary
+from each existing runner (`ubuntu-24.04`, `macos-15`, `windows-2025`), checks their
+source revision, public package files, installed tests and checksums, then assembles
+one nonpublishing candidate archive. That archive is installed and exercised on
+Linux without rebuilding its binaries. The assembly manifest records the exact
+observed platform/architecture set, including the macOS runner's actual architecture.
+
+The supported distribution scope is Linux x64 with GNU libc, Windows x64/MSVC,
+and the macOS architecture actually provided and qualified by `macos-15` (arm64
+or x64). This does not promise both macOS architectures in every archive. Linux
+musl, Linux arm64 and all other unqualified targets fail with an informative
+`unsupported_native_target` error; there is no download or source-build fallback.
+A missing manifest, absent selected binary or checksum mismatch fails closed.
+No registry package is published by assembly.
 The package itself has no runtime npm dependencies. TypeScript is a pinned
 repository-only development tool.
 

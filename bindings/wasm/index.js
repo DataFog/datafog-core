@@ -9,6 +9,7 @@ import initWasm, {
   restore as restoreWasm,
   transform as transformWasm,
   NativeWorkspace,
+  workspace_contract_version as nativeWorkspaceContractVersion,
   workspace_byte_range_from_utf16 as nativeWorkspaceByteRange,
 } from "./dist/datafog_wasm.js";
 
@@ -30,6 +31,12 @@ export function init() {
   }
 
   return initialization;
+}
+
+/** Workspace behavior contract. Call after await init(); pre-init calls fail closed. */
+export function workspaceContractVersion() {
+  assertInitialized("workspaceContractVersion");
+  return nativeWorkspaceContractVersion();
 }
 
 export class DataFogError extends Error {

@@ -583,15 +583,10 @@ export interface PreparedStructuredScan {
   selectors: Array<KeySelector>
 }
 
-export declare function prepareScanAndTransform(text: string, config: ScanAndTransformConfig): PreparedScanAndTransform
 
-export declare function prepareStructuredScanAndTransform(text: string, config: unknown): PreparedStructuredScan
 
-export declare function requiredKeySelectors(text: string, findings: FindingInput[], config: TransformationConfig): Array<KeySelector>
 
-export declare function requiredRestoreItems(text: string, context: PrivacyContext): Array<RestoreItem>
 
-export declare function requiredTokenizationItems(text: string, findings: FindingInput[], config: TransformationConfig, context?: PrivacyContext | undefined): Array<TokenizeItem>
 
 export interface ResolvedKeyInput {
   selectorIndex: number
@@ -627,7 +622,6 @@ export interface RestoreResult {
   readonly restorations: Array<Restoration>
 }
 
-export declare function restoreWithResults(text: string, context: PrivacyContext, results: Array<RestoredValueInput>): RestoreResult
 
 /** Scan text for supported PII findings. */
 export declare function scan(text: string, config?: ScanConfig | undefined): Array<Finding>
@@ -648,34 +642,27 @@ export interface StructuredFindingInput {
 }
 
 /** Scan text and transform the detected findings. */
-export declare function structuredRequiredKeySelectors(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): Array<KeySelector>
 
-export declare function structuredRequiredRestoreItems(text: JsonDocument, context: PrivacyContext): Array<RestoreItem>
 
-export declare function structuredRequiredTokenizationItems(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context?: PrivacyContext | undefined): Array<TokenizeItem>
 
 export interface StructuredRestoration {
   path: string
   restoration: Restoration
 }
 
-export declare function structuredRestoreWithResults(text: JsonDocument, context: PrivacyContext, results: Array<RestoredValueInput>): NativeStructuredRestoreResult
 
-export declare function structuredScanAndTransform(text: JsonDocument, config: StructuredScanAndTransformConfig): NativeStructuredTransformResult
 
 export interface StructuredScanResult {
   mappings: Array<FieldMapping>
   findings: Array<StructuredFinding>
 }
 
-export declare function structuredTransform(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig): NativeStructuredTransformResult
 
 export interface StructuredTransformation {
   path: string
   transformation: Transformation
 }
 
-export declare function structuredTransformWithProviderResults(text: JsonDocument, findings: StructuredFindingInput[], config: TransformationConfig, context: PrivacyContext | undefined, resolvedKeys: Array<ResolvedKeyInput>, tokenResults: Array<TokenizeResultInput>): NativeStructuredTransformResult
 
 export interface TextRange {
   readonly start: number
@@ -721,6 +708,7 @@ export interface TransformResult {
   readonly transformations: Array<Transformation>
 }
 
-export declare function transformWithProviderResults(text: string, findings: FindingInput[], config: TransformationConfig, context: PrivacyContext | undefined, resolvedKeys: Array<ResolvedKeyInput>, tokenResults: Array<TokenizeResultInput>): TransformResult
 
-export declare function transformWithResolvedKeys(text: string, findings: FindingInput[], config: TransformationConfig, resolvedKeys: Array<ResolvedKeyInput>): TransformResult
+
+/** Workspace API contract implemented by this compiled Core. */
+export declare function workspaceContractVersion(): number

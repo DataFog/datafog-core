@@ -1,0 +1,515 @@
+{
+  "schemaVersion": 1,
+  "status": "proposed; freeze requires fresh final v1 artifact qualification and release review",
+  "workspaceContractVersion": 1,
+  "bindings": {
+    "node": {
+      "runtime": "bindings/node/index.js",
+      "declarations": "bindings/node/index.d.ts",
+      "runtimeExports": [
+        "DataFogError",
+        "ModelCancellation",
+        "ModelSession",
+        "ModelSessionNative",
+        "PrivacyManager",
+        "Workspace",
+        "discoverFields",
+        "openModelSession",
+        "scan",
+        "scanAndTransform",
+        "scanAndTransformStructured",
+        "scanStructured",
+        "transform",
+        "transformStructured",
+        "workspaceByteRangeFromUtf16",
+        "workspaceContractVersion"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "ff87cd2458a1531ee475172fd6f3d42d24b8c5d1738040e152ec544a26240dcc"
+    },
+    "wasm": {
+      "runtime": "bindings/wasm/index.js",
+      "declarations": "bindings/wasm/index.d.ts",
+      "runtimeExports": [
+        "DataFogError",
+        "Workspace",
+        "discoverFields",
+        "init",
+        "restore",
+        "restoreStructured",
+        "scan",
+        "scanAndTransform",
+        "scanAndTransformStructured",
+        "scanStructured",
+        "transform",
+        "transformStructured",
+        "workspaceByteRangeFromUtf16",
+        "workspaceContractVersion"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "9016445fc7110e74937f40922b494556ad22bc70d89b2a559305f213be3109b3"
+    },
+    "python": {
+      "runtime": "bindings/python/python/datafog_core/__init__.py",
+      "declarations": "bindings/python/python/datafog_core/__init__.pyi",
+      "runtimeExports": [
+        "DataFogConfigurationError",
+        "DataFogFindingError",
+        "DataFogInternalError",
+        "DataFogKeyProviderError",
+        "DataFogModelError",
+        "DataFogWorkspaceError",
+        "DataFogWorkspaceStreamError",
+        "FieldMapping",
+        "Finding",
+        "ModelCancellation",
+        "ModelScanResult",
+        "ModelSession",
+        "PrivacyManager",
+        "Restoration",
+        "RestoreResult",
+        "StructuredFinding",
+        "StructuredRestoration",
+        "StructuredRestoreResult",
+        "StructuredScanResult",
+        "StructuredTransformResult",
+        "StructuredTransformation",
+        "TextRange",
+        "TransformResult",
+        "Transformation",
+        "Workspace",
+        "WorkspaceBufferedRestore",
+        "WorkspaceFinding",
+        "WorkspaceHead",
+        "WorkspaceInput",
+        "WorkspacePreparedChange",
+        "WorkspaceProgressiveRestore",
+        "WorkspaceReviewCorrection",
+        "WorkspaceReviewInput",
+        "capabilities",
+        "discover_fields",
+        "scan",
+        "scan_and_transform",
+        "scan_and_transform_structured",
+        "scan_structured",
+        "transform",
+        "transform_structured",
+        "workspace_contract_version"
+      ],
+      "declarationOnlyExports": [
+        "_Allow",
+        "_Capabilities",
+        "_CapabilityActivation",
+        "_CapabilityActivationRequired",
+        "_CommonScanConfig",
+        "_EntityCapability",
+        "_Gliner2Config",
+        "_Gliner2Label",
+        "_Gliner2LabelRequired",
+        "_KeyProvider",
+        "_LocaleCapability",
+        "_Mask",
+        "_MaskRequired",
+        "_ModelConfig",
+        "_ModelConfigRequired",
+        "_ModelDescriptor",
+        "_ModelLimits",
+        "_PrivacyContext",
+        "_Pseudonymize",
+        "_PseudonymizeRequired",
+        "_Redact",
+        "_Regex",
+        "_RegexRequired",
+        "_Remove",
+        "_ResolvedKey",
+        "_ResolvedKeyObject",
+        "_RestoreItem",
+        "_RestoreResult",
+        "_RestoreResultObject",
+        "_Reveal",
+        "_ScanAndTransformConfig",
+        "_ScanAndTransformRequired",
+        "_ScanConfig",
+        "_StructuredScanAndTransformConfig",
+        "_StructuredScanConfig",
+        "_TokenProvider",
+        "_Tokenize",
+        "_TokenizeItem",
+        "_TokenizeResult",
+        "_TokenizeResultObject",
+        "_TransformRequired",
+        "_TransformationConfig",
+        "_WorkspaceChoice",
+        "_WorkspaceChoiceEdit",
+        "_WorkspaceChoicePreview",
+        "_WorkspaceConversation",
+        "_WorkspaceConversationInput",
+        "_WorkspaceConversationState",
+        "_WorkspaceCounts",
+        "_WorkspaceFindingRange",
+        "_WorkspaceFindingValue",
+        "_WorkspaceHeadValue",
+        "_WorkspaceHistoryCoverage",
+        "_WorkspaceMarkerIssue",
+        "_WorkspaceOperation",
+        "_WorkspaceOperationPage",
+        "_WorkspaceOperationRecord",
+        "_WorkspaceOutcome",
+        "_WorkspacePolicy",
+        "_WorkspacePolicyEdits",
+        "_WorkspacePolicyPreview",
+        "_WorkspacePreview",
+        "_WorkspaceRange",
+        "_WorkspaceRecall",
+        "_WorkspaceRecallFinding",
+        "_WorkspaceRestoreChunk",
+        "_WorkspaceRestoreProgress",
+        "_WorkspaceRestoreReport",
+        "_WorkspaceReview",
+        "_WorkspaceReviewCandidate",
+        "_WorkspaceReviewConflict",
+        "_WorkspaceRule",
+        "_WorkspaceRuleEdit",
+        "_WorkspaceRulePreview",
+        "_WorkspaceSendIntent",
+        "_WorkspaceSnapshotFormat",
+        "_WorkspaceTransformation"
+      ],
+      "declarationsSha256": "468e864191710d8ce10ccca4a7c02052d5d2df07946bea8b943d63678cc4a427"
+    }
+  },
+  "workspaceErrorCodes": [
+    "closed_workspace",
+    "conversation_pending",
+    "conversation_unknown",
+    "inactive_plan",
+    "inactive_stream",
+    "invalid_batch",
+    "invalid_conversation",
+    "invalid_encoding",
+    "invalid_finding",
+    "invalid_marker",
+    "invalid_operation",
+    "invalid_operation_id",
+    "invalid_policy",
+    "invalid_send_intent",
+    "invalid_snapshot",
+    "operation_reused",
+    "resource_limit",
+    "review_conflict",
+    "workspace_conflict"
+  ],
+  "snapshot": {
+    "writerVersion": 3,
+    "readerVersions": [
+      1,
+      2,
+      3
+    ],
+    "keys": [
+      {
+        "id": 0,
+        "meaning": "version",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 1,
+        "meaning": "namespace",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 2,
+        "meaning": "head",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 3,
+        "meaning": "entries",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 4,
+        "meaning": "label counters",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 5,
+        "meaning": "reserved empty array",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 6,
+        "meaning": "policy",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 7,
+        "meaning": "protected choices",
+        "missingFieldFixture": "fixtures/workspace/backup-current-fields.json"
+      },
+      {
+        "id": 8,
+        "meaning": "operations",
+        "missingFieldFixture": "fixtures/workspace/backup-operation-fields.json"
+      },
+      {
+        "id": 9,
+        "meaning": "conversations and send intents",
+        "missingFieldFixture": "fixtures/workspace/backup-operation-fields.json"
+      },
+      {
+        "id": 10,
+        "meaning": "recorded counts",
+        "missingFieldFixture": "fixtures/workspace/backup-operation-fields.json"
+      }
+    ]
+  },
+  "behaviorFixtures": [
+    {
+      "path": "fixtures/workspace/sdk-contract-v1.json",
+      "requiredMethods": [
+        "create",
+        "openBundle",
+        "head",
+        "namespace",
+        "exportBundle",
+        "prepare",
+        "prepareBatch",
+        "prepareReview",
+        "preparePolicyChanges",
+        "prepareRecovery",
+        "review",
+        "recall",
+        "restore",
+        "restoreReport",
+        "activateSaved",
+        "close",
+        "plan.heads",
+        "plan.previews",
+        "plan.exportCandidateBundle",
+        "plan.discard",
+        "plan.snapshotFormat",
+        "plan.policyPreview"
+      ],
+      "caseIds": [
+        "unicode-persist-recall-policy-recovery",
+        "review-conflicts-and-correction",
+        "batch-markers-lifetimes",
+        "legacy-v1-upgrade-full-uint64",
+        "shared-review-disjoint-person-ssn",
+        "shared-review-exact-duplicate-origins",
+        "shared-review-native-ssn-equal-person",
+        "shared-review-spoofed-ssn-type-conflict",
+        "shared-review-containing-person-keeps-ssn-covered",
+        "shared-review-crossing-person-ssn",
+        "shared-review-crossing-person-ssn-reversed",
+        "shared-review-unicode-crossing",
+        "shared-review-narrow-waiver-keeps-wider-protected",
+        "shared-review-exact-waiver-removes-only-target-obligation",
+        "shared-review-invalid-waived-finding",
+        "unicode-normalization-boundaries-no-fuzzy-recall",
+        "committed-recall-retains-all-crossing-protected-spans"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/operation-contract-v1.json",
+      "requiredMethods": [
+        "create",
+        "createWithOperation",
+        "openBundle",
+        "head",
+        "namespace",
+        "exportBundle",
+        "prepare",
+        "prepareBatch",
+        "prepareWithOperation",
+        "prepareBatchWithOperation",
+        "prepareRecovery",
+        "prepareRecoveryWithOperation",
+        "preparePolicyChanges",
+        "prepareOutcome",
+        "operations",
+        "operationsPage",
+        "counts",
+        "historyCoverage",
+        "restore",
+        "restoreReport",
+        "activateSaved",
+        "close",
+        "plan.heads",
+        "plan.previews",
+        "plan.exportCandidateBundle",
+        "plan.discard",
+        "plan.snapshotFormat",
+        "plan.policyPreview"
+      ],
+      "caseIds": [
+        "timed-unicode-batch-atomic-save-pages-reopen",
+        "v1-unknown-history-noop-discard-and-timed-upgrade",
+        "v2-unknown-history-noop-discard-and-timed-upgrade",
+        "legacy-unknown-times-explicit-outcomes-policy-and-recovery",
+        "legacy-versus-explicit-current-mapping-settings-history-replay",
+        "discard-stale-siblings-close-and-no-automatic-history",
+        "bounded-reads-errors-ranges-and-failures-never-write"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/conversation-contract-v1.json",
+      "requiredMethods": [
+        "create",
+        "createWithOperation",
+        "openBundle",
+        "head",
+        "namespace",
+        "exportBundle",
+        "prepare",
+        "prepareRecoveryWithOperation",
+        "counts",
+        "operations",
+        "historyCoverage",
+        "activateSaved",
+        "close",
+        "restoreReport",
+        "prepareConversationSend",
+        "prepareObservedSend",
+        "prepareDefinitelyNotSent",
+        "conversation",
+        "conversationForSite",
+        "sendIntentStatus",
+        "restoreInConversation",
+        "restoreReportInConversation",
+        "bufferedRestoreInConversation",
+        "progressiveRestoreInConversation",
+        "plan.heads",
+        "plan.previews",
+        "plan.exportCandidateBundle",
+        "plan.discard",
+        "plan.snapshotFormat",
+        "plan.policyPreview",
+        "plan.sendIntents"
+      ],
+      "caseIds": [
+        "partial-batch-first-chat-reopen-recovery",
+        "isolated-contexts-and-eligible-counts-on-strict-failure",
+        "scoped-utf8-utf16-and-repeated-marker-counts",
+        "scoped-late-failure-no-partial-final-response",
+        "scoped-stream-epoch-noop-and-owner-close",
+        "immutable-binding-bounds-and-atomic-rejections",
+        "legacy-v1-exact-noop-and-explicit-context-upgrade",
+        "legacy-v2-exact-noop-and-explicit-context-upgrade"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/streaming-contract-v1.json",
+      "requiredMethods": [],
+      "caseIds": [
+        "live-marker-and-late-failure-reset",
+        "eof-prefix",
+        "oversized-prefix",
+        "bare-code-at-eof",
+        "unknown-marker",
+        "utf8-scalar-split",
+        "invalid-utf8",
+        "utf16-surrogate-split",
+        "utf16-eof-high-surrogate",
+        "cancel-after-prefix",
+        "changed-head",
+        "closed-workspace",
+        "unicode-late-damaged-original-ranges"
+      ]
+    }
+  ],
+  "relatedContracts": [
+    "docs/contracts/core-v1.md",
+    "docs/contracts/launch-api-0.5.0-beta.2-beta.3.md",
+    "docs/workspace-parity-0.5.0-beta.3.md",
+    "docs/adr/001-privacy-core-contract.md",
+    "docs/model-sessions.md",
+    "docs/model-manifests.md",
+    "docs/browser-model.md"
+  ],
+  "integrationBindings": {
+    "fogvault-node": {
+      "runtime": "integrations/fogvault-node/index.mjs",
+      "declarations": "integrations/fogvault-node/index.d.ts",
+      "runtimeExports": [
+        "DataFogVaultError",
+        "NativeWorkspace",
+        "PreparedChange",
+        "RestoreStream"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "4e7ef6ef1530196ad0243e19090f68a771f847f302b1b488901e076b0180ee8c"
+    },
+    "fogvault-browser": {
+      "runtime": "integrations/fogvault-browser/index.mjs",
+      "declarations": "integrations/fogvault-browser/index.d.ts",
+      "runtimeExports": [
+        "FogVaultWorkspace",
+        "WorkspaceVaultError"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "b84cd04f644658f0f00cbb100a2ada0fd1d9dfba2bfff4c6471012633ac47773"
+    },
+    "fogvault-legacy-browser": {
+      "runtime": "integrations/fogvault-legacy-browser/index.mjs",
+      "declarations": "integrations/fogvault-legacy-browser/index.d.ts",
+      "runtimeExports": [
+        "LegacyBackupImport",
+        "LegacyImportError"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "8fdf3addb03592d9a64f00fc6c8b38967dc35d3f5d42fd717e3c76d6c5a64ad3"
+    },
+    "fogvault-python": {
+      "runtime": "integrations/fogvault-python/src/lib.rs",
+      "declarations": "integrations/fogvault-python/datafog_fogvault.pyi",
+      "runtimeKind": "pyo3",
+      "runtimeSources": [
+        "integrations/fogvault-python/src/stream.rs"
+      ],
+      "runtimeExports": [
+        "FogVaultWorkspaceError",
+        "NativeWorkspace",
+        "PreparedChange",
+        "RestoreStream",
+        "WorkspaceHead",
+        "__version__"
+      ],
+      "declarationOnlyExports": [],
+      "declarationsSha256": "0007b8bd0d950ec52f098ed6cedb8f118342b5281acd61c7122703395706274d"
+    }
+  },
+  "rustIntegrations": [
+    {
+      "source": "integrations/fogvault-native/src/lib.rs",
+      "publicItems": [
+        "core (re-export)",
+        "vault (re-export)",
+        "BINDING_BYTES",
+        "Binding",
+        "Error",
+        "Result<T>",
+        "Change",
+        "Committed",
+        "Owner"
+      ],
+      "review": "Manual source API signature/DTO/generic and lifetime review; not a private implementation hash or stable binary ABI claim. Native unit and installed consumer tests are required.",
+      "tests": [
+        "integrations/fogvault-native/tests/native.rs"
+      ]
+    },
+    {
+      "source": "integrations/fogvault-migration/src/lib.rs",
+      "publicItems": [
+        "MigrationError",
+        "RecoveryCandidate",
+        "stage_authenticated_bundle"
+      ],
+      "review": "Manual source API signature/DTO/lifetime review; not a stable binary ABI claim. Authenticated-source recovery tests are required.",
+      "tests": [
+        "integrations/fogvault-migration/tests/recovery.rs"
+      ]
+    }
+  ]
+}

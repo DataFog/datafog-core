@@ -32,6 +32,8 @@ def text_value(command):
 
 
 def run(fixture):
+    if api.workspace_contract_version() != 1:
+        raise ValueError("workspace contract version mismatch")
     if fixture["schemaVersion"] != 1 or not fixture["cases"]:
         raise ValueError("invalid workspace fixture")
     if not all(hasattr(api, name) for name in ("Workspace", "WorkspaceFinding", "WorkspaceInput", "WorkspaceReviewInput", "WorkspaceReviewCorrection", "DataFogWorkspaceError")):

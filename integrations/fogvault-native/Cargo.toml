@@ -1,18 +1,18 @@
 [package]
 name = "datafog-fogvault-native"
-version = "0.0.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.89"
-publish = false
 license = "MIT"
 description = "Optional native persistence integration for DataFog Core workspaces"
+readme = "README.md"
 
 [workspace]
 
 [dependencies]
-datafog-fogvault-migration = { path = "../fogvault-migration" }
-datafog-core = { path = "../../crates/core", default-features = false }
-fogvault-native = { git = "https://github.com/DataFog/fogvault.git", rev = "6c6176a3a9df320447ba42b924b26de7ac4d693a", default-features = false }
+datafog-fogvault-migration = { version = "1.0.0", path = "../fogvault-migration" }
+datafog-core = { version = "1.0.0", path = "../../crates/core", default-features = false }
+fogvault-native = { version = "0.1.0", git = "https://github.com/DataFog/fogvault.git", rev = "220aaec145fe67f4c96d468d6858445020b88cd3", default-features = false }
 zeroize = "=1.9.1"
 
 [dev-dependencies]

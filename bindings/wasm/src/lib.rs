@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 mod workspace;
 
+/// Workspace API contract implemented by this initialized WASM Core.
+#[wasm_bindgen]
+pub fn workspace_contract_version() -> u32 {
+    datafog_core::workspace::WORKSPACE_CONTRACT_VERSION
+}
+
 #[derive(Default, Deserialize, Serialize)]
 struct TextRange {
     start: usize,

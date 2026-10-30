@@ -1,6 +1,6 @@
 [package]
 name = "datafog-core-python"
-version = "0.5.0-beta.3"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Python bindings for datafog-core"
@@ -12,7 +12,7 @@ name = "datafog_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-datafog-core = { version = "0.5.0-beta.3", path = "../../crates/core", features = ["models"] }
+datafog-core = { version = "1.0.0", path = "../../crates/core", features = ["models"] }
 pyo3 = { version = "0.29", features = ["abi3-py310"] }
 pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
 serde_json = "1"

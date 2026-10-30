@@ -89,7 +89,7 @@ def validate_producers(node, python):
     if node["artifacts"]["sourceAddon"]["sha256"] != node["artifacts"]["installedAddon"]["sha256"]:
         raise ValueError("Installed Node addon differs")
     installed_node = Path(node["artifacts"]["consumerPath"]) / "node_modules/@datafog/core-fogvault-node"
-    for name in ("index.mjs", "index.d.ts", "LICENSE", "README.md", "package.json"):
+    for name in ("index.mjs", "index.d.ts", "native-loader.mjs", "LICENSE", "README.md", "package.json"):
         if sha(installed_node / name) != sha(ROOT / "integrations/fogvault-node" / name):
             raise ValueError("Installed Node runtime/types differ from current source")
     with tarfile.open(node["artifacts"]["tarball"]["path"], "r:gz") as archive:

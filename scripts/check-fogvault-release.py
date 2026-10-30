@@ -1,4 +1,4 @@
-"""Read-only v1+ publication gate for exact-commit Core/FogVault qualification.
+"""Read-only v1+ publication gate for exact-commit Core/FogVault/SDK qualification.
 
 Unlike the older model gate, this gate has no documentation-only ancestry
 exception. Only same-repository push or manual workflow runs qualify; PR
@@ -19,7 +19,9 @@ REQUIRED = {
         *(f"Core–FogVault native / {platform}" for platform in PLATFORMS),
         *(f"Core–FogVault joint / {engine}" for engine in ("chromium", "firefox", "msedge")),
     },
+    "browser-model.yml": {"extraction"},
     "fogvault-native-languages.yml": {
+        "Core–FogVault unified Node archive",
         *(f"Core–FogVault Node/Python / {platform}" for platform in PLATFORMS),
     },
 }

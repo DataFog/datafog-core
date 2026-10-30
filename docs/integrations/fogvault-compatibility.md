@@ -1,5 +1,19 @@
 # Core–FogVault compatibility and release boundaries
 
+**October 30 scope update:** the owner-approved [Core v1 release scope](../core-v1-release-scope.md)
+supersedes the original joint-product launch assumptions recorded below. Core
+SDKs and adapters are 1.0.0 candidates; FogVault is a separate 0.1.0 candidate.
+Its [distribution proof](https://github.com/DataFog/fogvault/blob/staging/docs/packaging.md)
+now covers real archives and an offline registry-only beta.3 consumer. Public
+registry availability remains untested until separately authorized publication.
+G1 and shipping-extension G2/G4 evidence remain unfinished product work; no
+synthetic SDK test is recorded as their acceptance.
+
+## Original integration assessment (historical)
+
+The original release conditions in this assessment are superseded by the scope
+update above. The original findings and source identities are preserved for review.
+
 This work targets the Core-owned optional integration. The inspected baselines
 are Core [`1ffd46a`](https://github.com/DataFog/datafog-core/tree/1ffd46accb7132083e562e1048ced951fd642c65)
 and FogVault [`6c6176a`](https://github.com/DataFog/fogvault/tree/6c6176a3a9df320447ba42b924b26de7ac4d693a).

@@ -1,5 +1,6 @@
 """Synthetic installed-wheel contracts; never a physical-provider qualification."""
 import gc
+from importlib.metadata import version
 import json
 from pathlib import Path
 import secrets
@@ -66,9 +67,9 @@ class InstalledOwnerTests(unittest.TestCase):
         return owner.commit(TENANT, plan, True, identity()), plan, preview
 
     def test_installed_native_extension_not_source_wrapper(self):
+        self.assertEqual(fv.__version__, version("datafog-fogvault"))
         self.assertTrue(any(Path(fv.__file__).parent.glob("*.so")) or any(Path(fv.__file__).parent.glob("*.pyd")))
         self.assertIn("site-packages", str(fv.__file__))
-        self.assertEqual(fv.__version__, "0.0.0")
         with self.assertRaises(TypeError):
             fv.NativeWorkspace()
         with self.assertRaises(TypeError):

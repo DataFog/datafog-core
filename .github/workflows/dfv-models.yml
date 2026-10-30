@@ -171,10 +171,22 @@ jobs:
 
       - run: cargo dfv build --sdk python
 
-      - name: Install Python wheel for model checks
+      - name: Select current Python wheel for model checks
+        id: model-wheel
         run: |
-          WHEEL=$(ls target/wheels/datafog_core-*.whl)
-          python -m pip install --force-reinstall "${WHEEL}[gliner2]"
+          python - <<'PYTHON'
+          import os
+          from pathlib import Path
+          import tomllib
+          version = tomllib.loads(Path("bindings/python/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          wheels = list(Path("target/wheels").glob("datafog_core-" + version + "-*.whl"))
+          if len(wheels) != 1:
+              raise ValueError("Require exactly one current-version model wheel")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("wheel=" + wheels[0].as_posix() + "\n")
+          PYTHON
+      - name: Install Python wheel for model checks
+        run: python -m pip install --force-reinstall "${{ steps.model-wheel.outputs.wheel }}[gliner2]"
 
       - name: GLiNER2 entity-count gating regression
         run: cargo test -p datafog-core --all-features --test model_gliner2_entity_count

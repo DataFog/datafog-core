@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 from zipfile import ZipFile
+from email.parser import Parser
 
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parents[1]
@@ -103,6 +104,13 @@ def main():
             raise ValueError("Consumer imported a package outside the isolated environment")
         with ZipFile(wheel) as archive:
             names = archive.namelist()
+            metadata = [name for name in names if name.endswith(".dist-info/METADATA")]
+            licenses = [name for name in names if name.endswith(".dist-info/licenses/LICENSE")]
+            if len(metadata) != 1 or len(licenses) != 1 or archive.read(licenses[0]) != (PACKAGE / "LICENSE").read_bytes():
+                raise ValueError("Wheel omitted its exact license notice")
+            description = Parser().parsestr(archive.read(metadata[0]).decode("utf-8")).get_payload()
+            if description.strip() != (PACKAGE / "README.md").read_text(encoding="utf-8").strip():
+                raise ValueError("Wheel metadata omitted its reviewed README")
             if len(names) != len(set(n.casefold() for n in names)):
                 raise ValueError("Wheel has duplicate/colliding members")
             for member in names:

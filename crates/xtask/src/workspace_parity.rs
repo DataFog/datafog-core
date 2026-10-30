@@ -61,6 +61,27 @@ pub fn run_workspace_parity(args: &[String], json_output: bool) -> ExitCode {
             json_output,
         );
     }
+    for script in [
+        "scripts/check-core-contract.py",
+        "scripts/test-core-contract.py",
+    ] {
+        let output = Command::new("python3")
+            .arg(root.join(script))
+            .current_dir(&root)
+            .output();
+        let Ok(output) = output else {
+            return failure("contract inventory check could not start", json_output);
+        };
+        let mut log = output.stdout;
+        log.extend_from_slice(&output.stderr);
+        let name = script.rsplit('/').next().unwrap_or("contract");
+        if fs::write(run.join(format!("{name}.log")), log).is_err() || !output.status.success() {
+            return failure(
+                "contract inventory differs or its evidence is unavailable",
+                json_output,
+            );
+        }
+    }
     let mut command = Command::new("node");
     command
         .arg(root.join("scripts/test-workspace-parity.mjs"))

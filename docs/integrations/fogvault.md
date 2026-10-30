@@ -3,7 +3,7 @@
 Core now has optional native Rust, Node, Python and browser integration
 candidates. They keep Core preparation separate from persistence and activate only after the exact
 candidate has been saved. Core's existing 0.5.0-beta.3 packages and Rust 1.88
-minimum are unchanged. These new integration packages remain unpublished 0.0.0
+minimum are unchanged. These new integration packages remain unpublished 1.0.0
 candidates; this change does not freeze the v1 API or approve a production host.
 
 ## Start here
@@ -36,7 +36,7 @@ cargo dfv check --fogvault
 ```
 
 The explicit FogVault preparation command checks out exact public revision
-`6c6176a3a9df320447ba42b924b26de7ac4d693a` into Core's ignored
+`220aaec145fe67f4c96d468d6858445020b88cd3` into Core's ignored
 `target/fogvault-integration/dependencies/`. It installs that candidate's locked
 build tools, provisions Rust 1.94.1's WASM target, builds/packages it there and
 packs Core's current WASM package. It does not modify an existing FogVault
@@ -80,16 +80,16 @@ are retained in `target/fogvault-language/check-*/`. CI qualifies this installed
 path on Linux, macOS and Windows. It does not qualify production tenant routing,
 physical providers, power cuts or every Python/Node version.
 
-For a future Core v1 release, each existing publish workflow also requires both
-joint CI workflows to have succeeded for the exact candidate commit, including
-all six native/browser scopes and all three native-language OS scopes. Pending,
+For a future Core v1 release, each existing publish workflow also requires all three
+qualification workflows to have succeeded for the exact candidate commit, including
+all six native/browser scopes and all three native-language OS scopes and the installed browser model SDK scope. Pending,
 failed, incomplete or older-commit evidence blocks publication. This gate does
 not publish packages or waive the remaining release approvals.
 
 Both `--fogvault` and `--fogvault-languages` are required joint qualification
 scopes for changes that affect all maintained integrations. Neither publishes
 packages or changes the existing Core beta.3 minimum. The optional packages stay
-unpublished `0.0.0` candidates until the remaining v1 gates close.
+unpublished `1.0.0` candidates until the remaining v1 gates close.
 
 ## Browser extension handoff
 
@@ -116,22 +116,22 @@ Core issue #132 and gate G4. Browser tests use actual installed Core WASM,
 FogVault Worker and IndexedDB; synthetic host observations do not prove real
 chat-site identity or network delivery.
 
-## Remaining v1 gates
+## Release boundary
 
-CSV is owner-deferred from v1. Existing marker/detection qualification (G1/G2),
-complete format/API freeze (G3), exact production-host/provider/security review
-(G4), shipping-extension acceptance and registry release remain separate. The
-open-issue assessment identifies additional native-model fault and current-model
-false-positive dispositions rather than declaring them closed.
+The owner-approved [Core v1 release scope](../core-v1-release-scope.md) separates
+Core SDK qualification from extension-product acceptance. Core requires its
+contract freeze, installed package/parity checks and exact-candidate joint gates.
+External provider preservation and Josh's shipping-site acceptance remain open
+product work; their thresholds have not been lowered or reported as passed.
 
-Recovery staging validates separately authenticated/decrypted source bundles and
-uses Core recovery; it does not decrypt legacy encrypted backup files or invent
-future v1 schema bytes. [Resource observations](fogvault-resource-budget.md)
-include isolated native process peak RSS and support the integrated owners'
-one-active-preparation limit. Combined browser memory, installed-language copy
-costs, device floors, real power loss and every OS/browser remain unqualified. Resolve the
-documented FogVault registry dependency-distribution blockers before publishing
-both products as 1.0.0.
+The integration packages are unpublished 1.0.0 candidates. FogVault is an
+independently versioned 0.1.0 candidate. Its registry graph is verified locally;
+actual public availability and post-publication installation remain later,
+explicitly authorized release actions. CSV is deferred from Core v1.
+
+[Resource observations](fogvault-resource-budget.md) support one pending
+integrated preparation. They do not establish arbitrary device memory budgets,
+physical power-loss guarantees or production key/provider qualification.
 
 The browser portion of `cargo dfv check --fogvault --engine ENGINE` also requires
 an installed import-only reader for the supported **reference** encrypted backup
@@ -143,6 +143,6 @@ uncertain publication with cleanup failure, and fresh reconciliation/reopen.
 Named evidence is retained as `legacy.json` beside `browser.json`.
 
 This covers the non-shipping reference-host format; it does not establish the
-archive provenance or format of Josh's shipping extension. Final v1 schema
-compatibility and production security review remain open gates. See the
+archive provenance or format of Josh's shipping extension. The Core contract review and production extension security review are separate
+release decisions. See the
 [reader scope and resource limits](../../integrations/fogvault-legacy-browser/README.md).

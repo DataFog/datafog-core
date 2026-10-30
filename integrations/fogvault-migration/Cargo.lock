@@ -53,7 +53,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-core"
-version = "0.5.0-beta.3"
+version = "1.0.0"
 dependencies = [
  "base64",
  "hmac",
@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-migration"
-version = "0.0.0"
+version = "1.0.0"
 dependencies = [
  "datafog-core",
  "serde_json",
