@@ -14,18 +14,18 @@ PACKAGE = ROOT / "integrations/fogvault-node"
 def pins():
     channels = []
     for package in ("fogvault-node", "fogvault-python"):
-        text = (ROOT / "integrations" / package / "rust-toolchain.toml").read_text()
+        text = (ROOT / "integrations" / package / "rust-toolchain.toml").read_text(encoding="utf-8")
         match = re.search(r'^channel\s*=\s*"([^"]+)"\s*$', text, re.M)
         if not match:
             raise ValueError("Missing native language Rust toolchain pin")
         channels.append(match[1])
     if channels[0] != channels[1]:
         raise ValueError("Native language Rust toolchain pins disagree")
-    project = (ROOT / "integrations/fogvault-python/pyproject.toml").read_text()
+    project = (ROOT / "integrations/fogvault-python/pyproject.toml").read_text(encoding="utf-8")
     maturin = re.search(r'"maturin==([^"]+)"', project)
     if not maturin:
         raise ValueError("Missing exact maturin build-system pin")
-    engines = json.loads((PACKAGE / "package.json").read_text())["engines"]["node"]
+    engines = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))["engines"]["node"]
     if not re.fullmatch(r">=\d+", engines):
         raise ValueError("Unsupported Node engine pin; require explicit integer minimum")
     return channels[0], maturin[1], int(engines[2:])
@@ -63,7 +63,7 @@ def tools(require_dependencies=True):
         raise ValueError(f"Install maturin=={maturin_pin} explicitly")
     if require_dependencies:
         compiler = PACKAGE / "node_modules/typescript/bin/tsc"
-        pin = json.loads((PACKAGE / "package.json").read_text())["devDependencies"]["typescript"]
+        pin = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))["devDependencies"]["typescript"]
         if not compiler.is_file() or capture([node, str(compiler), "--version"]) != "Version " + pin:
             raise ValueError("Missing/mismatched TypeScript; run prepare-fogvault-languages.py")
     return found, node, npm

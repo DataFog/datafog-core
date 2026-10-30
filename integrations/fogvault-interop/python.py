@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 from datafog_fogvault import NativeWorkspace, WorkspaceHead, FogVaultWorkspaceError
 
-c = json.loads(Path(sys.argv[1]).read_text())
-original = json.loads(Path(c["nodeResult"]).read_text())
+c = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+original = json.loads(Path(c["nodeResult"]).read_text(encoding="utf-8"))
 tenant = c["tenant"]
 ident = lambda name: bytes(c[name])
 expected = WorkspaceHead(int(original["head"]["revision"]), bytes(original["head"]["commitId"]))
@@ -42,6 +42,6 @@ try:
     Path(c["pythonResult"]).write_text(json.dumps({
         "head": {"revision": str(h.revision), "commitId": list(h.commit_id)},
         "marker": marker, "sentMarker": pending["previews"][0],
-    }))
+    }), encoding="utf-8")
 finally:
     owner.close(tenant)

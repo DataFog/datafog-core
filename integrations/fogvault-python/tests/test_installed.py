@@ -259,7 +259,7 @@ class InstalledOwnerTests(unittest.TestCase):
 
     def test_authenticated_recovery_uses_new_destination_and_preserves_source(self):
         fixture = Path(__file__).resolve().parents[3] / "fixtures/workspace/backup-current-fields.json"
-        gold = json.loads(fixture.read_text())["current"]
+        gold = json.loads(fixture.read_text(encoding="utf-8"))["current"]
         raw = bytes.fromhex(gold["bundleHex"])
         source_head = fv.WorkspaceHead(int(gold["head"]["revision"]), bytes(gold["head"]["commitId"]))
         args = (TENANT, self.control, self.vault, PASSWORD, self.record, raw, bytes([41])*16,

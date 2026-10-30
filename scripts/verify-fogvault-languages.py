@@ -184,7 +184,7 @@ def main():
         run("node", [node, str(ROOT / "integrations/fogvault-node/test/run-installed.mjs"), "--output", str(output / "node.json")])
         run("python", [sys.executable, str(ROOT / "integrations/fogvault-python/tests/run-installed.py"), "--output", str(output / "python.json")])
         run("interop", [sys.executable, str(ROOT / "integrations/fogvault-interop/run.py"), "--node-report", str(output / "node.json"), "--python-report", str(output / "python.json"), "--output", str(output / "interop.json")])
-        validate(*(json.loads((output / name).read_text()) for name in ("node.json", "python.json", "interop.json")), output / "node.json", output / "python.json")
+        validate(*(json.loads((output / name).read_text(encoding="utf-8")) for name in ("node.json", "python.json", "interop.json")), output / "node.json", output / "python.json")
         if identity() != before:
             raise ValueError("Current source bytes changed during qualification")
     except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError) as error:
@@ -194,7 +194,7 @@ def main():
               "tools": versions, "commands": commands, "failure": failure,
               "reports": {name: {"path": str(output / (name + ".json")), "sha256": sha(output / (name + ".json"))}
                           for name in ("node", "python", "interop") if (output / (name + ".json")).is_file()}}
-    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"pass": report["pass"], "report": str(output / "report.json")}))
     return 0 if report["pass"] else 1
 
