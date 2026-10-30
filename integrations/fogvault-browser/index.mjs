@@ -53,7 +53,8 @@ export class FogVaultWorkspace {
   }
 
   static async create({Workspace, vault, recordId, namespace, operationId = randomId(), requestId = randomId()}) {
-    bytes16(recordId); bytes16(namespace); bytes16(operationId); bytes16(requestId);
+    const request = bytes16(requestId);
+    bytes16(recordId); bytes16(namespace); bytes16(operationId);
     const workspace = Workspace.create(namespace, operationId);
     const owner = new FogVaultWorkspace(constructorToken, Workspace, vault, recordId, workspace);
     let payload;
@@ -62,7 +63,7 @@ export class FogVaultWorkspace {
       await owner.#requireVacant(0);
       payload = workspace.exportBundle();
       const initial = head(workspace.head());
-      await owner.#save(payload, initial, initial, requestId, 0);
+      await owner.#save(payload, initial, initial, request, 0);
       return owner;
     } catch (error) { owner.#invalidate(); throw error; }
     finally { payload?.fill(0); }
@@ -70,8 +71,8 @@ export class FogVaultWorkspace {
 
   static async open({Workspace, vault, recordId, expectedNamespace, expectedHead}) {
     const identity = bytes16(recordId);
-    if (expectedNamespace !== undefined) bytes16(expectedNamespace);
-    if (expectedHead !== undefined) head(expectedHead);
+    const wantedNamespace = expectedNamespace === undefined ? undefined : bytes16(expectedNamespace);
+    const wantedHead = expectedHead === undefined ? undefined : head(expectedHead);
     let record, workspace;
     try {
       const before = receipt(await vault.receipt());
@@ -85,8 +86,8 @@ export class FogVaultWorkspace {
       }
       const binding = decodeBinding(record.metadata);
       if (!equalBytes(identity, binding.recordId) ||
-          (expectedNamespace !== undefined && !equalBytes(expectedNamespace, binding.namespace)) ||
-          (expectedHead !== undefined && !sameHead(expectedHead, binding.saved))) {
+          (wantedNamespace !== undefined && !equalBytes(wantedNamespace, binding.namespace)) ||
+          (wantedHead !== undefined && !sameHead(wantedHead, binding.saved))) {
         throw new WorkspaceVaultError('binding_mismatch');
       }
       workspace = Workspace.openBundle(record.payload);
@@ -104,7 +105,8 @@ export class FogVaultWorkspace {
   static async importAuthenticatedBundle({Workspace, vault, recordId, bundle, expectedNamespace, expectedHead,
     operationId = randomId(), requestId = randomId(), approved}) {
     if (approved !== true) throw new WorkspaceVaultError('approval_required');
-    bytes16(recordId); bytes16(expectedNamespace); bytes16(operationId); bytes16(requestId); head(expectedHead);
+    const request = bytes16(requestId);
+    bytes16(recordId); bytes16(expectedNamespace); bytes16(operationId); head(expectedHead);
     if (!(bundle instanceof Uint8Array) || bundle.length > 16 * 1024 * 1024) throw new WorkspaceVaultError('invalid_record');
     let workspace, owner, payload;
     try {
@@ -116,8 +118,9 @@ export class FogVaultWorkspace {
       const recovery = workspace.prepareRecovery(operationId), heads = recovery.heads();
       payload = recovery.exportCandidateBundle();
       owner.#receipt = receipt(await vault.receipt()); owner.#checkEpoch(0);
+      await owner.#requireEmptyVault(0);
       await owner.#requireVacant(0);
-      await owner.#save(payload, heads.expectedHead, heads.candidateHead, requestId, 0);
+      await owner.#save(payload, heads.expectedHead, heads.candidateHead, request, 0);
       owner.#checkEpoch(0); workspace.activateSaved(recovery, heads.expectedHead, heads.candidateHead);
       owner.#checkEpoch(0); workspace = null;
       return owner;
@@ -172,6 +175,24 @@ export class FogVaultWorkspace {
     if (after.generation !== this.#receipt.generation || !equalBytes(after.head_digest, this.#receipt.head_digest)) {
       throw new WorkspaceVaultError('reopen_required');
     }
+  }
+
+  async #requireEmptyVault(epoch) {
+    const begun = await this.#vault.beginRecords(); this.#checkEpoch(epoch);
+    try {
+      const captured = receipt(begun.receipt);
+      if (captured.generation !== this.#receipt.generation || !equalBytes(captured.head_digest, this.#receipt.head_digest)) {
+        throw new WorkspaceVaultError('reopen_required');
+      }
+      const page = await this.#vault.recordPage(1); this.#checkEpoch(epoch);
+      const current = receipt(page.receipt);
+      if (current.generation !== captured.generation || !equalBytes(current.head_digest, captured.head_digest)) {
+        throw new WorkspaceVaultError('reopen_required');
+      }
+      if (!Array.isArray(page.records) || page.records.length !== 0 || page.complete !== true) {
+        throw new WorkspaceVaultError('occupied_destination');
+      }
+    } finally { await this.#vault.cancelRecords(); this.#checkEpoch(epoch); }
   }
 
   async #save(payload, parent, saved, requestId, epoch) {

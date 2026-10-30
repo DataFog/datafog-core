@@ -32,8 +32,10 @@ const required = [
   'occupied_creation_rejects_exact_duplicate_request_without_overwrite',
   'complete_head_cas_conflict_closes_stale_owner', 'authenticated_record_and_namespace_substitution_rejected',
   'saved_core_commit_id_mismatch_rejected', 'lost_save_reply_reconciles_without_handoff_or_old_approval',
+  'async_open_expectations_and_creation_request_ids_are_snapshotted',
   'late_confirmed_save_after_lock_never_activates', 'pending_conversation_survives_reopen_and_requires_observed_send',
   'authenticated_bundle_recovery_preserves_aliases_and_refuses_occupied_destination',
+  'authenticated_import_rejects_unrelated_occupied_vault_without_mutation',
   'whole_bundle_growth_samples_and_payload_admission',
 ];
 const commands = [], candidates = {}, installed = {};

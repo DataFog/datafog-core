@@ -95,6 +95,10 @@ the decoded bundle. Supply expected namespace/head when the application has
 trusted expectations. This does not add anti-rollback authority to the browser's
 unanchored offline profile.
 
+Open expectations and request identities are copied before asynchronous work.
+Caller buffer reuse cannot change an in-flight namespace/head expectation or
+the operation identity used for persistence/reconciliation.
+
 The initial adapter writes whole Core bundles. An indexed vault is not evidence
 that these copies fit low-memory devices. I5 must qualify combined costs. Core's
 existing Workspace/snapshot limits and the vault's separately admitted payload,
@@ -102,8 +106,10 @@ metadata and record limits all apply; no limit is silently increased.
 
 `importAuthenticatedBundle` accepts only a separately authenticated/decrypted
 Core bundle with mandatory trusted namespace/full-head expectations and literal
-approval. It uses actual Core recovery to create a fresh head, writes into an
-unoccupied destination record, and binds the authenticated source head as parent.
+approval. It uses actual Core recovery to create a fresh head, requires an empty
+destination vault under a fenced authenticated inventory, and binds the source
+head as parent. Ordinary workspace creation can add a separate vacant record to
+an existing vault; recovery import cannot merge into any occupied vault.
 Even a repeated exact FogVault request ID cannot make occupied creation/import
 succeed. Source credentials and wrappers are not transplanted. Caller-owned
 source bundle bytes remain the caller's cleanup responsibility.

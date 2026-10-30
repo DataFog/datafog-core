@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -50,9 +51,9 @@ def prepare():
     (source.parent / "Cargo.toml").write_text(
         '[workspace]\nmembers = ["fogvault/crates/fogvault-wasm"]\nresolver = "2"\n'
         + 'exclude = ' + json.dumps(sorted(excluded)) + '\n', encoding="utf-8")
-    if not (source.parent / "Cargo.lock").exists():
-        import shutil
-        shutil.copy2(source / "crates/fogvault-wasm/Cargo.lock", source.parent / "Cargo.lock")
+    pinned_lock = source / "crates/fogvault-wasm/Cargo.lock"
+    generated_lock = source.parent / "Cargo.lock"
+    shutil.copy2(pinned_lock, generated_lock)
     core_inputs = core_build_inputs(ROOT)
     run(["cargo", "dfv", "build", "--sdk", "wasm"], ROOT, BASE / "core-build.log")
     run(["npm", "pack", "--ignore-scripts", "--pack-destination", str(artifacts)],
@@ -68,6 +69,8 @@ def prepare():
         source / "packages/browser", BASE / "vault-pack.log", env)
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=source).strip():
         raise RuntimeError("Dependency build changed reviewed source")
+    if sha(generated_lock) != sha(pinned_lock):
+        raise RuntimeError("Generated dependency lock differs from pinned source lock")
     if core_build_inputs(ROOT) != core_inputs:
         raise RuntimeError("Core build/package inputs changed during preparation")
     # Browser installation is an intentional preparation step, never part of check.
@@ -78,6 +81,7 @@ def prepare():
              "vault_tarball": artifacts / "datafog-fogvault-browser-0.0.0.tgz"}
     report = {"schema": "datafog-fogvault-preparation/v1", "pass": True,
               "fogvault_commit": REV,
+              "fogvault_lock_sha256": sha(pinned_lock),
               "fogvault_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"],
                                                         cwd=source, text=True).strip(),
               "core_commit": subprocess.check_output(["git", "rev-parse", "HEAD"],
