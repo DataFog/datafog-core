@@ -1,0 +1,29 @@
+{
+  "name": "@datafog/core-fogvault-browser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Optional Core-owned Workspace adapter for the maintained FogVault browser owner",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "types": "./index.d.ts",
+  "files": [
+    "index.mjs",
+    "binding.mjs",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@datafog/wasm": "0.5.0-beta.3",
+    "@datafog/fogvault-browser": "0.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

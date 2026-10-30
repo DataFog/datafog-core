@@ -4,6 +4,7 @@ mod check;
 mod doctor;
 mod engines;
 mod eval;
+mod fogvault;
 mod models;
 mod parity;
 mod report;
@@ -26,9 +27,17 @@ fn main() -> ExitCode {
 
     match cmd.as_str() {
         "doctor" => doctor::run_doctor(&args[1..], json_output),
-        "build" => build::run_build(&args[1..], json_output),
+        "build" => {
+            if args[1..].iter().any(|arg| arg == "--fogvault") {
+                fogvault::run(&args[1..], true)
+            } else {
+                build::run_build(&args[1..], json_output)
+            }
+        }
         "check" => {
-            if args[1..].iter().any(|a| a == "--models") {
+            if args[1..].iter().any(|arg| arg == "--fogvault") {
+                fogvault::run(&args[1..], false)
+            } else if args[1..].iter().any(|a| a == "--models") {
                 models::run_models_check(&args[1..], json_output)
             } else {
                 check::run_check(&args[1..], json_output)
@@ -80,6 +89,10 @@ OPTIONS:
     --dry-run        Print commands without executing
 
 CHECK OPTIONS:
+    --fogvault       Verify maintained native/browser Core–FogVault integration
+                     Prepare candidates first: cargo dfv build --fogvault
+    --native-only    With --fogvault, check native/migration consumers only
+    --browser-only   With --fogvault, check installed browser consumers only
     --models         Run model-based detector tier (GLiNER2/DataFog)
                      Wraps: scripts/provision-*.py, scripts/model-*.py
 

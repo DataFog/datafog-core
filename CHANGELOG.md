@@ -6,6 +6,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional Core-owned native Rust and browser FogVault integration candidates
+  save exact Workspace bundles before activation, bind complete heads and record
+  identity, revoke Core handles on lock, and require fresh review after uncertain
+  saves. Authenticated-bundle recovery stages a fresh destination without
+  overwriting existing state. The new `cargo dfv build --fogvault` and
+  `cargo dfv check --fogvault` commands prepare and verify actual integration
+  candidates, including the exact published Core beta.3 regression.
+
 ### Changed
 
 - Update the documentation site with the Redacted line identity, self-hosted Geist
