@@ -19,7 +19,7 @@ function command(id,cmd,argv,options={}){
 }
 function sourceIdentity(){
  const result={};
- function scan(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(['target','node_modules','.git'].includes(entry.name)||entry.name==='addon.node'||entry.name.endsWith('.tgz'))continue;const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('source symlink rejected');if(entry.isDirectory())scan(file);else if(entry.isFile())result[path.relative(coreRoot,file)]=sha(file);}}
+ function scan(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(['target','node_modules','.git'].includes(entry.name)||entry.name==='addon.node'||entry.name.endsWith('.tgz'))continue;const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('source symlink rejected');if(entry.isDirectory())scan(file);else if(entry.isFile())result[path.relative(coreRoot,file).split(path.sep).join('/')]=sha(file);}}
  for(const dir of ['integrations/fogvault-node','integrations/fogvault-native','integrations/fogvault-migration','crates/core','fixtures/fogvault'])scan(path.join(coreRoot,dir));
  return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b)));
 }
