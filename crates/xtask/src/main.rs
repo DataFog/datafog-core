@@ -28,14 +28,20 @@ fn main() -> ExitCode {
     match cmd.as_str() {
         "doctor" => doctor::run_doctor(&args[1..], json_output),
         "build" => {
-            if args[1..].iter().any(|arg| arg == "--fogvault") {
+            if args[1..]
+                .iter()
+                .any(|arg| arg == "--fogvault" || arg == "--fogvault-languages")
+            {
                 fogvault::run(&args[1..], true)
             } else {
                 build::run_build(&args[1..], json_output)
             }
         }
         "check" => {
-            if args[1..].iter().any(|arg| arg == "--fogvault") {
+            if args[1..]
+                .iter()
+                .any(|arg| arg == "--fogvault" || arg == "--fogvault-languages")
+            {
                 fogvault::run(&args[1..], false)
             } else if args[1..].iter().any(|a| a == "--models") {
                 models::run_models_check(&args[1..], json_output)
@@ -91,6 +97,8 @@ OPTIONS:
 CHECK OPTIONS:
     --fogvault       Verify maintained native/browser Core–FogVault integration
                      Prepare candidates first: cargo dfv build --fogvault
+    --fogvault-languages  Verify installed native Node/Python owners and interoperability
+                         Prepare first: cargo dfv build --fogvault-languages
     --native-only    With --fogvault, check native/migration consumers only
     --browser-only   With --fogvault, check installed browser consumers only
     --models         Run model-based detector tier (GLiNER2/DataFog)

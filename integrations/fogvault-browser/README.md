@@ -57,7 +57,15 @@ Do not mutate or lock that raw owner behind the adapter. The adapter does not
 expose the raw Workspace, plaintext export, or raw prepared change. Its wrapped
 plans expose the existing preview/heads/format/intents/discard operations. They
 belong to exactly one owner. Reads and preparations are blocked during a save.
-Discard unused plans and close streams as usual.
+The adapter admits one live prepared change per owner. A second preparation
+returns `resource_limit` before Core clones the workspace. Rejected approval
+keeps the existing review live; discard it before preparing another. Discard and
+confirmed commit release the slot, and locking revokes it. The owner holds a
+weak reference to the public plan and one cleanup handle.
+After an abandoned wrapper is collected, the next preparation discards its Core
+candidate before cloning another; lock also releases it. Collection timing is
+not guaranteed. Discard unused plans and close streams promptly.
+This adapter limit does not change the raw Core API limit of 32 prepared changes.
 
 ## Save failure, restart and transport
 

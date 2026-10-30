@@ -8,7 +8,13 @@ pub use datafog_core::workspace as core;
 pub use fogvault_native as vault;
 
 use core::{Head, PreparedChange, PublicId, Workspace, WorkspaceError};
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use vault::{CommitReceipt, SessionToken, Vault};
 use zeroize::Zeroizing;
 
@@ -73,6 +79,7 @@ pub enum Error {
     ForeignChange,
     ReopenRequired,
     RevisionExhausted,
+    PreparationLimit,
     SavedButNotActivated { request_id: PublicId },
 }
 impl fmt::Display for Error {
@@ -88,6 +95,7 @@ impl fmt::Display for Error {
                 f.write_str("workspace owner is closed; authenticated reopen required")
             }
             Self::RevisionExhausted => f.write_str("vault record revision is exhausted"),
+            Self::PreparationLimit => f.write_str("one prepared change is already active"),
             Self::SavedButNotActivated { .. } => {
                 f.write_str("saved candidate was not activated; reopen required")
             }
@@ -107,10 +115,15 @@ impl From<vault::Error> for Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
+struct PreparationLease {
+    active: AtomicBool,
+}
+
 /// A local preview owned by exactly one adapter runtime. No raw plan import exists.
 pub struct Change {
     owner: Arc<()>,
     plan: PreparedChange,
+    lease: Arc<PreparationLease>,
 }
 impl Change {
     pub fn previews(&self) -> Result<&[core::Preview]> {
@@ -134,6 +147,7 @@ impl Change {
     }
     pub fn discard(&mut self) {
         self.plan.discard();
+        self.lease.active.store(false, Ordering::Release);
     }
 }
 
@@ -151,6 +165,7 @@ pub struct Owner {
     vault: Vault,
     token: SessionToken,
     owner: Arc<()>,
+    preparation: Mutex<Weak<PreparationLease>>,
     record_id: PublicId,
     namespace: PublicId,
     record_revision: u64,
@@ -239,6 +254,7 @@ impl Owner {
                 vault,
                 token,
                 owner: Arc::new(()),
+                preparation: Mutex::new(Weak::new()),
                 record_id,
                 namespace,
                 record_revision: 1,
@@ -286,6 +302,7 @@ impl Owner {
                 vault,
                 token,
                 owner: Arc::new(()),
+                preparation: Mutex::new(Weak::new()),
                 record_id,
                 namespace,
                 record_revision,
@@ -349,6 +366,7 @@ impl Owner {
                 vault,
                 token,
                 owner: Arc::new(()),
+                preparation: Mutex::new(Weak::new()),
                 record_id,
                 namespace,
                 record_revision: 1,
@@ -368,11 +386,32 @@ impl Owner {
             Err(Error::ReopenRequired)
         }
     }
-    fn wrap(&self, plan: PreparedChange) -> Change {
-        Change {
+    fn prepare_change(
+        &self,
+        build: impl FnOnce(&Workspace) -> std::result::Result<PreparedChange, WorkspaceError>,
+    ) -> Result<Change> {
+        self.ready()?;
+        // Admission precedes the Core clone. Weak ownership releases the slot
+        // on drop; an explicit inactive flag also releases retained wrappers.
+        let lease = {
+            let mut current = self.preparation.lock().map_err(|_| Error::ReopenRequired)?;
+            if current
+                .upgrade()
+                .is_some_and(|lease| lease.active.load(Ordering::Acquire))
+            {
+                return Err(Error::PreparationLimit);
+            }
+            let lease = Arc::new(PreparationLease {
+                active: AtomicBool::new(true),
+            });
+            *current = Arc::downgrade(&lease);
+            lease
+        };
+        Ok(Change {
             owner: Arc::clone(&self.owner),
-            plan,
-        }
+            plan: build(&self.workspace)?,
+            lease,
+        })
     }
     pub fn head(&self) -> Result<Head> {
         self.ready()?;
@@ -392,20 +431,17 @@ impl Owner {
         findings: &[core::WorkspaceFinding],
         id: PublicId,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare(text, findings, id)?))
+        self.prepare_change(|workspace| workspace.prepare(text, findings, id))
     }
     pub fn prepare_review(&self, inputs: &[core::ReviewInput<'_>], id: PublicId) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_review(inputs, id)?))
+        self.prepare_change(|workspace| workspace.prepare_review(inputs, id))
     }
     pub fn prepare_batch(
         &self,
         inputs: &[core::WorkspaceInput<'_>],
         id: PublicId,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_batch(inputs, id)?))
+        self.prepare_change(|workspace| workspace.prepare_batch(inputs, id))
     }
     pub fn prepare_with_operation(
         &self,
@@ -413,48 +449,34 @@ impl Owner {
         findings: &[core::WorkspaceFinding],
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(
-            self.workspace
-                .prepare_with_operation(text, findings, operation)?,
-        ))
+        self.prepare_change(|workspace| workspace.prepare_with_operation(text, findings, operation))
     }
     pub fn prepare_batch_with_operation(
         &self,
         inputs: &[core::WorkspaceInput<'_>],
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(
-            self.workspace
-                .prepare_batch_with_operation(inputs, operation)?,
-        ))
+        self.prepare_change(|workspace| workspace.prepare_batch_with_operation(inputs, operation))
     }
     pub fn prepare_recovery_with_operation(
         &self,
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_recovery_with_operation(operation)?))
+        self.prepare_change(|workspace| workspace.prepare_recovery_with_operation(operation))
     }
     pub fn prepare_outcome(
         &self,
         outcome: core::OperationOutcome,
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_outcome(outcome, operation)?))
+        self.prepare_change(|workspace| workspace.prepare_outcome(outcome, operation))
     }
     pub fn prepare_conversation_send(
         &self,
         inputs: &[core::ConversationInput<'_>],
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(
-            self.workspace
-                .prepare_conversation_send(inputs, operation)?,
-        ))
+        self.prepare_change(|workspace| workspace.prepare_conversation_send(inputs, operation))
     }
     pub fn prepare_observed_send(
         &self,
@@ -464,11 +486,9 @@ impl Owner {
         site_id: &str,
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(
-            self.workspace
-                .prepare_observed_send(intent, logical_id, surface, site_id, operation)?,
-        ))
+        self.prepare_change(|workspace| {
+            workspace.prepare_observed_send(intent, logical_id, surface, site_id, operation)
+        })
     }
     pub fn prepare_definitely_not_sent(
         &self,
@@ -476,23 +496,19 @@ impl Owner {
         logical_id: PublicId,
         operation: core::OperationContext,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(
-            self.workspace
-                .prepare_definitely_not_sent(intent, logical_id, operation)?,
-        ))
+        self.prepare_change(|workspace| {
+            workspace.prepare_definitely_not_sent(intent, logical_id, operation)
+        })
     }
     pub fn prepare_policy_changes(
         &self,
         edits: &core::PolicyEdits,
         id: PublicId,
     ) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_policy_changes(edits, id)?))
+        self.prepare_change(|workspace| workspace.prepare_policy_changes(edits, id))
     }
     pub fn prepare_recovery(&self, id: PublicId) -> Result<Change> {
-        self.ready()?;
-        Ok(self.wrap(self.workspace.prepare_recovery(id)?))
+        self.prepare_change(|workspace| workspace.prepare_recovery(id))
     }
     /// Approval is for this exact immutable preview; false does not consume the change.
     /// Every storage failure closes both owners conservatively. Never retry an old approval.
@@ -556,6 +572,7 @@ impl Owner {
             self.lock();
             return Err(Error::SavedButNotActivated { request_id });
         }
+        change.lease.active.store(false, Ordering::Release);
         self.receipt = receipt.clone();
         self.record_revision = next_revision;
         Ok(Committed {
@@ -675,6 +692,12 @@ impl Owner {
     }
     pub fn lock(&mut self) {
         self.active = false;
+        if let Ok(mut current) = self.preparation.lock() {
+            if let Some(lease) = current.upgrade() {
+                lease.active.store(false, Ordering::Release);
+            }
+            *current = Weak::new();
+        }
         self.workspace.close();
         self.vault.lock();
     }

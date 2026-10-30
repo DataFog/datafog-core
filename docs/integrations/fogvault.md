@@ -1,7 +1,7 @@
 # Using Core with FogVault
 
-Core now has optional native Rust and browser integration candidates. Both keep
-Core preparation separate from persistence and activate only after the exact
+Core now has optional native Rust, Node, Python and browser integration
+candidates. They keep Core preparation separate from persistence and activate only after the exact
 candidate has been saved. Core's existing 0.5.0-beta.3 packages and Rust 1.88
 minimum are unchanged. These new integration packages remain unpublished 0.0.0
 candidates; this change does not freeze the v1 API or approve a production host.
@@ -9,7 +9,10 @@ candidates; this change does not freeze the v1 API or approve a production host.
 ## Start here
 
 - Browser: [typed owner, runnable example and installed-package proof](../../integrations/fogvault-browser/README.md).
+- Native Node: [installed addon, tenant boundaries and lifecycle](../../integrations/fogvault-node/README.md).
+- Native Python: [installed wheel, thread boundaries and lifecycle](../../integrations/fogvault-python/README.md).
 - Native Rust: [registered SQLite owner and recovery](../../integrations/fogvault-native/README.md).
+- Legacy backups: [authenticated reference-format importer](../../integrations/fogvault-legacy-browser/README.md).
 - Migration: [authenticated/decrypted bundle recovery staging](../../integrations/fogvault-migration/README.md).
 - Shared [record and save/lifetime contract](fogvault-contract.md).
 - [Compatibility, backup differences and open-issue reconciliation](fogvault-compatibility.md).
@@ -53,10 +56,40 @@ Python gate directly for a Rust-only host with its explicitly installed native
 prerequisites. A native subset is not browser qualification.
 
 The native integration has its own Rust 1.94.1 qualification toolchain and a
-tested minimum of Rust 1.89. Core itself stays on 1.88. Python/Node Workspace
-bindings remain available, but this change does not expose the new FogVault
-native owner through those bindings. Their optional host bindings need separate
-installed-consumer proof before being advertised.
+tested minimum of Rust 1.89. Core itself stays on 1.88. Optional native Node and
+Python packages wrap that same Rust owner. They are separate from the existing
+Core SDKs, support password-only admission, and retain literal approval,
+complete-head save, lock/reopen and uncertain-outcome rules. Tenant/thread checks
+catch host routing errors; the application still owns authentication, path
+permissions and an independently protected native control namespace.
+
+Prepare and check the native language packages separately:
+
+```sh
+cargo dfv build --fogvault-languages
+cargo dfv check --fogvault-languages
+```
+
+This selected scope diagnoses its own pinned native build tools and does not
+require unrelated original SDK outputs. Setup installs the declared Node build
+tools; checking never installs dependencies. It builds an actual npm tarball and
+Python wheel, installs each in a fresh consumer, runs named behavioral cases and
+type checks, then runs Node → Python → Node against the same registered SQLite
+vault and control namespace. Logs, package identities, source hashes and reports
+are retained in `target/fogvault-language/check-*/`. CI qualifies this installed
+path on Linux, macOS and Windows. It does not qualify production tenant routing,
+physical providers, power cuts or every Python/Node version.
+
+For a future Core v1 release, each existing publish workflow also requires both
+joint CI workflows to have succeeded for the exact candidate commit, including
+all six native/browser scopes and all three native-language OS scopes. Pending,
+failed, incomplete or older-commit evidence blocks publication. This gate does
+not publish packages or waive the remaining release approvals.
+
+Both `--fogvault` and `--fogvault-languages` are required joint qualification
+scopes for changes that affect all maintained integrations. Neither publishes
+packages or changes the existing Core beta.3 minimum. The optional packages stay
+unpublished `0.0.0` candidates until the remaining v1 gates close.
 
 ## Browser extension handoff
 
@@ -93,7 +126,23 @@ false-positive dispositions rather than declaring them closed.
 
 Recovery staging validates separately authenticated/decrypted source bundles and
 uses Core recovery; it does not decrypt legacy encrypted backup files or invent
-future v1 schema bytes. Measured growth samples are advisory: they do not cover
-peak memory, device floors, real power loss or every OS/browser. Resolve the
+future v1 schema bytes. [Resource observations](fogvault-resource-budget.md)
+include isolated native process peak RSS and support the integrated owners'
+one-active-preparation limit. Combined browser memory, installed-language copy
+costs, device floors, real power loss and every OS/browser remain unqualified. Resolve the
 documented FogVault registry dependency-distribution blockers before publishing
 both products as 1.0.0.
+
+The browser portion of `cargo dfv check --fogvault --engine ENGINE` also requires
+an installed import-only reader for the supported **reference** encrypted backup
+v1/v2 envelopes. `cargo dfv build --fogvault` explicitly prepares its pinned worker
+build dependencies. The check authenticates actual legacy files using both
+password and recovery paths, validates Core identity/head, and publishes only
+approved recovery into a fresh FogVault destination. It tests real cancellation,
+uncertain publication with cleanup failure, and fresh reconciliation/reopen.
+Named evidence is retained as `legacy.json` beside `browser.json`.
+
+This covers the non-shipping reference-host format; it does not establish the
+archive provenance or format of Josh's shipping extension. Final v1 schema
+compatibility and production security review remain open gates. See the
+[reader scope and resource limits](../../integrations/fogvault-legacy-browser/README.md).

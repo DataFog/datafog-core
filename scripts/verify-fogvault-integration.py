@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 from fogvault_inputs import core_build_inputs
 
@@ -30,6 +31,19 @@ BROWSER_CASES = {
     "async_open_expectations_and_creation_request_ids_are_snapshotted",
     "authenticated_import_rejects_unrelated_occupied_vault_without_mutation",
 }
+LEGACY_CASES = {
+    "legacy_fixed_kdf_profiles_match_reference_vectors",
+    "legacy_v1_v2_password_recovery_actual_kdf_reopen",
+    "legacy_unused_slot_tampering_and_profile_versions_reject",
+    "legacy_wrong_credentials_namespace_and_authenticated_head_reject",
+    "legacy_literal_approval_opaque_session_and_occupied_destination",
+    "legacy_worker_cancel_and_closed_session_never_publish",
+    "legacy_archive_admission_and_source_preservation",
+    "legacy_confirmed_save_cancel_cleanup_failure_preserves_request",
+}
+LEGACY_COMBINATIONS = {"v1_password", "v1_recovery", "v2_password", "v2_recovery"}
+LEGACY_PACKAGES = {"core": "@datafog/wasm", "vault": "@datafog/fogvault-browser",
+                   "adapter": "@datafog/core-fogvault-browser", "importer": "@datafog/core-fogvault-legacy-browser"}
 RUST_CASES = {
     "migration": {
         "v1_source_stays_exact_while_recovery_upgrades_through_core",
@@ -101,6 +115,89 @@ def validate_browser(report, expected_artifacts=None):
                 expected = expected_artifacts[name + "_tarball"]
                 if candidate["sha256"] != expected["sha256"] or candidate["bytes"] != expected["bytes"]:
                     raise ValueError("Browser proof used a different prepared package")
+
+
+def validate_legacy(report, expected_artifacts=None, expected_engine=None):
+    if (not isinstance(report, dict) or report.get("schema") != "datafog-fogvault-legacy-browser-proof/v1"
+            or report.get("pass") is not True or report.get("executed") is not True
+            or report.get("typecheck_executed") is not True or report.get("failure")):
+        raise ValueError("Legacy installed report did not pass")
+    if report.get("engine") not in {"chromium", "firefox", "msedge"} or (expected_engine is not None and report["engine"] != expected_engine):
+        raise ValueError("Legacy browser engine does not match selected qualification scope")
+    result = report.get("result")
+    if (not isinstance(result, dict) or result.get("pass") is not True or result.get("executed") is not True
+            or result.get("failure") or not result.get("userAgent")):
+        raise ValueError("Legacy browser execution missing")
+    cases = result.get("cases")
+    if (not isinstance(cases, list) or len(cases) != len(LEGACY_CASES)
+            or any(not isinstance(c, dict) for c in cases)
+            or {c.get("id") for c in cases} != LEGACY_CASES
+            or set(report.get("required_cases", [])) != LEGACY_CASES
+            or any(c.get("status") != "pass" or c.get("executed") is not True for c in cases)):
+        raise ValueError("Legacy required named cases missing, duplicated, failed or skipped")
+    combinations = next(c for c in cases if c["id"] == "legacy_v1_v2_password_recovery_actual_kdf_reopen").get("combinations")
+    if (not isinstance(combinations, list) or len(combinations) != len(LEGACY_COMBINATIONS)
+            or any(not isinstance(c, dict) for c in combinations)
+            or {c.get("id") for c in combinations} != LEGACY_COMBINATIONS
+            or set(report.get("required_combinations", [])) != LEGACY_COMBINATIONS
+            or any(c.get("status") != "pass" or c.get("executed") is not True for c in combinations)):
+        raise ValueError("Legacy credential/envelope matrix is incomplete")
+    installed = report.get("installed_assets")
+    candidates = report.get("candidates")
+    if (not isinstance(installed, dict) or set(installed) != set(LEGACY_PACKAGES.values())
+            or not isinstance(candidates, dict) or set(candidates) != set(LEGACY_PACKAGES)
+            or any(not isinstance(v, dict) or not v for v in installed.values())):
+        raise ValueError("Legacy proof must identify all four actual installed candidates")
+    if expected_artifacts is None:
+        return
+    preparation = report.get("preparation")
+    if (not isinstance(preparation, dict) or preparation.get("core_build_inputs") != core_build_inputs(ROOT)
+            or preparation.get("fogvault_commit") != VAULT_REV):
+        raise ValueError("Legacy proof used stale Core/FogVault source inputs")
+    inputs = report.get("source_identity")
+    required_inputs = {"integrations/fogvault-legacy-browser/" + f for f in
+                       ("index.mjs", "backup-read.mjs", "vault-read.mjs", "kdf-worker-source.mjs", "index.d.ts", "package-lock.json")}
+    if not isinstance(inputs, dict) or not required_inputs <= inputs.keys():
+        raise ValueError("Legacy source identities missing")
+    for name, recorded in inputs.items():
+        source = (ROOT / name).resolve()
+        if not source.is_relative_to(ROOT) or digest(source) != recorded:
+            raise ValueError("Legacy checked source bytes changed")
+    consumer = Path(report["run_directory"])
+    for key, package in LEGACY_PACKAGES.items():
+        candidate = candidates[key]
+        archive_path = Path(candidate["path"])
+        if digest(archive_path) != candidate["sha256"] or archive_path.stat().st_size != candidate["bytes"]:
+            raise ValueError("Legacy candidate archive changed")
+        if key in ("core", "vault"):
+            expected = expected_artifacts[key + "_tarball"]
+            if candidate["sha256"] != expected["sha256"] or candidate["bytes"] != expected["bytes"]:
+                raise ValueError("Legacy candidate differs from prepared Core/FogVault")
+        seen, member_names = set(), set()
+        with tarfile.open(archive_path, "r:gz") as archive:
+            for member in archive.getmembers():
+                if member.isdir():
+                    continue
+                parts = member.name.split("/")
+                if (not member.isfile() or parts[0] != "package" or len(parts) < 2
+                        or any(p in ("", ".", "..") for p in parts) or "\\" in member.name
+                        or member.name.casefold() in seen):
+                    raise ValueError("Unsafe/colliding legacy candidate archive member")
+                seen.add(member.name.casefold())
+                relative = "/".join(parts[1:]); member_names.add(relative)
+                actual = consumer / "node_modules" / package / relative
+                content = archive.extractfile(member).read()
+                expected = hashlib.sha256(content).hexdigest()
+                if (actual.is_symlink() or not actual.is_file() or digest(actual) != expected
+                        or installed[package].get(relative) != expected):
+                    raise ValueError("Legacy installed bytes differ from actual candidate archive")
+        if set(installed[package]) != member_names:
+            raise ValueError("Legacy installed member identities omitted or invented")
+        if key in ("adapter", "importer"):
+            directory = ROOT / "integrations" / ("fogvault-browser" if key == "adapter" else "fogvault-legacy-browser")
+            for relative in member_names - {"kdf-worker.mjs"}:
+                if digest(directory / relative) != installed[package][relative]:
+                    raise ValueError("Legacy packed adapter/importer differs from current source")
 
 
 def validate_rust(log, suite):
@@ -185,6 +282,11 @@ def main():
                     "--vault-tarball", artifacts["vault_tarball"]["path"],
                     "--engine", args.engine, "--output", str(browser_output)],
                     lambda _: validate_browser(json.loads(browser_output.read_text(encoding="utf-8")), artifacts))
+            legacy_output = run_dir / "legacy.json"
+            command("installed-legacy-reference-import", [sys.executable, "scripts/verify-fogvault-legacy.py",
+                    "--prepared", str(BASE / "prepared.json"), "--engine", args.engine,
+                    "--output", str(legacy_output)],
+                    lambda _: validate_legacy(json.loads(legacy_output.read_text(encoding="utf-8")), artifacts, args.engine))
         except (OSError, ValueError, KeyError, TypeError) as failure:
             checks.append({"id": "browser-preparation", "pass": False, "executed": False,
                            "error": str(failure) + "; run cargo dfv build --fogvault"})

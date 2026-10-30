@@ -117,3 +117,10 @@ foreign copies, set a new latency threshold, or qualify low-memory devices.
 This Rust integration does not expose a maintained Python or Node host package.
 Those bindings, cross-platform CI, physical/provider and power-loss qualification,
 final v1 migrations and registry publication remain separate work.
+
+Only one prepared change may be active per integrated owner. A second preparation
+returns `resource_limit` before Core clones its state. Discarding, dropping or
+consuming the change releases the slot even if an older wrapper remains retained;
+closing the owner revokes all its authority. Read-only review and restore streams
+remain available. This is a per-owner plan limit, not a global memory budget; see
+[combined resource observations](../../docs/integrations/fogvault-resource-budget.md).

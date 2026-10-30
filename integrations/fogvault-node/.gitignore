@@ -1,0 +1,4 @@
+/target/
+/addon.node
+/node_modules/
+/*.tgz

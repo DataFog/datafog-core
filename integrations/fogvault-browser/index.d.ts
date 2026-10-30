@@ -4,6 +4,7 @@ import type {
 import type {FogVault, Receipt} from '@datafog/fogvault-browser';
 
 export class WorkspaceVaultError extends Error {readonly code: string; readonly requestId?: Uint8Array;}
+/** One live prepared change per owner; discard unused plans promptly. */
 export interface WorkspaceVaultPlan {
   preview(): WorkspacePreview;
   previews(): readonly WorkspacePreview[];
@@ -55,6 +56,7 @@ export class FogVaultWorkspace {
   progressiveRestore: Workspace['progressiveRestore'];
   bufferedRestoreInConversation: Workspace['bufferedRestoreInConversation'];
   progressiveRestoreInConversation: Workspace['progressiveRestoreInConversation'];
+  /** A second live preparation fails with resource_limit before Core clones state. */
   prepare(...args: Parameters<Workspace['prepare']>): WorkspaceVaultPlan;
   prepareBatch(...args: Parameters<Workspace['prepareBatch']>): WorkspaceVaultPlan;
   prepareReview(...args: Parameters<Workspace['prepareReview']>): WorkspaceVaultPlan;

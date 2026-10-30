@@ -17,12 +17,12 @@ function findings(text) { return scan(text).map(f => ({entityType: f.entityType,
 function review(owner, text = '🦀 Email alice@example.test') {
   return owner.prepareReview([{text, scannerFindings: findings(text), userSelections: []}], randomId());
 }
-async function make() {
+async function make(CoreWorkspace = Workspace) {
   const vault = new FogVault(options); owners.add(vault);
   const name = 'datafog-SYNTHETIC-joint-' + crypto.randomUUID(); names.push(name);
   await vault.create(name, password);
   const recordId = randomId(), namespace = randomId();
-  const owner = await FogVaultWorkspace.create({Workspace, vault, recordId, namespace});
+  const owner = await FogVaultWorkspace.create({Workspace: CoreWorkspace, vault, recordId, namespace});
   return {vault, owner, name, recordId, namespace};
 }
 function receiptBarrier(vault) {
@@ -68,13 +68,56 @@ window.coreFogVaultDone = (async () => {
       clearRecord(raw); await reopened.close();
     });
     await record('literal_approval_and_foreign_plan_rejection_before_save', async () => {
-      const f = await make(), second = await make(), plan = review(f.owner);
+      let preparations = 0;
+      const observedWorkspace = {
+        create(...args) {
+          const core = Workspace.create(...args);
+          return new Proxy(core, {get(target, property) {
+            const value = Reflect.get(target, property, target);
+            if (typeof value !== 'function') return value;
+            return (...values) => {
+              if (String(property).startsWith('prepare')) preparations++;
+              return value.apply(target, values);
+            };
+          }});
+        },
+        openBundle: (...args) => Workspace.openBundle(...args),
+      };
+      const f = await make(observedWorkspace), second = await make(), plan = review(f.owner);
+      require(preparations === 1, 'initial Core preparation missing');
+      await rejected(() => review(f.owner), 'resource_limit');
+      require(preparations === 1, 'quota rejection reached Core clone');
       const before = await f.vault.receipt();
       for (const approved of [false, 1, 'true', undefined]) await rejected(() => f.owner.commit(plan, {approved}), 'approval_required');
       await rejected(() => second.owner.commit(plan, {approved: true}), 'foreign_or_consumed_plan');
       require(same(before.head_digest, (await f.vault.receipt()).head_digest), 'rejected approval mutated storage');
-      await f.owner.commit(plan, {approved: true}); await rejected(() => f.owner.commit(plan, {approved: true}), 'foreign_or_consumed_plan');
-      await f.owner.close(); await second.owner.close();
+      await rejected(() => review(f.owner), 'resource_limit');
+      require(preparations === 1, 'rejected approval released live quota');
+      plan.discard(); await rejected(() => plan.preview(), 'foreign_or_consumed_plan');
+      const replacement = review(f.owner);
+      require(preparations === 2, 'discard did not release quota');
+      await f.owner.commit(replacement, {approved: true});
+      await rejected(() => f.owner.commit(replacement, {approved: true}), 'foreign_or_consumed_plan');
+      const afterCommit = review(f.owner);
+      require(preparations === 3, 'confirmed commit did not release quota');
+      afterCommit.discard();
+      // Chromium/Edge expose real CDP collection through this fixture only.
+      // More than the unchanged raw Core32 limit proves collected wrappers do
+      // not leave hidden candidates accumulated in Core's handle map.
+      if (typeof window.__datafogCollectBrowserGarbage === 'function') {
+        for (let index = 0; index < 35; index++) {
+          let abandoned = review(f.owner);
+          const weak = new WeakRef(abandoned); abandoned = null;
+          await window.__datafogCollectBrowserGarbage();
+          require(weak.deref() === undefined, 'test plan wrapper was retained');
+        }
+      }
+      const activeAtLock = review(f.owner), preparedAtLock = preparations;
+      const locking = f.owner.lock();
+      await rejected(() => activeAtLock.preview(), 'owner_closed');
+      await rejected(() => review(f.owner), 'owner_closed');
+      require(preparations === preparedAtLock, 'closed owner reached Core clone');
+      await locking; await f.owner.close(); await second.owner.close();
     });
     await record('occupied_creation_rejects_exact_duplicate_request_without_overwrite', async () => {
       const vault = new FogVault(options); owners.add(vault);

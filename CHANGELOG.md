@@ -8,6 +8,18 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Optional native Node and Python FogVault owners expose approved save/reopen,
+  recovery, conversation and restore-stream flows through the shared Rust owner.
+  `cargo dfv build --fogvault-languages` and `check --fogvault-languages` verify
+  installed npm/wheel candidates and Node–Python shared-vault interoperability.
+  Future v1 publication requires passing joint native/browser and native-language
+  CI evidence for the exact candidate commit.
+
+- An optional import-only browser reader authenticates supported v1/v2 Core
+  reference backups and migrates them into fresh FogVault destinations after
+  approval. It preserves source archives and uses the existing legacy crypto;
+  compatibility with an unidentified shipping extension is not established.
+
 - Optional Core-owned native Rust and browser FogVault integration candidates
   save exact Workspace bundles before activation, bind complete heads and record
   identity, revoke Core handles on lock, and require fresh review after uncertain
@@ -17,6 +29,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
   candidates, including the exact published Core beta.3 regression.
 
 ### Changed
+
+- Integrated FogVault owners admit one active prepared change per owner before
+  cloning Core state. Discard, drop, confirmed consumption and close release the
+  slot; another preparation returns `resource_limit` without changing saved state.
+  Near-capacity native observations document memory costs without claiming a
+  device floor or production memory SLA.
 
 - Environment diagnosis uses the installed, pinned Playwright package and checks
   that the Chromium executable exists. Missing tools fail with local setup

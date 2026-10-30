@@ -88,6 +88,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Require exact-commit Core and FogVault qualification for v1+
+        run: python3 scripts/check-fogvault-release.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Require passing model integration for this commit
         run: python3 scripts/check-model-integration.py
         env:

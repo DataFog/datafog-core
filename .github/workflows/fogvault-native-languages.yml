@@ -1,0 +1,103 @@
+name: Core and FogVault native language packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Every PR receives explicit results, including docs-only changes. Superseded PR
+# runs are cancelled; main pushes and manual runs retain their own scopes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  installed-native-languages:
+    name: Core–FogVault Node/Python / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/fogvault-language
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.88.0'
+          components: rustfmt, clippy
+      - name: Install isolated native integration toolchain
+        run: rustup toolchain install 1.94.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '25.8.2'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.14'
+      - name: Install the declared wheel build tool
+        run: python -m pip install maturin==1.14.1
+      - name: Record native package environment
+        run: |
+          mkdir -p target/fogvault-language/ci
+          {
+            git rev-parse HEAD
+            rustc +1.88.0 --version
+            rustc +1.94.1 --version
+            python --version
+            node --version
+            python -m maturin --version
+          } | tee target/fogvault-language/ci/environment.log
+      # Setup is explicit and separate from checking. The builder uses Node's
+      # npm CLI entry point on Windows and never publishes registry packages.
+      - name: Prepare native package candidates
+        run: cargo dfv build --fogvault-languages 2>&1 | tee target/fogvault-language/ci/preparation.log
+      - name: Test release evidence gate
+        run: python scripts/test-fogvault-release.py
+      # The same checker is exposed by cargo dfv check --fogvault-languages.
+      # Direct invocation avoids requiring unrelated original SDK build outputs.
+      - name: Verify installed packages and shared-vault interoperability
+        run: python scripts/verify-fogvault-languages.py 2>&1 | tee target/fogvault-language/ci/verification.log
+      - name: Retain candidate and installed-consumer evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: core-fogvault-native-languages-${{ matrix.os }}
+          path: |
+            target/dfv/runs/*/build.json
+            target/dfv/runs/*/metadata.json
+            target/fogvault-language/ci/*.log
+            target/fogvault-language/prepared.json
+            target/fogvault-language/artifacts/*.tgz
+            target/fogvault-language/artifacts/*.whl
+            target/fogvault-language/check-*/report.json
+            target/fogvault-language/check-*/node.json
+            target/fogvault-language/check-*/python.json
+            target/fogvault-language/check-*/interop.json
+            target/fogvault-language/check-*/*.log
+            target/fogvault-language/check-*/node-installed-*/report.json
+            target/fogvault-language/check-*/node-installed-*/*.log
+            target/fogvault-language/check-*/node-installed-*/*.tgz
+            target/fogvault-language/check-*/node-installed-*/consumer/package-lock.json
+            target/fogvault-language/check-*/python-consumer-*/installed-cases.json
+            target/fogvault-language/check-*/python-consumer-*/*.log
+            target/fogvault-language/check-*/python-consumer-*/artifacts/*.whl
+            target/fogvault-language-interop/interop-*/*.log
+          if-no-files-found: error
