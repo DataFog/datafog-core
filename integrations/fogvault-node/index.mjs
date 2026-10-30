@@ -2,6 +2,13 @@ import {createRequire} from 'node:module';
 import {types} from 'node:util';
 const {NativeOwner}=createRequire(import.meta.url)('./addon.node');
 const owners=new WeakMap(), changes=new WeakMap(), streams=new WeakMap();
+// Held values retain the owner, never their target. Cleanup only releases
+// abandoned handles; it cannot save, activate or approve a candidate.
+const abandoned=new FinalizationRegistry(({owner,handle,method})=>{
+  const state=owners.get(owner);
+  if(!state)return;
+  try{state.raw.call(state.tenant,method,JSON.stringify(method==='discard'?handle:{handle}));}catch{/* Explicit lock/close may already have revoked it. */}
+});
 const internal=Symbol('Core FogVault owner construction');
 const MAX=16*1024*1024;
 export class DataFogVaultError extends Error {
@@ -66,10 +73,10 @@ function factory(options,mode,bundle,approved){
   if('expectedHead' in data&&(data.expectedHead===null||typeof data.expectedHead.revision!=='string'||!/^(0|[1-9][0-9]*)$/.test(data.expectedHead.revision)))fail('invalid_head');
   if(mode==='importAuthenticatedBundle'){if(approved!==true)fail('approval_required');data.approved=true;if(!data.sourceHead||typeof data.sourceHead.revision!=='string')fail('invalid_head');}
   const password=bytes(originalPassword,undefined,1024);let source;
-  try{if(password.length>1024)fail('resource_limit');if(mode==='importAuthenticatedBundle')source=bytes(bundle);return new NativeWorkspace(internal,source?NativeOwner[mode](serialized(data),password,source):NativeOwner[mode](serialized(data),password));}catch(e){throw error(e);}finally{password.fill(0);source?.fill(0);}
+  try{if(password.length>1024)fail('resource_limit');if(mode==='importAuthenticatedBundle')source=bytes(bundle);return new NativeWorkspace(internal,source?NativeOwner[mode](serialized(data),password,source):NativeOwner[mode](serialized(data),password),data.tenant);}catch(e){throw error(e);}finally{password.fill(0);source?.fill(0);}
 }
 export class NativeWorkspace {
-  constructor(token,raw){if(token!==internal)fail('invalid_owner');owners.set(this,{raw});Object.freeze(this);}
+  constructor(token,raw,tenant){if(token!==internal)fail('invalid_owner');owners.set(this,{raw,tenant});Object.freeze(this);}
   static createNew(options){return factory(options,'createNew');}
   static openExisting(options){return factory(options,'openExisting');}
   static importAuthenticatedBundle(options,bundle,approved){return factory(options,'importAuthenticatedBundle',bundle,approved);}
@@ -90,7 +97,7 @@ export class NativeWorkspace {
     if(approved!==true)fail('approval_required');
     const c=changes.get(change);if(!c||c.owner!==this)fail('foreign_change');
     const result=call(this,t,'commit',{handle:c.handle,approved:true,requestId:id(requestId)});
-    changes.delete(change);return result;
+    abandoned.unregister(change);changes.delete(change);return result;
   }
   reconcile(t,requestId){return call(this,t,'reconcile',id(requestId));}
   restore(t,text){return call(this,t,'restore',text);}
@@ -104,18 +111,18 @@ export class NativeWorkspace {
 }
 function stage(owner,t,method,args){const {handle}=call(owner,t,method,args);return new PreparedChange(internal,owner,handle);}
 export class PreparedChange {
-  constructor(token,owner,handle){if(token!==internal)fail('foreign_change');changes.set(this,{owner,handle});Object.freeze(this);}
+  constructor(token,owner,handle){if(token!==internal)fail('foreign_change');changes.set(this,{owner,handle});abandoned.register(this,{owner,handle,method:'discard'},this);Object.freeze(this);}
   #call(t,method){const c=changes.get(this);if(!c)fail('inactive_plan');return call(c.owner,t,method,c.handle);}
   previews(t){return this.#call(t,'previews');}
   heads(t){return this.#call(t,'planHeads');}
   sendIntents(t){return this.#call(t,'sendIntents');}
   snapshotFormat(t){return this.#call(t,'snapshotFormat');}
   policyPreview(t){return this.#call(t,'policyPreview');}
-  discard(t){this.#call(t,'discard');changes.delete(this);}
+  discard(t){this.#call(t,'discard');abandoned.unregister(this);changes.delete(this);}
 }
 function stream(owner,t,progressive,encoding,logicalId){const data={progressive,encoding};if(logicalId!==undefined)data.logicalId=id(logicalId);const{handle}=call(owner,t,'stream',data);return new RestoreStream(internal,owner,handle,encoding);}
 export class RestoreStream {
-  constructor(token,owner,handle,encoding){if(token!==internal)fail('inactive_stream');streams.set(this,{owner,handle,encoding});Object.freeze(this);}
+  constructor(token,owner,handle,encoding){if(token!==internal)fail('inactive_stream');streams.set(this,{owner,handle,encoding});abandoned.register(this,{owner,handle,method:'streamClose'},this);Object.freeze(this);}
   #call(t,method,data={}){const s=streams.get(this);if(!s)fail('inactive_stream');return call(s.owner,t,method,{handle:s.handle,...data});}
   feed(t,value){
     const s=streams.get(this);if(!s)fail('inactive_stream');
@@ -129,5 +136,5 @@ export class RestoreStream {
   }
   finalize(t){return this.#call(t,'streamFinalize');}
   reset(t){return this.#call(t,'streamReset');}
-  close(t){this.#call(t,'streamClose');streams.delete(this);}
+  close(t){this.#call(t,'streamClose');abandoned.unregister(this);streams.delete(this);}
 }

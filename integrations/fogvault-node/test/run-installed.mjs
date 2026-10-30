@@ -53,7 +53,7 @@ try{
  for(const name of ['index.mjs','index.d.ts','LICENSE','README.md','package.json'])if(sha(path.join(packageRoot,name))!==sha(path.join(installed,name)))throw Error(`installed file mismatch ${name}`);
  command('typescript',process.execPath,[path.join(packageRoot,'node_modules/typescript/bin/tsc'),'--noEmit','--strict','--module','nodenext','--target','es2022','--lib','es2022,dom',path.join(consumer,'test/types.ts')],{cwd:consumer});
  proof.installedTypesVerified=true;
- const stdout=command('installed-consumer',process.execPath,['--test','--test-reporter=tap',path.join(consumer,'test/consumer.mjs')],{cwd:consumer,env:{DATAFOG_FOGVAULT_NODE_IMPORT:'@datafog/core-fogvault-node',DATAFOG_NODE_TEST_TMP:path.join(run,'sqlite-fixtures'),DATAFOG_NODE_AUTHENTICATED_FIXTURE:fixturePath}});
+ const stdout=command('installed-consumer',process.execPath,['--expose-gc','--test','--test-reporter=tap',path.join(consumer,'test/consumer.mjs')],{cwd:consumer,env:{DATAFOG_FOGVAULT_NODE_IMPORT:'@datafog/core-fogvault-node',DATAFOG_NODE_TEST_TMP:path.join(run,'sqlite-fixtures'),DATAFOG_NODE_AUTHENTICATED_FIXTURE:fixturePath}});
  const required=[
   'installed_node_roundtrip_approval_lock_reopen_unicode',
   'installed_node_tenant_foreign_and_hostile_transport_reject',
@@ -63,6 +63,7 @@ try{
   'installed_node_dropped_ack_reconciliation_requires_fresh_owner',
   'installed_node_errors_are_structured_and_content_free',
   'installed_node_authenticated_import_uses_fresh_destination',
+  'installed_node_abandoned_handles_release_native_capacity',
  ];
  for(const name of required){const pattern=new RegExp(`^ok [0-9]+ - ${name}$`,'m');if(!pattern.test(stdout))throw Error(`missing installed case ${name}`);proof.cases.push({id:name,status:'pass',executed:true});}
  if(!stdout.includes(`# pass ${required.length}`)||!stdout.includes('# fail 0')||!stdout.includes('# skipped 0')||!stdout.includes('# cancelled 0'))throw Error('incomplete consumer results');

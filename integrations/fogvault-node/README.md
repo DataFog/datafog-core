@@ -105,7 +105,12 @@ marker issues block restoration. Strict streams buffer until finalization;
 progressive streams are explicit irreversible output. Wrong feed transport is
 terminated through Core's error path and retains prior progressive delivery
 counts without failing-call text. Lock closes owned Core state/plans/streams;
-caller copies cannot be retracted.
+caller copies cannot be retracted. Call `discard` on unused plans and `close` on
+streams and owners for deterministic cleanup. Abandoned plan/stream wrappers
+also release their native handles after JavaScript garbage collection; timing
+is not guaranteed. A retained child keeps its owner alive, so dropping only the
+owner variable is not a lock operation. Explicit lock/close always revokes all
+children, including retained children.
 
 Unknown-save errors retain `requestId` and `requiresReopen`. Keep the operation
 identity in trusted host state. `owner.reconcile(tenant, requestId)` leaves Core

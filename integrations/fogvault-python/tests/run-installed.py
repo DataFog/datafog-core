@@ -81,13 +81,13 @@ def main():
         for name, command in [
             ("rust", ["rustc", "+1.94.1", "--version"]),
             ("cargo", ["cargo", "+1.94.1", "--version"]),
-            ("maturin", ["maturin", "--version"]),
+            ("maturin", [sys.executable, "-m", "maturin", "--version"]),
             ("python", [sys.executable, "--version"]),
         ]:
             versions[name] = run(name+"-version", command, 30)
         if versions["maturin"] != "maturin 1.14.1":
             raise ValueError("Install repository-declared maturin 1.14.1 before building")
-        run("wheel-build", ["maturin", "build", "--locked", "--manifest-path", str(PACKAGE/"Cargo.toml"),
+        run("wheel-build", [sys.executable, "-m", "maturin", "build", "--locked", "--manifest-path", str(PACKAGE/"Cargo.toml"),
             "--out", str(wheels), "--interpreter", sys.executable])
         artifacts = list(wheels.glob("*.whl"))
         if len(artifacts) != 1:

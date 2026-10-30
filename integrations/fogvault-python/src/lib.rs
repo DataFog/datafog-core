@@ -21,6 +21,20 @@ fn fail(py: Python<'_>, code: &str) -> PyErr {
     }
     e
 }
+fn unknown_outcome(py: Python<'_>, request_id: [u8; 16]) -> PyErr {
+    let exception = fail(py, "outcome_unknown");
+    let attach = || -> PyResult<()> {
+        exception
+            .value(py)
+            .setattr("request_id", PyBytes::new(py, &request_id))?;
+        exception.value(py).setattr("requires_reopen", true)?;
+        Ok(())
+    };
+    match attach() {
+        Ok(()) => exception,
+        Err(error) => error,
+    }
+}
 fn native_error(py: Python<'_>, error: Error) -> PyErr {
     let (code, request) = match &error {
         Error::Core(e) => (e.code.as_str(), None),
@@ -662,25 +676,38 @@ impl NativeWorkspace {
         if !Arc::ptr_eq(&self.shared, &change.shared) {
             return Err(fail(py, "foreign_plan"));
         }
+        let request_id = transport::id(py, request_id)?;
         let mut g = self.shared.owner(py, tenant)?;
         let mut plan = lock(py, &change.inner)?;
         let result = g
             .as_mut()
             .ok_or_else(|| fail(py, "owner_closed"))?
-            .commit(&mut plan, true, transport::id(py, request_id)?)
+            .commit(&mut plan, true, request_id)
             .map_err(|e| native_error(py, e))?;
-        let out = PyDict::new(py);
-        out.set_item("head", Head { inner: result.head }.into_pyobject(py)?)?;
-        out.set_item("previews", result.previews)?;
-        out.set_item(
-            "recordRevision",
-            g.as_ref()
-                .ok_or_else(|| fail(py, "owner_closed"))?
-                .record_revision()
-                .map_err(|e| native_error(py, e))?,
-        )?;
-        out.set_item("receipt",transport::value(py,json!({"generation":result.receipt.generation,"requestId":result.receipt.request_id,"headDigest":result.receipt.head_digest}))?)?;
-        Ok(out.into_any().unbind())
+        let projected = (|| -> PyResult<Py<PyAny>> {
+            let out = PyDict::new(py);
+            out.set_item("head", Head { inner: result.head }.into_pyobject(py)?)?;
+            out.set_item("previews", result.previews)?;
+            out.set_item(
+                "recordRevision",
+                g.as_ref()
+                    .ok_or_else(|| fail(py, "owner_closed"))?
+                    .record_revision()
+                    .map_err(|e| native_error(py, e))?,
+            )?;
+            out.set_item("receipt",transport::value(py,json!({"generation":result.receipt.generation,"requestId":result.receipt.request_id,"headDigest":result.receipt.head_digest}))?)?;
+            Ok(out.into_any().unbind())
+        })();
+        if projected.is_err() {
+            // A confirmed save must never look like an ordinary retryable
+            // transport failure. Release guards before revoking child handles.
+            g.take();
+            drop(plan);
+            drop(g);
+            self.shared.revoke();
+            return Err(unknown_outcome(py, request_id));
+        }
+        projected
     }
     fn restore(&self, py: Python<'_>, tenant: &str, text: &Bound<'_, PyAny>) -> PyResult<String> {
         let g = self.shared.owner(py, tenant)?;

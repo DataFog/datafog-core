@@ -79,6 +79,12 @@ are retained in `target/fogvault-language/check-*/`. CI qualifies this installed
 path on Linux, macOS and Windows. It does not qualify production tenant routing,
 physical providers, power cuts or every Python/Node version.
 
+For a future Core v1 release, each existing publish workflow also requires both
+joint CI workflows to have succeeded for the exact candidate commit, including
+all six native/browser scopes and all three native-language OS scopes. Pending,
+failed, incomplete or older-commit evidence blocks publication. This gate does
+not publish packages or waive the remaining release approvals.
+
 Both `--fogvault` and `--fogvault-languages` are required joint qualification
 scopes for changes that affect all maintained integrations. Neither publishes
 packages or changes the existing Core beta.3 minimum. The optional packages stay

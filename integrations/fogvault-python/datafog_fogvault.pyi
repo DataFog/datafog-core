@@ -5,6 +5,7 @@ __version__: str
 class FogVaultWorkspaceError(ValueError):
     code: str
     request_id: bytes
+    requires_reopen: bool
     finding_index: int | None
     input_index: int | None
     marker_issues: list[dict[str, Any]]

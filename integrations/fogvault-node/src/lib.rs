@@ -748,13 +748,15 @@ impl NativeOwner {
                     .get_mut(&a.handle)
                     .ok_or_else(|| fail("inactive_plan"))?;
                 let result = o.commit(c, a.approved, a.request_id).map_err(mapped)?;
-                let record_revision = o.record_revision().map_err(mapped)?.to_string();
+                let encoded = (|| {
+                    let record_revision = o.record_revision().map_err(mapped)?.to_string();
+                    output(
+                        json!({"head":head(result.head),"receipt":receipt(&result.receipt),"recordRevision":record_revision,"previews":result.previews}),
+                    )
+                })();
                 self.changes.remove(&a.handle);
-                // A failed binding reply after confirmed persistence cannot be
-                // interpreted as rollback or retain live handoff authority.
-                let encoded = output(
-                    json!({"head":head(result.head),"receipt":receipt(&result.receipt),"recordRevision":record_revision,"previews":result.previews}),
-                );
+                // Every fallible step after confirmed persistence belongs to
+                // the uncertain-reply guard, including receipt projection.
                 if encoded.is_err() {
                     if let Some(o) = self.owner.as_mut() {
                         o.lock();

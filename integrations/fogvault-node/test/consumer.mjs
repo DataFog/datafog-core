@@ -81,3 +81,37 @@ test('installed_node_authenticated_import_uses_fresh_destination',()=>{
   assert.throws(()=>NativeWorkspace.importAuthenticatedBundle(options,Uint8Array.from(source.bundle),true),code('destination_occupied'));
  }finally{owner?.close(t);f.cleanup();}
 });
+
+test('installed_node_abandoned_handles_release_native_capacity',async()=>{
+ assert.equal(typeof global.gc,'function','installed proof must enable explicit GC');
+ const f=fixture();let owner=f.owner();
+ try{
+  async function abandonAndRecover(make,release){
+   const weak=[];
+   // Fill the bounded native registry while keeping no JavaScript handles.
+   for(let i=0;i<32;i++){let child=make();weak.push(new WeakRef(child));child=null;}
+   let recovered=[];
+   // GC and finalization run on separate turns. Retry capacity, rather than
+   // assuming that a finalizer must have run immediately after global.gc().
+   for(let attempt=0;attempt<100;attempt++){
+    await new Promise(resolve=>setImmediate(resolve));global.gc();
+    await new Promise(resolve=>setImmediate(resolve));
+    try{while(recovered.length<32)recovered.push(make());}catch(e){assert.equal(e.code,'resource_limit');}
+    if(recovered.length===32)break;
+   }
+   assert.equal(weak.filter(ref=>ref.deref()!==undefined).length,0,'abandoned wrappers must be collected');
+   assert.equal(recovered.length,32,'all abandoned native handle slots must become reusable');
+   for(const child of recovered)release(child);
+  }
+  await abandonAndRecover(()=>owner.prepareRecovery(t,id()),p=>p.discard(t));
+  await abandonAndRecover(()=>owner.bufferedRestore(t),s=>s.close(t));
+  const child=owner.prepareRecovery(t,id()),stream=owner.bufferedRestore(t),weakOwner=new WeakRef(owner);
+  owner=null;
+  for(let i=0;i<3;i++){await new Promise(resolve=>setImmediate(resolve));global.gc();}
+  assert.ok(weakOwner.deref(),'retained child deliberately retains owner');
+  assert.ok(child.heads(t).candidate);
+  weakOwner.deref().close(t);
+  assert.throws(()=>child.previews(t),code(['inactive_plan','closed_workspace']));
+  assert.throws(()=>stream.feed(t,Buffer.from('late')),code('inactive_stream'));
+ }finally{owner?.close(t);f.cleanup();}
+});

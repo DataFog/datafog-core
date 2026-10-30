@@ -12,6 +12,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
   recovery, conversation and restore-stream flows through the shared Rust owner.
   `cargo dfv build --fogvault-languages` and `check --fogvault-languages` verify
   installed npm/wheel candidates and Node–Python shared-vault interoperability.
+  Future v1 publication requires passing joint native/browser and native-language
+  CI evidence for the exact candidate commit.
 
 - Optional Core-owned native Rust and browser FogVault integration candidates
   save exact Workspace bundles before activation, bind complete heads and record

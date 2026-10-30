@@ -147,3 +147,9 @@ and foreign-plan isolation, writer conflicts, recovery, conversations, stream
 revocation/failures, malformed inputs and receipt-only restart reconciliation.
 They do not qualify physical providers, power cuts, every OS/Python version,
 real shipping-host authentication, registry publication, or production security.
+
+If Python result conversion fails after a confirmed save, the owner and its
+children are revoked. The best-effort error has `code="outcome_unknown"`, the
+exact `request_id`, and `requires_reopen=True`; reconcile the request and reopen
+instead of retrying the change. Tests cover ordinary confirmed saves and reopen;
+they do not force allocation exhaustion or guarantee reporting after process OOM.

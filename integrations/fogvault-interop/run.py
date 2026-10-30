@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -39,11 +40,12 @@ def main():
     try:
         node = json.loads(args.node_report.read_text())
         python = json.loads(args.python_report.read_text())
-        if any(d.get("pass") is not True or d.get("executed") is not True for d in [node, python]):
-            raise ValueError("Installed consumer qualification is required first")
-        for artifact in [node["artifacts"]["tarball"], node["artifacts"]["installedAddon"], python["candidate"]]:
-            if digest(Path(artifact["path"])) != artifact["sha256"]:
-                raise ValueError("Installed candidate artifact identity changed")
+        spec = importlib.util.spec_from_file_location("language_gate", ROOT / "scripts/verify-fogvault-languages.py")
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        # The standalone runner accepts only the exact qualified installed files,
+        # not merely reports whose old top-level pass flag still reads true.
+        gate.validate_producers(node, python)
         module = Path(node["artifacts"]["consumerPath"]) / "node_modules/@datafog/core-fogvault-node/index.mjs"
         executable = Path(python["run_directory"]) / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         config = {"tenant": "synthetic-cross-language-tenant", "control": str(run_dir / "control"),
@@ -74,6 +76,7 @@ def main():
                            "command": argv, "log": str(log_path), "log_sha256": digest(log_path)})
             if result.returncode:
                 raise ValueError(f"Interop command failed; see {log_path}")
+        gate.validate_producers(node, python)
     except (OSError, ValueError, KeyError, TypeError) as error:
         failure = str(error)
     checks.append({"id": "source_stability", "pass": before == identity(), "executed": True})
@@ -81,7 +84,8 @@ def main():
     report = {"schema": "datafog-fogvault-native-interop/v1", "pass": passed, "executed": True,
               "recorded_at_utc": datetime.now(timezone.utc).isoformat(), "checks": checks,
               "input_identity": before, "failure": failure, "run_directory": str(run_dir),
-              "node_proof_sha256": digest(args.node_report), "python_proof_sha256": digest(args.python_report),
+              "node_proof_sha256": digest(args.node_report) if args.node_report.is_file() else None,
+              "python_proof_sha256": digest(args.python_report) if args.python_report.is_file() else None,
               "qualification": "Synthetic actual installed packages, shared SQLite/control namespace; not provider or power-loss qualification"}
     with args.output.open("x", encoding="utf-8") as stream:
         stream.write(json.dumps(report, indent=2) + "\n")
