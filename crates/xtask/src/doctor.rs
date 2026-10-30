@@ -425,8 +425,10 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
     let root = workspace_root();
     let wasm_dir = root.join("bindings").join("wasm");
 
-    let output = Command::new("npx")
-        .args(["playwright", "--version"])
+    // Diagnosis must use the installed pinned package, never npx's download
+    // fallback. Candidate preparation is a separate intentional action.
+    let output = Command::new("node")
+        .args(["node_modules/playwright/cli.js", "--version"])
         .current_dir(&wasm_dir)
         .output();
 
@@ -436,8 +438,12 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
             let found_version = extract_playwright_version(&raw);
 
             if playwright_matches(&raw, expected) {
-                let chromium_output = Command::new("npx")
-                    .args(["playwright", "chromium", "--version"])
+                let chromium_output = Command::new("node")
+                    .args([
+                        "--input-type=module",
+                        "-e",
+                        "import {existsSync} from 'node:fs'; import {chromium} from 'playwright'; const p=chromium.executablePath(); if(!existsSync(p)) process.exit(1); console.log(p);",
+                    ])
                     .current_dir(&wasm_dir)
                     .output();
                 match chromium_output {
@@ -445,7 +451,11 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
                         let chromium_ver = String::from_utf8_lossy(&co.stdout);
                         DoctorCheck::pass(
                             "playwright_chromium",
-                            &format!("Playwright {} (Chromium {})", expected, chromium_ver.trim()),
+                            &format!(
+                                "Playwright {} (Chromium installed: {})",
+                                expected,
+                                chromium_ver.trim()
+                            ),
                             true,
                         )
                     }
@@ -453,7 +463,7 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
                         "playwright_chromium",
                         Some(&format!("Playwright {expected} (Chromium not installed)")),
                         &format!("Playwright {expected} with Chromium"),
-                        &format!("npx playwright@{expected} install chromium"),
+                        "npm ci --prefix bindings/wasm && node bindings/wasm/node_modules/playwright/cli.js install chromium",
                         true,
                     ),
                 }
@@ -462,7 +472,7 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
                     "playwright_chromium",
                     Some(&format!("Playwright {found_version}")),
                     &format!("Playwright {expected}"),
-                    &format!("npx playwright@{expected} install chromium"),
+                    "npm ci --prefix bindings/wasm && node bindings/wasm/node_modules/playwright/cli.js install chromium",
                     true,
                 )
             }
@@ -471,7 +481,7 @@ pub fn check_playwright_chromium(pins: &VersionPins) -> DoctorCheck {
             "playwright_chromium",
             None,
             &format!("Playwright {expected} with Chromium"),
-            &format!("npx playwright@{expected} install chromium"),
+            "npm ci --prefix bindings/wasm && node bindings/wasm/node_modules/playwright/cli.js install chromium",
             true,
         ),
     }
