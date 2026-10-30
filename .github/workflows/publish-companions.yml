@@ -1,0 +1,91 @@
+name: Publish qualified FogVault companion packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: Dependency-ordered publication group
+        type: choice
+        required: true
+        options:
+          - access
+          - fog-rust
+          - fog-browser
+          - core-rust-integrations
+          - core-browser-integrations
+          - core-node-integration
+          - core-python-integration
+      dry_run:
+        description: Verify without uploading packages
+        type: boolean
+        default: true
+
+concurrency:
+  group: companion-publication
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: ${{ (inputs.group == 'fog-rust' || inputs.group == 'core-rust-integrations') && 'crates-io' || inputs.group == 'core-python-integration' && 'pypi' || 'npm' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@11.17.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        if: inputs.group == 'fog-rust' || inputs.group == 'core-rust-integrations'
+        with:
+          toolchain: '1.94.1'
+      - name: Test publication guard failures
+        run: python scripts/test-publish-companions.py
+      - name: Admit qualified archives and publish the selected group
+        id: companion
+        env:
+          PUBLICATION_GROUP: ${{ inputs.group }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [ "$DRY_RUN" = false ]; then args+=(--execute); fi
+          python scripts/publish-companions.py --group "$PUBLICATION_GROUP" "${args[@]}"
+      - name: Upload the exact qualified Python wheels through PyPI OIDC
+        if: inputs.group == 'core-python-integration' && !inputs.dry_run && steps.companion.outputs.python_upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: target/companion-publication/dist
+          skip-existing: false
+      - name: Verify the complete public Python release file set
+        if: inputs.group == 'core-python-integration' && !inputs.dry_run
+        run: python scripts/publish-companions.py --group core-python-integration --verify-python
+      - name: Retain publication receipts and exact uploaded archives
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: companion-publication-${{ inputs.group }}
+          path: |
+            target/companion-publication/qualification.json
+            target/companion-publication/receipt.json
+            target/companion-publication/partial-receipt.json
+            target/companion-publication/*.crate
+            target/companion-publication/dist/*.whl
+          if-no-files-found: warn
