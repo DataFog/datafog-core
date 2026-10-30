@@ -28,6 +28,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
   instructions rather than invoking an implicit package-download fallback.
 - Verification resolves the current Core checkout before the binary's build-time
   path, preventing shared build caches from testing another worktree's inputs.
+- Apply lowercase product names and brand-orange badges to the repository README.
+
 - Update the documentation site with the Redacted line identity, self-hosted Geist
   fonts, lowercase product names, and matching light and dark themes.
 
