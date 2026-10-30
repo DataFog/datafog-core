@@ -1,6 +1,6 @@
 ---
 title: "Configuration"
-description: "Choose the folders DataFog MCP can access and where protected copies are saved."
+description: "Choose the folders datafog MCP can access and where protected copies are saved."
 icon: "sliders"
 ---
 
@@ -21,7 +21,7 @@ policy refuses every path instead of falling back to that default.
 `DATAFOG_MCP_ALLOWED_ROOTS` overrides the file when set. It contains
 colon-separated directories. Setting it to an empty value refuses every path.
 
-Allowed roots restrict DataFog's access, not the agent's other tools.
+Allowed roots restrict datafog's access, not the agent's other tools.
 Credential directories such as `.ssh`, `.aws`, and `.kube` remain refused even
 when they are inside an allowed root.
 

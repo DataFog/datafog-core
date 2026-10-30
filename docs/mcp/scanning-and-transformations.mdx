@@ -4,13 +4,13 @@ description: "Check local files, then create a redacted, masked, or removed copy
 icon: "magnifying-glass"
 ---
 
-[Connect DataFog MCP to Claude Code](/mcp/quickstart) before following these examples.
+[Connect datafog MCP to Claude Code](/mcp/quickstart) before following these examples.
 
 ## Scan before opening a file
 
 Put a CSV or text file inside an allowed folder. Ask Claude Code:
 
-> Scan customers.csv with DataFog before opening it. Tell me what types of
+> Scan customers.csv with datafog before opening it. Tell me what types of
 > sensitive data you find, without reading the file into the conversation.
 
 Use an absolute path if the file is outside the agent's current directory.
@@ -24,7 +24,7 @@ from the MCP repository. Save it inside an allowed folder first.
 
 After scanning, ask:
 
-> Create a redacted copy of customers.csv with DataFog. Use the default checks,
+> Create a redacted copy of customers.csv with datafog. Use the default checks,
 > leave the original unchanged, and tell me the copy's path. Do not open either file.
 
 The original stays intact. By default, copies are saved beside it; existing

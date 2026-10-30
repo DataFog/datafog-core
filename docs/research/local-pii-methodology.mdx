@@ -1,6 +1,6 @@
 ---
 title: "Local PII model: evaluation methodology"
-description: "Data provenance, split rules, exact-span results, calibration limitations, and native runtime observations for the DataFog research preview."
+description: "Data provenance, split rules, exact-span results, calibration limitations, and native runtime observations for the datafog research preview."
 ---
 
 This page documents one completed prototype run. It is not an independent
@@ -74,8 +74,8 @@ byte length: 63,160 gold bytes were missed and 10,061 unnecessary bytes redacted
 
 ## Regex comparison
 
-The baseline was the published **legacy DataFog Python 4.8.1 regex engine**,
-not current DataFog Core. Only email and phone number were compared because
+The baseline was the published **legacy datafog Python 4.8.1 regex engine**,
+not current datafog core. Only email and phone number were compared because
 those are the baseline's supported categories within this experiment's scope.
 Both systems saw all test documents, with the same exact-span scoring.
 

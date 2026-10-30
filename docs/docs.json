@@ -1,39 +1,40 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "DataFog",
-  "description": "Local file protection with DataFog MCP and privacy SDKs with DataFog Core",
+  "name": "datafog",
+  "description": "Local file protection with datafog MCP and privacy SDKs with datafog core",
   "colors": {
-    "primary": "#8A5D00",
-    "light": "#8A5D00",
-    "dark": "#F7CE7A"
+    "primary": "#A83226",
+    "light": "#FF7A1A",
+    "dark": "#C0362C"
   },
   "appearance": {
-    "default": "light",
-    "strict": true
+    "default": "system",
+    "strict": false
   },
   "background": {
     "color": {
-      "light": "#F2F0EB",
-      "dark": "#1B1A17"
+      "light": "#EEF0EF",
+      "dark": "#0E1316"
     }
   },
   "logo": {
     "light": "/images/datafog-wordmark-light.svg",
-    "dark": "/images/datafog-wordmark.svg"
+    "dark": "/images/datafog-wordmark.svg",
+    "href": "https://datafog.ai"
   },
   "favicon": "/favicon.svg",
   "fonts": {
     "heading": {
-      "family": "Hanken Grotesk",
-      "weight": 600,
-      "source": "/fonts/hanken-grotesk-latin.woff2",
+      "family": "Geist",
+      "weight": 300,
+      "source": "/fonts/geist-latin.woff2",
       "format": "woff2"
     },
     "body": {
-      "family": "Hanken Grotesk",
+      "family": "Geist",
       "weight": 400,
-      "source": "/fonts/hanken-grotesk-latin.woff2",
+      "source": "/fonts/geist-latin.woff2",
       "format": "woff2"
     }
   },
@@ -42,13 +43,13 @@
       "og:image": "https://docs.datafog.ai/images/og-docs.png",
       "twitter:image": "https://docs.datafog.ai/images/og-docs.png",
       "twitter:card": "summary_large_image",
-      "theme-color": "#F2F0EB",
+      "theme-color": "#0E1316",
       "og:image:width": "1200",
       "og:image:height": "630",
       "og:image:type": "image/png",
-      "og:image:alt": "DataFog documentation \u2014 Guides for MCP and Core SDK.",
-      "twitter:image:alt": "DataFog documentation \u2014 Guides for MCP and Core SDK.",
-      "og:site_name": "DataFog documentation"
+      "og:image:alt": "datafog documentation — Guides for MCP and Core SDK.",
+      "twitter:image:alt": "datafog documentation — Guides for MCP and Core SDK.",
+      "og:site_name": "datafog documentation"
     }
   },
   "navigation": {
@@ -69,7 +70,7 @@
             ]
           },
           {
-            "group": "Use DataFog MCP",
+            "group": "Use datafog MCP",
             "pages": [
               "mcp/scanning-and-transformations",
               "mcp/configuration",
@@ -205,7 +206,7 @@
   "navbar": {
     "links": [
       {
-        "label": "DataFog home",
+        "label": "datafog home",
         "href": "https://datafog.ai"
       }
     ]

@@ -4,8 +4,8 @@ description: "Create deterministic one-way pseudonyms with application-managed k
 icon: "key"
 ---
 
-Pseudonymization replaces a finding with a deterministic keyed digest. DataFog
-Core uses HMAC-SHA-256 over the exact UTF-8 matched value and returns the full
+Pseudonymization replaces a finding with a deterministic keyed digest. datafog
+core uses HMAC-SHA-256 over the exact UTF-8 matched value and returns the full
 digest as standard padded Base64.
 
 <Warning>
@@ -90,7 +90,7 @@ const result = await manager.scanAndTransform("Email jane@example.com", {
 });
 ```
 
-The example `loadKeyFromYourKms` functions are application code. DataFog Core
+The example `loadKeyFromYourKms` functions are application code. datafog core
 does not ship cloud-specific key-provider adapters.
 
 ## Request behavior

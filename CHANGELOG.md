@@ -6,6 +6,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Update the documentation site with the Redacted line identity, self-hosted Geist
+  fonts, lowercase product names, and matching light and dark themes.
+
 ## [0.5.0-beta.3] - 2026-10-29
 
 ### Added

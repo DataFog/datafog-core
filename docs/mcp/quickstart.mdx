@@ -4,7 +4,7 @@ description: "Check local files for personal data and credentials before your ag
 icon: "shield-halved"
 ---
 
-DataFog MCP connects DataFog Core to Claude Code through five tools. Scan local
+datafog MCP connects datafog core to Claude Code through five tools. Scan local
 files, then create redacted, masked, or removed copies. Tool responses contain
 counts, locations, and copy paths, without file contents or matched values.
 
@@ -14,12 +14,12 @@ You need **Python 3.10 or later**, [uv](https://docs.astral.sh/uv/getting-starte
 and Claude Code running on the machine that holds your files.
 
 <Steps>
-  <Step title="Install DataFog MCP">
+  <Step title="Install datafog MCP">
     ```bash
     uv tool install datafog-mcp
     ```
   </Step>
-  <Step title="Choose the folders DataFog can access">
+  <Step title="Choose the folders datafog can access">
     ```bash
     datafog-mcp roots --edit
     ```

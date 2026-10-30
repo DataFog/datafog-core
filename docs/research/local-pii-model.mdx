@@ -1,9 +1,9 @@
 ---
 title: "A small PII model for local Rust inference"
-description: "A DataFog research preview: detection results across seven PII categories, local runtime measurements, and fine-tuning on a Mac."
+description: "A datafog research preview: detection results across seven PII categories, local runtime measurements, and fine-tuning on a Mac."
 ---
 
-**DataFog research preview · September 2026**
+**datafog research preview · September 2026**
 
 We fine-tuned a 65.2-million-parameter DistilBERT model to detect seven categories
 of PII and packaged it for local inference in Rust. It returns typed spans for
@@ -43,7 +43,7 @@ Results across all seven categories:
 | Customer ID | 99.27% | 98.00% | 98.63% |
 | Account number | 98.76% | 96.83% | 97.78% |
 
-For email and phone numbers, the model was compared with the **legacy DataFog
+For email and phone numbers, the model was compared with the **legacy datafog
 Python 4.8.1 regex engine**. These were the two categories supported by that
 baseline within the seven-category evaluation:
 
