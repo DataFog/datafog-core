@@ -47,6 +47,22 @@ def inputs():
     return {f: sha((ROOT/f).read_bytes()) for f in sorted(set(files))
             if f and (f in exact or f.startswith(prefixes)) and (ROOT/f).is_file()}
 
+def verify_wheel_metadata(archive, package):
+    """Compare the packaged README and license to the actual source bytes.
+
+    Path.read_text() performs universal newline conversion; wheel metadata does
+    not. Decoding raw UTF-8 preserves CRLF from a Windows checkout and prevents
+    falsely rejecting a wheel which kept its source README exactly.
+    """
+    names = archive.namelist()
+    metadata = [name for name in names if name.endswith(".dist-info/METADATA")]
+    licenses = [name for name in names if name.endswith(".dist-info/licenses/LICENSE")]
+    if len(metadata) != 1 or len(licenses) != 1 or archive.read(licenses[0]) != (package / "LICENSE").read_bytes():
+        raise ValueError("Wheel omitted its exact license notice")
+    description = Parser().parsestr(archive.read(metadata[0]).decode("utf-8")).get_payload()
+    if description.strip() != (package / "README.md").read_bytes().decode("utf-8").strip():
+        raise ValueError("Wheel metadata omitted its reviewed README")
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -88,6 +104,7 @@ def main():
             versions[name] = run(name+"-version", command, 30)
         if versions["maturin"] != "maturin 1.14.1":
             raise ValueError("Install repository-declared maturin 1.14.1 before building")
+        run("wheel-metadata-regressions", [sys.executable, str(PACKAGE / "tests/test_wheel_metadata.py")], 30)
         run("wheel-build", [sys.executable, "-m", "maturin", "build", "--locked", "--manifest-path", str(PACKAGE/"Cargo.toml"),
             "--out", str(wheels), "--interpreter", sys.executable])
         artifacts = list(wheels.glob("*.whl"))
@@ -104,13 +121,7 @@ def main():
             raise ValueError("Consumer imported a package outside the isolated environment")
         with ZipFile(wheel) as archive:
             names = archive.namelist()
-            metadata = [name for name in names if name.endswith(".dist-info/METADATA")]
-            licenses = [name for name in names if name.endswith(".dist-info/licenses/LICENSE")]
-            if len(metadata) != 1 or len(licenses) != 1 or archive.read(licenses[0]) != (PACKAGE / "LICENSE").read_bytes():
-                raise ValueError("Wheel omitted its exact license notice")
-            description = Parser().parsestr(archive.read(metadata[0]).decode("utf-8")).get_payload()
-            if description.strip() != (PACKAGE / "README.md").read_text(encoding="utf-8").strip():
-                raise ValueError("Wheel metadata omitted its reviewed README")
+            verify_wheel_metadata(archive, PACKAGE)
             if len(names) != len(set(n.casefold() for n in names)):
                 raise ValueError("Wheel has duplicate/colliding members")
             for member in names:

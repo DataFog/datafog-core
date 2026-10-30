@@ -18,6 +18,11 @@ approved registry identity/checksum union. Compatible versions already present i
 that union may unify; every package graph rejects new versions or checksums.
 Source locks remain unchanged.
 
+Workspace metadata provisioning may fetch missing registry index entries and
+archives on a cold host. Its resolved graph must pass the same exact approved
+identity/checksum checks before any archive is accepted. The independent final
+consumer continues to run offline in a fresh Cargo home.
+
 Normal `cargo package --workspace --locked` builds and verifies every archive.
 There is no `--no-verify`. The command checks that normalized manifests resolve
 registry dependencies without paths, Git sources or patches and include readmes

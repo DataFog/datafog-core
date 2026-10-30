@@ -85,6 +85,28 @@ def lock_text(packages):
     return "\n".join(lines)
 
 
+def metadata_command(manifest):
+    # Explicit provisioning may populate a cold Cargo index/cache. The resolved
+    # graph is admitted against exact approved identities before packaging, and
+    # the independent final consumer still executes fully offline.
+    return ["cargo", "+1.94.1", "metadata", "--format-version", "1", "--manifest-path", str(manifest)]
+
+
+def admit_registry_graph(lock, approved, candidate_hashes):
+    graph = []
+    for row in tomllib.loads(lock.read_text())["package"]:
+        if row.get("source") != REGISTRY:
+            if row.get("source"):
+                raise ValueError("archive graph retains non-registry dependency")
+            continue
+        key = row["name"], row["version"]
+        expected = candidate_hashes.get(key) or approved.get(key, {}).get("checksum")
+        if expected is None or row["checksum"] != expected:
+            raise ValueError("unapproved registry identity/checksum: " + str(key))
+        graph.append({"name": key[0], "version": key[1], "sha256": expected})
+    return graph
+
+
 def execute(fog, output, allow_dirty):
     output.mkdir(parents=True, exist_ok=False)
     members = {name: (ROOT, relative, "1.0.0") for name, relative in CORE.items()}
@@ -193,20 +215,9 @@ def execute(fog, output, allow_dirty):
                 seed.extend(rows)
                 seeded_names.add(name)
     (scratch / "Cargo.lock").write_text(lock_text(seed))
-    run("lock-approved-union", ["cargo", "+1.94.1", "metadata", "--offline", "--format-version", "1", "--manifest-path", str(scratch / "Cargo.toml")])
+    run("lock-approved-union", metadata_command(scratch / "Cargo.toml"))
     def check_graph(lock, candidate_hashes):
-        graph = []
-        for row in tomllib.loads(lock.read_text())["package"]:
-            if row.get("source") != REGISTRY:
-                if row.get("source"):
-                    raise ValueError("archive graph retains non-registry dependency")
-                continue
-            key = row["name"], row["version"]
-            expected = candidate_hashes.get(key) or approved.get(key, {}).get("checksum")
-            if expected is None or row["checksum"] != expected:
-                raise ValueError("unapproved registry identity/checksum: " + str(key))
-            graph.append({"name": key[0], "version": key[1], "sha256": expected})
-        return graph
+        return admit_registry_graph(lock, approved, candidate_hashes)
     check_graph(scratch / "Cargo.lock", {})
     run("batch-package", ["cargo", "+1.94.1", "package", "--workspace", "--locked", "--registry", "crates-io", "--manifest-path", str(scratch / "Cargo.toml")])
     packages = scratch / "target/package"
