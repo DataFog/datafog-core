@@ -4,6 +4,10 @@ Decision date: October 30, 2026. The owner authorized preparing Core v1 and the
 minimum FogVault packaging needed to consume it. Nothing in this document
 authorizes registry publication, a release tag, or an extension product launch.
 
+Publication was authorized separately. The [1.0.0 release](releases/1-0-0.mdx)
+records the published packages and public-install evidence. The preparation
+decisions below remain the scope policy; extension launch is still separate.
+
 ## What Core v1 commits to
 
 Core is an independently usable SDK, with Rust, Python, native Node and browser

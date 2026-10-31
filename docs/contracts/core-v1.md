@@ -7,8 +7,8 @@ Fresh installed Rust/Python/Node/WASM candidates passed 45 workspace cases and
 600 steps; the native registry consumer also passed its ten named cases,
 including exact published beta.3 interoperability.
 
-This is the compatibility policy for the 1.0.0 candidate, not release approval.
-Publication still requires every exact-head platform, unified-package, model and
+This compatibility policy governs the published 1.0.0 release. Each subsequent
+publication still requires every exact-head platform, unified-package, model and
 joint release check. A supported-path failure blocks release and must be fixed
 without silently changing this contract. External provider and shipping-extension
 acceptance remain separate under the owner-approved Core release scope.

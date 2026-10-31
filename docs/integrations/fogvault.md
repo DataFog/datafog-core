@@ -1,10 +1,11 @@
 # Using Core with FogVault
 
-Core now has optional native Rust, Node, Python and browser integration
-candidates. They keep Core preparation separate from persistence and activate only after the exact
-candidate has been saved. Core's existing 0.5.0-beta.3 packages and Rust 1.88
-minimum are unchanged. These new integration packages remain unpublished 1.0.0
-candidates; this change does not freeze the v1 API or approve a production host.
+Core 1.0 includes optional native Rust, Node, Python and browser integrations.
+They keep Core preparation separate from persistence and activate only after the
+exact candidate has been saved. The integration packages are version 1.0.0;
+FogVault is independently versioned 0.1.0. The reviewed Workspace contract is
+version 1. Core's Rust 1.88 minimum and exact published 0.5.0-beta.3 interchange
+regression remain unchanged. Production-host acceptance remains separate.
 
 ## Start here
 
@@ -80,16 +81,16 @@ are retained in `target/fogvault-language/check-*/`. CI qualifies this installed
 path on Linux, macOS and Windows. It does not qualify production tenant routing,
 physical providers, power cuts or every Python/Node version.
 
-For a future Core v1 release, each existing publish workflow also requires all three
-qualification workflows to have succeeded for the exact candidate commit, including
-all six native/browser scopes and all three native-language OS scopes and the installed browser model SDK scope. Pending,
-failed, incomplete or older-commit evidence blocks publication. This gate does
-not publish packages or waive the remaining release approvals.
+Core v1 and later publish workflows require all three qualification workflows
+for the exact release commit: all six native/browser scopes, all three native
+language OS scopes, the unified native Node archive and the browser model SDK
+scope. Pending, failed, incomplete or older-commit evidence blocks publication.
+This gate does not publish packages or replace release authorization.
 
 Both `--fogvault` and `--fogvault-languages` are required joint qualification
 scopes for changes that affect all maintained integrations. Neither publishes
-packages or changes the existing Core beta.3 minimum. The optional packages stay
-unpublished `1.0.0` candidates until the remaining v1 gates close.
+packages or changes the existing Core beta.3 minimum. Published versions and
+public-install evidence are recorded in the [1.0.0 release](../releases/1-0-0.mdx).
 
 ## Browser extension handoff
 
@@ -124,10 +125,10 @@ contract freeze, installed package/parity checks and exact-candidate joint gates
 External provider preservation and Josh's shipping-site acceptance remain open
 product work; their thresholds have not been lowered or reported as passed.
 
-The integration packages are unpublished 1.0.0 candidates. FogVault is an
-independently versioned 0.1.0 candidate. Its registry graph is verified locally;
-actual public availability and post-publication installation remain later,
-explicitly authorized release actions. CSV is deferred from Core v1.
+Core-owned integration packages 1.0.0 and independently versioned FogVault
+0.1.0 are published. Registry archive identities and public-install behavior are
+verified separately from local candidate packaging. The release records retain
+both sets of evidence. CSV is deferred from Core v1.
 
 [Resource observations](fogvault-resource-budget.md) support one pending
 integrated preparation. They do not establish arbitrary device memory budgets,
