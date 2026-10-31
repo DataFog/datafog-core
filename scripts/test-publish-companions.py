@@ -1,6 +1,9 @@
 """Publication tests exercise changed bytes, unsafe archives and failed evidence."""
 import io
 import json
+import os
+import subprocess
+import shutil
 from pathlib import Path
 import tarfile
 import tempfile
@@ -56,6 +59,25 @@ class Publication(unittest.TestCase):
             result = publisher.publish_npm(archive, "@datafog/core-fogvault-browser", "1.0.0", True)
         self.assertTrue(result["published"])
         run.assert_not_called()
+
+    def test_accepted_npm_upload_waits_for_processing_without_reupload(self):
+        archive = self.npm()
+        public = {"dist": {"tarball": "registry-file"}}
+        responses = [None] + [None] * 13 + [public]
+        with patch.object(publisher, "json_read", side_effect=responses), patch.object(publisher, "read", return_value=archive.read_bytes()), patch.object(publisher, "run") as run, patch.object(publisher.time, "sleep") as sleep:
+            result = publisher.publish_npm(archive, "@datafog/core-fogvault-browser", "1.0.0", True)
+        self.assertTrue(result["published"])
+        self.assertEqual(sleep.call_count, 13)
+        run.assert_called_once()
+        self.assertNotIn("--dry-run", run.call_args.args[0])
+
+    def test_processed_npm_upload_still_requires_exact_archive_bytes(self):
+        public = {"dist": {"tarball": "registry-file"}}
+        responses = [None] + [None] * 13 + [public]
+        with patch.object(publisher, "json_read", side_effect=responses), patch.object(publisher, "read", return_value=b"different"), patch.object(publisher, "run") as run, patch.object(publisher.time, "sleep"):
+            with self.assertRaisesRegex(ValueError, "Published npm archive is missing or differs"):
+                publisher.publish_npm(self.npm(), "@datafog/core-fogvault-browser", "1.0.0", True)
+        run.assert_called_once()
 
     def test_existing_different_archive_hard_stops(self):
         with patch.object(publisher, "json_read", return_value={"dist": {"tarball": "registry-file"}}), patch.object(publisher, "read", return_value=b"different"), patch.object(publisher, "run") as run:
@@ -149,13 +171,72 @@ class Publication(unittest.TestCase):
         with self.assertRaises(ValueError):
             publisher.compare_crate(qualified, actual, source, "a" * 40, {}, {})
 
+    def test_normal_cargo_repackages_broad_include_only_after_generated_orig_is_omitted(self):
+        source = self.root / "source"
+        (source / "src").mkdir(parents=True)
+        (source / "Cargo.toml").write_text(
+            '[package]\nname="publication-fixture"\nversion="1.0.0"\nedition="2021"\ninclude=["**"]\n')
+        (source / "src/lib.rs").write_text('pub fn fixture() -> u8 { 1 }\n')
+        environment = dict(os.environ, CARGO_TARGET_DIR=str(self.root / "build"))
+        def cargo(*arguments):
+            return subprocess.run(["cargo", *arguments], cwd=self.root, env=environment,
+                                  text=True, capture_output=True, timeout=120)
+        result = cargo("generate-lockfile", "--offline", "--manifest-path", str(source / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(source / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        qualified = self.root / "qualified/publication-fixture-1.0.0.crate"
+        qualified.parent.mkdir()
+        shutil.copyfile(self.root / "build/package/publication-fixture-1.0.0.crate", qualified)
+        prefix = "publication-fixture-1.0.0/"
+        files = publisher.tar_files(qualified)
+        self.assertIn(prefix + "Cargo.toml.orig", files)
+        broken = self.root / "broken"
+        for name, content in files.items():
+            target = broken / name.removeprefix(prefix)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(broken / "Cargo.toml"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reserved file name Cargo.toml.orig", result.stderr)
+        repaired = self.root / "repaired"
+        publisher.stage_crate_sources(qualified, repaired, prefix)
+        self.assertFalse((repaired / "Cargo.toml.orig").exists())
+        self.assertFalse((repaired / ".cargo_vcs_info.json").exists())
+        self.assertEqual((repaired / "Cargo.lock").read_bytes(), files[prefix + "Cargo.lock"])
+        self.assertEqual((repaired / "src/lib.rs").read_bytes(), files[prefix + "src/lib.rs"])
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(repaired / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        actual = self.root / "build/package/publication-fixture-1.0.0.crate"
+        publisher.compare_crate(qualified, actual, repaired, "a" * 40, {}, {})
+
     def test_public_python_release_requires_complete_exact_hashes(self):
         (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": [{"name": "one.whl", "sha256": "right"}]}))
         with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": [{"filename": "one.whl", "digests": {"sha256": "right"}}]}):
             publisher.verify_python(self.root)
-        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": []}):
-            with self.assertRaises(ValueError):
+        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": []}), patch.object(publisher.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "still incomplete"):
                 publisher.verify_python(self.root)
+        self.assertEqual(sleep.call_count, 120)
+
+    def test_python_replication_missing_then_matching_subset_then_complete(self):
+        packages = [{"name": "one.whl", "sha256": "first"}, {"name": "two.whl", "sha256": "second"}]
+        (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": packages}))
+        partial = {"urls": [{"filename": "one.whl", "digests": {"sha256": "first"}}]}
+        complete = {"urls": partial["urls"] + [{"filename": "two.whl", "digests": {"sha256": "second"}}]}
+        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", side_effect=[None, partial, complete]), patch.object(publisher.time, "sleep") as sleep:
+            publisher.verify_python(self.root)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_python_replication_rejects_wrong_hash_and_extra_file_immediately(self):
+        packages = [{"name": "one.whl", "sha256": "right"}]
+        (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": packages}))
+        for filename, digest in (("one.whl", "wrong"), ("unexpected.whl", "right")):
+            with self.subTest(filename=filename), patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": [{"filename": filename, "digests": {"sha256": digest}}]}) as read, patch.object(publisher.time, "sleep") as sleep:
+                with self.assertRaisesRegex(ValueError, "file set or hashes differ"):
+                    publisher.verify_python(self.root)
+            read.assert_called_once()
+            sleep.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -8,6 +8,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Allow bounded PyPI replication time for missing expected wheels after upload,
+  while immediately rejecting unexpected files or mismatched SHA-256 values.
+
+- Wait up to ten minutes for accepted npm uploads to finish registry processing;
+  verify the exact public archive without submitting a duplicate upload.
+
+- Regenerate Cargo-owned `Cargo.toml.orig` when staging qualified crates for
+  publication, so packages with broad include rules pass normal Cargo verification.
+
 - Retain exact base SDK publication archives and SHA-256 receipts before upload;
   npm publishes those same archives with lifecycle hooks disabled.
 

@@ -56,6 +56,17 @@ patterns are `rust-v1.0.0`, `node-v1.0.0`, `python-v1.0.0` and `wasm-v1.0.0`;
 pushing these tags triggers real publication. Their manual runs default to safe
 dry runs. Do not create any publication tag before its exact source gates pass.
 
+Push at most three publication tags in one operation. GitHub suppresses tag push
+workflow events when more than three tags are pushed together; an atomic push of
+all four SDK tags therefore creates the refs without starting these publishers.
+See the [GitHub push-event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push).
+If tags already exist, leave them unchanged. Inspect existing runs for each
+workflow and exact release revision before dispatching a missing publisher;
+never dispatch a duplicate while a matching upload is running or already complete.
+Use `workflow_dispatch` on the unchanged SDK tag with `dry_run=false` only when
+its previous run and public registry state establish that publication is still
+needed. Manual dry runs retain their default `dry_run=true`.
+
 The companion publication workflow, `publish-companions.yml`, handles the new
 FogVault/integration release packages under the same release coordination. Keep
 its dry run enabled until namespace ownership, registry permissions, predecessor

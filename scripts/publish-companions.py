@@ -149,7 +149,9 @@ def publish_npm(path, expected_name, version, execute):
             env["NPM_CONFIG_PROVENANCE"] = "false"
         run(["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--tag", "latest"] + ([] if execute else ["--dry-run"]), env=env)
         if execute:
-            for _ in range(12):
+            # npm can acknowledge an upload before registry processing finishes.
+            # Poll for up to ten minutes without submitting the archive again.
+            for _ in range(120):
                 existing = json_read(url)
                 if existing:
                     break
@@ -163,11 +165,30 @@ def verify_python(output):
     receipt = json.loads((output / "receipt.json").read_text())
     if receipt["revision"] != os.environ["GITHUB_SHA"] or receipt["group"] != "core-python-integration":
         raise ValueError("Python publication receipt identity differs")
-    public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
-    observed = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
     expected = {entry["name"]: entry["sha256"] for entry in receipt["packages"]}
-    if observed != expected:
-        raise ValueError("Published Python file set or hashes differ")
+    for _ in range(120):
+        public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
+        observed = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
+        if any(name not in expected or sha256 != expected[name] for name, sha256 in observed.items()):
+            raise ValueError("Published Python file set or hashes differ")
+        if observed == expected:
+            return
+        # Only missing expected files can be delayed by registry replication.
+        time.sleep(5)
+    raise ValueError("Published Python file set is still incomplete after registry processing")
+
+
+def stage_crate_sources(qualified, destination, prefix):
+    """Keep qualified sources and locks; Cargo regenerates its reserved receipts."""
+    for filename, data in tar_files(qualified).items():
+        if not filename.startswith(prefix):
+            raise ValueError("Wrong qualified archive root")
+        relative_name = filename.removeprefix(prefix)
+        if relative_name in (".cargo_vcs_info.json", "Cargo.toml.orig"):
+            continue
+        target = destination / relative_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
 
 
 def compare_crate(qualified, actual, source, revision, approved, candidates):
@@ -311,15 +332,7 @@ def publish_rust(args, output, runs, revision, results):
             raise ValueError("Qualified crate receipt missing or ambiguous")
         qualified = qualified_file(source, entries[0], ".crate")
         prefix = f"{name}-{version}/"
-        for filename, data in tar_files(qualified).items():
-            if not filename.startswith(prefix):
-                raise ValueError("Wrong qualified archive root")
-            relative_name = filename.removeprefix(prefix)
-            if relative_name == ".cargo_vcs_info.json":
-                continue  # Cargo's reserved generated receipt, never source code.
-            destination = package / relative_name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(data)
+        stage_crate_sources(qualified, package, prefix)
         lock = tomllib.loads((package / "Cargo.lock").read_text())
         for row in lock["package"]:
             if row.get("source") == qualifier.REGISTRY and (row["name"], row["version"]) in candidates:
