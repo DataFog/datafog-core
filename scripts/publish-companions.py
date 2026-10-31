@@ -170,6 +170,19 @@ def verify_python(output):
         raise ValueError("Published Python file set or hashes differ")
 
 
+def stage_crate_sources(qualified, destination, prefix):
+    """Keep qualified sources and locks; Cargo regenerates its reserved receipts."""
+    for filename, data in tar_files(qualified).items():
+        if not filename.startswith(prefix):
+            raise ValueError("Wrong qualified archive root")
+        relative_name = filename.removeprefix(prefix)
+        if relative_name in (".cargo_vcs_info.json", "Cargo.toml.orig"):
+            continue
+        target = destination / relative_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+
 def compare_crate(qualified, actual, source, revision, approved, candidates):
     expected, observed = tar_files(qualified), tar_files(actual)
     prefix = actual.name.removesuffix(".crate") + "/"
@@ -311,15 +324,7 @@ def publish_rust(args, output, runs, revision, results):
             raise ValueError("Qualified crate receipt missing or ambiguous")
         qualified = qualified_file(source, entries[0], ".crate")
         prefix = f"{name}-{version}/"
-        for filename, data in tar_files(qualified).items():
-            if not filename.startswith(prefix):
-                raise ValueError("Wrong qualified archive root")
-            relative_name = filename.removeprefix(prefix)
-            if relative_name == ".cargo_vcs_info.json":
-                continue  # Cargo's reserved generated receipt, never source code.
-            destination = package / relative_name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(data)
+        stage_crate_sources(qualified, package, prefix)
         lock = tomllib.loads((package / "Cargo.lock").read_text())
         for row in lock["package"]:
             if row.get("source") == qualifier.REGISTRY and (row["name"], row["version"]) in candidates:

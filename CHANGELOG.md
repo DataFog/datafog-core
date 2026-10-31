@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Regenerate Cargo-owned `Cargo.toml.orig` when staging qualified crates for
+  publication, so packages with broad include rules pass normal Cargo verification.
+
 - Retain exact base SDK publication archives and SHA-256 receipts before upload;
   npm publishes those same archives with lifecycle hooks disabled.
 

@@ -1,6 +1,9 @@
 """Publication tests exercise changed bytes, unsafe archives and failed evidence."""
 import io
 import json
+import os
+import subprocess
+import shutil
 from pathlib import Path
 import tarfile
 import tempfile
@@ -148,6 +151,45 @@ class Publication(unittest.TestCase):
         tar(actual, files)
         with self.assertRaises(ValueError):
             publisher.compare_crate(qualified, actual, source, "a" * 40, {}, {})
+
+    def test_normal_cargo_repackages_broad_include_only_after_generated_orig_is_omitted(self):
+        source = self.root / "source"
+        (source / "src").mkdir(parents=True)
+        (source / "Cargo.toml").write_text(
+            '[package]\nname="publication-fixture"\nversion="1.0.0"\nedition="2021"\ninclude=["**"]\n')
+        (source / "src/lib.rs").write_text('pub fn fixture() -> u8 { 1 }\n')
+        environment = dict(os.environ, CARGO_TARGET_DIR=str(self.root / "build"))
+        def cargo(*arguments):
+            return subprocess.run(["cargo", *arguments], cwd=self.root, env=environment,
+                                  text=True, capture_output=True, timeout=120)
+        result = cargo("generate-lockfile", "--offline", "--manifest-path", str(source / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(source / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        qualified = self.root / "qualified/publication-fixture-1.0.0.crate"
+        qualified.parent.mkdir()
+        shutil.copyfile(self.root / "build/package/publication-fixture-1.0.0.crate", qualified)
+        prefix = "publication-fixture-1.0.0/"
+        files = publisher.tar_files(qualified)
+        self.assertIn(prefix + "Cargo.toml.orig", files)
+        broken = self.root / "broken"
+        for name, content in files.items():
+            target = broken / name.removeprefix(prefix)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(broken / "Cargo.toml"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reserved file name Cargo.toml.orig", result.stderr)
+        repaired = self.root / "repaired"
+        publisher.stage_crate_sources(qualified, repaired, prefix)
+        self.assertFalse((repaired / "Cargo.toml.orig").exists())
+        self.assertFalse((repaired / ".cargo_vcs_info.json").exists())
+        self.assertEqual((repaired / "Cargo.lock").read_bytes(), files[prefix + "Cargo.lock"])
+        self.assertEqual((repaired / "src/lib.rs").read_bytes(), files[prefix + "src/lib.rs"])
+        result = cargo("package", "--locked", "--offline", "--manifest-path", str(repaired / "Cargo.toml"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        actual = self.root / "build/package/publication-fixture-1.0.0.crate"
+        publisher.compare_crate(qualified, actual, repaired, "a" * 40, {}, {})
 
     def test_public_python_release_requires_complete_exact_hashes(self):
         (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": [{"name": "one.whl", "sha256": "right"}]}))
