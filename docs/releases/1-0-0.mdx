@@ -1,0 +1,80 @@
+---
+title: "1.0.0"
+description: "Stable Core SDK contracts and optional native and browser FogVault persistence."
+icon: "tag"
+---
+
+Core `1.0.0` aligns the Rust, Python, native Node and browser WASM SDK versions.
+The public Workspace API contract is version **1**; the snapshot writer remains
+version **3**, with supported readers for versions **1, 2 and 3**. These identifiers
+are separate. The [reviewed compatibility contract](../contracts/core-v1.md)
+records their guarantees and limits.
+
+## What changes from beta.3
+
+- All SDKs expose the Rust-backed Workspace contract identifier. A committed
+  inventory checks public runtime exports, shipped types, structured error codes
+  and snapshot fixtures alongside actual installed four-SDK parity.
+- Optional Core-owned FogVault packages provide native Rust, Node, Python and
+  browser persistence. They preserve explicit approval, complete-head binding,
+  lock/reopen, lost-acknowledgment reconciliation and fresh-destination recovery.
+  Native Node and Python call the same Rust owner and can reopen the same vault.
+- Browser integrations include an import-only reader for the documented Core
+  reference backups. This does not establish compatibility with an unidentified
+  extension's archive format.
+- Integrated owners admit one pending prepared change per owner. Another returns
+  `resource_limit` before cloning Core state; discard, confirmed consumption and
+  close release the slot. Raw Rust Core callers retain their existing semantics.
+- Native Node declarations now match actual public exports. Native integration
+  binaries are checked against their source/target manifests; Python wheels
+  include their README and MIT license.
+- The root dependency lock uses Tokio 1.53.3 for RUSTSEC-2026-0386. Core's base Rust
+  support floor remains 1.88; optional adapters document their higher requirements.
+
+## Packages and installation
+
+After registry publication completes, install exact stable versions:
+
+```bash
+cargo add datafog-core@=1.0.0
+python -m pip install datafog-core==1.0.0
+npm install --save-exact @datafog/node@1.0.0
+npm install --save-exact @datafog/wasm@1.0.0
+```
+
+The optional [FogVault integration guide](../integrations/fogvault.md) describes
+`datafog-fogvault-native`, `datafog-fogvault-migration`, `datafog-fogvault`,
+`@datafog/core-fogvault-node`, `@datafog/core-fogvault-browser` and
+`@datafog/core-fogvault-legacy-browser`, all version `1.0.0`. FogVault itself is
+independently versioned **0.1.0**. Its browser runtime is
+`@datafog/fogvault-browser@0.1.0`.
+
+Base native Node supports macOS ARM64/Intel, Linux ARM64/x64 GNU and Windows x64.
+The optional native Node/Python adapter release is qualified on macOS ARM64,
+Linux x64 GNU and Windows x64. The optional Python Linux x64 wheel uses
+`manylinux_2_34` and requires glibc 2.34 or later. Node requires version 24 or
+later; Python requires 3.10 or later. Browser integration is qualified in Chromium, Firefox and Edge;
+WebKit and physical mobile qualification remain separate work.
+
+## Saved-vault compatibility
+
+Exact published Core `0.5.0-beta.3` interchange remains a separate tested
+regression. Existing v1/v2 bundles read and re-export unchanged; reads, no-ops,
+discarded candidates and failed saves do not upgrade them. An approved saved
+mutation or recovery can stage v3. Preserve existing backups: beta.1 and beta.2
+cannot read an upgraded v3 vault. No existing saved layout changes in this release.
+
+## Qualification and limits
+
+Publication requires the exact release commit's native/browser integration,
+installed Node/Python distribution, browser model and supported native CPU model
+checks. The verifier also checks rule regressions, installed SDKs and live parity.
+Registry-only archive consumers and public-registry installation checks are
+separate evidence; a local candidate proof alone is not a completed publication.
+
+This is an SDK release. Shipping-extension/provider acceptance, real key-provider
+integration, certification, CUDA/all-device OOM guarantees and global memory SLAs
+are not established by these checks. CSV remains deferred. Browser model accuracy
+measurements retain actual misses/false positives and do not become an extension
+accuracy promise. See the [release scope](../core-v1-release-scope.md) and
+[publication runbook](../core-v1-publication.md).

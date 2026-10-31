@@ -52,8 +52,25 @@ jobs:
       - run: npm ci --prefix bindings/wasm
       - run: npx --prefix bindings/wasm playwright install --with-deps chromium
       - run: npm run test:package --prefix bindings/wasm
-      - run: npm publish --dry-run --ignore-scripts
-        working-directory: bindings/wasm
-      - run: npm publish
+      - name: Freeze the tested WASM package archive
+        run: python3 scripts/stage-publication.py wasm
+      - name: Check the exact archive without publishing
+        working-directory: target/publication-wasm
+        run: |
+          sha256sum --check SHA256SUMS
+          while IFS= read -r archive; do
+            npm publish "$archive" --dry-run --ignore-scripts --access public --tag "$(cat npm-tag.txt)"
+          done < publication-order.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: wasm-publication-inputs
+          path: target/publication-wasm/
+          if-no-files-found: error
+      - name: Publish the retained archive
         if: github.event_name == 'push' || !inputs.dry_run
-        working-directory: bindings/wasm
+        working-directory: target/publication-wasm
+        run: |
+          sha256sum --check SHA256SUMS
+          while IFS= read -r archive; do
+            npm publish "$archive" --ignore-scripts --access public --tag "$(cat npm-tag.txt)"
+          done < publication-order.txt

@@ -15,7 +15,7 @@ from fogvault_inputs import core_build_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "target/fogvault-integration"
-VAULT_REV = "220aaec145fe67f4c96d468d6858445020b88cd3"
+VAULT_REV = "f4dc492549b70f0bc44f5c6bf82fe3022353030f"
 BROWSER_CASES = {
     "create_approve_save_activate_lock_reopen_restore",
     "literal_approval_and_foreign_plan_rejection_before_save",

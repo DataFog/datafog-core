@@ -280,7 +280,7 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 [[package]]
 name = "fogvault"
 version = "0.1.0"
-source = "git+https://github.com/DataFog/fogvault.git?rev=220aaec145fe67f4c96d468d6858445020b88cd3#220aaec145fe67f4c96d468d6858445020b88cd3"
+source = "git+https://github.com/DataFog/fogvault.git?rev=f4dc492549b70f0bc44f5c6bf82fe3022353030f#f4dc492549b70f0bc44f5c6bf82fe3022353030f"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -294,7 +294,7 @@ dependencies = [
 [[package]]
 name = "fogvault-native"
 version = "0.1.0"
-source = "git+https://github.com/DataFog/fogvault.git?rev=220aaec145fe67f4c96d468d6858445020b88cd3#220aaec145fe67f4c96d468d6858445020b88cd3"
+source = "git+https://github.com/DataFog/fogvault.git?rev=f4dc492549b70f0bc44f5c6bf82fe3022353030f#f4dc492549b70f0bc44f5c6bf82fe3022353030f"
 dependencies = [
  "fogvault",
  "rusqlite",

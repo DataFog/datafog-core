@@ -54,6 +54,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Test companion publication guards
+        if: steps.scope.outputs.code == 'true'
+        run: |
+          python3 scripts/test-publish-companions.py
+          python3 scripts/test-stage-publication.py
       - if: steps.scope.outputs.code == 'true'
         run: python3 -m pip install maturin
       - if: steps.scope.outputs.code == 'true'

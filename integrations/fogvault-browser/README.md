@@ -1,13 +1,17 @@
-# Core–FogVault browser adapter candidate
+# Core–FogVault browser adapter
 
 This optional Core-owned package joins the maintained `@datafog/wasm` Workspace
 to `@datafog/fogvault-browser`. It stores the exact Workspace bundle as an opaque
 FogVault record, then activates only after a confirmed durable save. It contains
 no encryption, key derivation, marker allocation or detection implementation.
 
-The adapter and FogVault package remain unpublished candidates. Use locally
-packed artifacts and exact dependency locks; this is not a v1 contract freeze or
-production/security qualification. Core beta.3 stays the exact regression floor.
+Version `1.0.0` implements the reviewed Core Workspace contract 1 with FogVault
+`0.1.0`. Production host and key-provider qualification remain separate. Core
+beta.3 stays the exact tested regression floor.
+
+```sh
+npm install --save-exact @datafog/wasm@1.0.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.0.0
+```
 
 ## Ownership and local review
 
@@ -96,7 +100,7 @@ has unresolved sends. Unscoped restore is not a fallback around scoped rejection
 
 ## Binding and limits
 
-Authenticated metadata uses the shared 88-byte `DFVBRG01` candidate contract in
+Authenticated metadata uses the shared 88-byte `DFVBRG01` binding contract in
 [`docs/integrations/fogvault-contract.md`](../../docs/integrations/fogvault-contract.md).
 Open checks record identity, namespace and the complete saved Core head against
 the decoded bundle. Supply expected namespace/head when the application has
@@ -133,7 +137,7 @@ pinned Core WASM/Playwright tools and both candidate tarballs:
 
 ```sh
 node integrations/fogvault-browser/test/run-installed.mjs \
-  --core-tarball target/fogvault-integration/artifacts/datafog-wasm-0.5.0-beta.3.tgz \
+  --core-tarball target/fogvault-integration/artifacts/datafog-wasm-1.0.0.tgz \
   --vault-tarball target/fogvault-integration/artifacts/datafog-fogvault-browser-0.1.0.tgz \
   --output target/fogvault-integration/browser-proof.json
 ```

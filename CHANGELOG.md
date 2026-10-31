@@ -6,6 +6,27 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Retain exact base SDK publication archives and SHA-256 receipts before upload;
+  npm publishes those same archives with lifecycle hooks disabled.
+
+- Build and install the optional Python FogVault wheel with the optimized release
+  profile during qualification, so the tested wheel is the publication artifact.
+
+- Python publication rejects existing distribution files instead of silently
+  accepting them on retry. Partial releases require comparing public checksums
+  and selecting only missing, qualified artifacts.
+
+### Changed
+
+- Identify the source repository in optional Core–FogVault npm package metadata
+  so registry provenance resolves to the owning public project.
+- Document exact Core 1.0 and FogVault 0.1 installation paths, supported package
+  targets and the separate publication/extension-acceptance boundaries.
+
+## [1.0.0] - 2026-10-30
+
 ### Security
 
 - Update locked Tokio to 1.53.3 for RUSTSEC-2026-0386 (AsyncFd I/O safety);

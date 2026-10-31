@@ -36,7 +36,7 @@ cargo dfv check --fogvault
 ```
 
 The explicit FogVault preparation command checks out exact public revision
-`220aaec145fe67f4c96d468d6858445020b88cd3` into Core's ignored
+`f4dc492549b70f0bc44f5c6bf82fe3022353030f` into Core's ignored
 `target/fogvault-integration/dependencies/`. It installs that candidate's locked
 build tools, provisions Rust 1.94.1's WASM target, builds/packages it there and
 packs Core's current WASM package. It does not modify an existing FogVault

@@ -1,10 +1,14 @@
-# Optional native Node Core–FogVault integration candidate
+# Optional native Node Core–FogVault integration
 
 `@datafog/core-fogvault-node` owns the Rust Core–FogVault adapter in a native
-N-API addon. The current package is unpublished `1.0.0` candidate, for source and
-packed-candidate evaluation. It is not a production qualification or v1 freeze.
+N-API addon. Version `1.0.0` implements the reviewed Core Workspace contract 1;
+production host and key-provider acceptance remain separate.
 Existing `@datafog/node` remains independent and retains its Rust 1.88 floor.
 This optional isolated package builds with Rust 1.94.1 and uses Node 24+.
+
+```sh
+npm install --save-exact @datafog/core-fogvault-node@1.0.0
+```
 
 ## Build and installed proof
 
@@ -23,7 +27,7 @@ hashes are retained with the report. A local build packs one explicitly tagged
 native binary and a checksum manifest. CI retains the actually qualified binary
 from each existing runner (`ubuntu-24.04`, `macos-15`, `windows-2025`), checks their
 source revision, public package files, installed tests and checksums, then assembles
-one nonpublishing candidate archive. That archive is installed and exercised on
+one qualified archive. That archive is installed and exercised on
 Linux without rebuilding its binaries. The assembly manifest records the exact
 observed platform/architecture set, including the macOS runner's actual architecture.
 

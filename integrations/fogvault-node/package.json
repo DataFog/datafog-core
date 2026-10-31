@@ -4,6 +4,10 @@
   "type": "module",
   "description": "Optional native Core\u2013FogVault integration candidate",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DataFog/datafog-core.git"
+  },
   "engines": {
     "node": ">=24"
   },
