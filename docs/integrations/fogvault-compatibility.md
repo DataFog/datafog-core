@@ -2,10 +2,10 @@
 
 **October 30 scope update:** the owner-approved [Core v1 release scope](../core-v1-release-scope.md)
 supersedes the original joint-product launch assumptions recorded below. Core
-SDKs and adapters are 1.0.0 candidates; FogVault is a separate 0.1.0 candidate.
-Its [distribution proof](https://github.com/DataFog/fogvault/blob/staging/docs/packaging.md)
-now covers real archives and an offline registry-only beta.3 consumer. Public
-registry availability remains untested until separately authorized publication.
+SDKs and adapters are published at 1.0.0; FogVault is independently published
+at 0.1.0. Its [distribution proof](https://github.com/DataFog/fogvault/blob/v0.1.0/docs/packaging.md)
+covers real archives and a registry-only beta.3 consumer. Public registry archive
+identity and installation checks are recorded in the [release notes](../releases/1-0-0.mdx).
 G1 and shipping-extension G2/G4 evidence remain unfinished product work; no
 synthetic SDK test is recorded as their acceptance.
 

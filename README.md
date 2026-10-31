@@ -26,13 +26,13 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**1.0.0 release:** [release notes](docs/releases/1-0-0.mdx) · Publication underway; the coordinated release is complete only after public-registry installation checks pass.
+**Stable:** [1.0.0](https://github.com/DataFog/datafog-core/releases/tag/v1.0.0) · [Release notes](docs/releases/1-0-0.mdx) · Public registry installation checks passed.
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-Once publication completes, choose the exact 1.0.0 package for your application:
+Choose the exact 1.0.0 package for your application:
 
 | SDK | Install 1.0.0 | Requirements |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ The optional browser adapter uses the maintained FogVault Worker/WASM owner and
 IndexedDB storage. Native Rust, Node and Python owners use the same portable
 vault core through the registered native adapter.
 
-After the coordinated publication completes:
+Install the browser integration:
 
 ```bash
 npm install --save-exact @datafog/wasm@1.0.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.0.0
@@ -190,7 +190,7 @@ npm install --save-exact @datafog/wasm@1.0.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-After publication completes, install the exact 1.0.0 SDK:
+Install the exact 1.0.0 SDK:
 
 ```bash
 python -m pip install 'datafog-core==1.0.0'

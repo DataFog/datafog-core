@@ -17,23 +17,6 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Regenerate Cargo-owned `Cargo.toml.orig` when staging qualified crates for
   publication, so packages with broad include rules pass normal Cargo verification.
 
-- Retain exact base SDK publication archives and SHA-256 receipts before upload;
-  npm publishes those same archives with lifecycle hooks disabled.
-
-- Build and install the optional Python FogVault wheel with the optimized release
-  profile during qualification, so the tested wheel is the publication artifact.
-
-- Python publication rejects existing distribution files instead of silently
-  accepting them on retry. Partial releases require comparing public checksums
-  and selecting only missing, qualified artifacts.
-
-### Changed
-
-- Identify the source repository in optional Core–FogVault npm package metadata
-  so registry provenance resolves to the owning public project.
-- Document exact Core 1.0 and FogVault 0.1 installation paths, supported package
-  targets and the separate publication/extension-acceptance boundaries.
-
 ## [1.0.0] - 2026-10-30
 
 ### Security
@@ -43,7 +26,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- The Core v1 candidate exposes a Rust-backed Workspace contract identifier in
+- Core v1 exposes a Rust-backed Workspace contract identifier in
   every SDK and checks a reviewed API/type/snapshot inventory alongside installed
   parity. Current v3 writes and v1/v2 reads keep their existing semantics.
 - `cargo dfv check --core-sdk` qualifies actual packed SDK contracts and
@@ -53,15 +36,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
   recovery, conversation and restore-stream flows through the shared Rust owner.
   `cargo dfv build --fogvault-languages` and `check --fogvault-languages` verify
   installed npm/wheel candidates and Node–Python shared-vault interoperability.
-  Future v1 publication requires passing joint native/browser and native-language
-  CI evidence for the exact candidate commit.
+  Publication requires passing joint native/browser and native-language
+  CI evidence for the exact release commit.
 
 - An optional import-only browser reader authenticates supported v1/v2 Core
   reference backups and migrates them into fresh FogVault destinations after
   approval. It preserves source archives and uses the existing legacy crypto;
   compatibility with an unidentified shipping extension is not established.
 
-- Optional Core-owned native Rust and browser FogVault integration candidates
+- Optional Core-owned native Rust and browser FogVault integrations
   save exact Workspace bundles before activation, bind complete heads and record
   identity, revoke Core handles on lock, and require fresh review after uncertain
   saves. Authenticated-bundle recovery stages a fresh destination without
@@ -71,12 +54,17 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
-- Native FogVault Node candidates use checked platform binaries and a single
+- Identify the source repository in optional Core–FogVault npm package metadata
+  so registry provenance resolves to the owning public project.
+- Document exact Core 1.0 and FogVault 0.1 installation paths, supported package
+  targets and the separate publication/extension-acceptance boundaries.
+
+- Native FogVault Node packages use checked platform binaries and a single
   assembled archive; Python wheels include their README and MIT license. Core
   release qualification also verifies real Rust registry-style archives.
 
-- Prepare aligned Core SDK and integration package versions for 1.0.0 without
-  publishing. The exact published beta.3 compatibility regression is retained.
+- Release aligned Core SDK and integration package versions as 1.0.0. The exact
+  published beta.3 compatibility regression is retained.
 - Node's public declarations omit private transport functions that were never
   exported by its public runtime; generated declarations and installed type
   tests enforce that boundary.
@@ -96,6 +84,18 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Update the documentation site with the Redacted line identity, self-hosted Geist
   fonts, lowercase product names, and matching light and dark themes.
+
+### Fixed
+
+- Retain exact base SDK publication archives and SHA-256 receipts before upload;
+  npm publishes those same archives with lifecycle hooks disabled.
+
+- Build and install the optional Python FogVault wheel with the optimized release
+  profile during qualification, so the tested wheel is the publication artifact.
+
+- Python publication rejects existing distribution files instead of silently
+  accepting them on retry. Partial releases require comparing public checksums
+  and selecting only missing, qualified artifacts.
 
 ## [0.5.0-beta.3] - 2026-10-29
 
