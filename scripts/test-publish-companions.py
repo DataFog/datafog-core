@@ -60,6 +60,25 @@ class Publication(unittest.TestCase):
         self.assertTrue(result["published"])
         run.assert_not_called()
 
+    def test_accepted_npm_upload_waits_for_processing_without_reupload(self):
+        archive = self.npm()
+        public = {"dist": {"tarball": "registry-file"}}
+        responses = [None] + [None] * 13 + [public]
+        with patch.object(publisher, "json_read", side_effect=responses), patch.object(publisher, "read", return_value=archive.read_bytes()), patch.object(publisher, "run") as run, patch.object(publisher.time, "sleep") as sleep:
+            result = publisher.publish_npm(archive, "@datafog/core-fogvault-browser", "1.0.0", True)
+        self.assertTrue(result["published"])
+        self.assertEqual(sleep.call_count, 13)
+        run.assert_called_once()
+        self.assertNotIn("--dry-run", run.call_args.args[0])
+
+    def test_processed_npm_upload_still_requires_exact_archive_bytes(self):
+        public = {"dist": {"tarball": "registry-file"}}
+        responses = [None] + [None] * 13 + [public]
+        with patch.object(publisher, "json_read", side_effect=responses), patch.object(publisher, "read", return_value=b"different"), patch.object(publisher, "run") as run, patch.object(publisher.time, "sleep"):
+            with self.assertRaisesRegex(ValueError, "Published npm archive is missing or differs"):
+                publisher.publish_npm(self.npm(), "@datafog/core-fogvault-browser", "1.0.0", True)
+        run.assert_called_once()
+
     def test_existing_different_archive_hard_stops(self):
         with patch.object(publisher, "json_read", return_value={"dist": {"tarball": "registry-file"}}), patch.object(publisher, "read", return_value=b"different"), patch.object(publisher, "run") as run:
             with self.assertRaises(ValueError):

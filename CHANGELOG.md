@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Wait up to ten minutes for accepted npm uploads to finish registry processing;
+  verify the exact public archive without submitting a duplicate upload.
+
 - Regenerate Cargo-owned `Cargo.toml.orig` when staging qualified crates for
   publication, so packages with broad include rules pass normal Cargo verification.
 

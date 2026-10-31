@@ -149,7 +149,9 @@ def publish_npm(path, expected_name, version, execute):
             env["NPM_CONFIG_PROVENANCE"] = "false"
         run(["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--tag", "latest"] + ([] if execute else ["--dry-run"]), env=env)
         if execute:
-            for _ in range(12):
+            # npm can acknowledge an upload before registry processing finishes.
+            # Poll for up to ten minutes without submitting the archive again.
+            for _ in range(120):
                 existing = json_read(url)
                 if existing:
                     break
