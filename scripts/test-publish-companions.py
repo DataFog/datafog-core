@@ -214,9 +214,29 @@ class Publication(unittest.TestCase):
         (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": [{"name": "one.whl", "sha256": "right"}]}))
         with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": [{"filename": "one.whl", "digests": {"sha256": "right"}}]}):
             publisher.verify_python(self.root)
-        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": []}):
-            with self.assertRaises(ValueError):
+        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": []}), patch.object(publisher.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "still incomplete"):
                 publisher.verify_python(self.root)
+        self.assertEqual(sleep.call_count, 120)
+
+    def test_python_replication_missing_then_matching_subset_then_complete(self):
+        packages = [{"name": "one.whl", "sha256": "first"}, {"name": "two.whl", "sha256": "second"}]
+        (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": packages}))
+        partial = {"urls": [{"filename": "one.whl", "digests": {"sha256": "first"}}]}
+        complete = {"urls": partial["urls"] + [{"filename": "two.whl", "digests": {"sha256": "second"}}]}
+        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", side_effect=[None, partial, complete]), patch.object(publisher.time, "sleep") as sleep:
+            publisher.verify_python(self.root)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_python_replication_rejects_wrong_hash_and_extra_file_immediately(self):
+        packages = [{"name": "one.whl", "sha256": "right"}]
+        (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": packages}))
+        for filename, digest in (("one.whl", "wrong"), ("unexpected.whl", "right")):
+            with self.subTest(filename=filename), patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "json_read", return_value={"urls": [{"filename": filename, "digests": {"sha256": digest}}]}) as read, patch.object(publisher.time, "sleep") as sleep:
+                with self.assertRaisesRegex(ValueError, "file set or hashes differ"):
+                    publisher.verify_python(self.root)
+            read.assert_called_once()
+            sleep.assert_not_called()
 
 
 if __name__ == "__main__":

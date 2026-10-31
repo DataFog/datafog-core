@@ -8,6 +8,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Allow bounded PyPI replication time for missing expected wheels after upload,
+  while immediately rejecting unexpected files or mismatched SHA-256 values.
+
 - Wait up to ten minutes for accepted npm uploads to finish registry processing;
   verify the exact public archive without submitting a duplicate upload.
 

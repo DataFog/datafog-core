@@ -165,11 +165,17 @@ def verify_python(output):
     receipt = json.loads((output / "receipt.json").read_text())
     if receipt["revision"] != os.environ["GITHUB_SHA"] or receipt["group"] != "core-python-integration":
         raise ValueError("Python publication receipt identity differs")
-    public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
-    observed = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
     expected = {entry["name"]: entry["sha256"] for entry in receipt["packages"]}
-    if observed != expected:
-        raise ValueError("Published Python file set or hashes differ")
+    for _ in range(120):
+        public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
+        observed = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
+        if any(name not in expected or sha256 != expected[name] for name, sha256 in observed.items()):
+            raise ValueError("Published Python file set or hashes differ")
+        if observed == expected:
+            return
+        # Only missing expected files can be delayed by registry replication.
+        time.sleep(5)
+    raise ValueError("Published Python file set is still incomplete after registry processing")
 
 
 def stage_crate_sources(qualified, destination, prefix):
