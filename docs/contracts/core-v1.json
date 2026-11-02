@@ -204,7 +204,8 @@
     "readerVersions": [
       1,
       2,
-      3
+      3,
+      4
     ],
     "keys": [
       {
@@ -260,6 +261,11 @@
       {
         "id": 10,
         "meaning": "recorded counts",
+        "missingFieldFixture": "fixtures/workspace/backup-operation-fields.json"
+      },
+      {
+        "id": 11,
+        "meaning": "retired codes",
         "missingFieldFixture": "fixtures/workspace/backup-operation-fields.json"
       }
     ]

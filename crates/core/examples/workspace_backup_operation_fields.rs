@@ -1,4 +1,4 @@
-//! Generate synthetic current-v3 backup vectors through the real public Core lifecycle.
+//! Generate synthetic current-v3 and retired-v4 backup vectors through the real public Core lifecycle.
 use datafog_core::{
     TextRange,
     workspace::{
@@ -95,6 +95,11 @@ fn map(values: &[(u8, Vec<u8>)]) -> Result<Vec<u8>> {
 fn uint(value: u64) -> Result<Vec<u8>> {
     let mut encoder = Encoder::new(Vec::new());
     encoder.u64(value)?;
+    Ok(encoder.into_writer())
+}
+fn text(value: &str) -> Result<Vec<u8>> {
+    let mut encoder = Encoder::new(Vec::new());
+    encoder.str(value)?;
     Ok(encoder.into_writer())
 }
 fn null() -> Result<Vec<u8>> {
@@ -410,6 +415,73 @@ fn conversation_rejections(pending: &[u8], resolved: &[u8]) -> Result<Vec<Value>
     )?;
     Ok(result)
 }
+fn code(marker: &str) -> Result<&str> {
+    marker
+        .strip_suffix("]]")
+        .and_then(|value| value.rsplit_once('_'))
+        .map(|(_, code)| code)
+        .ok_or_else(|| "marker code missing".into())
+}
+fn retired_rejections(current: &Value) -> Result<Vec<Value>> {
+    let mut workspace = Workspace::open_bundle(&unhex(
+        current["bundleHex"].as_str().ok_or("current missing")?,
+    )?)?;
+    let forgotten = code(
+        current["aliases"][0]["marker"]
+            .as_str()
+            .ok_or("alias missing")?,
+    )?;
+    let mut plan = workspace.prepare_forget(&[forgotten.to_owned()], [140; 16])?;
+    save(&mut workspace, &mut plan)?;
+    let bytes = workspace.export_bundle()?;
+    let mut result = Vec::new();
+    let mut add = |id: &str, candidate: Vec<u8>| -> Result<()> {
+        let failure = Workspace::open_bundle(&candidate)
+            .err()
+            .ok_or("retired negative unexpectedly accepted")?;
+        if failure.code != ErrorCode::InvalidSnapshot {
+            return Err("retired negative category changed".into());
+        }
+        result.push(json!({"id":id,"bundleHex":hex(&candidate),"code":"invalid_snapshot","encryptedImport":true}));
+        Ok(())
+    };
+    add(
+        "missing_top_key_11",
+        map(&fields(&bytes)?
+            .into_iter()
+            .filter(|(key, _)| *key != 11)
+            .collect::<Vec<_>>())?,
+    )?;
+    add("retired_empty", replace_field(&bytes, 11, array(&[])?)?)?;
+    add("retired_wrong_type", replace_field(&bytes, 11, uint(0)?)?)?;
+    let rows = members(&field(&bytes, 11)?)?;
+    let change = |member: usize, value: Option<Vec<u8>>| -> Result<Vec<u8>> {
+        let mut values = members(&rows[0])?;
+        match value {
+            Some(value) => values[member] = value,
+            None => {
+                values.remove(member);
+            }
+        }
+        replace_field(&bytes, 11, array(&[array(&values)?])?)
+    };
+    for member in 0..5 {
+        add(
+            &format!("missing_retired_member_{member}"),
+            change(member, None)?,
+        )?;
+    }
+    let live = code(
+        current["aliases"][1]["marker"]
+            .as_str()
+            .ok_or("alias missing")?,
+    )?;
+    add("retired_code_in_use", change(1, Some(text(live)?))?)?;
+    add("retired_counter_zero", change(3, Some(uint(0)?))?)?;
+    let create = members(&members(&field(&bytes, 8)?)?[0])?[0].clone();
+    add("retired_operation_not_forget", change(4, Some(create))?)?;
+    Ok(result)
+}
 fn rejections(bytes: &[u8]) -> Result<Vec<Value>> {
     let mut result = Vec::new();
     let mut add = |id: &str, candidate: Vec<u8>, encrypted: bool| -> Result<()> {
@@ -572,6 +644,7 @@ fn main() -> Result<()> {
         &unhex(pending["bundleHex"].as_str().ok_or("pending missing")?)?,
         &unhex(resolved["bundleHex"].as_str().ok_or("resolved missing")?)?,
     )?);
+    rejections.extend(retired_rejections(&current)?);
     let generator =
         std::fs::read(root.join("crates/core/examples/workspace_backup_operation_fields.rs"))?;
     let fixture = json!({"schemaVersion":1,"syntheticOnly":true,"source":{"commit":git(&root,&["rev-parse","HEAD"])? ,"coreRuntimeTree":git(&root,&["rev-parse","HEAD:crates/core/src"])? ,"generatorSha256":hex(&Sha256::digest(generator))},
