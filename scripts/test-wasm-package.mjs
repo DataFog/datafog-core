@@ -224,11 +224,11 @@ workspace.prepare("Jane", [{...inputs[0].findings[0], source: "user", needsRevie
 workspace.prepare("Jane", [{...inputs[0].findings[0], source: "private"}], new Uint8Array(16));
 void findingSource; void needsReview;
 const currentPolicy = workspace.policy();
-const snapshotVersion: 1 | 2 | 3 = currentPolicy.snapshotVersion;
+const snapshotVersion: 1 | 2 | 3 | 4 = currentPolicy.snapshotVersion;
 const policyChange = workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "not_sensitive"}]}, new Uint8Array(16));
 const settingPreview = policyChange.policyPreview();
 const previousChoice: "keep" | "not_sensitive" | null | undefined = settingPreview?.choices[0]?.before;
-const currentFormat: 1 | 2 | 3 = policyChange.snapshotFormat().currentVersion;
+const currentFormat: 1 | 2 | 3 | 4 = policyChange.snapshotFormat().currentVersion;
 // @ts-expect-error Choices use a closed disposition set.
 workspace.preparePolicyChanges({rules: [], choices: [{entityType: "PERSON", value: "May", disposition: "notSensitive"}]}, new Uint8Array(16));
 // @ts-expect-error Review flags cannot grant an exception through a settings edit.
@@ -356,6 +356,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"workspace-conversation-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-conversation-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "workspace-forget-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-forget-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-counters.json"), readFileSync(path.join(root, "fixtures/workspace/counters.json")));
@@ -910,6 +911,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     const { verifyWorkspace, verifyWorkspaceOperations } = await import("/workspace-conformance.mjs");
     await verifyWorkspace(workspaceApi, await fetch("/workspace-counters.json").then(r => r.json()));
     await verifyWorkspaceOperations(workspaceApi);
+    const {verifyWorkspaceForget} = await import("/workspace-forget-conformance.mjs");
+    verifyWorkspaceForget(workspaceApi);
     let coreFailure;
     try { workspaceApi.Workspace.openBundle(new Uint8Array()); }
     catch (error) { coreFailure = error; }

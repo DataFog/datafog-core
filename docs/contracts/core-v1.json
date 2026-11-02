@@ -25,7 +25,7 @@
         "workspaceContractVersion"
       ],
       "declarationOnlyExports": [],
-      "declarationsSha256": "ff87cd2458a1531ee475172fd6f3d42d24b8c5d1738040e152ec544a26240dcc"
+      "declarationsSha256": "51e5548d1129bbcef5075175dc8754f80bdbc6c425d6f26d36eb1b94f5cee2ef"
     },
     "wasm": {
       "runtime": "bindings/wasm/index.js",
@@ -47,7 +47,7 @@
         "workspaceContractVersion"
       ],
       "declarationOnlyExports": [],
-      "declarationsSha256": "9016445fc7110e74937f40922b494556ad22bc70d89b2a559305f213be3109b3"
+      "declarationsSha256": "65e05fb1e51c6ae3242f1c9e2d3030a3fa3dbd2aa604728dde8ee1527637c14d"
     },
     "python": {
       "runtime": "bindings/python/python/datafog_core/__init__.py",
@@ -175,7 +175,7 @@
         "_WorkspaceSnapshotFormat",
         "_WorkspaceTransformation"
       ],
-      "declarationsSha256": "468e864191710d8ce10ccca4a7c02052d5d2df07946bea8b943d63678cc4a427"
+      "declarationsSha256": "d1eb1eeb1596bebfb0b45e0e22509672ef21654b06a6105155f4f72ff88a3a05"
     }
   },
   "workspaceErrorCodes": [
@@ -455,7 +455,7 @@
         "WorkspaceVaultError"
       ],
       "declarationOnlyExports": [],
-      "declarationsSha256": "b84cd04f644658f0f00cbb100a2ada0fd1d9dfba2bfff4c6471012633ac47773"
+      "declarationsSha256": "45db40cdbcac179dee5491f9a6e76168464f29c10f44f15529aa081c0daa6240"
     },
     "fogvault-legacy-browser": {
       "runtime": "integrations/fogvault-legacy-browser/index.mjs",

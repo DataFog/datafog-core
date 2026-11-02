@@ -63,6 +63,8 @@ export class FogVaultWorkspace {
   prepareConversationSend(...args: Parameters<Workspace['prepareConversationSend']>): WorkspaceVaultPlan;
   prepareObservedSend(...args: Parameters<Workspace['prepareObservedSend']>): WorkspaceVaultPlan;
   prepareDefinitelyNotSent(...args: Parameters<Workspace['prepareDefinitelyNotSent']>): WorkspaceVaultPlan;
+  /** Host selects stale codes; commit persists retirement before activation. Requires a Core build with prepareForget. */
+  prepareForget(...args: Parameters<Workspace['prepareForget']>): WorkspaceVaultPlan;
   preparePolicyChanges(...args: Parameters<Workspace['preparePolicyChanges']>): WorkspaceVaultPlan;
   prepareOutcome(...args: Parameters<Workspace['prepareOutcome']>): WorkspaceVaultPlan;
   prepareRecovery(...args: Parameters<Workspace['prepareRecovery']>): WorkspaceVaultPlan;
