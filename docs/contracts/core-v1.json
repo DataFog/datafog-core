@@ -25,7 +25,7 @@
         "workspaceContractVersion"
       ],
       "declarationOnlyExports": [],
-      "declarationsSha256": "51e5548d1129bbcef5075175dc8754f80bdbc6c425d6f26d36eb1b94f5cee2ef"
+      "declarationsSha256": "7991b2bd3f917193de6690f7a94e33c7305abb438a9caddcde44ff0cfb46b281"
     },
     "wasm": {
       "runtime": "bindings/wasm/index.js",

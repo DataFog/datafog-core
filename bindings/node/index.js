@@ -707,6 +707,20 @@ export class Workspace {
   counts() { return JSON.parse(workspaceCall(this.#state, "counts")); }
   historyCoverage() { return JSON.parse(workspaceCall(this.#state, "history_coverage")); }
   policy() { return JSON.parse(workspaceCall(this.#state,"policy")); }
+  prepareForget(codes, operationId) {
+    workspaceBytes(operationId, 16, true);
+    if (!Array.isArray(codes)) throw workspaceFailure("invalid_marker");
+    if (codes.length > 20000) throw workspaceFailure("resource_limit");
+    const values = [];
+    for (let index = 0; index < codes.length; index++) {
+      const item = Object.getOwnPropertyDescriptor(codes, String(index));
+      if (!item || !("value" in item) || typeof item.value !== "string" ||
+          !/^[0-9A-HJKMNP-TV-Z]{6}$/.test(item.value)) throw workspaceFailure("invalid_marker");
+      values.push(item.value);
+    }
+    return new PreparedWorkspaceChange(this.#state,
+      workspaceCall(this.#state, "prepare_forget", JSON.stringify(values), operationId));
+  }
   preparePolicyChanges(edits, operationId) {
     workspaceBytes(operationId,16,true);
     let json;

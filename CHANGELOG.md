@@ -8,7 +8,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
-- WASM `Workspace.prepareForget` and browser `FogVaultWorkspace.prepareForget` expose
+- Node/WASM `Workspace.prepareForget` and browser `FogVaultWorkspace.prepareForget` expose
   host-selected mapping expiry through the existing save-and-activate lifecycle.
 
 - Rust `Workspace::prepare_forget` drops committed values by marker code and

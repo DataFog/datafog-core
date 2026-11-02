@@ -1,4 +1,4 @@
-/** Installed WASM retirement lifecycle; synthetic values only. */
+/** Installed JavaScript SDK retirement lifecycle; synthetic values only. */
 export function verifyWorkspaceForget({Workspace, DataFogError}) {
   const check = (value, message) => { if (!value) throw Error(message); };
   const id = value => new Uint8Array(16).fill(value);

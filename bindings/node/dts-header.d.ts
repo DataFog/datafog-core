@@ -482,6 +482,8 @@ export class Workspace {
   progressiveRestoreInConversation(logicalId: Uint8Array, encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
   policy(): WorkspacePolicy;
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
+  /** Retire committed codes through the save-and-activate lifecycle. First use upgrades storage to v4. */
+  prepareForget(codes: readonly string[], operationId: Uint8Array): PreparedWorkspaceChange;
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;
