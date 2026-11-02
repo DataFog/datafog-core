@@ -168,3 +168,60 @@ fn source_text_with_a_forgotten_marker_still_blocks_preparation() {
         .unwrap();
     assert_eq!(failure.code, ErrorCode::InvalidMarker);
 }
+
+fn retirement_boundary_round_trip(distinct_labels: bool) {
+    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+    for (batch, count) in [(0, 10_000), (1, 10_000), (2, 1)] {
+        let mut text = String::new();
+        let mut findings = Vec::new();
+        for index in 0..count {
+            let value = format!("value{batch}x{index}");
+            let label = if distinct_labels {
+                format!("LABEL_{}", batch as usize * 10_000 + index)
+            } else {
+                "PERSON".to_owned()
+            };
+            let start = text.len();
+            text.push_str(&value);
+            findings.push(WorkspaceFinding::new(
+                label,
+                value,
+                TextRange {
+                    start,
+                    end: text.len(),
+                },
+            ));
+            text.push(' ');
+        }
+        let mut plan = workspace
+            .prepare(&text, &findings, [10 + batch * 2; 16])
+            .unwrap();
+        let markers = plan.preview().unwrap().text.clone();
+        let parent = plan.expected_head().unwrap();
+        let next = plan.candidate_head().unwrap();
+        workspace.activate_saved(&mut plan, parent, next).unwrap();
+        let markers: Vec<_> = markers.split_whitespace().collect();
+        forget(&mut workspace, &markers, 11 + batch * 2);
+        let bundle = workspace.export_bundle().unwrap();
+        workspace = Workspace::open_bundle(&bundle).expect("every accepted forget must reopen");
+        assert_eq!(workspace.export_bundle().unwrap(), bundle);
+        assert!(workspace.recall(&text).unwrap().findings.is_empty());
+        assert_eq!(
+            workspace.restore_report(markers[0]).unwrap().issues[0].kind,
+            MarkerIssueKind::Expired
+        );
+    }
+    let marker = commit(&mut workspace, "PERSON", "New Person", 20);
+    assert_eq!(workspace.restore(&marker).unwrap(), "New Person");
+    Workspace::open_bundle(&workspace.export_bundle().unwrap()).unwrap();
+}
+
+#[test]
+fn more_than_the_live_entry_limit_can_be_retired_and_reopened() {
+    retirement_boundary_round_trip(false);
+}
+
+#[test]
+fn label_counters_survive_more_than_the_live_entry_limit_of_retired_labels() {
+    retirement_boundary_round_trip(true);
+}

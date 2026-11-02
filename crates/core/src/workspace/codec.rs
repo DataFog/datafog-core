@@ -268,7 +268,9 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     let count = d
         .array()?
         .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
-    require(count <= MAX_ENTRIES as u64)?;
+    // Counters survive forgetting; bound allocation by the admitted snapshot, not
+    // the number of simultaneously live entries. Each row consumes input bytes.
+    require(count <= bytes.len() as u64)?;
     // Checked against entry and retired-code counters once key 11 is read.
     let mut counters = BTreeMap::new();
     for _ in 0..count {
@@ -413,7 +415,9 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         let count = d
             .array()?
             .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
-        require(count > 0 && count <= MAX_ENTRIES as u64)?;
+        // Retired codes accumulate across generations of live entries. The bundle
+        // byte ceiling bounds retained rows; MAX_ENTRIES only caps live entries.
+        require(count > 0 && count <= bytes.len() as u64)?;
         for _ in 0..count {
             array(&mut d, 5)?;
             let label = d.str()?;

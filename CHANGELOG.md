@@ -14,6 +14,9 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Reopen snapshots after more than 20,000 mapping retirements or retained label
+  counters; the live-entry limit no longer rejects valid retirement history.
+
 - Allow bounded PyPI replication time for missing expected wheels after upload,
   while immediately rejecting unexpected files or mismatched SHA-256 values.
 
