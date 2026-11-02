@@ -6,6 +6,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Rust `Workspace::prepare_forget` drops committed values by marker code and
+  retires their codes, so old markers report `Expired` instead of restoring to
+  a later value. A forget writes snapshot version 4, which Core 1.0 cannot read.
+
 ### Fixed
 
 - Allow bounded PyPI replication time for missing expected wheels after upload,

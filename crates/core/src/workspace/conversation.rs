@@ -456,16 +456,21 @@ impl Conversations {
             .enumerate()
             .map(|(index, row)| (row.id, (index, row)))
             .collect();
-        let aliases: BTreeMap<_, _> = state
-            .entries
-            .iter()
-            .map(|(identity, entry)| {
-                (
-                    (identity.entity_type.as_str(), entry.code.as_str()),
-                    entry.issuance,
-                )
-            })
-            .collect();
+        // Forgotten codes stay valid references; restoration reports them as expired.
+        let aliases: BTreeMap<_, _> =
+            state
+                .entries
+                .iter()
+                .map(|(identity, entry)| {
+                    (
+                        (identity.entity_type.as_str(), entry.code.as_str()),
+                        entry.issuance,
+                    )
+                })
+                .chain(state.retired.iter().map(|(code, retired)| {
+                    ((retired.label.as_str(), code.as_str()), retired.issuance)
+                }))
+                .collect();
         let mut logical = BTreeSet::new();
         let mut bound = BTreeSet::new();
         for context in &self.contexts {
