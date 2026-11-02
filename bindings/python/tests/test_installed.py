@@ -45,6 +45,26 @@ from datafog_core import (
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def verify_adjacent_entities() -> None:
+    fixture = json.loads((ROOT / "fixtures/adjacent-entities.json").read_text())
+    for pair in fixture["pairs"]:
+        for separator in pair["separators"]:
+            text = f"👋 é {pair['left']}{separator}{pair['right']} 中"
+            findings = scan(text)
+            for finding in findings:
+                assert text.encode()[finding.byte_range.start:finding.byte_range.end].decode() == finding.matched_text
+                assert text[finding.codepoint_range.start:finding.codepoint_range.end] == finding.matched_text
+            for entity_type, value in [(pair["leftType"], pair["left"]), (pair["rightType"], pair["right"])]:
+                assert any(f.entity_type == entity_type and f.matched_text == value for f in findings), text
+                result = transform(text, findings, {"default": {"strategy": "redact"}, "entities": [entity_type]})
+                assert result.text == text.replace(value, f"[{entity_type}]", 1), text
+            result = transform(text, findings, {"default": {"strategy": "redact"}})
+            assert result.text == f"👋 é [{pair['leftType']}]{separator}[{pair['rightType']}] 中", text
+    for case in fixture["intact"]:
+        findings = scan(case["text"], {"entities": [case["type"]]})
+        assert len(findings) == 1 and findings[0].matched_text == case["text"], case
+
+
 def verify_account_number() -> None:
     for line in ((ROOT / "fixtures" / "account-number.jsonl").read_text().splitlines()
                  + (ROOT / "fixtures" / "masked-account-number.jsonl").read_text().splitlines()):
@@ -648,6 +668,7 @@ def verify_ssn_person_priority() -> None:
 
 
 if __name__ == "__main__":
+    verify_adjacent_entities()
     workspace_conformance.verify_workspace()
     workspace_streaming_conformance.verify_streaming()
     workspace_operation_conformance.verify_operations()
