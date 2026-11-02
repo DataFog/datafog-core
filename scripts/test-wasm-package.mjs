@@ -324,7 +324,7 @@ try {
     temporaryDirectory,
   );
 
-  for (const fixture of ["email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
+  for (const fixture of ["adjacent-entities.json", "email-context.jsonl", "development.jsonl", "final.jsonl", "structured.jsonl", "structured-transform.jsonl", "german.jsonl", "jwt.jsonl", "credential-overlaps.jsonl", "bearer-token.jsonl", "private-key.jsonl", "uuid.jsonl", "us-routing-number.jsonl", "npi.jsonl", "account-number.jsonl", "masked-account-number.jsonl", "street-address.jsonl", "api-key.jsonl", "credential-uri.jsonl"]) {
     writeFileSync(
       path.join(temporaryDirectory, fixture),
       readFileSync(path.join(fixturesDirectory, fixture)),
@@ -356,6 +356,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"workspace-conversation-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-conversation-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "adjacent-entities-conformance.mjs"), readFileSync(path.join(root, "scripts/adjacent-entities-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-forget-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-forget-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-review-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-review-conformance.mjs")));
@@ -913,6 +914,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspaceOperations(workspaceApi);
     const {verifyWorkspaceForget} = await import("/workspace-forget-conformance.mjs");
     verifyWorkspaceForget(workspaceApi);
+    const {verifyAdjacentEntities} = await import("/adjacent-entities-conformance.mjs");
+    verifyAdjacentEntities(workspaceApi, await fetch("/adjacent-entities.json").then(r => r.json()));
     let coreFailure;
     try { workspaceApi.Workspace.openBundle(new Uint8Array()); }
     catch (error) { coreFailure = error; }

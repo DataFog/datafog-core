@@ -17,6 +17,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Keep adjacent phone/email, card, credential URI, date, IP and ZIP values within
+  their own detector spans, so delimiter-joined input can be transformed and
+  reviewed without swallowing neighboring values.
+
 - Reopen snapshots after more than 20,000 mapping retirements or retained label
   counters; the live-entry limit no longer rejects valid retirement history.
 

@@ -3290,9 +3290,88 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
     for matched in EMAIL_RE.find_iter(text) {
         candidates.push(Candidate {
             label: Label::Email,
-            start_byte: matched.start(),
+            start_byte: email_start_after_neighbor(text, matched.start(), matched.end()),
             end_byte: matched.end(),
         });
+    }
+}
+
+/// Keep a recognized neighboring value out of the next email's local part without
+/// removing punctuation from the supported email alphabet.
+fn email_start_after_neighbor(text: &str, start: usize, end: usize) -> usize {
+    let bytes = text.as_bytes();
+    let Some(at) = text[start..end].find('@').map(|offset| start + offset) else {
+        return start;
+    };
+    // PHONE_RE accepts at most 30 characters (15 digits, 14 separators and
+    // '+'); Unicode digits/whitespace can occupy up to four UTF-8 bytes each.
+    let mut context_start = start.saturating_sub(30 * 4);
+    while !text.is_char_boundary(context_start) {
+        context_start += 1;
+    }
+    let mut contact_end = start;
+    for phone in PHONE_RE.find_iter(&text[context_start..at]) {
+        let phone_start = context_start + phone.start();
+        let phone_end = context_start + phone.end();
+        if phone_start <= start
+            && phone_end > start
+            && has_phone_boundaries(text, phone_start, phone_end)
+            && is_valid_phone(phone.as_str())
+        {
+            contact_end = contact_end.max(phone_end);
+        }
+    }
+    for neighbor_start in context_start..=start {
+        if !bytes[neighbor_start].is_ascii_hexdigit()
+            || (neighbor_start > 0 && bytes[neighbor_start - 1].is_ascii_alphanumeric())
+        {
+            continue;
+        }
+        let ssn = ssn_parts_at(bytes, neighbor_start)
+            .filter(|(_, area, group, serial)| is_valid_ssn(*area, *group, *serial))
+            .map(|(end, _, _, _)| end);
+        let ipv4 = ipv4_end_at(bytes, neighbor_start).filter(|&end| {
+            is_valid_ipv4(bytes, neighbor_start, end)
+                && !is_part_of_longer_ipv4(bytes, neighbor_start, end)
+        });
+        let mut ipv6_end = neighbor_start;
+        while ipv6_end < bytes.len()
+            && ipv6_end - neighbor_start <= MAX_IPV6_HEX_COLON_LENGTH
+            && (bytes[ipv6_end].is_ascii_hexdigit() || bytes[ipv6_end] == b':')
+        {
+            ipv6_end += 1;
+        }
+        let ipv6 = (ipv6_end > neighbor_start && is_valid_ipv6(bytes, neighbor_start, ipv6_end))
+            .then_some(ipv6_end);
+        for end in [
+            ssn,
+            ipv4,
+            ipv6,
+            date_at(bytes, neighbor_start),
+            zip_end_at(bytes, neighbor_start),
+            card_end_at(bytes, neighbor_start),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if end > start && end < at && has_ip_boundaries(bytes, neighbor_start, end) {
+                contact_end = contact_end.max(end);
+            }
+        }
+    }
+    if contact_end > start
+        && contact_end + 1 < at
+        && matches!(
+            bytes[contact_end],
+            b'/' | b'-' | b'.' | b'=' | b'_' | b'|' | b'+'
+        )
+        && EMAIL_RE
+            .find_at(text, contact_end + 1)
+            .is_some_and(|email| email.start() == contact_end + 1 && email.end() == end)
+    {
+        contact_end + 1
+    } else {
+        start
     }
 }
 
@@ -3475,6 +3554,9 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, [u8; 19], usize) {
         let byte = bytes[end];
 
         if byte.is_ascii_digit() {
+            if previous_was_separator && numeric_neighbor_at(bytes, end) {
+                break;
+            }
             if count == digits.len() {
                 break;
             }
@@ -3493,6 +3575,23 @@ fn card_parts_at(bytes: &[u8], start: usize) -> (usize, [u8; 19], usize) {
     }
 
     (last_digit_end, digits, count)
+}
+
+/// An independently valid adjacent value is not another card digit group.
+fn numeric_neighbor_at(bytes: &[u8], start: usize) -> bool {
+    if let Some(end) = ipv4_end_at(bytes, start) {
+        if has_ip_boundaries(bytes, start, end) && is_valid_ipv4(bytes, start, end) {
+            return true;
+        }
+    }
+    if let Some((end, area, group, serial)) = ssn_parts_at(bytes, start) {
+        if is_valid_ssn(area, group, serial)
+            && (end == bytes.len() || !bytes[end].is_ascii_alphanumeric())
+        {
+            return true;
+        }
+    }
+    date_at(bytes, start).is_some()
 }
 
 /// A contiguous digit run after `3.` or `3,` may be a decimal fraction.
@@ -3979,6 +4078,9 @@ fn zip_end_at(bytes: &[u8], start: usize) -> Option<usize> {
     }
 
     if bytes.get(five_digit_end) == Some(&b'-') {
+        if five_digit_end + 1 < bytes.len() && date_at(bytes, five_digit_end + 1).is_some() {
+            return Some(five_digit_end);
+        }
         let zip_plus_four_end = five_digit_end + 5;
 
         if zip_plus_four_end <= bytes.len()
@@ -4138,6 +4240,14 @@ fn detect_ip_address_in(
     candidates: &mut Vec<Candidate>,
 ) {
     let mut start = segment_start;
+    // A date's final component can look like an IPv6 hextet after ':' joins
+    // the next field. Date syntax is at most "September 30, 2024" (18 bytes).
+    for date_start in segment_start.saturating_sub(18)..=segment_start {
+        if let Some(end) = date_at(bytes, date_start).filter(|end| *end > segment_start) {
+            start = end;
+            break;
+        }
+    }
     // The hexadecimal-and-colon run containing `start` and its last colon. Every
     // start inside one run shares its end, so the run is scanned once, not once
     // per start; without this a long run of `a:` takes quadratic time.

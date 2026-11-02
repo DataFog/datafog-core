@@ -1,0 +1,278 @@
+{
+  "pairs": [
+    {
+      "left": "(555)555-0123",
+      "leftType": "PHONE",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        " / ",
+        "-",
+        ".",
+        "=",
+        "_",
+        "|",
+        ",",
+        ";",
+        ":",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "219-09-9999",
+      "leftType": "SSN",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        "-",
+        ".",
+        "=",
+        "_",
+        "|",
+        ",",
+        ";",
+        ":",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "jane@example.com",
+      "leftType": "EMAIL",
+      "right": "555-555-0123",
+      "rightType": "PHONE",
+      "separators": [
+        "/",
+        " / ",
+        "-",
+        "=",
+        "_",
+        "|",
+        ",",
+        ";",
+        ":",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "postgres://admin:s3cret@db.example.com:5432/app",
+      "leftType": "CREDENTIAL_URI",
+      "right": "4111 1111 1111 1111",
+      "rightType": "CREDIT_CARD",
+      "separators": [
+        "-",
+        "/",
+        "_",
+        "=",
+        " ",
+        " / ",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "555-555-0123",
+      "leftType": "PHONE",
+      "right": "192.168.1.10",
+      "rightType": "IP_ADDRESS",
+      "separators": [
+        " ",
+        "/",
+        "|",
+        ",",
+        ";",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "4111 1111 1111 1111",
+      "leftType": "CREDIT_CARD",
+      "right": "219-09-9999",
+      "rightType": "SSN",
+      "separators": [
+        " ",
+        "-",
+        "/",
+        "|",
+        ",",
+        ";",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "2024-01-15",
+      "leftType": "DATE",
+      "right": "2001:db8::1",
+      "rightType": "IP_ADDRESS",
+      "separators": [
+        ":",
+        "/",
+        ",",
+        ";",
+        " ",
+        "\t",
+        "\n"
+      ]
+    },
+    {
+      "left": "94105",
+      "leftType": "ZIP_CODE",
+      "right": "2024-01-15",
+      "rightType": "DATE",
+      "separators": [
+        "-",
+        "/",
+        "|",
+        " ",
+        ";"
+      ]
+    },
+    {
+      "left": "+4 4 2 0 7 9 4 6 0 9 5 8",
+      "leftType": "PHONE",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        "-",
+        "=",
+        "|",
+        " / "
+      ]
+    },
+    {
+      "left": "September 30, 2024",
+      "leftType": "DATE",
+      "right": "2001:db8::1",
+      "rightType": "IP_ADDRESS",
+      "separators": [
+        ":"
+      ]
+    },
+    {
+      "left": "192.168.1.10",
+      "leftType": "IP_ADDRESS",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        ".",
+        "=",
+        "_",
+        "|",
+        "-"
+      ]
+    },
+    {
+      "left": "2001:db8::1",
+      "leftType": "IP_ADDRESS",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        ".",
+        "=",
+        "_",
+        "|",
+        "-"
+      ]
+    },
+    {
+      "left": "2024-01-15",
+      "leftType": "DATE",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        ".",
+        "=",
+        "_",
+        "|",
+        "-"
+      ]
+    },
+    {
+      "left": "4111-1111-1111-1111",
+      "leftType": "CREDIT_CARD",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        ".",
+        "=",
+        "_",
+        "|",
+        "-"
+      ]
+    },
+    {
+      "left": "94105",
+      "leftType": "ZIP_CODE",
+      "right": "jane@example.com",
+      "rightType": "EMAIL",
+      "separators": [
+        "/",
+        ".",
+        "=",
+        "_",
+        "|"
+      ]
+    }
+  ],
+  "intact": [
+    {
+      "type": "EMAIL",
+      "text": "orders/billing@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "first.last+tag@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "customer=tag@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "o'connor@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "123-45-6789@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "555-555-0123@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "555-0123/jane@example.com"
+    },
+    {
+      "type": "EMAIL",
+      "text": "999-00-0000-jane@example.com"
+    },
+    {
+      "type": "ZIP_CODE",
+      "text": "94105-2024"
+    },
+    {
+      "type": "CREDIT_CARD",
+      "text": "4111 1111 1111 1111 110"
+    },
+    {
+      "type": "CREDENTIAL_URI",
+      "text": "postgres://admin:s3cret@db.example.com:5432/app-4111"
+    },
+    {
+      "type": "IP_ADDRESS",
+      "text": "15:2001:db8::1"
+    }
+  ]
+}
