@@ -27,6 +27,7 @@ BROWSER_CASES = {
     "late_confirmed_save_after_lock_never_activates",
     "authenticated_bundle_recovery_preserves_aliases_and_refuses_occupied_destination",
     "whole_bundle_growth_samples_and_payload_admission",
+    "forget_persists_retirement_and_revokes_old_streams",
     "occupied_creation_rejects_exact_duplicate_request_without_overwrite",
     "async_open_expectations_and_creation_request_ids_are_snapshotted",
     "authenticated_import_rejects_unrelated_occupied_vault_without_mutation",

@@ -310,7 +310,7 @@ export interface WorkspacePolicyEdits {
   readonly choices: readonly {readonly entityType: string; readonly value: string; readonly disposition: WorkspaceChoiceDisposition | null}[];
 }
 export interface WorkspacePolicy {
-  readonly snapshotVersion: 1 | 2 | 3;
+  readonly snapshotVersion: 1 | 2 | 3 | 4;
   readonly defaultRule: "hide";
   readonly protectedTypes: readonly string[];
   readonly rules: readonly {readonly entityType: string; readonly rule: WorkspaceTypeRule}[];
@@ -323,8 +323,8 @@ export interface WorkspacePolicyPreview {
 export interface PreparedWorkspaceChange {
   /** Intent IDs are owned metadata, never proof of a send. */
   sendIntents(): readonly WorkspaceSendIntent[];
-  /** Warn before a saved format upgrade: beta.1 cannot open v2, and beta.1/beta.2 cannot open v3. */
-  snapshotFormat(): {readonly currentVersion: 1 | 2 | 3; readonly candidateVersion: 1 | 2 | 3};
+  /** Warn before a saved format upgrade: beta.1 cannot open v2, and beta.1/beta.2 cannot open v3; Core 1.0 cannot open v4. */
+  snapshotFormat(): {readonly currentVersion: 1 | 2 | 3 | 4; readonly candidateVersion: 1 | 2 | 3 | 4};
   /** Present only for settings edits; values are sensitive and remain local. */
   policyPreview(): WorkspacePolicyPreview | null;
   /** Requires a single-input plan. */
@@ -337,8 +337,8 @@ export interface PreparedWorkspaceChange {
 }
 /** Content-free source or output issue ranges; never contains a source or restored value. */
 export interface WorkspaceMarkerIssue {
-  /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets. */
-  readonly kind: "unknown" | "damaged" | "unbracketed" | "not_issued_in_conversation";
+  /** unknown: well formed but never committed here; damaged: unparseable marker; unbracketed: committed code without brackets; expired: a retired mapping. */
+  readonly kind: "unknown" | "damaged" | "unbracketed" | "not_issued_in_conversation" | "expired";
   readonly byteRange: TextRange;
   readonly codepointRange: TextRange;
   readonly utf16Range: TextRange;
@@ -399,7 +399,7 @@ export type WorkspaceOutcomeKind = "copy_confirmed" | "user_cancelled" | "blocke
 export interface WorkspaceOutcome { readonly kind: WorkspaceOutcomeKind; readonly issueCount: number; }
 export interface WorkspaceOperationRecord {
   readonly id: readonly number[];
-  readonly kind: "create" | "prepare" | "recovery" | "policy_change" | "conversation_prepare" | "send_confirmed" | "send_not_sent" | WorkspaceOutcomeKind;
+  readonly kind: "create" | "prepare" | "forget" | "recovery" | "policy_change" | "conversation_prepare" | "send_confirmed" | "send_not_sent" | WorkspaceOutcomeKind;
   readonly occurredAtMs: number | null;
   readonly preparedInputs: number;
   readonly transformedSpans: number;
@@ -482,6 +482,8 @@ export class Workspace {
   progressiveRestoreInConversation(logicalId: Uint8Array, encoding?: WorkspaceRestoreEncoding): WorkspaceProgressiveRestore;
   policy(): WorkspacePolicy;
   /** Explicit exact-value corrections can override real PII; source flags cannot. Null removes an override. */
+  /** Retire committed codes through the save-and-activate lifecycle. First use upgrades storage to v4. */
+  prepareForget(codes: readonly string[], operationId: Uint8Array): PreparedWorkspaceChange;
   preparePolicyChanges(edits: WorkspacePolicyEdits, operationId: Uint8Array): PreparedWorkspaceChange;
   /** Stage a fresh recovery head without changing saved markers. No text previews or handoff permission. */
   prepareRecovery(operationId: Uint8Array): PreparedWorkspaceChange;

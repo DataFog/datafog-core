@@ -37,6 +37,7 @@ const required = [
   'authenticated_bundle_recovery_preserves_aliases_and_refuses_occupied_destination',
   'authenticated_import_rejects_unrelated_occupied_vault_without_mutation',
   'whole_bundle_growth_samples_and_payload_admission',
+  'forget_persists_retirement_and_revokes_old_streams',
 ];
 const commands = [], candidates = {}, installed = {};
 function run(name, executable, values, cwd = work) {

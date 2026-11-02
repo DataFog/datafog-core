@@ -159,3 +159,24 @@ Default qualification is Chromium. Other engines must pass their own explicit
 run; Chrome/Firefox/Edge SDK passes in FogVault alone do not prove this adapter.
 Real shipping extension CSP/installation, physical-device budgets, providers,
 security review and production acceptance remain separate qualification work.
+
+## Mapping expiry (unreleased)
+
+`prepareForget(codes, operationId)` prepares retirement of committed marker
+codes. Pass the six-character code, not the full `[[LABEL_CODE]]` marker. Commit
+the returned plan with the existing approval and durable-save flow. It has no
+previews. Discarding it leaves mappings intact; a confirmed commit removes their
+values, reserves their codes permanently, and revokes streams from the old head.
+
+The host tracks last-created/restored times and selects stale codes; Core and
+this adapter do not keep a clock or apply a TTL. Batch stale codes to avoid
+consuming one history record per mapping. Empty, duplicate, unknown or already
+retired codes fail with `invalid_marker` without creating a plan.
+
+Inspect `plan.snapshotFormat()` before approval. The first forget upgrades the
+snapshot to version 4, which Core 1.0 cannot reopen; explain that compatibility
+change before approving the save. After reopen, old markers report `expired`
+and cannot restore. A forgotten value seen again receives a new code. Retirement
+affects the current saved workspace, not older backups or text already returned
+to callers. Requires a Core WASM build containing `prepareForget`; this API is
+not available in the published 1.0.0 packages. No package release is included.

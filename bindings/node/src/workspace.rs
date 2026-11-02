@@ -411,6 +411,26 @@ impl NativeWorkspace {
         serde_json::to_string(&self.inner.policy().map_err(from_error)?)
             .map_err(|_| failure(ErrorCode::InvalidPolicy))
     }
+    #[napi(js_name = "prepare_forget")]
+    pub fn prepare_forget(&mut self, codes_json: String, operation: Buffer) -> Result<u32, Error> {
+        if codes_json.len() > workspace::MAX_BUNDLE_BYTES || self.plans.len() >= 32 {
+            return Err(failure(ErrorCode::ResourceLimit));
+        }
+        let codes: Vec<String> =
+            serde_json::from_str(&codes_json).map_err(|_| failure(ErrorCode::InvalidMarker))?;
+        let next = self
+            .next_plan
+            .checked_add(1)
+            .ok_or_else(|| failure(ErrorCode::ResourceLimit))?;
+        let plan = self
+            .inner
+            .prepare_forget(&codes, id(&operation)?)
+            .map_err(from_error)?;
+        let handle = self.next_plan;
+        self.plans.insert(handle, plan);
+        self.next_plan = next;
+        Ok(handle)
+    }
     #[napi(js_name = "prepare_policy_changes")]
     pub fn prepare_policy_changes(
         &mut self,

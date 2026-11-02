@@ -8,11 +8,17 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Added
 
+- Node/WASM `Workspace.prepareForget` and browser `FogVaultWorkspace.prepareForget` expose
+  host-selected mapping expiry through the existing save-and-activate lifecycle.
+
 - Rust `Workspace::prepare_forget` drops committed values by marker code and
   retires their codes, so old markers report `Expired` instead of restoring to
   a later value. A forget writes snapshot version 4, which Core 1.0 cannot read.
 
 ### Fixed
+
+- Reopen snapshots after more than 20,000 mapping retirements or retained label
+  counters; the live-entry limit no longer rejects valid retirement history.
 
 - Allow bounded PyPI replication time for missing expected wheels after upload,
   while immediately rejecting unexpected files or mismatched SHA-256 values.

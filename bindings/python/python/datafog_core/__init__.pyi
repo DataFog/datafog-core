@@ -487,7 +487,7 @@ class _WorkspaceHeadValue(TypedDict):
     revision: int
     commitId: list[int]
 class _WorkspaceMarkerIssue(TypedDict):
-    kind: Literal["unknown", "damaged", "unbracketed", "not_issued_in_conversation"]
+    kind: Literal["unknown", "damaged", "unbracketed", "not_issued_in_conversation", "expired"]
     byteRange: _WorkspaceRange
     codepointRange: _WorkspaceRange
     utf16Range: _WorkspaceRange
@@ -586,8 +586,8 @@ class _WorkspacePreview(TypedDict):
     text: str
     transformations: list[_WorkspaceTransformation]
 class _WorkspaceSnapshotFormat(TypedDict):
-    currentVersion: Literal[1, 2, 3]
-    candidateVersion: Literal[1, 2, 3]
+    currentVersion: Literal[1, 2, 3, 4]
+    candidateVersion: Literal[1, 2, 3, 4]
 class _WorkspaceRuleEdit(TypedDict):
     entityType: str
     rule: Literal["hide", "keep"] | None
@@ -606,7 +606,7 @@ class _WorkspaceChoice(TypedDict):
     value: str
     disposition: Literal["keep", "not_sensitive"]
 class _WorkspacePolicy(TypedDict):
-    snapshotVersion: Literal[1, 2, 3]
+    snapshotVersion: Literal[1, 2, 3, 4]
     defaultRule: Literal["hide"]
     protectedTypes: list[str]
     rules: list[_WorkspaceRule]
@@ -679,7 +679,7 @@ class _WorkspaceConversationState(TypedDict):
     issuedMarkers: int
 class _WorkspaceOperationRecord(TypedDict):
     id: list[int]
-    kind: Literal["create", "prepare", "recovery", "policy_change", "conversation_prepare", "send_confirmed", "send_not_sent", "copy_confirmed", "user_cancelled", "blocked_input", "restore_blocked"]
+    kind: Literal["create", "prepare", "forget", "recovery", "policy_change", "conversation_prepare", "send_confirmed", "send_not_sent", "copy_confirmed", "user_cancelled", "blocked_input", "restore_blocked"]
     occurredAtMs: int | None
     preparedInputs: int
     transformedSpans: int

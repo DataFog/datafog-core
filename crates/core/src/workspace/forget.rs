@@ -75,3 +75,57 @@ impl Workspace {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn activate(workspace: &mut Workspace, plan: &mut PreparedChange) {
+        let parent = plan.expected_head().unwrap();
+        let saved = plan.candidate_head().unwrap();
+        workspace.activate_saved(plan, parent, saved).unwrap();
+    }
+
+    #[test]
+    fn issuance_redraws_when_the_first_candidate_is_a_retired_code() {
+        let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+        let finding = WorkspaceFinding::new("PERSON", "Jane", TextRange { start: 0, end: 4 });
+        let mut plan = workspace
+            .prepare("Jane", std::slice::from_ref(&finding), [3; 16])
+            .unwrap();
+        let marker = plan.preview().unwrap().text.clone();
+        let code = marker
+            .trim_end_matches("]]")
+            .rsplit_once('_')
+            .unwrap()
+            .1
+            .to_owned();
+        activate(&mut workspace, &mut plan);
+        let mut plan = workspace
+            .prepare_forget(std::slice::from_ref(&code), [4; 16])
+            .unwrap();
+        activate(&mut workspace, &mut plan);
+
+        // A valid synthetic snapshot reserves exactly the next issuance's first
+        // draw. This forces a collision instead of relying on random chance.
+        let collision = issue_code([1; 16], [5; 16], "PERSON", 2, &mut BTreeSet::new()).unwrap();
+        let mut state = workspace.state().unwrap().clone();
+        let retired = state.retired.remove(&code).unwrap();
+        state.retired.insert(collision.clone(), retired);
+        let bundle = codec::encode(&state).unwrap();
+        let mut reopened = Workspace::open_bundle(&bundle).unwrap();
+        let mut plan = reopened.prepare("Jane", &[finding], [5; 16]).unwrap();
+        let new_marker = plan.preview().unwrap().text.clone();
+        assert_ne!(new_marker, super::super::marker("PERSON", &collision));
+        activate(&mut reopened, &mut plan);
+        assert_eq!(reopened.restore(&new_marker).unwrap(), "Jane");
+        assert_eq!(
+            reopened
+                .restore_report(&super::super::marker("PERSON", &collision))
+                .unwrap()
+                .issues[0]
+                .kind,
+            MarkerIssueKind::Expired
+        );
+    }
+}
