@@ -69,6 +69,9 @@ before the first forget, as was done for the version 3 upgrade.
   the 32⁶ code space and the 32 redraw attempts in `issue_code` are not at
   risk. A collision past those attempts returns `ResourceLimit` and never
   reuses a code.
+- Each forget adds one operation record and counts toward the existing record
+  ceiling, so hosts should forget in batches (for example, once per unlock)
+  rather than one value at a time.
 - Forget records carry no `occurred_at_ms`. The host owns time, and the record
   only needs to show that a forget happened.
 - Unknown and retired codes reuse `InvalidMarker` rather than adding an error
