@@ -95,15 +95,15 @@ def validate(root=ROOT, manifest=None):
         same([case["id"] for case in fixture["cases"]], entry["caseIds"], entry["path"] + " cases")
     snapshot = manifest["snapshot"]
     same(snapshot["writerVersion"], 3, "snapshot writer")
-    same(snapshot["readerVersions"], [1, 2, 3], "snapshot readers")
+    same(snapshot["readerVersions"], [1, 2, 3, 4], "snapshot readers")
     if "snapshot_version: 3," not in source:
         raise ValueError("new workspace snapshot writer differs")
     codec = (root / "crates/core/src/workspace/codec.rs").read_text(encoding="utf-8")
     decoder_versions = re.search(r"require\(matches!\(\s*\(snapshot_version, fields\),(.+?)\)\)\?;", codec, re.S)
     if not decoder_versions:
         raise ValueError("snapshot reader inventory requires review")
-    same([(int(version), int(fields)) for version, fields in re.findall(r"\((\d+), Some\((\d+)\)\)", decoder_versions[1])], [(1, 7), (2, 8), (3, 11)], "snapshot reader map shapes")
-    same([key["id"] for key in snapshot["keys"]], list(range(11)), "snapshot keys")
+    same([(int(version), int(fields)) for version, fields in re.findall(r"\((\d+), Some\((\d+)\)\)", decoder_versions[1])], [(1, 7), (2, 8), (3, 11), (4, 12)], "snapshot reader map shapes")
+    same([key["id"] for key in snapshot["keys"]], list(range(12)), "snapshot keys")
     for key in snapshot["keys"]:
         fixture = json.loads((root / key["missingFieldFixture"]).read_text(encoding="utf-8"))
         names = [case["id"] for case in fixture["rejections"]]

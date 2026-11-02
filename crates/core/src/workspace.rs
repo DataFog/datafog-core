@@ -4,6 +4,7 @@
 //! encryption, approval and durable storage; activating a candidate trusts that host.
 mod codec;
 mod conversation;
+mod forget;
 pub use conversation::{
     Conversation, ConversationInput, ConversationState, SendIntentId, SendStatus,
 };
@@ -237,6 +238,8 @@ pub enum MarkerIssueKind {
     /// A committed `LABEL_CODE` whose surrounding brackets were dropped.
     Unbracketed,
     NotIssuedInConversation,
+    /// Well-formed marker whose mapping this workspace forgot. Its code is retired.
+    Expired,
 }
 impl MarkerIssueKind {
     pub fn as_str(self) -> &'static str {
@@ -245,6 +248,7 @@ impl MarkerIssueKind {
             Self::Damaged => "damaged",
             Self::Unbracketed => "unbracketed",
             Self::NotIssuedInConversation => "not_issued_in_conversation",
+            Self::Expired => "expired",
         }
     }
 }
@@ -300,6 +304,17 @@ impl Drop for Entry {
     }
 }
 
+/// A forgotten entry's public marker. The value is gone; the code stays reserved so
+/// it is never issued again and an old marker can't restore to a different value.
+/// `issuance` and `counter` keep the entry's provenance and counter bounds valid.
+#[derive(Clone)]
+struct Retired {
+    label: String,
+    issuance: PublicId,
+    counter: u64,
+    operation: PublicId,
+}
+
 /// Derive the normalized identity key for workspace lookup.
 ///
 /// Uses [`str::split_whitespace`], which recognizes Unicode whitespace including
@@ -332,6 +347,8 @@ struct State {
     head: Head,
     entries: BTreeMap<Identity, Entry>,
     counters: BTreeMap<String, u64>,
+    /// Retired codes by code, from forgotten entries. Non-empty only in version 4.
+    retired: BTreeMap<String, Retired>,
 }
 
 struct Pending {
@@ -448,6 +465,7 @@ impl Workspace {
             },
             entries: BTreeMap::new(),
             counters: BTreeMap::new(),
+            retired: BTreeMap::new(),
         })
     }
     pub fn open_bundle(bytes: &[u8]) -> Result<Self> {
@@ -691,7 +709,13 @@ impl Workspace {
             state.admit_record(false)?;
         }
         let committed = marker_lookup(state);
-        let mut codes: BTreeSet<String> = state.entries.values().map(|e| e.code.clone()).collect();
+        // Retired codes stay reserved so a forgotten marker never names a new value.
+        let mut codes: BTreeSet<String> = state
+            .entries
+            .values()
+            .map(|e| e.code.clone())
+            .chain(state.retired.keys().cloned())
+            .collect();
         let mut candidate = state.clone();
         let mut previews = Vec::with_capacity(inputs.len());
         let mut output_bytes = 0usize;
@@ -950,7 +974,7 @@ fn restore_report_scoped(
     }
     let lookup = marker_lookup(state);
     let spans = marker_spans(text)?;
-    let mut issues = marker_issues(text, &spans, &lookup)?;
+    let mut issues = marker_issues(text, &spans, &lookup, |canonical| state.retires(canonical))?;
     if let Some(context) = context {
         let mut index = TextIndex::new(text);
         for span in &spans {
@@ -1052,6 +1076,22 @@ fn unbracketed_markers(
     Ok(())
 }
 
+impl State {
+    /// Whether a canonical marker names a forgotten entry's retired code and label.
+    fn retires(&self, canonical: &str) -> bool {
+        // Labels may contain underscores; codes never do.
+        canonical
+            .strip_prefix("[[")
+            .and_then(|marker| marker.strip_suffix("]]"))
+            .and_then(|interior| interior.rsplit_once('_'))
+            .is_some_and(|(label, code)| {
+                self.retired
+                    .get(code)
+                    .is_some_and(|retired| retired.label == label)
+            })
+    }
+}
+
 /// Canonical marker text → display value, for every committed entry.
 fn marker_lookup(state: &State) -> BTreeMap<String, &str> {
     state
@@ -1117,10 +1157,12 @@ fn marker_spans(text: &str) -> Result<Vec<MarkerSpan>> {
 }
 
 /// Classify spans identically for source validation and strict restoration.
+/// `retired` names forgotten markers; source validation reports them as unknown.
 fn marker_issues(
     text: &str,
     spans: &[MarkerSpan],
     lookup: &BTreeMap<String, &str>,
+    retired: impl Fn(&str) -> bool,
 ) -> Result<Vec<MarkerIssue>> {
     let mut problems = Vec::new();
     let mut push = |kind, range| {
@@ -1135,6 +1177,7 @@ fn marker_issues(
         unbracketed_markers(&text[cursor..span.range.start], cursor, lookup, &mut push)?;
         match span.canonical.as_ref() {
             Some(canonical) if lookup.contains_key(canonical) => {}
+            Some(canonical) if retired(canonical) => push(MarkerIssueKind::Expired, span.range)?,
             Some(_) => push(MarkerIssueKind::Unknown, span.range)?,
             None => push(MarkerIssueKind::Damaged, span.range)?,
         }
@@ -1166,7 +1209,7 @@ fn committed_marker_ranges(
     committed: &BTreeMap<String, &str>,
 ) -> Result<Vec<TextRange>> {
     let spans = marker_spans(text)?;
-    let issues = marker_issues(text, &spans, committed)?;
+    let issues = marker_issues(text, &spans, committed, |_| false)?;
     if issues.len() > MAX_FINDINGS {
         return Err(error(ErrorCode::ResourceLimit));
     }

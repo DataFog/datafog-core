@@ -99,7 +99,8 @@ fn encode_into(
     e.map(match state.snapshot_version {
         1 => 7,
         2 => 8,
-        _ => 11,
+        3 => 11,
+        _ => 12,
     })?
     .u8(0)?
     .u8(state.snapshot_version)?
@@ -145,7 +146,7 @@ fn encode_into(
                 .bytes(&record.operation)?;
         }
     }
-    if state.snapshot_version == 3 {
+    if state.snapshot_version >= 3 {
         e.u8(8)?.array(state.operations.len() as u64)?;
         for operation in &state.operations {
             encode_operation(operation, e)?;
@@ -160,6 +161,17 @@ fn encode_into(
             .u64(counts.transformed_spans)?
             .u64(counts.confirmed_handoffs)?
             .u64(counts.reported_blocked_attempts)?;
+    }
+    if state.snapshot_version == 4 {
+        e.u8(11)?.array(state.retired.len() as u64)?;
+        for (code, retired) in &state.retired {
+            e.array(5)?
+                .str(&retired.label)?
+                .str(code)?
+                .bytes(&retired.issuance)?
+                .u64(retired.counter)?
+                .bytes(&retired.operation)?;
+        }
     }
     Ok(())
 }
@@ -198,7 +210,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     let snapshot_version = d.u8()?;
     require(matches!(
         (snapshot_version, fields),
-        (1, Some(7)) | (2, Some(8)) | (3, Some(11))
+        (1, Some(7)) | (2, Some(8)) | (3, Some(11)) | (4, Some(12))
     ))?;
     key(&mut d, 1)?;
     let namespace = id(&mut d)?;
@@ -256,14 +268,14 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     let count = d
         .array()?
         .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
-    require(count <= MAX_ENTRIES as u64 && count == maximums.len() as u64)?;
+    require(count <= MAX_ENTRIES as u64)?;
+    // Checked against entry and retired-code counters once key 11 is read.
     let mut counters = BTreeMap::new();
     for _ in 0..count {
         array(&mut d, 2)?;
         let label = d.str()?;
         require(valid_type(label))?;
         let counter = d.u64()?;
-        require(maximums.get(label).is_some_and(|n| counter >= *n))?;
         require(counters.insert(label.to_owned(), counter).is_none())?;
     }
     key(&mut d, 5)?;
@@ -345,7 +357,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
     let mut operations = Vec::new();
     let mut operation_counts = OperationCounts::default();
     let mut conversations = conversation::Conversations::default();
-    if snapshot_version == 3 {
+    if snapshot_version >= 3 {
         key(&mut d, 8)?;
         let count = d
             .array()?
@@ -395,7 +407,46 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             require(head.revision >= operations.len() as u64)?;
         }
     }
-    if snapshot_version == 3 {
+    let mut retired = BTreeMap::new();
+    if snapshot_version == 4 {
+        key(&mut d, 11)?;
+        let count = d
+            .array()?
+            .ok_or_else(|| error(ErrorCode::InvalidSnapshot))?;
+        require(count > 0 && count <= MAX_ENTRIES as u64)?;
+        for _ in 0..count {
+            array(&mut d, 5)?;
+            let label = d.str()?;
+            require(valid_type(label))?;
+            let code = d.str()?;
+            require(valid_code(code))?;
+            let issuance = id(&mut d)?;
+            let counter = d.u64()?;
+            require(counter > 0)?;
+            let operation = id(&mut d)?;
+            require(!issuance_ids.contains(&operation))?;
+            // Shares the entry code set: a retired code is unique and never live.
+            require(codes.insert(code.to_owned()))?;
+            maximums
+                .entry(label.to_owned())
+                .and_modify(|v| *v = (*v).max(counter))
+                .or_insert(counter);
+            let record = Retired {
+                label: label.to_owned(),
+                issuance,
+                counter,
+                operation,
+            };
+            require(retired.insert(code.to_owned(), record).is_none())?;
+        }
+    }
+    require(
+        counters.len() == maximums.len()
+            && counters
+                .iter()
+                .all(|(label, counter)| maximums.get(label).is_some_and(|n| counter >= n)),
+    )?;
+    if snapshot_version >= 3 {
         let complete = operations
             .first()
             .is_some_and(|record| record.kind == OperationKind::Create);
@@ -404,8 +455,12 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             .map(|record| (record.id, record))
             .collect();
         let mut issued = BTreeMap::<PublicId, u64>::new();
-        for entry in entries.values() {
-            if let Some(record) = by_id.get(&entry.issuance) {
+        let issuances = entries
+            .values()
+            .map(|entry| entry.issuance)
+            .chain(retired.values().map(|record: &Retired| record.issuance));
+        for issuance in issuances {
+            if let Some(record) = by_id.get(&issuance) {
                 require(matches!(
                     record.kind,
                     OperationKind::Prepare | OperationKind::ConversationPrepare
@@ -413,7 +468,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
             } else {
                 require(!complete)?;
             }
-            *issued.entry(entry.issuance).or_default() += 1;
+            *issued.entry(issuance).or_default() += 1;
         }
         for (id, count) in issued {
             if let Some(record) = by_id.get(&id) {
@@ -431,6 +486,13 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
                 require(!complete)?;
             }
         }
+        for record in retired.values() {
+            if let Some(operation) = by_id.get(&record.operation) {
+                require(operation.kind == OperationKind::Forget)?;
+            } else {
+                require(!complete)?;
+            }
+        }
     }
     require(d.position() == bytes.len())?;
     let state = State {
@@ -444,6 +506,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<State> {
         head,
         entries,
         counters,
+        retired,
     };
     state.conversations.validate(&state)?;
     if !state.conversations.is_empty() {
