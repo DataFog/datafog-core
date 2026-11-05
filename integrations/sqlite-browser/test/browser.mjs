@@ -1,0 +1,142 @@
+import {init, Workspace, scan} from './sdk/wasm/index.js';
+import {SQLiteVault, SQLiteWorkspace} from './sdk/core-sqlite-browser/index.mjs';
+await init();
+const password = 'synthetic password for qualification';
+const id = 'aa'.repeat(16), recordId = new Uint8Array(16).fill(2), namespace = new Uint8Array(16).fill(3);
+const rotatedPassword = 'rotated synthetic password';
+const recovery = new Uint8Array(32).fill(7);
+const random = () => crypto.getRandomValues(new Uint8Array(16));
+const check = (value, message) => { if (!value) throw Error(message); };
+const rejects = async (action, code) => { try { await action(); } catch (error) { check(!code || error.code === code, `expected ${code}, received ${error.code}`); return; } throw Error('expected rejection'); };
+globalThis.runFirst = async () => {
+  const cases = [];
+  const vault = await SQLiteVault.create({id, password});
+  const owner = await SQLiteWorkspace.create({Workspace, vault, recordId, namespace});
+  const text = 'Email alice@example.test';
+  const findings = scan(text).map(f => ({entityType: f.entityType, matchedText: f.matchedText, range: {unit: 'utf8_bytes', ...f.byteRange}, detectorName: f.detectorName}));
+  const plan = owner.prepareReview([{text, scannerFindings: findings, userSelections: []}], random());
+  await rejects(() => owner.commit(plan, {approved: false}), 'approval_required');
+  const saved = await owner.commit(plan, {approved: true});
+  check(owner.restore(saved.previews[0].text) === text, 'restore failed');
+  localStorage.setItem('protected', saved.previews[0].text);
+  await rejects(() => vault.read(recordId), 'ownership_transferred');
+  cases.push('raw_provider_mutation_rejected_after_transfer');
+  cases.push('approved_save_before_activation_and_exact_restore');
+  await owner.lock();
+  await rejects(() => owner.restore(saved.previews[0].text), 'owner_closed');
+  await rejects(() => SQLiteVault.open({id, password: 'wrong password value'}));
+  cases.push('lock_revokes_owner_and_wrong_password_rejected');
+  const reopenedVault = await SQLiteVault.open({id, password});
+  const reopened = await SQLiteWorkspace.open({Workspace, vault: reopenedVault, recordId, expectedNamespace: namespace});
+  check(reopened.restore(saved.previews[0].text) === text, 'reopen restore failed');
+  const backup = await reopened.exportBackup({password});
+  await reopened.changePassword({password: rotatedPassword, recoveryKey: recovery});
+  await reopened.close();
+  await rejects(() => SQLiteVault.open({id, password}));
+  const recoveryVault = await SQLiteVault.open({id, recoveryKey: recovery});
+  const recovered = await SQLiteWorkspace.open({Workspace, vault: recoveryVault, recordId, expectedNamespace: namespace});
+  check(recovered.restore(saved.previews[0].text) === text, 'recovery restore failed');
+  await recovered.close();
+  cases.push('password_rotation_and_independent_recovery');
+  const destination = await SQLiteVault.create({id: 'bb'.repeat(16), password});
+  const imported = await SQLiteWorkspace.importBackup({Workspace, vault: destination, recordId: random(), backup, password, approved: true});
+  check(imported.restore(saved.previews[0].text) === text, 'backup restore failed');
+  check(imported.head().revision !== saved.head.revision || JSON.stringify(imported.head().commitId) !== JSON.stringify(saved.head.commitId), 'recovery did not create a fresh head');
+  await imported.close();
+  const corrupt = backup.slice(); corrupt[corrupt.length - 15] ^= 1;
+  const spare = await SQLiteVault.create({id: 'cc'.repeat(16), password});
+  await rejects(() => SQLiteWorkspace.importBackup({Workspace, vault: spare, recordId: random(), backup: corrupt, password, approved: true}), 'invalid_credentials');
+  await spare.close();
+  cases.push('authenticated_encrypted_backup_fresh_destination_recovery_and_tamper_rejection');
+  cases.push('encrypted_opfs_close_and_reopen');
+  return cases;
+};
+globalThis.runFaults = async () => {
+  const cases = [];
+  const text = 'Email fault@example.test';
+  const input = () => [{text, scannerFindings: scan(text).map(f => ({entityType: f.entityType, matchedText: f.matchedText, range: {unit: 'utf8_bytes', ...f.byteRange}, detectorName: f.detectorName})), userSelections: []}];
+  for (const [number, fault] of ['lost', 'quota', 'late', 'crash'].entries()) {
+    const vaultId = (number + 4).toString(16).repeat(32);
+    const initial = await SQLiteVault.create({id: vaultId, password});
+    const empty = await SQLiteWorkspace.create({Workspace, vault: initial, recordId, namespace});
+    await empty.close();
+    const NativeWorker = globalThis.Worker;
+    let saved;
+    const savedPromise = new Promise(resolve => { saved = resolve; });
+    globalThis.Worker = class extends NativeWorker {
+      constructor(...args) { super(...args); this.addEventListener('message', event => { if (event.data.testSaved) saved(); }); }
+    };
+    let vault;
+    try { vault = await SQLiteVault.open({id: vaultId, password, workerUrl: new URL(`./fault-worker.mjs?fault=${fault}`, location.href)}); }
+    finally { globalThis.Worker = NativeWorker; }
+    const owner = await SQLiteWorkspace.open({Workspace, vault, recordId, expectedNamespace: namespace});
+    const request = random();
+    const plan = owner.prepareReview(input(), random());
+    const committing = owner.commit(plan, {approved: true, requestId: request});
+    // Attach a rejection handler before a lock may synchronously revoke the Worker.
+    const outcome = committing.then(() => false, failure => failure);
+    if (fault === 'late') { await savedPromise; await owner.lock(); }
+    check(await outcome, 'fault authorized handoff');
+    check(owner.closed, 'fault kept owner active');
+    const fresh = await SQLiteVault.open({id: vaultId, password});
+    const reconciliation = await fresh.reconcileLatest(request);
+    check(reconciliation.found === (!['quota', 'crash'].includes(fault)), 'wrong durable reconciliation');
+    const reopened = await SQLiteWorkspace.open({Workspace, vault: fresh, recordId, expectedNamespace: namespace});
+    check(reopened.head().revision === (['quota', 'crash'].includes(fault) ? '0' : '1'), 'partial candidate after fault');
+    await reopened.close();
+    cases.push(`${fault}_save_never_grants_handoff_and_reopens_complete_state`);
+  }
+  const interruptedId = '88'.repeat(16);
+  await rejects(() => SQLiteVault.create({id: interruptedId, password, workerUrl: new URL('./fault-worker.mjs?fault=init', location.href)}));
+  const resumed = await SQLiteVault.open({id: interruptedId, password});
+  const resumedOwner = await SQLiteWorkspace.create({Workspace, vault: resumed, recordId, namespace});
+  await resumedOwner.close();
+  cases.push('interrupted_bootstrap_resumes_only_after_credential_authentication');
+  const exclusive = await SQLiteVault.open({id, password: rotatedPassword});
+  await rejects(() => SQLiteVault.open({id, password: rotatedPassword}));
+  await exclusive.close();
+  cases.push('competing_opfs_worker_rejected_without_mutation');
+  // SQL compare-and-set is checked even inside the exclusive Worker profile.
+  const raw = await SQLiteVault.open({id, password: rotatedPassword});
+  const receipt = await raw.receipt(), row = await raw.read(recordId);
+  await raw.save(recordId, row.metadata, row.payload, {expectedRevision: row.revision, expectedVaultRevision: receipt.revision, requestId: random()});
+  await rejects(() => raw.save(recordId, row.metadata, row.payload, {expectedRevision: row.revision, expectedVaultRevision: receipt.revision, requestId: random()}), 'conflict');
+  await raw.close();
+  cases.push('stale_complete_storage_revision_cas_rejected');
+  const damagedId = '99'.repeat(16);
+  const disposable = await SQLiteVault.create({id: damagedId, password});
+  const disposableOwner = await SQLiteWorkspace.create({Workspace, vault: disposable, recordId, namespace});
+  const disposablePlan = disposableOwner.prepareReview(input(), random());
+  await disposableOwner.commit(disposablePlan, {approved: true});
+  await disposableOwner.close();
+  const directory = await (await navigator.storage.getDirectory()).getDirectoryHandle(`.datafog-sqlite-${damagedId}`);
+  const files = [];
+  async function visit(dir) {
+    for await (const handle of dir.values()) {
+      if (handle.kind === 'directory') await visit(handle);
+      else { const file = await handle.getFile(); files.push({handle, bytes: new Uint8Array(await file.arrayBuffer())}); }
+    }
+  }
+  await visit(directory);
+  check(files.length > 0, 'no OPFS evidence');
+  for (const file of files) check(!new TextDecoder().decode(file.bytes).includes('fault@example.test'), 'plaintext persisted');
+  const largest = files.sort((a,b) => b.bytes.length - a.bytes.length)[0];
+  check(largest.bytes.length > 8192, 'encrypted database evidence absent');
+  largest.bytes[largest.bytes.length - 100] ^= 1;
+  const writable = await largest.handle.createWritable(); await writable.write(largest.bytes); await writable.close();
+  await rejects(async () => {
+    const corrupted = await SQLiteVault.open({id: damagedId, password});
+    try { await SQLiteWorkspace.open({Workspace, vault: corrupted, recordId, expectedNamespace: namespace}); }
+    finally { if (!corrupted.closed) await corrupted.close(); }
+  });
+  cases.push('persistent_artifacts_contain_no_fixture_plaintext_and_page_tamper_rejects');
+  return cases;
+};
+globalThis.runRestart = async () => {
+  const vault = await SQLiteVault.open({id, password: rotatedPassword});
+  const owner = await SQLiteWorkspace.open({Workspace, vault, recordId, expectedNamespace: namespace});
+  check(owner.restore(localStorage.getItem('protected')) === 'Email alice@example.test', 'process restart lost state');
+  await owner.close();
+  return ['browser_process_restart_preserves_exact_restore'];
+};
+globalThis.ready = true;
