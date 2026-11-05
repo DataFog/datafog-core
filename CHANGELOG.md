@@ -6,6 +6,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Bundle the statement recipient-name and mailing-address CNN in Core's browser
+  WASM detector, with default-enabled extension scanning and an explicit disable
+  control that preserves saved Workspace restoration.
+- Add an optional SQLite3 Multiple Ciphers browser Workspace backend for
+  encrypted local persistence, approved save-before-activation, and reopen/restore.
+
 ### Fixed
 
 - Allow bounded PyPI replication time for missing expected wheels after upload,
