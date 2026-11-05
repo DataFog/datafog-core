@@ -5,19 +5,30 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--registry-version' || !/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(args[1]))) {
+  throw Error('Usage: node scripts/test-v1-1-browser.mjs [--registry-version <exact-version>]');
+}
+const registryVersion = args[1];
 const output = path.join(root, 'target/v1-1-browser', new Date().toISOString().replaceAll(':', '-'));
 mkdirSync(output, {recursive: true});
 const run = (cmd, args, cwd = root) => execFileSync(cmd, args, {cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024});
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 const candidates = [];
 for (const directory of ['bindings/wasm', 'integrations/sqlite-browser', 'integrations/fogvault-browser']) {
-  const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', output], path.join(root, directory)))[0];
-  const file = path.join(output, packed.filename); const metadata = JSON.parse(readFileSync(path.join(root, directory, 'package.json')));
-  candidates.push({file, name: metadata.name, version: metadata.version, bytes: readFileSync(file).length, sha256: hash(file)});
+  const metadata = JSON.parse(readFileSync(path.join(root, directory, 'package.json')));
+  const spec = registryVersion ? [`${metadata.name}@${registryVersion}`] : [];
+  const packed = JSON.parse(run('npm', ['pack', ...spec, '--json', '--ignore-scripts', '--pack-destination', output], registryVersion ? root : path.join(root, directory)))[0];
+  const file = path.join(output, packed.filename);
+  candidates.push({file, name: metadata.name, version: registryVersion || metadata.version, bytes: readFileSync(file).length, sha256: hash(file)});
 }
 const extension = path.join(output, 'extension'); mkdirSync(extension);
 writeFileSync(path.join(extension, 'package.json'), '{"private":true,"type":"module"}');
 run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...candidates.map(item => item.file), '@datafog/fogvault-browser@0.1.0'], extension);
+for (const candidate of candidates) {
+  const installed = JSON.parse(readFileSync(path.join(extension, 'node_modules', candidate.name, 'package.json')));
+  if (installed.name !== candidate.name || installed.version !== candidate.version) throw Error('Installed package identity differs from selected candidate');
+}
 copyFileSync(path.join(root, 'scripts/v1-1-browser-types.ts'), path.join(extension, 'types.ts'));
 run(process.execPath, [path.join(root, 'bindings/wasm/node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--module', 'nodenext', '--target', 'es2022', '--lib', 'es2022,dom', 'types.ts'], extension);
 const manifest = {manifest_version: 3, name: 'DataFog v1.1 joint qualification', version: '1.0', background: {service_worker: 'background.js'}, content_security_policy: {extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"}};
@@ -33,6 +44,7 @@ const launch = async () => {
   await context.setOffline(true); return context;
 };
 const receipt = {schema: 'datafog-browser-v1-1-proof/v1', typecheck: true, git_status: run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), revision: run('git', ['rev-parse', 'HEAD']).trim(), commit: run('git', ['rev-parse', 'HEAD']).trim(), candidates, manifest, cases: [], externalRequests};
+receipt.distribution = registryVersion ? {source: 'npm-registry', version: registryVersion} : {source: 'checkout'};
 let context;
 try {
   context = await launch(); receipt.browser = context.browser().version();

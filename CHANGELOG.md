@@ -6,6 +6,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.1.0-rc.1] - 2026-11-04
+
 ### Added
 
 - Bundle the statement recipient-name and mailing-address CNN in Core's browser
