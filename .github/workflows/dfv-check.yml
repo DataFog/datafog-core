@@ -59,6 +59,7 @@ jobs:
         run: |
           python3 scripts/test-publish-companions.py
           python3 scripts/test-stage-publication.py
+          python3 scripts/test-model-candidate-versions.py
       - if: steps.scope.outputs.code == 'true'
         run: python3 -m pip install maturin
       - if: steps.scope.outputs.code == 'true'
