@@ -17,15 +17,17 @@ Subcommands:
 - `eval` — run evaluations with per-entity baselines
 - `bench` — performance benchmarks (warn-only until a stable baseline exists)
 
-A project verification skill and feature map will live at `.cursor/skills/verify-datafog/`. See [AGENTS.md](AGENTS.md) for repository rules and verification workflow.
+The project verification skill and feature map live at `.cursor/skills/verify-datafog/`. See [AGENTS.md](AGENTS.md) for repository rules and verification workflow.
+
+## Completed
+
+- **GLiNER2 entity-count gating.** Fixed in [PR #112](https://github.com/DataFog/datafog-core/pull/112); [issue #87](https://github.com/DataFog/datafog-core/issues/87) is closed. Regression checks remain part of model verification.
 
 ## Planned
 
-1. **Fix GLiNER2 entity-count gating.** Valid spans are sometimes skipped due to the entity-count gate. [Issue #87](https://github.com/DataFog/datafog-core/issues/87) tracks this.
+1. **Unified model-engine interface.** A single interface in `crates/core` for model engines. Existing engines (the DataFog model and GLiNER2) will move onto it. Engines remain a fixed list behind optional features, each pinned to a revision with SHA-256 hashes and with its own eval baseline. There is no runtime plugin system.
 
-2. **Unified model-engine interface.** A single interface in `crates/core` for model engines. Existing engines (the DataFog model and GLiNER2) will move onto it. Engines remain a fixed list behind optional features, each pinned to a revision with SHA-256 hashes and with its own eval baseline. There is no runtime plugin system.
-
-3. **Contributed multilingual engines.** Engines for Arabic, Persian, Urdu, and Turkish coverage, built on the unified interface.
+2. **Contributed multilingual engines.** Engines for Arabic, Persian, Urdu, and Turkish coverage, built on the unified interface.
 
 ## Under consideration
 
