@@ -71,3 +71,7 @@ candidate archives and retain failure evidence. The SQLite profile does not
 provide independent rollback detection for replayed valid storage. Automated
 Chromium evidence does not replace acceptance in Josh's actual packaged extension
 or establish support for untested browser engines and devices.
+
+Publication requires a successful `Browser CNN and Workspace vaults` workflow
+for the exact release commit, alongside the existing release qualifications.
+PR merge-checkout results alone do not authorize publication.

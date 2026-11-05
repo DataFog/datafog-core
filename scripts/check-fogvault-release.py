@@ -20,6 +20,7 @@ REQUIRED = {
         *(f"Core–FogVault joint / {engine}" for engine in ("chromium", "firefox", "msedge")),
     },
     "browser-model.yml": {"extraction"},
+    "browser-v1-1.yml": {"installed-extension"},
     "fogvault-native-languages.yml": {
         "Core–FogVault unified Node archive",
         *(f"Core–FogVault Node/Python / {platform}" for platform in PLATFORMS),
