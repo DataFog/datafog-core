@@ -12,7 +12,8 @@ const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex
 const candidates = [];
 for (const directory of ['bindings/wasm', 'integrations/sqlite-browser', 'integrations/fogvault-browser']) {
   const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', output], path.join(root, directory)))[0];
-  const file = path.join(output, packed.filename); candidates.push({file, sha256: hash(file)});
+  const file = path.join(output, packed.filename); const metadata = JSON.parse(readFileSync(path.join(root, directory, 'package.json')));
+  candidates.push({file, name: metadata.name, version: metadata.version, bytes: readFileSync(file).length, sha256: hash(file)});
 }
 const extension = path.join(output, 'extension'); mkdirSync(extension);
 writeFileSync(path.join(extension, 'package.json'), '{"private":true,"type":"module"}');
@@ -31,7 +32,7 @@ const launch = async () => {
   context.on('request', request => {if (/^https?:/.test(request.url())) externalRequests.push(request.url());});
   await context.setOffline(true); return context;
 };
-const receipt = {commit: run('git', ['rev-parse', 'HEAD']).trim(), candidates, manifest, cases: [], externalRequests};
+const receipt = {schema: 'datafog-browser-v1-1-proof/v1', typecheck: true, git_status: run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), revision: run('git', ['rev-parse', 'HEAD']).trim(), commit: run('git', ['rev-parse', 'HEAD']).trim(), candidates, manifest, cases: [], externalRequests};
 let context;
 try {
   context = await launch(); receipt.browser = context.browser().version();
@@ -58,6 +59,6 @@ try {
   if (receipt.cases.length !== required.length || required.some(name => !receipt.cases.includes(name)) || externalRequests.length) {
     throw Error('incomplete cases or unexpected external request');
   }
-  receipt.passed = true;
+  receipt.required = required; receipt.passed = true;
 } catch (error) {receipt.passed = false; receipt.failure = error.message; throw error;}
 finally {await context?.close(); writeFileSync(path.join(output, 'receipt.json'), JSON.stringify(receipt, null, 2)); console.log(path.join(output, 'receipt.json'));}

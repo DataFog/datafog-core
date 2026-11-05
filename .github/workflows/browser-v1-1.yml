@@ -72,5 +72,7 @@ jobs:
             target/dfv/runs/**/report.json
             target/dfv/runs/**/*.log
             target/sqlite-browser/**/receipt.json
+            target/sqlite-browser/**/*.tgz
             target/v1-1-browser/**/receipt.json
+            target/v1-1-browser/**/*.tgz
           retention-days: 14

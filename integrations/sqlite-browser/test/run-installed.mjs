@@ -50,7 +50,7 @@ const launch = async () => {
   await browser.route(/^https?:/, route => { requests.push(route.request().url()); return route.abort(); });
   return browser;
 };
-const receipt = {candidates: Object.fromEntries(Object.entries(candidates).map(([name, file]) => [name, {file, sha256: hash(readFileSync(file))}])), sqlite: lock, cases: []};
+const receipt = {schema: 'datafog-sqlite-browser-proof/v1', revision: run('git', ['rev-parse', 'HEAD']).trim(), git_status: run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), candidates: Object.fromEntries(Object.entries(candidates).map(([name, file]) => [name, {file, bytes: readFileSync(file).length, sha256: hash(readFileSync(file))}])), sqlite: lock, cases: []};
 let context;
 try {
   context = await launch();

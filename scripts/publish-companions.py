@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "DataFog/datafog-core"
 GROUPS = ("access", "fog-rust", "fog-browser", "core-rust-integrations",
-          "core-browser-integrations", "core-node-integration", "core-python-integration")
+          "core-browser-integrations", "core-sqlite-browser-integration", "core-node-integration", "core-python-integration")
 
 
 def module(name):
@@ -27,6 +28,64 @@ def module(name):
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
+
+
+def core_version():
+    return tomllib.loads((ROOT / "crates/core/Cargo.toml").read_text())["package"]["version"]
+
+
+def npm_version(relative):
+    return json.loads((ROOT / relative / "package.json").read_text())["version"]
+
+
+def python_version():
+    return tomllib.loads((ROOT / "integrations/fogvault-python/pyproject.toml").read_text())["project"]["version"]
+
+
+def npm_tag(version):
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", version):
+        raise ValueError("Invalid npm release version")
+    return "next" if "-" in version.split("+")[0] else "latest"
+
+
+def retain_npm(path, output):
+    target = output / path.name
+    if target.exists() and target.read_bytes() != path.read_bytes():
+        raise ValueError("Conflicting qualified npm archive basename")
+    if path.resolve() != target.resolve():
+        shutil.copyfile(path, target)
+    return target
+
+
+def admit_browser_proof(directory, schema, revision):
+    proof = report(directory, schema, passed_key="passed")
+    if proof.get("revision") != revision or proof.get("git_status") != "":
+        raise ValueError("Browser package lacks clean exact source qualification")
+    if proof.get("typecheck") is not True or proof.get("externalRequests") != []:
+        raise ValueError("Browser typecheck or offline qualification missing")
+    required, cases = proof.get("required"), proof.get("cases")
+    if (not isinstance(required, list) or not required or not isinstance(cases, list)
+            or len(cases) != len(set(cases)) or set(cases) != set(required)):
+        raise ValueError("Browser qualification cases missing or duplicated")
+    return proof
+
+
+def sqlite_archive(directory, revision):
+    standalone = admit_browser_proof(directory, "datafog-sqlite-browser-proof/v1", revision)
+    joint = admit_browser_proof(directory, "datafog-browser-v1-1-proof/v1", revision)
+    candidate = standalone.get("candidates", {}).get("sqlite", {})
+    matching = [entry for entry in joint.get("candidates", [])
+                if entry.get("name") == "@datafog/core-sqlite-browser"]
+    if len(matching) != 1 or candidate.get("sha256") != matching[0].get("sha256"):
+        raise ValueError("SQLite standalone and joint candidates differ")
+    required_standalone = {"conversation_pending_survives_process_restart_until_approved_observation_save",
+                           "crash_save_never_grants_handoff_and_reopens_complete_state",
+                           "browser_process_restart_preserves_expired_marker"}
+    required_joint = {"sqlite_default_cnn_review_toggle_save_restore", "sqlite_process_restart_restore_with_cnn_disabled",
+                      "sqlite_cnn_conversation_pending_observed_scoped_restore", "fogvault_to_sqlite_approved_fresh_recovery"}
+    if not required_standalone.issubset(standalone["cases"]) or not required_joint.issubset(joint["cases"]):
+        raise ValueError("Required SQLite release scenarios absent")
+    return qualified_file(directory, candidate, ".tgz")
 
 
 def run(argv, cwd=ROOT, capture=False, env=None):
@@ -85,7 +144,7 @@ def download_artifact(run_id, name, destination):
     return destination
 
 
-def report(directory, schema):
+def report(directory, schema, passed_key="pass"):
     matches = []
     for path in directory.rglob("*.json"):
         try:
@@ -94,7 +153,7 @@ def report(directory, schema):
             continue
         if isinstance(value, dict) and value.get("schema") == schema:
             matches.append(value)
-    if len(matches) != 1 or matches[0].get("pass") is not True:
+    if len(matches) != 1 or matches[0].get(passed_key) is not True:
         raise ValueError("Missing, duplicate or failed qualification receipt: " + schema)
     return matches[0]
 
@@ -147,7 +206,7 @@ def publish_npm(path, expected_name, version, execute):
             env = {key: value for key, value in os.environ.items()
                    if key not in ("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL")}
             env["NPM_CONFIG_PROVENANCE"] = "false"
-        run(["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--tag", "latest"] + ([] if execute else ["--dry-run"]), env=env)
+        run(["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--tag", npm_tag(version)] + ([] if execute else ["--dry-run"]), env=env)
         if execute:
             # npm can acknowledge an upload before registry processing finishes.
             # Poll for up to ten minutes without submitting the archive again.
@@ -167,7 +226,7 @@ def verify_python(output):
         raise ValueError("Python publication receipt identity differs")
     expected = {entry["name"]: entry["sha256"] for entry in receipt["packages"]}
     for _ in range(120):
-        public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
+        public = json_read("https://pypi.org/pypi/datafog-fogvault/" + python_version() + "/json")
         observed = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
         if any(name not in expected or sha256 != expected[name] for name, sha256 in observed.items()):
             raise ValueError("Published Python file set or hashes differ")
@@ -233,7 +292,7 @@ def main():
         print(json.dumps({"npm_token_configured": bool(os.environ.get("NODE_AUTH_TOKEN"))}))
         run(["npm", "whoami"])
         return
-    gates = module("check-fogvault-release").check(REPO, revision, "1.0.0")
+    gates = module("check-fogvault-release").check(REPO, revision, core_version())
     module("check-model-integration").check(REPO, revision)
     output = ROOT / "target/companion-publication"
     if args.verify_python:
@@ -250,20 +309,24 @@ def main():
         proof = report(source, "datafog-fogvault-legacy-browser-proof/v1")
         if proof.get("executed") is not True or proof.get("preparation", {}).get("fogvault_commit") != tomllib.loads((ROOT / "integrations/fogvault-native/Cargo.toml").read_text())["dependencies"]["fogvault-native"]["rev"]:
             raise ValueError("Browser source qualification differs")
-        packages = [("vault", "@datafog/fogvault-browser", "0.1.0")] if args.group == "fog-browser" else [("adapter", "@datafog/core-fogvault-browser", "1.0.0"), ("importer", "@datafog/core-fogvault-legacy-browser", "1.0.0")]
+        packages = [("vault", "@datafog/fogvault-browser", "0.1.0")] if args.group == "fog-browser" else [("adapter", "@datafog/core-fogvault-browser", npm_version("integrations/fogvault-browser")), ("importer", "@datafog/core-fogvault-legacy-browser", npm_version("integrations/fogvault-legacy-browser"))]
         for key, name, version in packages:
-            results.append(publish_npm(qualified_file(source, proof["candidates"][key], ".tgz"), name, version, args.execute))
+            results.append(publish_npm(retain_npm(qualified_file(source, proof["candidates"][key], ".tgz"), output), name, version, args.execute))
             (output / "partial-receipt.json").write_text(json.dumps(results, indent=2) + "\n")
+    elif args.group == "core-sqlite-browser-integration":
+        source = download_artifact(runs["browser-v1-1.yml"], "browser-v1-1-evidence", output / "browser")
+        archive = retain_npm(sqlite_archive(source, revision), output)
+        results.append(publish_npm(archive, "@datafog/core-sqlite-browser", npm_version("integrations/sqlite-browser"), args.execute))
     elif args.group == "core-node-integration":
         source = download_artifact(runs["fogvault-native-languages.yml"], "core-fogvault-node-unified", output / "node")
         proof = report(source, "datafog-fogvault-node-assembly/v1")
         if proof.get("revision") != revision or set(proof.get("targets", [])) != {"linux-x64-gnu", "darwin-arm64", "win32-x64-msvc"}:
             raise ValueError("Unified native package lacks exact qualified platforms")
-        results.append(publish_npm(qualified_file(source, proof["tarball"], ".tgz"), "@datafog/core-fogvault-node", "1.0.0", args.execute))
+        results.append(publish_npm(retain_npm(qualified_file(source, proof["tarball"], ".tgz"), output), "@datafog/core-fogvault-node", npm_version("integrations/fogvault-node"), args.execute))
     elif args.group == "core-python-integration":
         dist = output / "dist"
         dist.mkdir()
-        public = json_read("https://pypi.org/pypi/datafog-fogvault/1.0.0/json")
+        public = json_read("https://pypi.org/pypi/datafog-fogvault/" + python_version() + "/json")
         existing = {} if not public else {entry["filename"]: entry["digests"]["sha256"] for entry in public["urls"]}
         for platform in ("ubuntu-24.04", "macos-15", "windows-2025"):
             source = download_artifact(runs["fogvault-native-languages.yml"], "core-fogvault-native-languages-" + platform, output / platform)
@@ -272,7 +335,7 @@ def main():
                 raise ValueError("Python package lacks clean exact source qualification")
             wheel = qualified_file(source, proof["candidate"], ".whl")
             name = Path(proof["candidate"]["path"].replace("\\", "/")).name
-            if not name.startswith("datafog_fogvault-1.0.0-") or (dist / name).exists():
+            if not name.startswith("datafog_fogvault-" + python_version() + "-") or (dist / name).exists():
                 raise ValueError("Wrong or duplicate Python distribution")
             if name in existing:
                 if existing[name] != digest(wheel.read_bytes()):
@@ -305,7 +368,7 @@ def publish_rust(args, output, runs, revision, results):
     temporary = tempfile.TemporaryDirectory(prefix="fogvault-reviewed-publication-")
     qualifier = module("qualify-native-registry")
     identities = {name: (fog, relative, version) for name, (relative, version) in qualifier.FOG.items()}
-    identities.update({name: (ROOT, relative, "1.0.0") for name, relative in qualifier.CORE.items()})
+    identities.update({name: (ROOT, relative, tomllib.loads((ROOT / relative / "Cargo.toml").read_text())["package"]["version"]) for name, relative in qualifier.CORE.items()})
     approved = {}
     for lock in (ROOT / "Cargo.lock", ROOT / "integrations/fogvault-native/Cargo.lock", fog / "crates/fogvault-native/Cargo.lock", fog / "experiments/vault-prototype/Cargo.lock"):
         for item in tomllib.loads(lock.read_text())["package"]:
