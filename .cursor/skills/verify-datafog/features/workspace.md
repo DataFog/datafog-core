@@ -12,14 +12,14 @@ DataFog Core provides a Workspace API for privacy-preserving session management.
 | `Workspace.openBundle` | Open from serialized bundle | Yes |
 | `prepare` / `prepareBatch` | Stage text transformations | Yes |
 | `restore` / `restoreReport` | Restore marker codes to values | Yes |
-| `activateSaved` | Commit prepared changes | Yes |
+| `activateSaved` | Activate a host-confirmed saved candidate | Yes |
 | `exportBundle` | Serialize workspace state | Yes |
 
-### Forget / mapping expiry (Node and WASM only)
+### Forget / mapping expiry (Rust, Node and WASM)
 
-| Function | Purpose | Python | Node | WASM |
-|----------|---------|--------|------|------|
-| `prepareForget` | Retire committed marker codes | No | Yes | Yes |
+| Function | Purpose | Rust | Python | Node | WASM |
+|----------|---------|------|--------|------|------|
+| `prepareForget` (`prepare_forget` in Rust) | Retire committed marker codes | Yes | No | Yes | Yes |
 
 The forget API retires committed marker codes after host-selected expiry. Core keeps no clock—the host decides which codes to forget. Retired codes:
 - Are never reissued
@@ -59,11 +59,18 @@ Restore operations can report marker issues:
 | Version | Introduced | Notes |
 |---------|------------|-------|
 | 1 | beta.1 | Initial format |
-| 2 | beta.1 | beta.1 cannot open |
-| 3 | beta.2 | beta.1/beta.2 cannot open |
-| 4 | 1.0 | Core 1.0 cannot open; supports retired mappings |
+| 2 | beta.2 | beta.1 cannot open |
+| 3 | beta.3 | beta.1/beta.2 cannot open |
+| 4 | 1.1.0-rc.1 | Core 1.0 cannot open; supports retired mappings |
 
 ## How to get to it (user POV)
+
+These examples demonstrate in-memory API calls with synthetic IDs. Production
+hosts must obtain explicit approval, encrypt and atomically compare-and-save the
+complete candidate bundle, and confirm persistence before calling `activateSaved`.
+Apply that lifecycle to both the original preparation and the forget plan. Use
+host-generated random IDs in production. The Core-owned vault adapters provide
+the approval/save/activation coordinator for durable integrations.
 
 ### Node.js
 
@@ -96,6 +103,8 @@ const forgetPlan = ws.prepareForget([code], id(4));
 console.log(forgetPlan.snapshotFormat());  // {currentVersion: 3, candidateVersion: 4}
 
 const { expectedHead: fh, candidateHead: fc } = forgetPlan.heads();
+const forgetBundle = forgetPlan.exportCandidateBundle();
+// Production hosts confirm approved, encrypted compare-and-save before activation.
 ws.activateSaved(forgetPlan, fh, fc);
 
 // Marker is now expired
@@ -115,15 +124,36 @@ await init();
 const id = (val) => new Uint8Array(16).fill(val);
 const ws = Workspace.create(id(1), id(2));
 
-// Same API as Node.js
+// Prepare a value
 const plan = ws.prepare("Jane Doe", [{
   entityType: "PERSON",
   matchedText: "Jane Doe",
   range: { unit: "utf8_bytes", start: 0, end: 8 }
 }], id(3));
 
-// prepareForget available in WASM
+const marker = plan.preview().text;  // [[PERSON_ABC123]]
+
+// Activate
+const { expectedHead, candidateHead } = plan.heads();
+const bundle = plan.exportCandidateBundle();
+ws.activateSaved(plan, expectedHead, candidateHead);
+
+// Restore
+const restored = ws.restore(marker);  // "Jane Doe"
+
+// Forget after expiry
+const code = marker.slice(2, -2).split("_").at(-1);  // "ABC123"
 const forgetPlan = ws.prepareForget([code], id(4));
+console.log(forgetPlan.snapshotFormat());  // {currentVersion: 3, candidateVersion: 4}
+
+const { expectedHead: fh, candidateHead: fc } = forgetPlan.heads();
+const forgetBundle = forgetPlan.exportCandidateBundle();
+// Production hosts confirm approved, encrypted compare-and-save before activation.
+ws.activateSaved(forgetPlan, fh, fc);
+
+// Marker is now expired
+const report = ws.restoreReport(marker);
+console.log(report.issues[0].kind);  // "expired"
 
 ws.close();
 ```
@@ -147,13 +177,16 @@ cargo dfv parity --workspace     # Workspace contract matrix across SDKs
 cargo dfv check                  # Includes workspace conformance tests
 ```
 
-The parity command with `--workspace` verifies workspace behavior across Rust, Python, Node, and WASM including the forget API where available.
+The parity command with `--workspace` compares shared Workspace behavior across
+Rust, Python, Node and WASM. Mapping expiry is covered by focused Rust, Node and
+WASM conformance checks run by `cargo dfv check`; it is outside the shared
+four-SDK parity fixture because Python does not expose the forget operation.
 
 ## Gotchas
 
 ### Python API availability
 
-The `prepareForget` API is not available in Python. Use Node.js or WASM for mapping expiry workflows.
+The `prepareForget` API is not available in Python. Use Rust, Node.js or WASM for mapping expiry workflows.
 
 ### Snapshot version compatibility
 
