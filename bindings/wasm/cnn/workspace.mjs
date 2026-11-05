@@ -12,11 +12,21 @@ class Review {
   preview() { return this.#current().plan.preview(); }
   previews() { return this.#current().plan.previews(); }
   heads() { return this.#current().plan.heads(); }
+  sendIntents() { return this.#current().plan.sendIntents(); }
   #current() {
     const entry = reviews.get(this);
     if (!entry.active || entry.owner.closed || entry.generation !== entry.owner.generation) throw new BrowserWorkspaceError('stale_review');
     return entry;
   }
+}
+
+function scannerFindings(result) {
+  return result.findings.map(finding => ({
+    entityType: finding.entityType, matchedText: finding.matchedText,
+    range: {unit: 'utf8_bytes', ...finding.byteRange}, detectorName: finding.detectorName,
+    detectorVersion: finding.detectorVersion, source: 'scanner', needsReview: true,
+    ...(finding.confidence == null ? {} : {confidence: finding.confidence}),
+  }));
 }
 
 /** Owns the supplied detector and vault-backed Workspace exclusively. */
@@ -71,16 +81,46 @@ export class BrowserWorkspace {
       const result = await this.#detector.scan(text, config);
       this.#check();
       if (generation !== this.#generation) throw new BrowserWorkspaceError('stale_review');
-      const scannerFindings = result.findings.map(finding => ({
-        entityType: finding.entityType, matchedText: finding.matchedText,
-        range: {unit: 'utf8_bytes', ...finding.byteRange}, detectorName: finding.detectorName,
-        detectorVersion: finding.detectorVersion, source: 'scanner', needsReview: true,
-        ...(finding.confidence == null ? {} : {confidence: finding.confidence}),
-      }));
-      const plan = this.#workspace.prepareReview([{text, scannerFindings, userSelections: selections}], operation);
+      const plan = this.#workspace.prepareReview([{text, scannerFindings: scannerFindings(result), userSelections: selections}], operation);
       const review = new Review(this, plan, generation); this.#pending = review;
       return review;
     } finally { this.#busy = false; }
+  }
+  async prepareConversationSend(inputs, operation, {scan} = {}) {
+    this.#check();
+    if (this.#busy) throw new BrowserWorkspaceError('workspace_busy');
+    if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 32) throw new BrowserWorkspaceError('invalid_configuration');
+    const copied = structuredClone(inputs), context = structuredClone(operation), config = structuredClone(scan);
+    this.#invalidate(); this.#check();
+    const generation = this.#generation; this.#busy = true;
+    try {
+      const scanned = [];
+      for (const entry of copied) {
+        const result = await this.#detector.scan(entry.input.text, config);
+        this.#check();
+        if (generation !== this.#generation) throw new BrowserWorkspaceError('stale_review');
+        scanned.push({input: {text: entry.input.text, scannerFindings: scannerFindings(result), userSelections: entry.input.userSelections === undefined ? [] : entry.input.userSelections},
+          conversation: entry.conversation});
+      }
+      const plan = this.#workspace.prepareConversationSend(scanned, context);
+      const review = new Review(this, plan, generation); this.#pending = review;
+      return review;
+    } finally { this.#busy = false; }
+  }
+  #prepareObservation(method, args) {
+    this.#check();
+    if (this.#busy) throw new BrowserWorkspaceError('workspace_busy');
+    const copied = structuredClone(args);
+    this.#invalidate(); this.#check();
+    const review = new Review(this, this.#workspace[method](...copied), this.#generation);
+    this.#pending = review;
+    return review;
+  }
+  prepareObservedSend(intent, logicalId, surface, siteId, operation) {
+    return this.#prepareObservation('prepareObservedSend', [intent, logicalId, surface, siteId, operation]);
+  }
+  prepareDefinitelyNotSent(intent, logicalId, operation) {
+    return this.#prepareObservation('prepareDefinitelyNotSent', [intent, logicalId, operation]);
   }
   async commit(review, {approved, requestId} = {}) {
     this.#check();
@@ -112,6 +152,11 @@ export class BrowserWorkspace {
   }
   restore(text) { this.#check(); return this.#workspace.restore(text); }
   restoreReport(text) { this.#check(); return this.#workspace.restoreReport(text); }
+  conversation(id) { this.#check(); return this.#workspace.conversation(id); }
+  conversationForSite(surface, siteId) { this.#check(); return this.#workspace.conversationForSite(surface, siteId); }
+  sendIntentStatus(intent) { this.#check(); return this.#workspace.sendIntentStatus(intent); }
+  restoreInConversation(text, id) { this.#check(); return this.#workspace.restoreInConversation(text, id); }
+  restoreReportInConversation(text, id) { this.#check(); return this.#workspace.restoreReportInConversation(text, id); }
   head() { this.#check(); return this.#workspace.head(); }
   close() {
     if (this.#closing) return this.#closing;
