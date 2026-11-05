@@ -3,6 +3,8 @@ mod account_number;
 mod api_key;
 mod bearer_token;
 mod capabilities;
+#[cfg(feature = "embedded-cnn")]
+pub mod cnn;
 mod coverage;
 mod credential_uri;
 mod email_context;

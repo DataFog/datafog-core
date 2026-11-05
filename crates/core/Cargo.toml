@@ -14,6 +14,7 @@ categories = ["text-processing"]
 [features]
 default = []
 models = []
+embedded-cnn = []
 
 [dependencies]
 base64 = "0.22"
