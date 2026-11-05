@@ -58,12 +58,28 @@ pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
             }
             cursor += 1;
         }
-        let uri = &bytes[start + prefix.len()..cursor];
+        let uri_start = start + prefix.len();
+        let mut end = cursor;
+        // A formatted card may start in the path and continue past the URI's
+        // whitespace boundary. Preserve the separator and redact it separately.
+        if valid(&bytes[uri_start..end]) {
+            for separator in uri_start..end {
+                if matches!(bytes[separator], b'-' | b'/' | b'_' | b'=')
+                    && crate::card_end_at(bytes, separator + 1)
+                        .is_some_and(|card_end| card_end > end)
+                    && valid(&bytes[uri_start..separator])
+                {
+                    end = separator;
+                    break;
+                }
+            }
+        }
+        let uri = &bytes[uri_start..end];
         if valid(uri) {
             candidates.push(Candidate {
                 label: Label::CredentialUri,
                 start_byte: start,
-                end_byte: cursor,
+                end_byte: end,
             });
         }
     }

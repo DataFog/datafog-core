@@ -285,7 +285,7 @@ WASM runs in any browser with WebAssembly support.
 Rust model APIs require the `models` feature:
 
 ```toml
-datafog-core = { version = "0.4", features = ["models"] }
+datafog-core = { version = "1.0", features = ["models"] }
 ```
 
 Browser/WASM model support is in the optional `@datafog/wasm/models` entry point using GLiNER2.5 Small ONNX. See `docs/browser-model.md`.

@@ -27,6 +27,7 @@ pub enum OperationKind {
     SendConfirmed,
     SendNotSent,
     ConversationPrepare,
+    Forget,
 }
 impl OperationKind {
     pub fn as_str(self) -> &'static str {
@@ -42,6 +43,7 @@ impl OperationKind {
             Self::SendConfirmed => "send_confirmed",
             Self::SendNotSent => "send_not_sent",
             Self::ConversationPrepare => "conversation_prepare",
+            Self::Forget => "forget",
         }
     }
     pub(super) fn code(self) -> u8 {
@@ -57,6 +59,7 @@ impl OperationKind {
             Self::SendConfirmed => 8,
             Self::SendNotSent => 9,
             Self::ConversationPrepare => 10,
+            Self::Forget => 11,
         }
     }
     pub(super) fn from_code(code: u8) -> Result<Self> {
@@ -72,6 +75,7 @@ impl OperationKind {
             8 => Ok(Self::SendConfirmed),
             9 => Ok(Self::SendNotSent),
             10 => Ok(Self::ConversationPrepare),
+            11 => Ok(Self::Forget),
             _ => Err(error(ErrorCode::InvalidSnapshot)),
         }
     }
@@ -190,6 +194,10 @@ impl State {
             || self.entries.values().any(|entry| entry.issuance == id)
             || self.rules.values().any(|record| record.operation == id)
             || self.choices.values().any(|record| record.operation == id)
+            || self
+                .retired
+                .values()
+                .any(|retired| retired.issuance == id || retired.operation == id)
             || self.operations.iter().any(|operation| operation.id == id)
         {
             return Err(error(if legacy {
@@ -225,7 +233,8 @@ impl State {
             .map_err(|_| error(ErrorCode::ResourceLimit))?;
         self.operations.push(operation);
         self.operation_counts = summarize(&self.operations)?;
-        self.snapshot_version = 3;
+        // Upgrade older snapshots to operation history; never downgrade version 4.
+        self.snapshot_version = self.snapshot_version.max(3);
         Ok(())
     }
 }

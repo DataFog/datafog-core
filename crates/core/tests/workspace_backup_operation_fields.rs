@@ -319,13 +319,16 @@ fn missing_or_inconsistent_operation_fields_never_import_as_empty_success() {
     ] {
         assert!(names.contains(required));
     }
-    assert_eq!(names.len(), 42);
+    assert_eq!(names.len(), 53);
     for required in [
         "missing_top_key_9",
         "pending_context_missing",
         "prepare_intent_missing",
         "confirmed_membership_missing",
         "confirmed_handoff_count_missing",
+        "missing_top_key_11",
+        "retired_code_in_use",
+        "retired_operation_not_forget",
     ] {
         assert!(names.contains(required));
     }

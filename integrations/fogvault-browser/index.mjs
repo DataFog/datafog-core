@@ -311,6 +311,7 @@ export class FogVaultWorkspace {
   prepareConversationSend(...args) { return this.#prepare('prepareConversationSend', args); }
   prepareObservedSend(...args) { return this.#prepare('prepareObservedSend', args); }
   prepareDefinitelyNotSent(...args) { return this.#prepare('prepareDefinitelyNotSent', args); }
+  prepareForget(...args) { return this.#prepare('prepareForget', args); }
   preparePolicyChanges(...args) { return this.#prepare('preparePolicyChanges', args); }
   prepareOutcome(...args) { return this.#prepare('prepareOutcome', args); }
   prepareRecovery(...args) { return this.#prepare('prepareRecovery', args); }

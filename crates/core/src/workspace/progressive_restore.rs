@@ -326,14 +326,19 @@ impl ProgressiveRestore {
                 if value == ']' {
                     let interior = &self.carry_text()[2..self.carry.len() - 1];
                     let Some(index) = self.known(interior) else {
-                        return Err(self.issue(
-                            self.start,
-                            if canonical_marker(interior).is_some() {
-                                MarkerIssueKind::Unknown
-                            } else {
-                                MarkerIssueKind::Damaged
-                            },
-                        ));
+                        let kind = match canonical_marker(interior) {
+                            Some(canonical)
+                                if self
+                                    .state
+                                    .as_deref()
+                                    .is_some_and(|state| state.retires(&canonical)) =>
+                            {
+                                MarkerIssueKind::Expired
+                            }
+                            Some(_) => MarkerIssueKind::Unknown,
+                            None => MarkerIssueKind::Damaged,
+                        };
+                        return Err(self.issue(self.start, kind));
                     };
                     if let Some(context) = self.context {
                         let state = self

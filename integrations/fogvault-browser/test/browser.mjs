@@ -67,6 +67,43 @@ window.coreFogVaultDone = (async () => {
       require(raw.metadata.length === 88 && same(raw.metadata.subarray(24, 40), f.recordId), 'binding metadata mismatch');
       clearRecord(raw); await reopened.close();
     });
+    await record('forget_persists_retirement_and_revokes_old_streams', async () => {
+      const f = await make(), text = 'Email alice@example.test', logicalId = randomId(), surface = 'synthetic-expiry';
+      const sent = f.owner.prepareConversationSend([{input: {text, scannerFindings: findings(text), userSelections: []},
+        conversation: {id: logicalId, surface, siteId: null, siteIdByteBudget: 64}}], {id: randomId(), occurredAtMs: 1});
+      const intents = sent.sendIntents(), saved = await f.owner.commit(sent, {approved: true});
+      await f.owner.commit(f.owner.prepareObservedSend(intents[0], logicalId, surface, 'synthetic-expiry-chat',
+        {id: randomId(), occurredAtMs: 2}), {approved: true});
+      const marker = saved.previews[0].text.match(/\[\[EMAIL_[0-9A-HJKMNP-TV-Z]{6}\]\]/)[0];
+      const code = marker.slice(2, -2).split('_').at(-1);
+      const before = await f.vault.receipt();
+      const discard = f.owner.prepareForget([code], randomId()); discard.discard();
+      require(f.owner.restore(marker) === 'alice@example.test', 'discard applied retirement');
+      const stream = f.owner.bufferedRestore(); stream.feed(new TextEncoder().encode(marker));
+      const plan = f.owner.prepareForget([code], randomId());
+      require(plan.snapshotFormat().candidateVersion === 4 && plan.previews().length === 0, 'wrong retirement plan');
+      await rejected(() => f.owner.commit(plan, {approved: false}), 'approval_required');
+      require(same(before.head_digest, (await f.vault.receipt()).head_digest) && f.owner.restore(marker) === 'alice@example.test',
+        'unapproved retirement changed stored state');
+      const forgotten = await f.owner.commit(plan, {approved: true});
+      require(forgotten.previews.length === 0, 'retirement released a preview');
+      await rejected(() => stream.finalize(), 'workspace_conflict'); stream.close();
+      await rejected(() => f.owner.restore(marker), 'invalid_marker');
+      await rejected(() => f.owner.commit(plan, {approved: true}), 'foreign_or_consumed_plan');
+      await f.owner.lock(); await f.vault.unlock(password);
+      const reopened = await FogVaultWorkspace.open({Workspace, vault: f.vault, recordId: f.recordId, expectedHead: forgotten.head});
+      require(reopened.sendIntentStatus(intents[0]) === 'observed_sent', 'retirement invalidated conversation provenance');
+      for (const report of [reopened.restoreReport(marker), reopened.restoreReportInConversation(marker, logicalId)]) {
+        require(report.text === null && report.issues[0].kind === 'expired', 'encrypted reopen revived forgotten marker');
+      }
+      require(reopened.recall('alice@example.test').findings.length === 0, 'retired value still recalled');
+      await rejected(() => reopened.prepareForget([code], randomId()), 'invalid_marker');
+      const again = await reopened.commit(review(reopened, text), {approved: true});
+      require(!again.previews[0].text.includes(marker) && reopened.restore(again.previews[0].text) === text,
+        'retired code reused for a returning value');
+      require(reopened.restoreReport(marker).issues[0].kind === 'expired', 'returning value revived old marker');
+      await reopened.close();
+    });
     await record('literal_approval_and_foreign_plan_rejection_before_save', async () => {
       let preparations = 0;
       const observedWorkspace = {
