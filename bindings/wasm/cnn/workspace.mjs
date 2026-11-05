@@ -1,3 +1,5 @@
+import {CnnSession} from './index.js';
+
 const reviews = new WeakMap();
 const token = Symbol('browser-workspace');
 
@@ -131,5 +133,3 @@ export class BrowserWorkspace {
   }
   async lock() { return this.close(); }
 }
-import {CnnSession} from './index.js';
-
