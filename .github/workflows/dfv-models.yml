@@ -233,6 +233,11 @@ jobs:
           print(f"\nAll {len(manifest)} model files verified")
           PY
 
+      - name: Prepare evaluation environment using provisioned model dependencies
+        run: |
+          python -m venv --clear --system-site-packages target/dfv_eval_venv
+          target/dfv_eval_venv/bin/python -I -c 'import gliner2, torch'
+
       - name: Run model eval
         run: cargo dfv eval --models --json
 

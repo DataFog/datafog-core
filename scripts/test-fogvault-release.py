@@ -178,6 +178,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
 
 class NativeModelPlatformTests(unittest.TestCase):
+    def test_model_eval_reuses_explicitly_provisioned_dependencies(self):
+        text = (gate.ROOT / ".github/workflows/dfv-models.yml").read_text()
+        marker = "      - name: Prepare evaluation environment using provisioned model dependencies\n"
+        self.assertEqual(text.count(marker), 1)
+        step = text.split(marker, 1)[1].split("      - ", 1)[0]
+        self.assertIn("python -m venv --clear --system-site-packages target/dfv_eval_venv", step)
+        self.assertIn("import gliner2, torch", step)
+        self.assertNotIn("continue-on-error", step)
+        self.assertLess(text.index("- name: Install Python wheel for model checks"), text.index(marker))
+        self.assertLess(text.index(marker), text.index("- name: Run model eval"))
+
     @classmethod
     def setUpClass(cls):
         spec = importlib.util.spec_from_file_location("native_model_gate", Path(__file__).with_name("check-model-integration.py"))
