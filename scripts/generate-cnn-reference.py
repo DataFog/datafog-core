@@ -48,6 +48,7 @@ texts = [
     "😀 Résumé\nSTATEMENT FOR\nMüller Hans\n42 Maple Road\nOttawa ON K1A 0B1",
     "BILL TO\nMaryJones 123Main Street\nToronto ON M5V 2T6",
     "",
+    "BILL TO\nJohn Smith\n123 Main Street\ńIL 62704\n²TO: Jane Doe\n\x1c12 Main Street",
     "αΣ ǅ ² Ⅷ İ Á 1Abc abc1 fooBar\n\nBILL TO\nAda Smith\n17 Meadway\nLondon SW1A 1AA",
     " ".join(["noise"] * 215) + "\nBILL TO\nJohn Smith\n123 Main Street\nSpringfield IL 62704\n" + " ".join(["noise"] * 80),
 ]

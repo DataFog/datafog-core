@@ -108,12 +108,36 @@ static RULES: LazyLock<Compiled> = LazyLock::new(|| {
         provinces: Regex::new(&format!(r"\b({})\b", r.provs.join("|"))).expect("province regex"),
     }
 });
+// Python's Unicode \w excludes marks/join controls but includes nondecimal
+// numbers. These regexes use word boundaries and ASCII literals, so project only
+// those differing classes to equivalent non-ASCII word/nonword representatives.
+// This affects rule features only; tokenizer/hash text and all offsets stay original.
+fn regex_text(s: &str, insensitive: bool) -> String {
+    static WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\w$").expect("word category"));
+    s.chars()
+        .map(|c| {
+            if insensitive && matches!(c, 'İ' | 'ı') {
+                return 'I';
+            }
+            if has(c, 128) && matches!(c, '\u{1c}'..='\u{1f}') {
+                return ' ';
+            }
+            let mut bytes = [0; 4];
+            let rust_word = WORD.is_match(c.encode_utf8(&mut bytes));
+            if py_word(c) != rust_word {
+                if py_word(c) { '字' } else { '!' }
+            } else {
+                c
+            }
+        })
+        .collect()
+}
 fn matches(key: &str, s: &str) -> bool {
-    RULES.regex[key].is_match(s)
+    RULES.regex[key].is_match(&regex_text(s, !matches!(key, "us" | "number")))
 }
 fn postcode(s: &str) -> bool {
     let t = trim(s);
-    let upper = t.to_uppercase();
+    let upper = regex_text(&t.to_uppercase(), false);
     if let Some(c) = RULES.regex["us"].captures(&upper) {
         if RULES.states.iter().any(|x| x == &c[1]) {
             return true;
@@ -126,7 +150,7 @@ fn postcode(s: &str) -> bool {
         return true;
     }
     RULES.regex["uk"]
-        .find(t)
+        .find(&regex_text(t, true))
         .is_some_and(|m| m.start() == 0 && m.end() == t.len())
 }
 fn street(s: &str) -> bool {
@@ -142,7 +166,10 @@ fn street(s: &str) -> bool {
         .chars()
         .map(|c| if py_word(c) || has(c, 128) { c } else { ' ' })
         .collect();
-    let words: Vec<_> = normalized.split_whitespace().collect();
+    let words: Vec<_> = normalized
+        .split(|c| has(c, 128))
+        .filter(|s| !s.is_empty())
+        .collect();
     words
         .iter()
         .skip(1)
@@ -193,7 +220,7 @@ fn split_at(chars: &[(usize, char)], i: usize) -> bool {
         || ((a.is_ascii_lowercase() || ('à'..='ÿ').contains(&a))
             && (b.is_ascii_uppercase() || ('À'..='Þ').contains(&b)))
 }
-pub(super) fn encode(text: &str) -> Vec<Token> {
+pub(super) fn encode(text: &str) -> Result<Vec<Token>, crate::model_scan::ModelError> {
     let mut base = Vec::new();
     let mut start = None;
     for (i, c) in text.char_indices() {
@@ -232,6 +259,13 @@ pub(super) fn encode(text: &str) -> Vec<Token> {
             spans.push((prev, end));
         }
     }
+    if spans.len() > super::MAX_TOKENS {
+        return Err(crate::model_scan::ModelError::new(
+            "model_resource_exhausted",
+            "limit_exceeded",
+            "/data",
+        ));
+    }
     let lexicon: serde_json::Value =
         serde_json::from_str(include_str!("assets/config.json")).expect("embedded config");
     let lexicon = lexicon["lexicon"].as_array().expect("lexicon");
@@ -263,7 +297,7 @@ pub(super) fn encode(text: &str) -> Vec<Token> {
         .collect();
     let mut li = 0;
     let mut previous = None;
-    spans
+    Ok(spans
         .into_iter()
         .map(|(start, end)| {
             while li + 1 < lines.len() && starts[li + 1] <= start {
@@ -324,5 +358,5 @@ pub(super) fn encode(text: &str) -> Vec<Token> {
                 features,
             }
         })
-        .collect()
+        .collect())
 }

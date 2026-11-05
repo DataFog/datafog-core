@@ -317,7 +317,7 @@ impl CnnDetector {
         )
     }
     fn infer(&self, text: &str) -> Result<Vec<NativeSpan>, ModelError> {
-        let tokens = features::encode(text);
+        let tokens = features::encode(text)?;
         let n = tokens.len();
         if n > MAX_TOKENS {
             return Err(ModelError::new(
@@ -377,8 +377,21 @@ fn viterbi(logits: &[[f32; 5]]) -> Vec<usize> {
     if logits.is_empty() {
         return Vec::new();
     }
-    // Per-token log-softmax subtracts a path-independent constant, so logits give the same optimum.
-    let mut score = logits[0];
+    // Match the reference log-softmax before dynamic programming; normalization
+    // also keeps long-page path scores from accumulating large common offsets.
+    let logp: Vec<_> = logits
+        .iter()
+        .map(|row| {
+            let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let normalizer = row
+                .iter()
+                .map(|value| (*value - max).exp())
+                .sum::<f32>()
+                .ln();
+            row.map(|value| value - max - normalizer)
+        })
+        .collect();
+    let mut score = logp[0];
     score[2] -= 1e9;
     score[4] -= 1e9;
     let mut back = vec![[0; 5]; logits.len()];
@@ -398,7 +411,7 @@ fn viterbi(logits: &[[f32; 5]]) -> Vec<usize> {
                     back[i][b] = a;
                 }
             }
-            *output = best + logits[i][b];
+            *output = best + logp[i][b];
         }
         score = next;
     }
@@ -426,7 +439,7 @@ mod tests {
         let detector = CnnDetector::open().unwrap();
         for fixture in fixtures["fixtures"].as_array().unwrap() {
             let text = fixture["text"].as_str().unwrap();
-            let tokens = features::encode(text);
+            let tokens = features::encode(text).unwrap();
             let expected = fixture["tokens"].as_array().unwrap();
             assert_eq!(tokens.len(), expected.len(), "{text}");
             for (token, want) in tokens.iter().zip(expected) {
