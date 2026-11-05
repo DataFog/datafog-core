@@ -1,6 +1,6 @@
 # DataFog 1.1.0-rc.1 extension test instructions
 
-Josh — this is the installable RC for the extension. The CNN is bundled into Core
+This guide covers the installable RC for the extension. The CNN is bundled into Core
 WASM and loads by default through `BrowserWorkspace.open`. SQLite3 Multiple
 Ciphers is available alongside FogVault. Please test your packaged extension
 before we promote the RC to stable.

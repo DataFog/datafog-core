@@ -28,7 +28,7 @@ Rule-based scanning runs locally without model weights or downloads. Optional lo
 
 **Stable:** [1.0.0](https://github.com/DataFog/datafog-core/releases/tag/v1.0.0) · [Release notes](docs/releases/1-0-0.mdx) · Public registry installation checks passed.
 
-**Release candidate:** [1.1.0-rc.1](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0-rc.1) · [Extension install and acceptance instructions](docs/releases/1-1-0-rc-1-josh.md). Install the candidate explicitly; npm `latest` remains on the stable release.
+**Release candidate:** [1.1.0-rc.1](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0-rc.1) · [Extension install and acceptance instructions](docs/releases/1-1-0-rc-1-extension-testing.md). Install the candidate explicitly; npm `latest` remains on the stable release.
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
