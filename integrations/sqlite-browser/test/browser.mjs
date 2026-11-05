@@ -86,6 +86,29 @@ globalThis.runForget = async () => {
   await reopened.close();
   return ['forget_persists_retirement_revokes_streams_and_does_not_reissue_codes'];
 };
+globalThis.runConversation = async () => {
+  const text = 'Email conversation@example.test', conversationId = random(), surface = 'synthetic-sqlite-no-network';
+  const vault = await SQLiteVault.create({id: 'ff'.repeat(16), password});
+  const owner = await SQLiteWorkspace.create({Workspace, vault, recordId, namespace});
+  const findings = scan(text).map(f => ({entityType: f.entityType, matchedText: f.matchedText,
+    range: {unit: 'utf8_bytes', ...f.byteRange}, detectorName: f.detectorName}));
+  const plan = owner.prepareConversationSend([{input: {text, scannerFindings: findings, userSelections: []},
+    conversation: {id: conversationId, surface, siteId: null, siteIdByteBudget: 64}}], {id: random(), occurredAtMs: 1});
+  const intents = plan.sendIntents();
+  check(intents.length === 1, 'missing conversation intent');
+  const saved = await owner.commit(plan, {approved: true});
+  check(owner.sendIntentStatus(intents[0]) === 'pending', 'save automatically observed send');
+  await rejects(() => owner.restoreInConversation(saved.previews[0].text, conversationId));
+  await owner.close();
+  const reopenedVault = await SQLiteVault.open({id: 'ff'.repeat(16), password});
+  const reopened = await SQLiteWorkspace.open({Workspace, vault: reopenedVault, recordId, expectedNamespace: namespace, expectedHead: saved.head});
+  check(reopened.sendIntentStatus(intents[0]) === 'pending', 'reopen automatically observed send');
+  await rejects(() => reopened.restoreInConversation(saved.previews[0].text, conversationId));
+  localStorage.setItem('conversation-pending', JSON.stringify({text, protectedText: saved.previews[0].text,
+    conversationId: Array.from(conversationId), intent: {preparationId: Array.from(intents[0].preparationId), inputIndex: intents[0].inputIndex}, surface}));
+  await reopened.close();
+  return ['conversation_pending_save_survives_encrypted_reopen_without_scoped_restore'];
+};
 globalThis.runFaults = async () => {
   const cases = [];
   const text = 'Email fault@example.test';
@@ -196,6 +219,30 @@ globalThis.runRestart = async () => {
   const forgotten = await SQLiteWorkspace.open({Workspace, vault: forgottenVault, recordId, expectedNamespace: namespace});
   check(forgotten.restoreReport(localStorage.getItem('retired-marker')).issues[0].kind === 'expired', 'process restart revived retirement');
   await forgotten.close();
-  return ['browser_process_restart_preserves_exact_restore', 'browser_process_restart_preserves_expired_marker'];
+  const route = JSON.parse(localStorage.getItem('conversation-pending'));
+  const conversationId = Uint8Array.from(route.conversationId);
+  const pendingVault = await SQLiteVault.open({id: 'ff'.repeat(16), password});
+  const pending = await SQLiteWorkspace.open({Workspace, vault: pendingVault, recordId, expectedNamespace: namespace});
+  check(pending.sendIntentStatus(route.intent) === 'pending', 'process restart automatically observed send');
+  await rejects(() => pending.restoreInConversation(route.protectedText, conversationId));
+  const observed = pending.prepareObservedSend(route.intent, conversationId, route.surface, 'synthetic-sqlite-confirmed-chat', {id: random(), occurredAtMs: 2});
+  check(pending.sendIntentStatus(route.intent) === 'pending', 'preparation observed send before save');
+  await rejects(() => pending.commit(observed, {approved: false}), 'approval_required');
+  check(pending.sendIntentStatus(route.intent) === 'pending', 'unapproved observation changed send status');
+  await pending.commit(observed, {approved: true});
+  check(pending.sendIntentStatus(route.intent) === 'observed_sent', 'approved persisted observation did not activate');
+  check(pending.restoreInConversation(route.protectedText, conversationId) === route.text, 'saved observation scoped restore mismatch');
+  await pending.close();
+  return ['browser_process_restart_preserves_exact_restore', 'browser_process_restart_preserves_expired_marker',
+    'conversation_pending_survives_process_restart_until_approved_observation_save'];
+};
+globalThis.runObservedRestart = async () => {
+  const route = JSON.parse(localStorage.getItem('conversation-pending'));
+  const vault = await SQLiteVault.open({id: 'ff'.repeat(16), password});
+  const owner = await SQLiteWorkspace.open({Workspace, vault, recordId, expectedNamespace: namespace});
+  check(owner.sendIntentStatus(route.intent) === 'observed_sent', 'process restart lost saved observation');
+  check(owner.restoreInConversation(route.protectedText, Uint8Array.from(route.conversationId)) === route.text, 'observed scoped restore changed after restart');
+  await owner.close();
+  return ['conversation_saved_observation_and_scoped_restore_survive_process_restart'];
 };
 globalThis.ready = true;
