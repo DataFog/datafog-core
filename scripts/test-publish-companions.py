@@ -70,6 +70,12 @@ class Publication(unittest.TestCase):
             self.assertEqual(publisher.core_version(), "1.1.0-rc.1")
             self.assertEqual(publisher.npm_version("integrations/sqlite-browser"), "1.1.0-rc.1")
             self.assertEqual(publisher.python_version(), "1.1.0rc1")
+            (self.root / "integrations/sqlite-browser/package.json").write_text('{"version":"1.0.0"}')
+            with self.assertRaisesRegex(ValueError, "npm version differs"):
+                publisher.npm_version("integrations/sqlite-browser")
+            (self.root / "integrations/fogvault-python/pyproject.toml").write_text('[project]\nversion="1.0.0"\n')
+            with self.assertRaisesRegex(ValueError, "Python version differs"):
+                publisher.python_version()
 
     def browser_proofs(self):
         archive = self.npm(name="@datafog/core-sqlite-browser", version="1.1.0-rc.1")

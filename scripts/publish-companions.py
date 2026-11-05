@@ -35,11 +35,19 @@ def core_version():
 
 
 def npm_version(relative):
-    return json.loads((ROOT / relative / "package.json").read_text())["version"]
+    version = json.loads((ROOT / relative / "package.json").read_text())["version"]
+    if version != core_version():
+        raise ValueError("Core companion npm version differs from Core")
+    return version
 
 
 def python_version():
-    return tomllib.loads((ROOT / "integrations/fogvault-python/pyproject.toml").read_text())["project"]["version"]
+    version = tomllib.loads((ROOT / "integrations/fogvault-python/pyproject.toml").read_text())["project"]["version"]
+    match = re.fullmatch(r"([0-9]+\.[0-9]+\.[0-9]+)(?:-(alpha|beta|rc)\.([0-9]+))?", core_version())
+    expected = None if not match else match[1] + ({"alpha": "a", "beta": "b", "rc": "rc"}[match[2]] + match[3] if match[2] else "")
+    if version != expected:
+        raise ValueError("Core companion Python version differs from Core")
+    return version
 
 
 def npm_tag(version):
