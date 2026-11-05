@@ -62,18 +62,69 @@ fn ensure(venv_dir: &Path) -> Result<PathBuf, String> {
     Ok(python)
 }
 
-/// Ambiguous cached wheels cannot establish which installed candidate was checked.
+fn current_python_version(root: &Path) -> Result<String, String> {
+    let project = root.join("bindings/python/pyproject.toml");
+    let source = fs::read_to_string(&project)
+        .map_err(|error| format!("Python wheel selection: cannot read pyproject.toml: {error}"))?;
+    let mut in_project = false;
+    let mut version = None;
+    for line in source.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.starts_with('[') {
+            in_project = line == "[project]";
+            continue;
+        }
+        if !in_project {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "version" {
+            continue;
+        }
+        let value = value.trim();
+        // The repository pins a literal PEP 440 version in [project]. No Python
+        // TOML parser or new toolchain requirement is needed to read that pin.
+        let quoted = value
+            .strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')));
+        let value = quoted
+            .filter(|v| {
+                !v.is_empty()
+                    && v.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || ".+-_!".contains(c))
+            })
+            .ok_or_else(|| {
+                "Python wheel selection: [project].version must be a literal PEP 440 pin"
+                    .to_string()
+            })?;
+        if version.replace(value.to_owned()).is_some() {
+            return Err("Python wheel selection: duplicate [project].version pin".into());
+        }
+    }
+    version.ok_or_else(|| "Python wheel selection: missing [project].version pin".into())
+}
+
+/// Select the current project version; old cached releases remain untouched.
 pub fn built_wheel(root: &Path) -> Result<PathBuf, String> {
+    let version = current_python_version(root)?;
+    let prefix = format!("datafog_core-{version}-");
     let directory = root.join("target/wheels");
     let mut wheels = fs::read_dir(&directory)
         .map_err(|error| format!("Python wheel selection: built wheel directory is missing or unreadable: {error}; run cargo dfv build --sdk python"))?
         .map(|entry| entry.map(|entry| entry.path()))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Python wheel selection: cannot read candidate directory: {error}"))?;
-    wheels.retain(|path| path.extension().is_some_and(|extension| extension == "whl"));
+    wheels.retain(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(&prefix) && name.ends_with(".whl"))
+    });
     if wheels.len() != 1 {
         return Err(format!(
-            "Python wheel selection: expected exactly one built wheel, found {}; clean target/wheels and run cargo dfv build --sdk python",
+            "Python wheel selection: expected exactly one built datafog-core {version} wheel, found {}; rebuild this candidate with cargo dfv build --sdk python (resolve duplicate current-version wheel tags explicitly)",
             wheels.len()
         ));
     }
@@ -187,9 +238,19 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    fn write_project(root: &Path, source: &str) {
+        let path = root.join("bindings/python/pyproject.toml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, source).unwrap();
+    }
+
     #[test]
-    fn wheel_selection_rejects_missing_and_ambiguous_candidates() {
+    fn wheel_selection_ignores_old_versions_but_rejects_missing_and_ambiguous_current_tags() {
         let root = eval_test_root("wheel-selection");
+        write_project(
+            &root,
+            "[build-system]\nversion=\"unrelated\"\n[project]\nversion = \"1.1.0rc1\" # candidate\n[tool.example]\nversion=\"unrelated\"\n",
+        );
         assert!(
             built_wheel(&root)
                 .unwrap_err()
@@ -198,12 +259,49 @@ mod tests {
         let directory = root.join("target/wheels");
         fs::create_dir_all(&directory).unwrap();
         assert!(built_wheel(&root).unwrap_err().contains("found 0"));
-        fs::write(directory.join("README"), "not a candidate").unwrap();
-        let first = directory.join("first.whl");
-        fs::write(&first, "first").unwrap();
+        for name in [
+            "README",
+            "datafog_core-1.0.0-cp310-abi3-manylinux_x86_64.whl",
+            "datafog_core-1.1.0rc11-cp310-abi3-manylinux_x86_64.whl",
+            "different_package-1.1.0rc1-py3-none-any.whl",
+        ] {
+            fs::write(directory.join(name), "old or unrelated").unwrap();
+        }
+        assert!(built_wheel(&root).unwrap_err().contains("found 0"));
+        let first = directory.join("datafog_core-1.1.0rc1-cp310-abi3-manylinux_x86_64.whl");
+        fs::write(&first, "current").unwrap();
         assert_eq!(built_wheel(&root).unwrap(), first);
-        fs::write(directory.join("second.whl"), "second").unwrap();
+        fs::write(
+            directory.join("datafog_core-1.1.0rc1-cp310-abi3-macosx_arm64.whl"),
+            "other current tag",
+        )
+        .unwrap();
         assert!(built_wheel(&root).unwrap_err().contains("found 2"));
+        assert!(
+            directory
+                .join("datafog_core-1.0.0-cp310-abi3-manylinux_x86_64.whl")
+                .exists()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_version_requires_one_literal_pin_in_the_project_section() {
+        let root = eval_test_root("version-pin");
+        assert!(current_python_version(&root).is_err());
+        for source in [
+            "[tool.example]\nversion = \"1.1.0rc1\"\n",
+            "[project]\nversion = 123\n",
+            "[project]\nversion = \"bad value\"\n",
+            "[project]\nversion = \"1.1.0rc1\"\nversion = \"1.0.0\"\n",
+        ] {
+            write_project(&root, source);
+            assert!(current_python_version(&root).is_err(), "{source}");
+        }
+        for version in ["1.0.0", "1.1.0b2", "1.1.0rc1"] {
+            write_project(&root, &format!("[project]\nversion = '{version}'\n"));
+            assert_eq!(current_python_version(&root).unwrap(), version);
+        }
         fs::remove_dir_all(root).unwrap();
     }
 

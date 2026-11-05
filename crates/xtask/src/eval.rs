@@ -1353,14 +1353,21 @@ mod tests {
         let root = eval_test_root("candidate-wheel");
         let wheels = root.join("target/wheels");
         fs::create_dir_all(&wheels).unwrap();
-        let wheel = wheels.join("datafog_eval_candidate-1.0-py3-none-any.whl");
+        let project = root.join("bindings/python/pyproject.toml");
+        fs::create_dir_all(project.parent().unwrap()).unwrap();
+        fs::write(
+            project,
+            "[project]\nname=\"datafog-core\"\nversion=\"1.0.0\"\n",
+        )
+        .unwrap();
+        let wheel = wheels.join("datafog_core-1.0.0-py3-none-any.whl");
         let write_wheel = |value: &str| {
             let output = Command::new("python3").args(["-I", "-c", r#"
 import sys, zipfile
-prefix = 'datafog_eval_candidate-1.0.dist-info/'
+prefix = 'datafog_core-1.0.0.dist-info/'
 files = {
  'datafog_eval_candidate.py': 'VALUE = ' + repr(sys.argv[2]) + '\n',
- prefix + 'METADATA': 'Metadata-Version: 2.1\nName: datafog-eval-candidate\nVersion: 1.0\n',
+ prefix + 'METADATA': 'Metadata-Version: 2.1\nName: datafog-core\nVersion: 1.0.0\n',
  prefix + 'WHEEL': 'Wheel-Version: 1.0\nGenerator: dfv-regression\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
 }
 files[prefix + 'RECORD'] = ''.join(name + ',,\n' for name in files) + prefix + 'RECORD,,\n'

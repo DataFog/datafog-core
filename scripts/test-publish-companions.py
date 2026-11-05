@@ -47,6 +47,95 @@ class Publication(unittest.TestCase):
         self.assertIn("--ignore-scripts", run.call_args.args[0])
         self.assertFalse(result["published"])
 
+    def test_release_candidate_uses_next_without_touching_latest(self):
+        version = "1.1.0-rc.1"
+        archive = self.npm(name="@datafog/core-sqlite-browser", version=version)
+        with patch.object(publisher, "json_read", return_value=None), patch.object(publisher, "run") as run:
+            publisher.publish_npm(archive, "@datafog/core-sqlite-browser", version, False)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--tag") + 1], "next")
+        self.assertNotIn("latest", command)
+        self.assertEqual(publisher.npm_tag("0.1.0"), "latest")
+        self.assertEqual(publisher.npm_tag("1.1.0-beta.2"), "beta")
+
+    def test_manifest_versions_include_python_release_candidate_spelling(self):
+        for relative, text in {
+            "crates/core/Cargo.toml": '[package]\nversion="1.1.0-rc.1"\n',
+            "integrations/fogvault-python/pyproject.toml": '[project]\nversion="1.1.0rc1"\n',
+            "integrations/sqlite-browser/package.json": '{"version":"1.1.0-rc.1"}',
+        }.items():
+            file = self.root / relative
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(text)
+        with patch.object(publisher, "ROOT", self.root):
+            self.assertEqual(publisher.core_version(), "1.1.0-rc.1")
+            self.assertEqual(publisher.npm_version("integrations/sqlite-browser"), "1.1.0-rc.1")
+            self.assertEqual(publisher.python_version(), "1.1.0rc1")
+            (self.root / "integrations/sqlite-browser/package.json").write_text('{"version":"1.0.0"}')
+            with self.assertRaisesRegex(ValueError, "npm version differs"):
+                publisher.npm_version("integrations/sqlite-browser")
+            (self.root / "integrations/fogvault-python/pyproject.toml").write_text('[project]\nversion="1.0.0"\n')
+            with self.assertRaisesRegex(ValueError, "Python version differs"):
+                publisher.python_version()
+
+    def browser_proofs(self):
+        archive = self.npm(name="@datafog/core-sqlite-browser", version="1.1.0-rc.1")
+        candidate = {"sha256": publisher.digest(archive.read_bytes()), "bytes": archive.stat().st_size}
+        standalone_cases = ["conversation_pending_survives_process_restart_until_approved_observation_save",
+                            "crash_save_never_grants_handoff_and_reopens_complete_state", "browser_process_restart_preserves_expired_marker"]
+        joint_cases = ["sqlite_default_cnn_review_toggle_save_restore", "sqlite_process_restart_restore_with_cnn_disabled",
+                       "sqlite_cnn_conversation_pending_observed_scoped_restore", "fogvault_to_sqlite_approved_fresh_recovery"]
+        common = {"revision": "a" * 40, "git_status": "", "passed": True, "typecheck": True, "externalRequests": []}
+        standalone = {**common, "schema": "datafog-sqlite-browser-proof/v1", "required": standalone_cases, "cases": standalone_cases[:], "candidates": {"sqlite": candidate}}
+        joint = {**common, "schema": "datafog-browser-v1-1-proof/v1", "required": joint_cases, "cases": joint_cases[:],
+                 "candidates": [{**candidate, "name": "@datafog/core-sqlite-browser"}]}
+        return archive, standalone, joint
+
+    def save_browser_proofs(self, standalone, joint):
+        (self.root / "standalone.json").write_text(json.dumps(standalone))
+        (self.root / "joint.json").write_text(json.dumps(joint))
+
+    def test_sqlite_publication_requires_same_head_and_same_archive_in_both_browser_suites(self):
+        archive, standalone, joint = self.browser_proofs()
+        self.save_browser_proofs(standalone, joint)
+        self.assertEqual(publisher.sqlite_archive(self.root, "a" * 40), archive)
+        joint["candidates"][0]["sha256"] = "wrong"
+        self.save_browser_proofs(standalone, joint)
+        with self.assertRaisesRegex(ValueError, "candidates differ"):
+            publisher.sqlite_archive(self.root, "a" * 40)
+
+    def test_sqlite_publication_rejects_stale_dirty_incomplete_and_online_proofs(self):
+        for field, value in (("revision", "b" * 40), ("git_status", " M source"), ("passed", False),
+                             ("typecheck", False), ("externalRequests", ["https://unexpected.test"]),
+                             ("cases", [])):
+            with self.subTest(field=field):
+                _, standalone, joint = self.browser_proofs()
+                standalone[field] = value
+                self.save_browser_proofs(standalone, joint)
+                with self.assertRaises(ValueError):
+                    publisher.sqlite_archive(self.root, "a" * 40)
+        _, standalone, joint = self.browser_proofs()
+        standalone["cases"].append(standalone["cases"][0])
+        self.save_browser_proofs(standalone, joint)
+        with self.assertRaises(ValueError):
+            publisher.sqlite_archive(self.root, "a" * 40)
+
+    def test_sqlite_publication_requires_retained_unchanged_tarball(self):
+        archive, standalone, joint = self.browser_proofs()
+        self.save_browser_proofs(standalone, joint)
+        archive.write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "missing or changed"):
+            publisher.sqlite_archive(self.root, "a" * 40)
+        archive.unlink()
+        with self.assertRaisesRegex(ValueError, "missing or changed"):
+            publisher.sqlite_archive(self.root, "a" * 40)
+
+    def test_public_python_release_queries_pep440_candidate_version(self):
+        (self.root / "receipt.json").write_text(json.dumps({"revision": "a" * 40, "group": "core-python-integration", "packages": [{"name": "candidate.whl", "sha256": "right"}]}))
+        with patch.dict(publisher.os.environ, {"GITHUB_SHA": "a" * 40}), patch.object(publisher, "python_version", return_value="1.1.0rc1"), patch.object(publisher, "json_read", return_value={"urls": [{"filename": "candidate.whl", "digests": {"sha256": "right"}}]}) as read:
+            publisher.verify_python(self.root)
+        read.assert_called_once_with("https://pypi.org/pypi/datafog-fogvault/1.1.0rc1/json")
+
     def test_wrong_package_never_runs_publish(self):
         with patch.object(publisher, "run") as run:
             with self.assertRaises(ValueError):

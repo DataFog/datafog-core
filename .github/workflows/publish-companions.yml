@@ -1,4 +1,4 @@
-name: Publish qualified FogVault companion packages
+name: Publish qualified companion packages
 
 on:
   workflow_dispatch:
@@ -13,6 +13,7 @@ on:
           - fog-browser
           - core-rust-integrations
           - core-browser-integrations
+          - core-sqlite-browser-integration
           - core-node-integration
           - core-python-integration
       dry_run:
@@ -87,5 +88,6 @@ jobs:
             target/companion-publication/receipt.json
             target/companion-publication/partial-receipt.json
             target/companion-publication/*.crate
+            target/companion-publication/*.tgz
             target/companion-publication/dist/*.whl
           if-no-files-found: warn

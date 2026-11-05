@@ -3,12 +3,16 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
+import tomllib
 import unittest
 from zipfile import ZipFile
 
 SPEC = importlib.util.spec_from_file_location("installed_runner", Path(__file__).with_name("run-installed.py"))
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
+
+
+VERSION = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())["project"]["version"]
 
 
 class WheelMetadataTests(unittest.TestCase):
@@ -20,11 +24,11 @@ class WheelMetadataTests(unittest.TestCase):
             stream = io.BytesIO()
             with ZipFile(stream, "w") as archive:
                 # Maturin embeds the README body and may append a final newline.
-                archive.writestr("datafog_fogvault-1.0.0.dist-info/METADATA",
-                                 b"Metadata-Version: 2.4\nName: datafog-fogvault\nVersion: 1.0.0\n\n" +
+                archive.writestr(f"datafog_fogvault-{VERSION}.dist-info/METADATA",
+                                 f"Metadata-Version: 2.4\nName: datafog-fogvault\nVersion: {VERSION}\n\n".encode() +
                                  (source if packaged is None else packaged) + b"\n")
                 if include_license:
-                    archive.writestr("datafog_fogvault-1.0.0.dist-info/licenses/LICENSE", license_notice)
+                    archive.writestr(f"datafog_fogvault-{VERSION}.dist-info/licenses/LICENSE", license_notice)
             with ZipFile(stream) as archive:
                 RUNNER.verify_wheel_metadata(archive, package)
 

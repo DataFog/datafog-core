@@ -1,6 +1,6 @@
 {
   "name": "@datafog/core-fogvault-legacy-browser",
-  "version": "1.0.0",
+  "version": "1.1.0-rc.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -27,8 +27,8 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "peerDependencies": {
-    "@datafog/wasm": "^0.5.0-beta.3 || ^1.0.0",
-    "@datafog/core-fogvault-browser": "1.0.0"
+    "@datafog/wasm": "^0.5.0-beta.3 || ^1.0.0 || 1.1.0-rc.1",
+    "@datafog/core-fogvault-browser": "1.1.0-rc.1"
   },
   "devDependencies": {
     "libsodium-wrappers-sumo": "0.8.4",
@@ -42,6 +42,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "latest"
+    "tag": "next"
   }
 }

@@ -1,6 +1,7 @@
 """Freeze base SDK upload inputs and retain hashes; this command never publishes."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -8,6 +9,10 @@ import shutil
 import subprocess
 import tarfile
 import tomllib
+
+_spec = importlib.util.spec_from_file_location("release_check", Path(__file__).with_name("check-release.py"))
+_release = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_release)
 
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ('darwin-arm64', 'darwin-x64', 'linux-x64-gnu', 'linux-arm64-gnu', 'win32-x64-msvc')
@@ -57,6 +62,9 @@ def stage_npm(kind, output):
     directory = ROOT / 'bindings' / kind
     metadata = json.loads((directory / 'package.json').read_text())
     packages = []
+    expected_tag = _release.npm_tag(metadata['version'])
+    if metadata.get('publishConfig', {}).get('tag', 'latest') != expected_tag:
+        raise ValueError('npm publication dist-tag must be ' + expected_tag)
     if kind == 'node':
         actual = {path.name for path in (directory / 'npm').iterdir() if path.is_dir()}
         if actual != set(PLATFORMS):
@@ -68,7 +76,7 @@ def stage_npm(kind, output):
             packages.append(pack(directory / 'npm' / target, output,
                                  metadata['name'] + '-' + target, metadata['version']))
     packages.append(pack(directory, output, metadata['name'], metadata['version']))
-    (output / 'npm-tag.txt').write_text(metadata.get('publishConfig', {}).get('tag', 'latest') + '\n')
+    (output / 'npm-tag.txt').write_text(expected_tag + '\n')
     return packages
 
 
