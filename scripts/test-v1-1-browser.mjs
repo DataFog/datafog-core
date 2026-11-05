@@ -53,6 +53,7 @@ try {
     `${kind}_lock_during_inference_rejects_late_review`,
     `${kind}_process_restart_restore_with_cnn_disabled`,
   ]);
+  required.push('fogvault_to_sqlite_approved_fresh_recovery');
   if (receipt.cases.length !== required.length || required.some(name => !receipt.cases.includes(name)) || externalRequests.length) {
     throw Error('incomplete cases or unexpected external request');
   }

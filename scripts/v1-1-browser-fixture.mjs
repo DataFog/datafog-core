@@ -1,7 +1,7 @@
 import {init, Workspace} from './node_modules/@datafog/wasm/index.js';
 import {BrowserWorkspace} from './node_modules/@datafog/wasm/cnn/workspace.mjs';
 import {SQLiteVault, SQLiteWorkspace} from './node_modules/@datafog/core-sqlite-browser/index.mjs';
-import {FogVault} from './node_modules/@datafog/fogvault-browser/dist/client.mjs';
+import {FogVault, clearRecord} from './node_modules/@datafog/fogvault-browser/dist/client.mjs';
 import {FogVaultWorkspace} from './node_modules/@datafog/core-fogvault-browser/index.mjs';
 
 await init();
@@ -56,7 +56,7 @@ globalThis.runJoint = async () => {
       check(host.restore(protectedText) === text, 'exact restoration failed');
       await host.setCnnEnabled(false);
       check(host.restore(protectedText) === text, 'disable destroyed committed mappings');
-      localStorage.setItem(`joint-${kind}`, JSON.stringify({...f.route, protectedText}));
+      localStorage.setItem(`joint-${kind}`, JSON.stringify({...f.route, protectedText, savedHead: result.head}));
       cases.push(`${kind}_default_cnn_review_toggle_save_restore`);
       measurements.push({backend: kind, loadAndFlowMs: performance.now() - start});
       await host.setCnnEnabled(true);
@@ -68,6 +68,26 @@ globalThis.runJoint = async () => {
       cases.push(`${kind}_lock_during_inference_rejects_late_review`);
     } finally {if (host) await host.close(); else await f.owner.close();}
   }
+  // Authenticate the source through FogVault, then recover into a fresh encrypted
+  // destination. No source key wrappers or backend receipts are transplanted.
+  const source = JSON.parse(localStorage.getItem('joint-fogvault'));
+  const sourceVault = new FogVault(fogOptions);
+  let bundle;
+  try {
+    await sourceVault.open(source.id); await sourceVault.unlock(password);
+    const record = await sourceVault.read(new Uint8Array(source.recordId));
+    try {bundle = record.payload.slice();} finally {clearRecord(record);}
+  } finally {await sourceVault.close();}
+  const destination = await SQLiteVault.create({id: hex(random()), password});
+  let migrated;
+  try {
+    migrated = await SQLiteWorkspace.importAuthenticatedBundle({Workspace, vault: destination,
+      recordId: random(), bundle, expectedNamespace: new Uint8Array(source.namespace),
+      expectedHead: source.savedHead, approved: true, operationId: random()});
+    check(migrated.restore(source.protectedText) === text, 'FogVault to SQLite recovery changed originals');
+    check(migrated.head().commitId.join(',') !== source.savedHead.commitId.join(','), 'migration reused source head');
+    cases.push('fogvault_to_sqlite_approved_fresh_recovery');
+  } finally {bundle.fill(0); if (migrated) await migrated.close();}
   return {cases, measurements};
 };
 globalThis.runJointRestart = async () => {

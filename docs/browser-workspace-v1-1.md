@@ -66,7 +66,8 @@ cargo dfv check --browser-v1-1 --json
 
 The check runs installed offline MV3 CNN tests, SQLite persistence/failure tests,
 and the combined approved save/restoration flow with both backends. It includes
-full browser-process restart with detection disabled. Reports identify the
+full browser-process restart with detection disabled and approved recovery from
+FogVault into a fresh SQLite destination. Reports identify the
 candidate archives and retain failure evidence. The SQLite profile does not
 provide independent rollback detection for replayed valid storage. Automated
 Chromium evidence does not replace acceptance in Josh's actual packaged extension
