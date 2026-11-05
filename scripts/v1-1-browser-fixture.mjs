@@ -1,0 +1,82 @@
+import {init, Workspace} from './node_modules/@datafog/wasm/index.js';
+import {CnnSession} from './node_modules/@datafog/wasm/cnn/index.js';
+import {BrowserWorkspace} from './node_modules/@datafog/wasm/cnn/workspace.mjs';
+import {SQLiteVault, SQLiteWorkspace} from './node_modules/@datafog/core-sqlite-browser/index.mjs';
+import {FogVault} from './node_modules/@datafog/fogvault-browser/dist/client.mjs';
+import {FogVaultWorkspace} from './node_modules/@datafog/core-fogvault-browser/index.mjs';
+
+await init();
+const text = 'BILL TO\nJohn Smith\n123 Main Street\nSpringfield IL 62704\nUSA\nEmail john@example.test';
+const password = 'synthetic v1.1 browser qualification password';
+const scan = {entities: ['PERSON', 'ADDRESS', 'EMAIL']};
+const random = () => crypto.getRandomValues(new Uint8Array(16));
+const hex = value => Array.from(value, n => n.toString(16).padStart(2, '0')).join('');
+const check = (condition, message) => {if (!condition) throw Error(message);};
+const reject = async (action, code) => {
+  try {await action();} catch (error) {if (code) check(error.code === code, `expected ${code}, got ${error.code}`); return;}
+  throw Error('operation unexpectedly succeeded');
+};
+const fogOptions = {limits: {payload: 16 * 1024 * 1024, metadata: 88, records: 64}, storageProfile: 'arraybuffer', kdfProfiles: [{memory_kib: 65536, passes: 3}]};
+async function backend(kind, saved) {
+  const route = saved || {id: hex(random()), recordId: [...random()], namespace: [...random()]};
+  const recordId = new Uint8Array(route.recordId), namespace = new Uint8Array(route.namespace);
+  let vault, owner;
+  if (kind === 'sqlite') {
+    vault = await SQLiteVault[saved ? 'open' : 'create']({id: route.id, password});
+    owner = await SQLiteWorkspace[saved ? 'open' : 'create']({Workspace, vault, recordId, ...(saved ? {expectedNamespace: namespace} : {namespace})});
+  } else {
+    vault = new FogVault(fogOptions);
+    if (saved) {await vault.open(route.id); await vault.unlock(password);} else await vault.create(route.id, password);
+    owner = await FogVaultWorkspace[saved ? 'open' : 'create']({Workspace, vault, recordId, ...(saved ? {expectedNamespace: namespace} : {namespace})});
+  }
+  return {owner, route};
+}
+
+globalThis.runJoint = async () => {
+  const cases = [], measurements = [];
+  for (const kind of ['sqlite', 'fogvault']) {
+    const f = await backend(kind);
+    let host;
+    const start = performance.now(), detector = await CnnSession.open();
+    try {
+      check(detector.cnnEnabled && detector.status === 'ready', 'CNN must load by default');
+      const found = await detector.scan(text, scan);
+      for (const type of ['PERSON', 'ADDRESS', 'EMAIL']) check(found.findings.some(item => item.entityType === type), `missing ${type}`);
+      host = BrowserWorkspace.adopt({workspace: f.owner, detector});
+      const pending = await host.prepare(text, random(), {scan});
+      await reject(() => host.commit(pending, {approved: false}), 'approval_required');
+      await host.setCnnEnabled(false);
+      await reject(() => host.commit(pending, {approved: true}), 'stale_review');
+      const disabled = await detector.scan(text, scan);
+      check(disabled.findings.some(item => item.entityType === 'EMAIL'), 'disabled CNN removed rules');
+      check(!disabled.findings.some(item => ['PERSON', 'ADDRESS'].includes(item.entityType)), 'disabled CNN inferred');
+      await host.setCnnEnabled(true);
+      const review = await host.prepare(text, random(), {scan});
+      const result = await host.commit(review, {approved: true});
+      const protectedText = result.previews[0].text;
+      check(!protectedText.includes('John Smith') && !protectedText.includes('123 Main Street'), 'CNN findings did not reach Workspace');
+      check(host.restore(protectedText) === text, 'exact restoration failed');
+      await host.setCnnEnabled(false);
+      check(host.restore(protectedText) === text, 'disable destroyed committed mappings');
+      localStorage.setItem(`joint-${kind}`, JSON.stringify({...f.route, protectedText}));
+      cases.push(`${kind}_default_cnn_review_toggle_save_restore`);
+      measurements.push({backend: kind, loadAndFlowMs: performance.now() - start});
+    } finally {if (host) await host.close(); else {detector.close(); await f.owner.close();}}
+  }
+  return {cases, measurements};
+};
+globalThis.runJointRestart = async () => {
+  const cases = [];
+  for (const kind of ['sqlite', 'fogvault']) {
+    const route = JSON.parse(localStorage.getItem(`joint-${kind}`));
+    const f = await backend(kind, route), detector = await CnnSession.open({cnnEnabled: false});
+    const host = BrowserWorkspace.adopt({workspace: f.owner, detector});
+    try {
+      check(detector.status === 'disabled', 'disabled startup initialized CNN');
+      check(host.restore(route.protectedText) === text, 'browser restart failed exact restoration');
+      cases.push(`${kind}_process_restart_restore_with_cnn_disabled`);
+    } finally {await host.close();}
+  }
+  return cases;
+};
+globalThis.jointReady = true;

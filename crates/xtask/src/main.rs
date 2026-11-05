@@ -1,4 +1,5 @@
 mod bench;
+mod browser;
 mod build;
 mod check;
 mod core_sdk;
@@ -29,7 +30,9 @@ fn main() -> ExitCode {
     match cmd.as_str() {
         "doctor" => doctor::run_doctor(&args[1..], json_output),
         "build" => {
-            if args[1..]
+            if browser::selected(&args[1..]) {
+                browser::run(&args[1..], true)
+            } else if args[1..]
                 .iter()
                 .any(|arg| arg == "--fogvault" || arg == "--fogvault-languages")
             {
@@ -39,7 +42,9 @@ fn main() -> ExitCode {
             }
         }
         "check" => {
-            if args[1..].iter().any(|arg| arg == "--core-sdk") {
+            if browser::selected(&args[1..]) {
+                browser::run(&args[1..], false)
+            } else if args[1..].iter().any(|arg| arg == "--core-sdk") {
                 core_sdk::run(&args[1..])
             } else if args[1..]
                 .iter()
@@ -85,6 +90,9 @@ USAGE:
     cargo dfv <COMMAND> [OPTIONS]
 
 COMMANDS:
+    build/check --browser-v1-1   Prepare/qualify bundled CNN and both browser vault flows
+    build/check --cnn            Prepare/qualify the embedded CNN in MV3
+    build/check --sqlite-browser Prepare/qualify SQLite3 Multiple Ciphers in MV3
     doctor    Check environment readiness (toolchains, bindings, models)
     build     Build SDK bindings
     check     Run rule-based detector tests across all SDKs
