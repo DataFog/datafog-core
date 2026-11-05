@@ -9,6 +9,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   remove-first-publication-latest:
@@ -23,10 +24,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
-      - run: npm install --global npm@11.17.0
+      - run: npm install --global npm@11.21.0
       - name: Remove only the new SQLite RC latest tag and verify next remains
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           node <<'NODE'
           const {execFileSync} = require('node:child_process');
