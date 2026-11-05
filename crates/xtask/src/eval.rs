@@ -313,14 +313,52 @@ struct PythonEnv {
     python_bin: PathBuf,
 }
 
-fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
-    let venv_dir = root.join("target").join("dfv_eval_venv");
-    let python_bin = if cfg!(windows) {
+fn eval_python_bin(venv_dir: &Path) -> PathBuf {
+    if cfg!(windows) {
         venv_dir.join("Scripts").join("python.exe")
     } else {
         venv_dir.join("bin").join("python")
-    };
+    }
+}
 
+fn eval_python_ready(python_bin: &Path, venv_dir: &Path) -> bool {
+    Command::new(python_bin)
+        .args(["-I", "-c", "import pathlib, sys, pip; assert sys.prefix != sys.base_prefix; assert pathlib.Path(sys.prefix).resolve() == pathlib.Path(sys.argv[1]).resolve()"])
+        .arg(venv_dir)
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
+fn ensure_eval_venv(venv_dir: &Path) -> Option<PathBuf> {
+    let python_bin = eval_python_bin(venv_dir);
+    if !eval_python_ready(&python_bin, venv_dir) {
+        // Runner caches can retain interpreter symlinks into a removed toolchain.
+        // Reusing that directory leaves those links in place during venv setup.
+        match fs::symlink_metadata(venv_dir) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    fs::remove_file(venv_dir).ok()?;
+                } else {
+                    fs::remove_dir_all(venv_dir).ok()?;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return None,
+        }
+        let status = Command::new("python3")
+            .args(["-m", "venv"])
+            .arg(venv_dir)
+            .status()
+            .ok()?;
+        if !status.success() || !eval_python_ready(&python_bin, venv_dir) {
+            return None;
+        }
+    }
+    Some(python_bin)
+}
+
+fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
+    let venv_dir = root.join("target").join("dfv_eval_venv");
     let wheel_dir = root.join("target").join("wheels");
     let wheel = fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
         entries.find_map(|e| {
@@ -335,27 +373,27 @@ fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
         })
     })?;
 
-    if !python_bin.exists() {
-        Command::new("python3")
-            .args(["-m", "venv"])
-            .arg(&venv_dir)
-            .status()
-            .ok()?;
-
-        let status = Command::new(&python_bin)
-            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-            .arg(&wheel)
-            .status()
-            .ok()?;
-
-        if !status.success() {
-            return None;
-        }
+    let python_bin = ensure_eval_venv(&venv_dir)?;
+    // A working cached interpreter can still contain an older candidate wheel.
+    let status = Command::new(&python_bin)
+        .args([
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "install",
+            "--force-reinstall",
+            "-q",
+        ])
+        .arg(&wheel)
+        .status()
+        .ok()?;
+    if !status.success() {
+        return None;
     }
 
     for extra in extras {
         let status = Command::new(&python_bin)
-            .args(["-m", "pip", "install", "-q"])
+            .args(["-m", "pip", "--disable-pip-version-check", "install", "-q"])
             .arg(format!("{}[{extra}]", wheel.display()))
             .status()
             .ok()?;
@@ -1375,6 +1413,110 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    fn eval_test_root(label: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("dfv-eval-{label}-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn invalid_cached_eval_venv_recreates_removed_interpreter_links() {
+        use std::os::unix::fs::symlink;
+        let root = eval_test_root("broken-interpreter");
+        let venv = root.join("venv");
+        fs::create_dir_all(venv.join("bin")).unwrap();
+        let executable = Command::new("python3")
+            .args([
+                "-I",
+                "-c",
+                "import os,sys; print(os.path.basename(sys.executable))",
+            ])
+            .output()
+            .unwrap();
+        assert!(executable.status.success());
+        let basename = String::from_utf8(executable.stdout).unwrap();
+        let names: HashSet<_> = ["python", "python3", basename.trim()].into_iter().collect();
+        for name in names {
+            symlink(
+                root.join("removed-toolchain-python"),
+                venv.join("bin").join(name),
+            )
+            .unwrap();
+        }
+        fs::write(venv.join("stale-marker"), "cached").unwrap();
+        // This is the CI failure: creating over the cache retains the broken
+        // primary interpreter link and ensurepip cannot start that interpreter.
+        let old_setup = Command::new("python3")
+            .args(["-m", "venv"])
+            .arg(&venv)
+            .output()
+            .unwrap();
+        assert!(
+            !old_setup.status.success(),
+            "invalid cache must reproduce setup failure"
+        );
+        let python = ensure_eval_venv(&venv).expect("invalid managed cache should be rebuilt");
+        assert!(eval_python_ready(&python, &venv));
+        assert!(!venv.join("stale-marker").exists());
+        // A healthy cache is retained rather than reinstalling its runtime.
+        fs::write(venv.join("healthy-marker"), "keep").unwrap();
+        assert_eq!(ensure_eval_venv(&venv).unwrap(), python);
+        assert!(venv.join("healthy-marker").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cached_eval_venv_refreshes_the_candidate_wheel() {
+        let root = eval_test_root("candidate-wheel");
+        let wheels = root.join("target/wheels");
+        fs::create_dir_all(&wheels).unwrap();
+        let wheel = wheels.join("datafog_eval_candidate-1.0-py3-none-any.whl");
+        let write_wheel = |value: &str| {
+            let output = Command::new("python3").args(["-I", "-c", r#"
+import sys, zipfile
+prefix = 'datafog_eval_candidate-1.0.dist-info/'
+files = {
+ 'datafog_eval_candidate.py': 'VALUE = ' + repr(sys.argv[2]) + '\n',
+ prefix + 'METADATA': 'Metadata-Version: 2.1\nName: datafog-eval-candidate\nVersion: 1.0\n',
+ prefix + 'WHEEL': 'Wheel-Version: 1.0\nGenerator: dfv-regression\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
+}
+files[prefix + 'RECORD'] = ''.join(name + ',,\n' for name in files) + prefix + 'RECORD,,\n'
+with zipfile.ZipFile(sys.argv[1], 'w') as wheel:
+ for name, content in files.items(): wheel.writestr(name, content)
+"#]).arg(&wheel).arg(value).output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let installed_value = |env: &PythonEnv| {
+            let output = Command::new(&env.python_bin)
+                .args([
+                    "-I",
+                    "-c",
+                    "import datafog_eval_candidate; print(datafog_eval_candidate.VALUE)",
+                ])
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        write_wheel("previous");
+        let first = setup_python_env(&root, &[]).expect("first candidate installation");
+        assert_eq!(installed_value(&first), "previous");
+        write_wheel("current");
+        let second = setup_python_env(&root, &[]).expect("cached candidate refresh");
+        assert_eq!(installed_value(&second), "current");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
         entity_metrics_from_counts(tp, fp, fn_)
