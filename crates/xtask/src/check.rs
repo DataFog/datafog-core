@@ -146,68 +146,23 @@ fn run_python_tests(run_dir: &Path, dry_run: bool) -> TestSuiteResult {
     let root = workspace_root();
     let python_tests = root.join("bindings").join("python").join("tests");
 
-    let wheel_dir = root.join("target").join("wheels");
-    let wheel = if wheel_dir.exists() {
-        fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
-            entries.find_map(|e| {
-                e.ok().and_then(|entry| {
-                    let name = entry.file_name();
-                    if name.to_string_lossy().ends_with(".whl") {
-                        Some(entry.path())
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
-    } else {
-        None
-    };
-
     let venv_dir = root.join("target").join("dfv_venv");
-    let python_bin = if cfg!(windows) {
-        venv_dir.join("Scripts").join("python.exe")
-    } else {
-        venv_dir.join("bin").join("python")
+    let python_bin = match crate::python_env::built_wheel(&root)
+        .and_then(|wheel| crate::python_env::prepare(&venv_dir, &wheel))
+    {
+        Ok(python) => python,
+        Err(error) => {
+            return TestSuiteResult {
+                pass: false,
+                duration_seconds: start.elapsed().as_secs_f64(),
+                output: Some(error.clone()),
+                error: Some(error),
+                failing_fixtures: vec![],
+                wrapped_script: Some(wrapped.into()),
+                command: Some(cmd.into()),
+            };
+        }
     };
-
-    if !venv_dir.exists() {
-        let venv_status = Command::new("python3")
-            .args(["-m", "venv"])
-            .arg(&venv_dir)
-            .status();
-
-        if !venv_status.map(|s| s.success()).unwrap_or(false) {
-            return TestSuiteResult {
-                pass: false,
-                duration_seconds: start.elapsed().as_secs_f64(),
-                output: None,
-                error: Some("failed to create venv".to_string()),
-                failing_fixtures: vec![],
-                wrapped_script: Some(wrapped.to_string()),
-                command: Some(cmd.to_string()),
-            };
-        }
-    }
-
-    if let Some(ref whl) = wheel {
-        let pip_install = Command::new(&python_bin)
-            .args(["-m", "pip", "install", "--force-reinstall"])
-            .arg(whl)
-            .output();
-
-        if !pip_install.map(|o| o.status.success()).unwrap_or(false) {
-            return TestSuiteResult {
-                pass: false,
-                duration_seconds: start.elapsed().as_secs_f64(),
-                output: None,
-                error: Some("failed to install wheel".to_string()),
-                failing_fixtures: vec![],
-                wrapped_script: Some(wrapped.to_string()),
-                command: Some(cmd.to_string()),
-            };
-        }
-    }
 
     let output = Command::new(&python_bin)
         .arg(python_tests.join("test_installed.py"))

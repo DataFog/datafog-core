@@ -1,0 +1,9 @@
+{
+  "version": "2.6.1",
+  "url": "https://github.com/utelle/SQLite3MultipleCiphers/releases/download/v2.6.1/sqlite3mc-2.6.1-sqlite-3.54.0-wasm.zip",
+  "sha256": "aba121490fd6123bcbef8404ee26df9b26c0301063781e2aa31f05aed6f48384",
+  "files": {
+    "sqlite3.mjs": "5308c7cc857408697c657a8d314e647a6f31c4aee67974ab8efd80c1a07161e0",
+    "sqlite3.wasm": "0b5a4bfff35f1ec87bf6f68ea293f425b86cbd661b77628a955cb827c9fbf524"
+  }
+}

@@ -315,54 +315,15 @@ struct PythonEnv {
 
 fn setup_python_env(root: &Path, extras: &[&str]) -> Option<PythonEnv> {
     let venv_dir = root.join("target").join("dfv_eval_venv");
-    let python_bin = if cfg!(windows) {
-        venv_dir.join("Scripts").join("python.exe")
-    } else {
-        venv_dir.join("bin").join("python")
-    };
-
-    let wheel_dir = root.join("target").join("wheels");
-    let wheel = fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
-        entries.find_map(|e| {
-            e.ok().and_then(|entry| {
-                let name = entry.file_name();
-                if name.to_string_lossy().ends_with(".whl") {
-                    Some(entry.path())
-                } else {
-                    None
-                }
-            })
-        })
-    })?;
-
-    if !python_bin.exists() {
-        Command::new("python3")
-            .args(["-m", "venv"])
-            .arg(&venv_dir)
-            .status()
-            .ok()?;
-
-        let status = Command::new(&python_bin)
-            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-            .arg(&wheel)
-            .status()
-            .ok()?;
-
-        if !status.success() {
-            return None;
-        }
-    }
-
-    for extra in extras {
-        let status = Command::new(&python_bin)
-            .args(["-m", "pip", "install", "-q"])
-            .arg(format!("{}[{extra}]", wheel.display()))
-            .status()
-            .ok()?;
-        if !status.success() {
-            return None;
-        }
-    }
+    let wheel = crate::python_env::built_wheel(root)
+        .inspect_err(|error| eprintln!("{error}"))
+        .ok()?;
+    let python_bin = crate::python_env::prepare(&venv_dir, &wheel)
+        .inspect_err(|error| eprintln!("{error}"))
+        .ok()?;
+    crate::python_env::install_extras(&python_bin, &wheel, extras)
+        .inspect_err(|error| eprintln!("{error}"))
+        .ok()?;
 
     Some(PythonEnv { python_bin })
 }
@@ -1375,6 +1336,63 @@ pub fn run_eval(args: &[String], json_output: bool) -> ExitCode {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    fn eval_test_root(label: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("dfv-eval-{label}-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn cached_eval_venv_refreshes_the_candidate_wheel() {
+        let root = eval_test_root("candidate-wheel");
+        let wheels = root.join("target/wheels");
+        fs::create_dir_all(&wheels).unwrap();
+        let wheel = wheels.join("datafog_eval_candidate-1.0-py3-none-any.whl");
+        let write_wheel = |value: &str| {
+            let output = Command::new("python3").args(["-I", "-c", r#"
+import sys, zipfile
+prefix = 'datafog_eval_candidate-1.0.dist-info/'
+files = {
+ 'datafog_eval_candidate.py': 'VALUE = ' + repr(sys.argv[2]) + '\n',
+ prefix + 'METADATA': 'Metadata-Version: 2.1\nName: datafog-eval-candidate\nVersion: 1.0\n',
+ prefix + 'WHEEL': 'Wheel-Version: 1.0\nGenerator: dfv-regression\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
+}
+files[prefix + 'RECORD'] = ''.join(name + ',,\n' for name in files) + prefix + 'RECORD,,\n'
+with zipfile.ZipFile(sys.argv[1], 'w') as wheel:
+ for name, content in files.items(): wheel.writestr(name, content)
+"#]).arg(&wheel).arg(value).output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let installed_value = |env: &PythonEnv| {
+            let output = Command::new(&env.python_bin)
+                .args([
+                    "-I",
+                    "-c",
+                    "import datafog_eval_candidate; print(datafog_eval_candidate.VALUE)",
+                ])
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        write_wheel("previous");
+        let first = setup_python_env(&root, &[]).expect("first candidate installation");
+        assert_eq!(installed_value(&first), "previous");
+        write_wheel("current");
+        let second = setup_python_env(&root, &[]).expect("cached candidate refresh");
+        assert_eq!(installed_value(&second), "current");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn make_metrics(tp: usize, fp: usize, fn_: usize) -> EntityMetrics {
         entity_metrics_from_counts(tp, fp, fn_)

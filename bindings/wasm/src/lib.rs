@@ -583,3 +583,65 @@ impl BrowserModelContract {
         .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 }
+
+/// In-process embedded CNN; the public browser session owns it in a Worker.
+#[wasm_bindgen]
+pub struct EmbeddedCnnDetector {
+    detector: datafog_core::cnn::CnnDetector,
+}
+
+#[wasm_bindgen]
+impl EmbeddedCnnDetector {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Result<EmbeddedCnnDetector, JsValue> {
+        Ok(Self {
+            detector: datafog_core::cnn::CnnDetector::open().map_err(model_error)?,
+        })
+    }
+    pub fn describe(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.detector.describe())
+            .map_err(|_| JsValue::from_str("CNN descriptor serialization failed"))
+    }
+    pub fn scan(&self, text: &str, config: JsValue, model_only: bool) -> Result<JsValue, JsValue> {
+        let result = if model_only {
+            self.detector.scan_model(text)
+        } else {
+            self.detector.scan(text, &config_value(config)?)
+        }
+        .map_err(model_error)?;
+        cnn_result(text, result)
+    }
+    /// Rules-only execution with exactly the enabled detector's config validation.
+    pub fn scan_disabled(text: &str, config: JsValue) -> Result<JsValue, JsValue> {
+        let result = datafog_core::cnn::CnnDetector::scan_disabled(text, &config_value(config)?)
+            .map_err(model_error)?;
+        cnn_result(text, result)
+    }
+}
+
+fn cnn_result(
+    text: &str,
+    result: datafog_core::model_scan::ModelScanResult,
+) -> Result<JsValue, JsValue> {
+    let mut index = datafog_core::TextIndex::new(text);
+    let findings = result
+        .findings
+        .into_iter()
+        .map(|finding| finding_from_core(&mut index, finding))
+        .collect::<Result<Vec<_>, _>>()?;
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ResultEnvelope {
+        contract_version: u32,
+        model: String,
+        findings: Vec<Finding>,
+        evidence: Vec<datafog_core::model_scan::FindingEvidence>,
+    }
+    serde_wasm_bindgen::to_value(&ResultEnvelope {
+        contract_version: result.contract_version,
+        model: result.model,
+        findings,
+        evidence: result.evidence,
+    })
+    .map_err(|_| JsValue::from_str("CNN result serialization failed"))
+}

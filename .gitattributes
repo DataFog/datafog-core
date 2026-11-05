@@ -1,0 +1,2 @@
+# Quantized weights and frozen Unicode tables must retain their exact bytes.
+crates/core/src/cnn/assets/*.bin binary

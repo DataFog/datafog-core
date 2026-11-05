@@ -84,37 +84,9 @@ struct PythonEnv {
 }
 
 fn init_python_env(root: &std::path::Path) -> Result<PythonEnv, String> {
-    let wheel_dir = root.join("target/wheels");
-    let mut wheels = fs::read_dir(&wheel_dir)
-        .map_err(|_| "Python setup: built wheel directory is missing or unreadable".to_string())?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| "Python setup: could not read wheel directory".to_string())?;
-    wheels.retain(|path| path.extension().is_some_and(|extension| extension == "whl"));
-    if wheels.len() != 1 {
-        return Err(
-            "Python setup: expected exactly one built wheel; run cargo dfv build".to_string(),
-        );
-    }
+    let wheel = crate::python_env::built_wheel(root)?;
     let venv_dir = root.join("target/dfv_parity_venv");
-    let python_bin = if cfg!(windows) {
-        venv_dir.join("Scripts/python.exe")
-    } else {
-        venv_dir.join("bin/python")
-    };
-    if !python_bin.exists() {
-        command_output(
-            Command::new("python3").args(["-m", "venv"]).arg(&venv_dir),
-            "Python environment creation",
-        )?;
-    }
-    // Refresh even an existing venv so a prior run cannot hide a changed wheel.
-    command_output(
-        Command::new(&python_bin)
-            .args(["-m", "pip", "install", "--force-reinstall", "-q"])
-            .arg(&wheels[0]),
-        "Python wheel installation",
-    )?;
+    let python_bin = crate::python_env::prepare(&venv_dir, &wheel)?;
     Ok(PythonEnv { python_bin })
 }
 

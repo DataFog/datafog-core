@@ -1,0 +1,76 @@
+name: Browser CNN and Workspace vaults
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'bindings/wasm/**'
+      - 'integrations/**'
+      - 'scripts/**'
+      - 'Cargo.*'
+      - '.cargo/**'
+      - '.nvmrc'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/browser-v1-1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'bindings/wasm/**'
+      - 'integrations/**'
+      - 'scripts/**'
+      - 'Cargo.*'
+      - '.cargo/**'
+      - '.nvmrc'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/browser-v1-1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-v1-1-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  installed-extension:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: python3 -m pip install maturin==1.14.1
+      - run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
+      - run: npm ci --prefix bindings/wasm
+      - run: node bindings/wasm/node_modules/playwright/cli.js install --with-deps chromium
+      - run: cargo dfv build
+      - run: python3 scripts/provision-sqlite-browser.py
+      - name: Qualify installed CNN, SQLite faults and both reversible vault flows offline
+        run: cargo dfv check --browser-v1-1 --json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-v1-1-evidence
+          path: |
+            target/dfv/runs/**/metadata.json
+            target/dfv/runs/**/browser.json
+            target/dfv/runs/**/report.json
+            target/dfv/runs/**/*.log
+            target/sqlite-browser/**/receipt.json
+            target/v1-1-browser/**/receipt.json
+          retention-days: 14

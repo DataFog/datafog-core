@@ -16,7 +16,8 @@
     "index.js",
     "index.d.ts",
     "dist",
-    "models"
+    "models",
+    "cnn"
   ],
   "exports": {
     ".": {
@@ -26,6 +27,14 @@
     "./models": {
       "types": "./models/index.d.ts",
       "import": "./models/index.js"
+    },
+    "./cnn": {
+      "types": "./cnn/index.d.ts",
+      "import": "./cnn/index.js"
+    },
+    "./cnn/workspace": {
+      "types": "./cnn/workspace.d.ts",
+      "import": "./cnn/workspace.mjs"
     }
   },
   "types": "./index.d.ts",

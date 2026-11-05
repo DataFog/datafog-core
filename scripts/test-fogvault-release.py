@@ -42,7 +42,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_beta3_is_explicitly_nonrequired_and_does_not_fetch(self):
         self.assertEqual(run({}, "0.5.0-beta.3")["required"], False)
 
-    def test_exact_completed_stable_and_manual_runs_pass_all_eleven_scopes(self):
+    def test_exact_completed_stable_and_manual_runs_pass_all_twelve_scopes(self):
         for event in ("push", "workflow_dispatch"):
             for version in ("1.0.0", "1.0.0-beta.1", "2.0.0"):
                 data = fixture()
@@ -51,7 +51,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                         pages[0]["workflow_runs"][0]["event"] = event
                 result = run(data, version)
                 self.assertTrue(result["required"])
-                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 11)
+                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 12)
                 self.assertTrue(all(p["head_sha"] == REVISION for p in result["proofs"]))
 
     def test_browser_sdk_extraction_is_required_at_exact_head(self):
@@ -61,6 +61,19 @@ class ReleaseEvidenceTests(unittest.TestCase):
         data[key][0]["workflow_runs"][0]["head_sha"] = "b" * 40
         with self.assertRaises(ValueError):
             run(data)
+
+    def test_embedded_detector_and_both_vaults_require_exact_head_browser_proof(self):
+        self.assertEqual(gate.REQUIRED["browser-v1-1.yml"], {"installed-extension"})
+        data = fixture()
+        key = f"actions/workflows/browser-v1-1.yml/runs?head_sha={REVISION}&per_page=1"
+        data[key][0]["workflow_runs"][0]["head_sha"] = "b" * 40
+        with self.assertRaises(ValueError):
+            run(data)
+        text = (gate.ROOT / ".github/workflows/browser-v1-1.yml").read_text()
+        step = text.split("      - name: Qualify installed CNN, SQLite faults and both reversible vault flows offline\n", 1)[1].split("      - ", 1)[0]
+        self.assertIn("run: cargo dfv check --browser-v1-1 --json", step)
+        self.assertNotIn("if:", step)
+        self.assertNotIn("continue-on-error", step)
 
     def test_browser_extraction_executes_the_sdk_gate_and_retains_its_evidence(self):
         text = (gate.ROOT / ".github/workflows/browser-model.yml").read_text()
@@ -165,6 +178,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
 
 class NativeModelPlatformTests(unittest.TestCase):
+    def test_model_eval_reuses_explicitly_provisioned_dependencies(self):
+        text = (gate.ROOT / ".github/workflows/dfv-models.yml").read_text()
+        marker = "      - name: Prepare evaluation environment using provisioned model dependencies\n"
+        self.assertEqual(text.count(marker), 1)
+        step = text.split(marker, 1)[1].split("      - ", 1)[0]
+        self.assertIn("python -m venv --clear --system-site-packages target/dfv_eval_venv", step)
+        self.assertIn("import gliner2, torch", step)
+        self.assertNotIn("continue-on-error", step)
+        self.assertLess(text.index("- name: Install Python wheel for model checks"), text.index(marker))
+        self.assertLess(text.index(marker), text.index("- name: Run model eval"))
+
     @classmethod
     def setUpClass(cls):
         spec = importlib.util.spec_from_file_location("native_model_gate", Path(__file__).with_name("check-model-integration.py"))
