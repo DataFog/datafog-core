@@ -53,7 +53,8 @@ def python_version():
 def npm_tag(version):
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", version):
         raise ValueError("Invalid npm release version")
-    return "next" if "-" in version.split("+")[0] else "latest"
+    release = version.split("+")[0]
+    return "beta" if "-beta." in release else "next" if "-" in release else "latest"
 
 
 def retain_npm(path, output):

@@ -56,6 +56,7 @@ class Publication(unittest.TestCase):
         self.assertEqual(command[command.index("--tag") + 1], "next")
         self.assertNotIn("latest", command)
         self.assertEqual(publisher.npm_tag("0.1.0"), "latest")
+        self.assertEqual(publisher.npm_tag("1.1.0-beta.2"), "beta")
 
     def test_manifest_versions_include_python_release_candidate_spelling(self):
         for relative, text in {
