@@ -9,6 +9,7 @@ mod eval;
 mod fogvault;
 mod models;
 mod parity;
+mod python_env;
 mod report;
 mod smoke;
 mod workspace_parity;

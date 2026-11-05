@@ -52,76 +52,23 @@ fn run_python_smoke(run_dir: &std::path::Path, dry_run: bool) -> SmokeTestResult
     let start = Instant::now();
     let root = workspace_root();
 
-    let wheel_dir = root.join("target").join("wheels");
-    let wheel = if wheel_dir.exists() {
-        fs::read_dir(&wheel_dir).ok().and_then(|mut entries| {
-            entries.find_map(|e| {
-                e.ok().and_then(|entry| {
-                    let name = entry.file_name();
-                    if name.to_string_lossy().ends_with(".whl") {
-                        Some(entry.path())
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
-    } else {
-        None
-    };
-
-    let Some(wheel_path) = wheel else {
-        return SmokeTestResult {
-            pass: false,
-            duration_seconds: start.elapsed().as_secs_f64(),
-            output: None,
-            error: Some("No wheel found in target/wheels/".to_string()),
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd.to_string()),
-            scan_result: None,
-        };
-    };
-
     let venv_dir = run_dir.join("python_smoke_venv");
-    let python_bin = if cfg!(windows) {
-        venv_dir.join("Scripts").join("python.exe")
-    } else {
-        venv_dir.join("bin").join("python")
+    let python_bin = match crate::python_env::built_wheel(&root)
+        .and_then(|wheel| crate::python_env::prepare(&venv_dir, &wheel))
+    {
+        Ok(python) => python,
+        Err(error) => {
+            return SmokeTestResult {
+                pass: false,
+                duration_seconds: start.elapsed().as_secs_f64(),
+                output: Some(error.clone()),
+                error: Some(error),
+                wrapped_script: Some(script.into()),
+                command: Some(cmd.into()),
+                scan_result: None,
+            };
+        }
     };
-
-    let venv_status = Command::new("python3")
-        .args(["-m", "venv"])
-        .arg(&venv_dir)
-        .status();
-
-    if !venv_status.map(|s| s.success()).unwrap_or(false) {
-        return SmokeTestResult {
-            pass: false,
-            duration_seconds: start.elapsed().as_secs_f64(),
-            output: None,
-            error: Some("Failed to create venv".to_string()),
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd.to_string()),
-            scan_result: None,
-        };
-    }
-
-    let pip_install = Command::new(&python_bin)
-        .args(["-m", "pip", "install", "--force-reinstall"])
-        .arg(&wheel_path)
-        .output();
-
-    if !pip_install.map(|o| o.status.success()).unwrap_or(false) {
-        return SmokeTestResult {
-            pass: false,
-            duration_seconds: start.elapsed().as_secs_f64(),
-            output: None,
-            error: Some("Failed to install wheel".to_string()),
-            wrapped_script: Some(script.to_string()),
-            command: Some(cmd.to_string()),
-            scan_result: None,
-        };
-    }
 
     let smoke_test_code = r#"
 import json
