@@ -1,6 +1,7 @@
 import initialize from './vendor/sqlite3.mjs';
 import {makeEnvelope, unlockEnvelope, envelopeStore, encryptArchive, sealState} from './credentials.mjs';
 let db, sqlite, vaultId, databaseKey, maxPayload, queue = Promise.resolve();
+const errorCodes = new Set(['invalid_credentials', 'invalid_identity', 'resource_limit', 'occupied_destination', 'not_found', 'storage_unavailable', 'unsupported_cipher', 'binding_mismatch', 'unsupported_schema', 'already_open', 'owner_closed', 'invalid_operation', 'NotFound', 'conflict', 'request_reused', 'outcome_unknown', 'credential_storage_failed']);
 const error = code => Object.assign(new Error(code), {code});
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 const one = (sql, bind = []) => db.exec({sql, bind, rowMode: 'object', returnValue: 'resultRows'})[0];
@@ -101,7 +102,7 @@ self.onmessage = ({data}) => {
       const result = await methods[data.method](data.args);
       self.postMessage({id: data.id, result});
     } catch (failure) {
-      self.postMessage({id: data.id, error: {code: failure?.code || 'storage_failed'}});
+      self.postMessage({id: data.id, error: {code: errorCodes.has(failure?.code) ? failure.code : 'storage_failed'}});
     }
   });
 };

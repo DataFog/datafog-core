@@ -3,6 +3,7 @@ import type {
 } from '@datafog/wasm';
 export interface SQLiteReceipt {readonly revision: bigint;}
 export class SQLiteVault {
+  private constructor();
   static create(options: {id: string; password: string; recoveryKey?: Uint8Array; workerUrl?: URL; maxPayloadBytes?: number}): Promise<SQLiteVault>;
   static open(options: {id: string; password?: string; recoveryKey?: Uint8Array; workerUrl?: URL; maxPayloadBytes?: number}): Promise<SQLiteVault>;
   changePassword(options: {password: string; recoveryKey?: Uint8Array}): Promise<void>;

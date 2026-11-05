@@ -1,10 +1,11 @@
 // Narrow fault injection around real packaged SQLite3MC/OPFS execution.
 const mode = new URL(location.href).searchParams.get('fault');
-let saving, armed = false;
+let saving, armed = false, credentialArmed = false;
 const waiting = [];
 const send = self.postMessage.bind(self);
 self.addEventListener('message', event => {
   const {data} = event;
+  if (data.method === 'changePassword') credentialArmed = true;
   if (!self.onmessage) waiting.push(event);
   if (data.method === 'save') { saving = data.id; armed = true; }
 });
@@ -15,6 +16,11 @@ if (mode === 'init') {
     return fetchAsset(...args);
   };
 }
+const put = IDBObjectStore.prototype.put;
+IDBObjectStore.prototype.put = function(...args) {
+  if (credentialArmed && mode === 'credential') throw new DOMException('Synthetic credential storage fault', 'QuotaExceededError');
+  return put.apply(this, args);
+};
 const write = FileSystemSyncAccessHandle.prototype.write;
 FileSystemSyncAccessHandle.prototype.write = function(...args) {
   if (armed && mode === 'crash') {

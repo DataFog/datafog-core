@@ -78,6 +78,14 @@ globalThis.runFaults = async () => {
     if (fault === 'late') { await savedPromise; await owner.lock(); }
     check(await outcome, 'fault authorized handoff');
     check(owner.closed, 'fault kept owner active');
+    const faultDirectory = await (await navigator.storage.getDirectory()).getDirectoryHandle(`.datafog-sqlite-${vaultId}`);
+    async function inspectArtifacts(directory) {
+      for await (const entry of directory.values()) {
+        if (entry.kind === 'directory') await inspectArtifacts(entry);
+        else check(!new TextDecoder().decode(await (await entry.getFile()).arrayBuffer()).includes('fault@example.test'), 'plaintext in interrupted database/journal');
+      }
+    }
+    await inspectArtifacts(faultDirectory);
     const fresh = await SQLiteVault.open({id: vaultId, password});
     const reconciliation = await fresh.reconcileLatest(request);
     check(reconciliation.found === (!['quota', 'crash'].includes(fault)), 'wrong durable reconciliation');
@@ -86,6 +94,18 @@ globalThis.runFaults = async () => {
     await reopened.close();
     cases.push(`${fault}_save_never_grants_handoff_and_reopens_complete_state`);
   }
+  const credentialVault = await SQLiteVault.open({id, password: rotatedPassword, workerUrl: new URL('./fault-worker.mjs?fault=credential', location.href)});
+  const credentialOwner = await SQLiteWorkspace.open({Workspace, vault: credentialVault, recordId, expectedNamespace: namespace});
+  await rejects(() => credentialOwner.changePassword({password: 'should never replace existing credentials'}), 'storage_failed');
+  check(credentialOwner.closed && credentialVault.closed, 'credential failure retained lock authority');
+  const oldCredential = await SQLiteVault.open({id, password: rotatedPassword});
+  await oldCredential.close();
+  await rejects(() => SQLiteVault.open({id, password: 'should never replace existing credentials'}), 'invalid_credentials');
+  cases.push('failed_credential_write_closes_owner_and_preserves_existing_credentials');
+  const validationVault = await SQLiteVault.open({id, password: rotatedPassword});
+  await rejects(() => SQLiteWorkspace.open({Workspace, vault: validationVault, recordId: new Uint8Array(16)}), 'invalid_identity');
+  await validationVault.close();
+  cases.push('invalid_options_do_not_transfer_or_strand_vault_ownership');
   const interruptedId = '88'.repeat(16);
   await rejects(() => SQLiteVault.create({id: interruptedId, password, workerUrl: new URL('./fault-worker.mjs?fault=init', location.href)}));
   const resumed = await SQLiteVault.open({id: interruptedId, password});

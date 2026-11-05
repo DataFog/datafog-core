@@ -56,28 +56,28 @@ export class SQLiteWorkspace {
   }
 
   static async create({Workspace, vault: sourceVault, recordId, namespace, operationId = randomId(), requestId = randomId()}) {
-    const vault = claimVault(sourceVault);
     const request = bytes16(requestId);
-    bytes16(recordId); bytes16(namespace); bytes16(operationId);
-    const workspace = Workspace.create(namespace, operationId);
-    const owner = new SQLiteWorkspace(constructorToken, Workspace, vault, recordId, workspace);
-    let payload;
+    const identity = bytes16(recordId), workspaceNamespace = bytes16(namespace), operation = bytes16(operationId);
+    const vault = claimVault(sourceVault);
+    let workspace, owner, payload;
     try {
+      workspace = Workspace.create(workspaceNamespace, operation);
+      owner = new SQLiteWorkspace(constructorToken, Workspace, vault, identity, workspace);
       owner.#receipt = receipt(await vault.receipt()); owner.#checkEpoch(0);
       await owner.#requireVacant(0);
       payload = workspace.exportBundle();
       const initial = head(workspace.head());
       await owner.#save(payload, initial, initial, request, 0);
       return owner;
-    } catch (error) { owner.#invalidate(); await vault.close(); throw error; }
+    } catch (error) { owner?.#invalidate(); workspace?.close(); await vault.close(); throw error; }
     finally { payload?.fill(0); }
   }
 
   static async open({Workspace, vault: sourceVault, recordId, expectedNamespace, expectedHead}) {
-    const vault = claimVault(sourceVault);
     const identity = bytes16(recordId);
     const wantedNamespace = expectedNamespace === undefined ? undefined : bytes16(expectedNamespace);
     const wantedHead = expectedHead === undefined ? undefined : head(expectedHead);
+    const vault = claimVault(sourceVault);
     let record, workspace;
     try {
       const before = receipt(await vault.receipt());
@@ -111,10 +111,10 @@ export class SQLiteWorkspace {
   static async importAuthenticatedBundle({Workspace, vault: sourceVault, recordId, bundle, expectedNamespace, expectedHead,
     operationId = randomId(), requestId = randomId(), approved}) {
     if (approved !== true) throw new WorkspaceVaultError('approval_required');
-    const vault = claimVault(sourceVault);
     const request = bytes16(requestId);
     bytes16(recordId); bytes16(expectedNamespace); bytes16(operationId); head(expectedHead);
     if (!(bundle instanceof Uint8Array) || bundle.length > 16 * 1024 * 1024) throw new WorkspaceVaultError('invalid_record');
+    const vault = claimVault(sourceVault);
     let workspace, owner, payload;
     try {
       workspace = Workspace.openBundle(bundle);
@@ -137,6 +137,7 @@ export class SQLiteWorkspace {
 
   static async importBackup({Workspace, vault, recordId, backup, password, approved, operationId, requestId}) {
     if (approved !== true) throw new WorkspaceVaultError('approval_required');
+    if (!(backup instanceof Uint8Array) || backup.length > 128 * 1024 * 1024) throw new WorkspaceVaultError('resource_limit');
     const identity = bytes16(recordId);
     const operation = operationId === undefined ? randomId() : bytes16(operationId);
     const request = requestId === undefined ? randomId() : bytes16(requestId);
@@ -158,7 +159,7 @@ export class SQLiteWorkspace {
   async changePassword(options) {
     this.#check(); const epoch = this.#epoch; this.#busy = true;
     try { await this.#vault.changePassword(options); this.#checkEpoch(epoch); }
-    catch (failure) { this.#invalidate(); throw failure; }
+    catch (failure) { this.#invalidate(); await this.#vault.close(); throw failure; }
     finally { this.#busy = false; }
   }
 

@@ -1,12 +1,14 @@
 import {WorkspaceVaultError, bytes16} from './binding.mjs';
 const claim = Symbol('transfer vault ownership');
+const constructorToken = Symbol('SQLite vault');
 export const claimVault = vault => {
   if (!(vault instanceof SQLiteVault)) throw new WorkspaceVaultError('invalid_owner');
   return vault[claim]();
 };
 export class SQLiteVault {
-  #worker; #pending = new Map(); #next = 0; #closed = false; #epoch = 0; #claimed = false;
-  constructor(workerUrl) {
+  #worker; #pending = new Map(); #next = 0; #closed = false; #claimed = false;
+  constructor(token, workerUrl) {
+    if (token !== constructorToken) throw new WorkspaceVaultError('invalid_owner');
     this.#worker = new Worker(workerUrl || new URL('./worker.mjs', import.meta.url), {type: 'module'});
     this.#worker.onmessage = ({data}) => {
       const pending = this.#pending.get(data.id);
@@ -19,7 +21,10 @@ export class SQLiteVault {
   static async create(options) { return this.#open(options, true); }
   static async open(options) { return this.#open(options, false); }
   static async #open({id, password, recoveryKey, workerUrl, maxPayloadBytes = 16 * 1024 * 1024}, create) {
-    const owner = new SQLiteVault(workerUrl);
+    if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id) || /^0+$/.test(id)) throw new WorkspaceVaultError('invalid_identity');
+    if (recoveryKey !== undefined && (!(recoveryKey instanceof Uint8Array) || recoveryKey.length !== 32)) throw new WorkspaceVaultError('invalid_credentials');
+    if ((create || recoveryKey === undefined) && (typeof password !== 'string' || password.length < 12 || password.length > 1024 || new TextEncoder().encode(password).length > 1024)) throw new WorkspaceVaultError('invalid_credentials');
+    const owner = new SQLiteVault(constructorToken, workerUrl);
     try {
       await owner.#call('open', {id, password, recoveryKey: recoveryKey?.slice(), maxPayloadBytes, create});
       return owner;
@@ -27,6 +32,7 @@ export class SQLiteVault {
   }
   #call(method, args) {
     if (this.#closed) return Promise.reject(new WorkspaceVaultError('owner_closed'));
+    if (this.#pending.size) return Promise.reject(new WorkspaceVaultError('operation_in_progress'));
     const id = ++this.#next;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.#revoke('outcome_unknown'), 120000);
@@ -36,7 +42,7 @@ export class SQLiteVault {
     });
   }
   #revoke(code) {
-    this.#closed = true; this.#epoch++; this.#worker.terminate();
+    this.#closed = true; this.#worker.terminate();
     for (const pending of this.#pending.values()) pending.reject(new WorkspaceVaultError(code));
     this.#pending.clear();
   }
