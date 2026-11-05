@@ -52,6 +52,7 @@ try {
     `${kind}_default_cnn_review_toggle_save_restore`,
     `${kind}_lock_during_inference_rejects_late_review`,
     `${kind}_process_restart_restore_with_cnn_disabled`,
+    `${kind}_cnn_conversation_pending_observed_scoped_restore`,
   ]);
   required.push('fogvault_to_sqlite_approved_fresh_recovery');
   if (receipt.cases.length !== required.length || required.some(name => !receipt.cases.includes(name)) || externalRequests.length) {

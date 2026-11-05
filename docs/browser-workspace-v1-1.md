@@ -43,6 +43,16 @@ The same coordinator accepts a [FogVault Workspace owner](integrations/fogvault.
 Both adapters keep sending separate from saving; preserve the existing
 conversation/send-observation contract for network handoff.
 
+For conversation-bound protection, use the coordinator's
+`prepareConversationSend([{input: {text, userSelections: []}, conversation}], operation, {scan})`.
+It scans every input and captures the conversation route before awaiting inference.
+Read `review.sendIntents()` before committing the review. A saved intent remains
+pending through restart. Only a trusted actual-send observation, prepared with
+`prepareObservedSend` and explicitly approved/saved through `commit`, authorizes
+`restoreInConversation`. `prepareDefinitelyNotSent` records trusted non-delivery;
+a timeout alone is insufficient. The coordinator never sends or invents these
+observations.
+
 Changing the setting invalidates pending reviews before awaiting Worker changes.
 A change during a submitted save closes the owner and reports `reopen_required`;
 reconcile/reopen durable state, then prepare and approve fresh work. Never reuse

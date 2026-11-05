@@ -88,6 +88,24 @@ globalThis.runJoint = async () => {
     check(migrated.head().commitId.join(',') !== source.savedHead.commitId.join(','), 'migration reused source head');
     cases.push('fogvault_to_sqlite_approved_fresh_recovery');
   } finally {bundle.fill(0); if (migrated) await migrated.close();}
+  for (const kind of ['sqlite', 'fogvault']) {
+    const f = await backend(kind), host = await BrowserWorkspace.open({workspace: f.owner});
+    const logicalId = random(), operation = () => ({id: random(), occurredAtMs: Date.now()});
+    try {
+      const review = await host.prepareConversationSend([{input: {text, userSelections: []},
+        conversation: {id: logicalId, surface: 'qualification', siteId: null, siteIdByteBudget: 64}}], operation(), {scan});
+      const intent = review.sendIntents()[0];
+      check(intent, 'conversation review omitted its send intent');
+      const saved = await host.commit(review, {approved: true});
+      check(host.sendIntentStatus(intent) === 'pending', 'save automatically observed a send');
+      await reject(() => host.restoreInConversation(saved.previews[0].text, logicalId));
+      const observation = host.prepareObservedSend(intent, logicalId, 'qualification', 'observed-chat', operation());
+      check(host.sendIntentStatus(intent) === 'pending', 'preparation activated observation');
+      await host.commit(observation, {approved: true});
+      check(host.restoreInConversation(saved.previews[0].text, logicalId) === text, 'scoped conversation restoration failed');
+      cases.push(`${kind}_cnn_conversation_pending_observed_scoped_restore`);
+    } finally {await host.close();}
+  }
   return {cases, measurements};
 };
 globalThis.runJointRestart = async () => {
