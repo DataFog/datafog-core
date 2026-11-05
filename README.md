@@ -169,6 +169,10 @@ Keep scan settings under `scan` and transformation policy under `transform`. A d
 
 ## Browser workspace and FogVault integration
 
+The unreleased v1.1 browser extension flow adds a bundled, default-enabled
+name/address CNN with a disable control, plus SQLite3 Multiple Ciphers as a
+second encrypted Workspace backend. See the [candidate integration guide](docs/browser-workspace-v1-1.md).
+
 Core 1.0 provides persistent `Workspace` pseudonyms, explicit approved saves,
 strict/progressive restoration, operation history and conversation-scoped recall.
 The optional browser adapter uses the maintained FogVault Worker/WASM owner and

@@ -20,7 +20,7 @@ export interface BrowserWorkspaceOwner {
   restore: Workspace['restore'];
   restoreReport: Workspace['restoreReport'];
   head: Workspace['head'];
-  close(): Promise<void>;
+  close(): Promise<unknown>;
 }
 export interface BrowserWorkspaceDetector {
   scan(text: string, config?: ScanConfig): Promise<{readonly findings: readonly Finding[]}>;

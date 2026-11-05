@@ -48,7 +48,14 @@ try {
   await page.goto(`chrome-extension://${id}/index.html`);
   await page.waitForFunction(() => globalThis.jointReady === true);
   receipt.cases.push(...await page.evaluate(() => globalThis.runJointRestart()));
-  if (receipt.cases.length !== 4 || externalRequests.length) throw Error('incomplete cases or unexpected external request');
+  const required = ['sqlite', 'fogvault'].flatMap(kind => [
+    `${kind}_default_cnn_review_toggle_save_restore`,
+    `${kind}_lock_during_inference_rejects_late_review`,
+    `${kind}_process_restart_restore_with_cnn_disabled`,
+  ]);
+  if (receipt.cases.length !== required.length || required.some(name => !receipt.cases.includes(name)) || externalRequests.length) {
+    throw Error('incomplete cases or unexpected external request');
+  }
   receipt.passed = true;
 } catch (error) {receipt.passed = false; receipt.failure = error.message; throw error;}
 finally {await context?.close(); writeFileSync(path.join(output, 'receipt.json'), JSON.stringify(receipt, null, 2)); console.log(path.join(output, 'receipt.json'));}

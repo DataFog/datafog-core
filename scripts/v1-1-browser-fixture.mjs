@@ -47,9 +47,10 @@ globalThis.runJoint = async () => {
       await reject(() => host.commit(pending, {approved: false}), 'approval_required');
       await host.setCnnEnabled(false);
       await reject(() => host.commit(pending, {approved: true}), 'stale_review');
-      const disabled = await detector.scan(text, scan);
-      check(disabled.findings.some(item => item.entityType === 'EMAIL'), 'disabled CNN removed rules');
-      check(!disabled.findings.some(item => ['PERSON', 'ADDRESS'].includes(item.entityType)), 'disabled CNN inferred');
+      const disabledReview = await host.prepare(text, random(), {scan});
+      const disabledText = disabledReview.preview().text;
+      check(!disabledText.includes('john@example.test'), 'disabled CNN removed rules');
+      check(disabledText.includes('John Smith') && disabledText.includes('123 Main Street'), 'disabled CNN inferred');
       await host.setCnnEnabled(true);
       const review = await host.prepare(text, random(), {scan});
       const result = await host.commit(review, {approved: true});
@@ -61,6 +62,13 @@ globalThis.runJoint = async () => {
       localStorage.setItem(`joint-${kind}`, JSON.stringify({...f.route, protectedText}));
       cases.push(`${kind}_default_cnn_review_toggle_save_restore`);
       measurements.push({backend: kind, loadAndFlowMs: performance.now() - start});
+      await host.setCnnEnabled(true);
+      const pendingScan = host.prepare(text.repeat(20), random(), {scan});
+      const closing = host.lock();
+      check(host.closed, 'lock did not revoke synchronously');
+      await reject(() => pendingScan);
+      await closing;
+      cases.push(`${kind}_lock_during_inference_rejects_late_review`);
     } finally {if (host) await host.close(); else {detector.close(); await f.owner.close();}}
   }
   return {cases, measurements};
