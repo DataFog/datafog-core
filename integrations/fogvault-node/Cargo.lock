@@ -207,7 +207,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-core"
-version = "1.0.0"
+version = "1.1.0-rc.1"
 dependencies = [
  "base64",
  "hmac 0.12.1",
@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-migration"
-version = "1.0.0"
+version = "1.1.0-rc.1"
 dependencies = [
  "datafog-core",
  "zeroize",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-native"
-version = "1.0.0"
+version = "1.1.0-rc.1"
 dependencies = [
  "datafog-core",
  "datafog-fogvault-migration",
@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-node"
-version = "1.0.0"
+version = "1.1.0-rc.1"
 dependencies = [
  "datafog-core",
  "datafog-fogvault-migration",

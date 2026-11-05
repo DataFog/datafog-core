@@ -21,6 +21,20 @@ spec.loader.exec_module(qualifier)
 
 
 class TestExecutionProof(unittest.TestCase):
+    def test_candidate_versions_are_read_from_manifests_and_legacy_floor_stays_exact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, relative in qualifier.CORE.items():
+                path = root / relative / "Cargo.toml"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f'[package]\nname="{name}"\nversion="1.1.0-rc.1"\n')
+            members = qualifier.core_members(root)
+            self.assertEqual({row[2] for row in members.values()}, {"1.1.0-rc.1"})
+            document = tomllib.loads(qualifier.consumer_manifest(members))
+            for name in qualifier.CORE:
+                self.assertEqual(document["dependencies"][name], "=1.1.0-rc.1")
+            self.assertEqual(document["dependencies"]["published-beta3"]["version"], "=0.5.0-beta.3")
+
     def test_cold_cargo_metadata_provisions_only_admitted_registry_identities(self):
         # Real Cargo and an empty home reproduce CI's missing beta.3 index entry.
         # A tiny localhost registry avoids relying on any public network/cache.

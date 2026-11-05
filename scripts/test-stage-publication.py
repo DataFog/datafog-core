@@ -18,7 +18,7 @@ def crate(path, version='1.0.0'):
     path.parent.mkdir(parents=True, exist_ok=True)
     data = ('[package]\nname="datafog-core"\nversion="' + version + '"\n').encode()
     with tarfile.open(path, 'w:gz') as archive:
-        entry = tarfile.TarInfo('datafog-core-1.0.0/Cargo.toml')
+        entry = tarfile.TarInfo(path.name.removesuffix('.crate') + '/Cargo.toml')
         entry.size = len(data)
         archive.addfile(entry, io.BytesIO(data))
 
@@ -63,9 +63,9 @@ class PublicationInputs(unittest.TestCase):
         with self.assertRaises(ValueError):
             staging.stage_rust(self.output)
 
-    def npm_source(self, name, directory, optional=None):
+    def npm_source(self, name, directory, optional=None, version="1.0.0", tag="latest"):
         directory.mkdir(parents=True)
-        metadata = {'name': name, 'version': '1.0.0', 'publishConfig': {'tag': 'latest'},
+        metadata = {'name': name, 'version': version, 'publishConfig': {'tag': tag},
                     'scripts': {'prepack': 'node -e "require(\'fs\').writeFileSync(\'hook-ran\',\'bad\')"'}}
         if optional is not None:
             metadata['optionalDependencies'] = optional
@@ -101,6 +101,28 @@ class PublicationInputs(unittest.TestCase):
         rows = staging.stage_npm('wasm', self.output)
         self.assertEqual(len(rows), 1)
         self.assertFalse((directory / 'hook-ran').exists())
+
+    def test_rc_cargo_archive_preserves_semver_identity(self):
+        version = '1.1.0-rc.1'
+        (self.root / 'crates/core/Cargo.toml').write_text('[package]\nname="datafog-core"\nversion="' + version + '"\n')
+        archive = self.root / ('target/package/datafog-core-' + version + '.crate')
+        crate(archive, version=version)
+        rows = staging.stage_rust(self.output)
+        self.assertEqual(rows[0]['version'], version)
+        self.assertEqual((self.output / archive.name).read_bytes(), archive.read_bytes())
+
+    def test_rc_npm_staging_requires_and_retains_next_tag(self):
+        directory = self.root / 'bindings/wasm'
+        self.npm_source('@datafog/wasm', directory, version='1.1.0-rc.1', tag='latest')
+        with self.assertRaisesRegex(ValueError, 'next'):
+            staging.stage_npm('wasm', self.output)
+        self.assertFalse(list(self.output.glob('*.tgz')))
+        document = json.loads((directory / 'package.json').read_text())
+        document['publishConfig']['tag'] = 'next'
+        (directory / 'package.json').write_text(json.dumps(document))
+        rows = staging.stage_npm('wasm', self.output)
+        self.assertEqual(rows[0]['version'], '1.1.0-rc.1')
+        self.assertEqual((self.output / 'npm-tag.txt').read_text(), 'next\n')
 
     def test_receipt_and_checksum_manifest_bind_exact_archive_bytes(self):
         archive = self.root / 'target/package/datafog-core-1.0.0.crate'

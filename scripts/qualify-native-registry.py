@@ -107,9 +107,21 @@ def admit_registry_graph(lock, approved, candidate_hashes):
     return graph
 
 
+def core_members(root=None):
+    root = ROOT if root is None else Path(root)
+    return {name: (root, relative, tomllib.loads((root / relative / "Cargo.toml").read_text())["package"]["version"])
+            for name, relative in CORE.items()}
+
+
+def consumer_manifest(members):
+    dependencies = "".join(f'{name}="={members[name][2]}"\n' for name in CORE)
+    return ('[package]\nname="core-native-registry-consumer"\nversion="0.0.0"\nedition="2024"\n[workspace]\n[dependencies]\n'
+            + dependencies + 'published-beta3={package="datafog-core",version="=0.5.0-beta.3"}\nserde_json="1"\ngetrandom="=0.4.3"\ntempfile="3"\n[profile.test]\nopt-level=2\n')
+
+
 def execute(fog, output, allow_dirty):
     output.mkdir(parents=True, exist_ok=False)
-    members = {name: (ROOT, relative, "1.0.0") for name, relative in CORE.items()}
+    members = core_members()
     members.update({name: (fog, relative, version) for name, (relative, version) in FOG.items()})
     commands = []
     def run(name, argv, cwd=ROOT, env=None):
@@ -295,7 +307,7 @@ def execute(fog, output, allow_dirty):
     tests = (ROOT / "integrations/fogvault-native/tests/native.rs").read_text().replace("../../../fixtures/", "../fixtures/")
     (consumer / "tests/native.rs").write_text(tests)
     (consumer / ".cargo/config.toml").write_text('[source.crates-io]\nreplace-with="candidate"\n[source.candidate]\nlocal-registry=' + json.dumps(str(registry)) + "\n")
-    (consumer / "Cargo.toml").write_text('[package]\nname="core-native-registry-consumer"\nversion="0.0.0"\nedition="2024"\n[workspace]\n[dependencies]\ndatafog-core="=1.0.0"\ndatafog-fogvault-native="=1.0.0"\ndatafog-fogvault-migration="=1.0.0"\npublished-beta3={package="datafog-core",version="=0.5.0-beta.3"}\nserde_json="1"\ngetrandom="=0.4.3"\ntempfile="3"\n[profile.test]\nopt-level=2\n')
+    (consumer / "Cargo.toml").write_text(consumer_manifest(members))
     env = dict(os.environ, CARGO_HOME=str(output / "consumer-cargo-home"))
     tests_passed = admit_consumer_test_output(run("registry-consumer-tests", ["cargo", "+1.94.1", "test", "--offline", "--manifest-path", str(consumer / "Cargo.toml")], cwd=consumer, env=env))
     graphs["consumer"] = check_graph(consumer / "Cargo.lock", candidate_hashes)

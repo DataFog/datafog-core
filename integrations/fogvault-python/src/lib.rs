@@ -915,9 +915,26 @@ impl PreparedChange {
     }
 }
 
+fn python_package_version(version: &str) -> String {
+    version.replace("-beta.", "b").replace("-rc.", "rc")
+}
+
+#[cfg(test)]
+mod version_tests {
+    #[test]
+    fn runtime_version_matches_python_distribution_spelling() {
+        assert_eq!(super::python_package_version("1.1.0-rc.1"), "1.1.0rc1");
+        assert_eq!(super::python_package_version("1.1.0-beta.2"), "1.1.0b2");
+        assert_eq!(super::python_package_version("1.1.0"), "1.1.0");
+    }
+}
+
 #[pymodule(gil_used = true)]
 fn datafog_fogvault(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add(
+        "__version__",
+        python_package_version(env!("CARGO_PKG_VERSION")),
+    )?;
     m.add(
         "FogVaultWorkspaceError",
         m.py().get_type::<FogVaultWorkspaceError>(),
