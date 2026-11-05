@@ -78,3 +78,9 @@ test('lock revokes immediately even when cleanup remains pending', async () => {
   assert.throws(() => f.owner.restore('[PERSON_1]'), {code: 'workspace_closed'});
   cleanup.resolve(); await closing;
 });
+
+test('failed detector startup releases the transferred vault owner', async () => {
+  const f = fixture();
+  await assert.rejects(BrowserWorkspace.open({workspace: f.workspace, cnnEnabled: 'invalid'}), TypeError);
+  assert.equal(f.workspace.closed, true);
+});

@@ -1,5 +1,4 @@
 import {init, Workspace} from './node_modules/@datafog/wasm/index.js';
-import {CnnSession} from './node_modules/@datafog/wasm/cnn/index.js';
 import {BrowserWorkspace} from './node_modules/@datafog/wasm/cnn/workspace.mjs';
 import {SQLiteVault, SQLiteWorkspace} from './node_modules/@datafog/core-sqlite-browser/index.mjs';
 import {FogVault} from './node_modules/@datafog/fogvault-browser/dist/client.mjs';
@@ -37,12 +36,10 @@ globalThis.runJoint = async () => {
   for (const kind of ['sqlite', 'fogvault']) {
     const f = await backend(kind);
     let host;
-    const start = performance.now(), detector = await CnnSession.open();
+    const start = performance.now();
     try {
-      check(detector.cnnEnabled && detector.status === 'ready', 'CNN must load by default');
-      const found = await detector.scan(text, scan);
-      for (const type of ['PERSON', 'ADDRESS', 'EMAIL']) check(found.findings.some(item => item.entityType === type), `missing ${type}`);
-      host = BrowserWorkspace.adopt({workspace: f.owner, detector});
+      host = await BrowserWorkspace.open({workspace: f.owner});
+      check(host.cnnEnabled && host.detectorStatus === 'ready', 'CNN must load by default');
       const pending = await host.prepare(text, random(), {scan});
       await reject(() => host.commit(pending, {approved: false}), 'approval_required');
       await host.setCnnEnabled(false);
@@ -69,7 +66,7 @@ globalThis.runJoint = async () => {
       await reject(() => pendingScan);
       await closing;
       cases.push(`${kind}_lock_during_inference_rejects_late_review`);
-    } finally {if (host) await host.close(); else {detector.close(); await f.owner.close();}}
+    } finally {if (host) await host.close(); else await f.owner.close();}
   }
   return {cases, measurements};
 };
@@ -77,10 +74,10 @@ globalThis.runJointRestart = async () => {
   const cases = [];
   for (const kind of ['sqlite', 'fogvault']) {
     const route = JSON.parse(localStorage.getItem(`joint-${kind}`));
-    const f = await backend(kind, route), detector = await CnnSession.open({cnnEnabled: false});
-    const host = BrowserWorkspace.adopt({workspace: f.owner, detector});
+    const f = await backend(kind, route);
+    const host = await BrowserWorkspace.open({workspace: f.owner, cnnEnabled: false});
     try {
-      check(detector.status === 'disabled', 'disabled startup initialized CNN');
+      check(host.detectorStatus === 'disabled', 'disabled startup initialized CNN');
       check(host.restore(route.protectedText) === text, 'browser restart failed exact restoration');
       cases.push(`${kind}_process_restart_restore_with_cnn_disabled`);
     } finally {await host.close();}

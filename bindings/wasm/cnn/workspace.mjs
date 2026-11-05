@@ -24,6 +24,22 @@ export class BrowserWorkspace {
     if (key !== token) throw new BrowserWorkspaceError('invalid_configuration');
     this.#workspace = workspace; this.#detector = detector;
   }
+  /** Load the bundled detector before granting access to the owned Workspace. */
+  static async open({workspace, ...detectorOptions}) {
+    if (!workspace || workspace.closed || typeof workspace.close !== 'function') throw new BrowserWorkspaceError('invalid_configuration');
+    let detector;
+    try {
+      detector = await CnnSession.open(detectorOptions);
+      return BrowserWorkspace.adopt({workspace, detector});
+    } catch (failure) {
+      detector?.close();
+      // Failed startup must release database ownership; cleanup failure propagates.
+      await workspace.close();
+      throw failure;
+    }
+  }
+  get cnnEnabled() { return this.#detector.cnnEnabled; }
+  get detectorStatus() { return this.#detector.status; }
   /** Transfer exclusive use of an already opened detector and vault owner. */
   static adopt({workspace, detector}) {
     if (!workspace || !detector || typeof workspace.prepareReview !== 'function' || typeof detector.scan !== 'function' ||
@@ -115,3 +131,5 @@ export class BrowserWorkspace {
   }
   async lock() { return this.close(); }
 }
+import {CnnSession} from './index.js';
+

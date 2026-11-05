@@ -23,6 +23,8 @@ export interface BrowserWorkspaceOwner {
   close(): Promise<unknown>;
 }
 export interface BrowserWorkspaceDetector {
+  readonly cnnEnabled: boolean;
+  readonly status: string;
   scan(text: string, config?: ScanConfig): Promise<{readonly findings: readonly Finding[]}>;
   setEnabled(enabled: boolean): Promise<unknown>;
   close(): Promise<void> | void;
@@ -30,7 +32,11 @@ export interface BrowserWorkspaceDetector {
 /** Adopt exclusively: do not use the supplied detector or owner behind this coordinator. */
 export class BrowserWorkspace {
   private constructor();
+  /** Loads the default-enabled bundled detector, closing the vault owner if startup fails. */
+  static open(options: {workspace: BrowserWorkspaceOwner; cnnEnabled?: boolean; workerUrl?: URL; timeoutMs?: number}): Promise<BrowserWorkspace>;
   static adopt(options: {workspace: BrowserWorkspaceOwner; detector: BrowserWorkspaceDetector}): BrowserWorkspace;
+  readonly cnnEnabled: boolean;
+  readonly detectorStatus: string;
   readonly closed: boolean;
   readonly generation: number;
   prepare(text: string, operationId: Uint8Array, options?: {scan?: ScanConfig; userSelections?: readonly WorkspaceFinding[]}): Promise<BrowserWorkspaceReview>;

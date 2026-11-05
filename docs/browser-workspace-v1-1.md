@@ -12,7 +12,6 @@ confirms persistence and activates the saved candidate.
 
 ```js
 import {init, Workspace} from '@datafog/wasm';
-import {CnnSession} from '@datafog/wasm/cnn';
 import {BrowserWorkspace} from '@datafog/wasm/cnn/workspace';
 import {SQLiteVault, SQLiteWorkspace} from '@datafog/core-sqlite-browser';
 
@@ -21,8 +20,7 @@ const vault = await SQLiteVault.open({id: savedVaultId, password});
 const workspace = await SQLiteWorkspace.open({
   Workspace, vault, recordId: savedRecordId, expectedNamespace: savedNamespace,
 });
-const detector = await CnnSession.open({cnnEnabled: savedPreference ?? true});
-const owner = BrowserWorkspace.adopt({workspace, detector});
+const owner = await BrowserWorkspace.open({workspace, cnnEnabled: savedPreference ?? true});
 // Transfer exclusive use: subsequent mutations go through owner.
 const review = await owner.prepare(text, crypto.getRandomValues(new Uint8Array(16)), {
   scan: {entities: ['PERSON', 'ADDRESS', 'EMAIL']},
