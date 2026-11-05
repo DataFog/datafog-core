@@ -83,6 +83,7 @@ jobs:
           import os
           from pathlib import Path
           import re
+          import runpy
           import tarfile
           import tomllib
           from zipfile import ZipFile
@@ -123,7 +124,8 @@ jobs:
           core_version = tomllib.loads(Path("crates/core/Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
           if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", node_version):
               raise ValueError("Invalid candidate package version")
-          if node_version != core_version or re.sub(r"^(\d+\.\d+\.\d+)b(\d+)$", r"\1-beta.\2", python_version) != core_version:
+          logical_version = runpy.run_path("scripts/check-release.py")["logical_version"]
+          if node_version != core_version or logical_version(python_version) != core_version:
               raise ValueError("Core, Node and Python candidate versions disagree")
           crate = exact("candidate-common", "datafog-core-" + core_version + ".crate")
           crate_directory = "datafog-core-" + core_version
