@@ -1,6 +1,6 @@
 # Models
 
-DataFog Core supports local model inference via ModelSession. Desktop/server SDKs (Rust, Python, Node.js) use the DataFog native runtime or GLiNER2 via Python. Browser/WASM has optional model support via `@datafog/wasm/models`, which runs GLiNER2.5 Small ONNX locally using ONNX Runtime Web.
+DataFog Core supports local model inference via ModelSession. Desktop/server SDKs (Rust, Python, Node.js) use the DataFog native runtime or GLiNER2 via Python. Browser/WASM provides two model entry points: `@datafog/wasm/cnn` bundles an embedded statements CNN for `PERSON` and `ADDRESS` detection (default-enabled, no download required), while `@datafog/wasm/models` runs GLiNER2.5 Small ONNX locally using ONNX Runtime Web for broader label coverage.
 
 ## Engine tiers
 
@@ -245,7 +245,12 @@ Desktop/server ModelSession runs on:
 - macOS Intel (15+)
 - Windows x86_64 (MSVC)
 
-Browser/WASM ModelSession (`@datafog/wasm/models`) runs in any browser with WebAssembly support. It uses GLiNER2.5 Small ONNX, not the DataFog native runtime or Python GLiNER2 backend. See `docs/browser-model.md` for asset hosting, entity mapping, and constraints.
+Browser/WASM provides two model entry points:
+
+- `@datafog/wasm/cnn` bundles an embedded statements CNN (`CnnSession`) for `PERSON` and `ADDRESS` detection. Weights are compiled into Core WASM; no model download, Python, ONNX Runtime or remote executable is required. See `docs/browser-cnn.md`.
+- `@datafog/wasm/models` runs GLiNER2.5 Small ONNX (`ModelSession`) for broader label coverage. It requires ONNX Runtime Web and hosted model assets. See `docs/browser-model.md`.
+
+Neither uses the DataFog native runtime or Python GLiNER2 backend.
 
 ### GLiNER2 entity-count gating
 
@@ -274,7 +279,7 @@ fails if the bundle is missing). The regression prefers
 disables the floor so the pre-fix skip can be reproduced. Never set it in
 production, qualification, or release paths.
 
-Rust, Python, and Node share that worker. Browser/WASM uses a separate `@datafog/wasm/models` entry point with GLiNER2.5 Small ONNX; it does not use the Python worker or the count-floor fix.
+Rust, Python, and Node share that worker. Browser/WASM's `@datafog/wasm/models` entry point with GLiNER2.5 Small ONNX does not use the Python worker or the count-floor fix; `@datafog/wasm/cnn` uses a completely separate embedded CNN.
 
 ### GLiNER2 eval baseline
 

@@ -52,7 +52,7 @@ DataFog Core detects PII and credentials using rule-based detectors and optional
 | Entity | Activation | Notes |
 |--------|------------|-------|
 | UUID | `detect_uuid: true` | UUID v1-v5 patterns |
-| PERSON | Structured scan only | Name-field discovery in JSON |
+| PERSON | Structured scan or browser CNN | Name-field discovery in JSON; browser CNN detects in text |
 
 ### Model-extended entities (require ModelSession for broader coverage)
 
@@ -180,6 +180,8 @@ Setting `detect_uuid: true` enables UUID detection. Selecting UUID in entities w
 
 Contiguous card digits after digit+comma or digit+period are suppressed to avoid false positives in decimal numbers. Parse CSV/TSV into cells before scanning.
 
-### Structured PERSON
+### PERSON detection
 
-PERSON detection only works in structured scans via `scan_structured()` or `discover_fields()`. It uses name-field aliases or explicit JSON Pointer mappings.
+In rule-based scanning, PERSON detection only works in structured scans via `scan_structured()` or `discover_fields()`. It uses name-field aliases or explicit JSON Pointer mappings.
+
+In browser/WASM, the bundled CNN (`@datafog/wasm/cnn`) detects PERSON in text scans. The CNN also detects ADDRESS (full mailing blocks), which is distinct from the rule-based STREET_ADDRESS.
