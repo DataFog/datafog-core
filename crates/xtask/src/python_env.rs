@@ -115,6 +115,7 @@ pub fn install_extras(python: &Path, wheel: &Path, extras: &[&str]) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::collections::HashSet;
     fn eval_test_root(label: &str) -> PathBuf {
         let nonce = std::time::SystemTime::now()
