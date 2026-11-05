@@ -5,6 +5,8 @@ async function exercise(password: string, bundle: Uint8Array, recordId: Uint8Arr
   const owner = await SQLiteWorkspace.create({Workspace, vault, recordId, namespace});
   const plan: WorkspaceVaultPlan = owner.prepareReview([], new Uint8Array(16));
   const saved: SavedWorkspaceChange = await owner.commit(plan, {approved: true});
+  const forgotten: WorkspaceVaultPlan = owner.prepareForget(['ABC123'], new Uint8Array(16));
+  forgotten.discard();
   const archive: Uint8Array = await owner.exportBackup({password});
   await owner.changePassword({password, recoveryKey: new Uint8Array(32)});
   owner.restore(saved.previews[0].text);

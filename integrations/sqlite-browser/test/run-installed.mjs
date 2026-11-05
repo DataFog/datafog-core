@@ -14,6 +14,7 @@ for (const [name, digest] of Object.entries(lock.files)) {
 }
 const required = [
   'failed_credential_write_closes_owner_and_preserves_existing_credentials', 'invalid_options_do_not_transfer_or_strand_vault_ownership',
+  'forget_persists_retirement_revokes_streams_and_does_not_reissue_codes', 'browser_process_restart_preserves_expired_marker',
   'raw_provider_mutation_rejected_after_transfer', 'approved_save_before_activation_and_exact_restore',
   'lock_revokes_owner_and_wrong_password_rejected', 'password_rotation_and_independent_recovery',
   'authenticated_encrypted_backup_fresh_destination_recovery_and_tamper_rejection', 'encrypted_opfs_close_and_reopen',
@@ -58,6 +59,7 @@ try {
   await page.goto(`chrome-extension://${id}/index.html`);
   await page.waitForFunction(() => globalThis.ready === true);
   receipt.cases.push(...await page.evaluate(() => globalThis.runFirst()));
+  receipt.cases.push(...await page.evaluate(() => globalThis.runForget()));
   receipt.cases.push(...await page.evaluate(() => globalThis.runFaults()));
   await context.close(); context = await launch();
   page = await context.newPage();

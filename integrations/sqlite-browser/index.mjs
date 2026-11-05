@@ -344,6 +344,7 @@ export class SQLiteWorkspace {
   prepareDefinitelyNotSent(...args) { return this.#prepare('prepareDefinitelyNotSent', args); }
   preparePolicyChanges(...args) { return this.#prepare('preparePolicyChanges', args); }
   prepareOutcome(...args) { return this.#prepare('prepareOutcome', args); }
+  prepareForget(...args) { return this.#prepare('prepareForget', args); }
   prepareRecovery(...args) { return this.#prepare('prepareRecovery', args); }
   prepareWithOperation(...args) { return this.#prepare('prepareWithOperation', args); }
   prepareBatchWithOperation(...args) { return this.#prepare('prepareBatchWithOperation', args); }

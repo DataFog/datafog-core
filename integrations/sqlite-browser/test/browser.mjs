@@ -51,6 +51,41 @@ globalThis.runFirst = async () => {
   cases.push('encrypted_opfs_close_and_reopen');
   return cases;
 };
+globalThis.runForget = async () => {
+  const text = 'Email alice@example.test', expiredId = 'ee'.repeat(16);
+  const vault = await SQLiteVault.create({id: expiredId, password});
+  const owner = await SQLiteWorkspace.create({Workspace, vault, recordId, namespace});
+  const prepare = target => target.prepareReview([{text, scannerFindings: scan(text).map(f => ({entityType: f.entityType, matchedText: f.matchedText,
+    range: {unit: 'utf8_bytes', ...f.byteRange}, detectorName: f.detectorName})), userSelections: []}], random());
+  const saved = await owner.commit(prepare(owner), {approved: true});
+  const marker = saved.previews[0].text.match(/\[\[EMAIL_[0-9A-HJKMNP-TV-Z]{6}\]\]/)[0];
+  const code = marker.slice(2, -2).split('_').at(-1);
+  const discarded = owner.prepareForget([code], random()); discarded.discard();
+  check(owner.restore(marker) === 'alice@example.test', 'discard applied retirement');
+  const stream = owner.bufferedRestore(); stream.feed(new TextEncoder().encode(marker));
+  const plan = owner.prepareForget([code], random());
+  check(plan.snapshotFormat().candidateVersion === 4 && plan.previews().length === 0, 'retirement plan metadata incorrect');
+  await rejects(() => owner.commit(plan, {approved: false}), 'approval_required');
+  check(owner.restore(marker) === 'alice@example.test', 'rejected approval applied retirement');
+  const forgotten = await owner.commit(plan, {approved: true});
+  check(forgotten.previews.length === 0, 'forget released a preview');
+  await rejects(() => stream.finalize(), 'workspace_conflict'); stream.close();
+  await rejects(() => owner.restore(marker), 'invalid_marker');
+  await owner.lock();
+  const reopenedVault = await SQLiteVault.open({id: expiredId, password});
+  const reopened = await SQLiteWorkspace.open({Workspace, vault: reopenedVault, recordId, expectedNamespace: namespace, expectedHead: forgotten.head});
+  const report = reopened.restoreReport(`👋 ${marker}`);
+  check(report.text === null && report.issues[0].kind === 'expired', 'encrypted reopen revived retired marker');
+  check(report.issues[0].byteRange.start === 5 && report.issues[0].codepointRange.start === 2 && report.issues[0].utf16Range.start === 3, 'expired marker source offsets changed');
+  check(reopened.recall('alice@example.test').findings.length === 0, 'retired value recalled');
+  await rejects(() => reopened.prepareForget([code], random()), 'invalid_marker');
+  const again = await reopened.commit(prepare(reopened), {approved: true});
+  check(!again.previews[0].text.includes(marker) && reopened.restore(again.previews[0].text) === text, 'retired code reused');
+  check(reopened.restoreReport(marker).issues[0].kind === 'expired', 'returning value revived old marker');
+  localStorage.setItem('retired-marker', marker);
+  await reopened.close();
+  return ['forget_persists_retirement_revokes_streams_and_does_not_reissue_codes'];
+};
 globalThis.runFaults = async () => {
   const cases = [];
   const text = 'Email fault@example.test';
@@ -157,6 +192,10 @@ globalThis.runRestart = async () => {
   const owner = await SQLiteWorkspace.open({Workspace, vault, recordId, expectedNamespace: namespace});
   check(owner.restore(localStorage.getItem('protected')) === 'Email alice@example.test', 'process restart lost state');
   await owner.close();
-  return ['browser_process_restart_preserves_exact_restore'];
+  const forgottenVault = await SQLiteVault.open({id: 'ee'.repeat(16), password});
+  const forgotten = await SQLiteWorkspace.open({Workspace, vault: forgottenVault, recordId, expectedNamespace: namespace});
+  check(forgotten.restoreReport(localStorage.getItem('retired-marker')).issues[0].kind === 'expired', 'process restart revived retirement');
+  await forgotten.close();
+  return ['browser_process_restart_preserves_exact_restore', 'browser_process_restart_preserves_expired_marker'];
 };
 globalThis.ready = true;

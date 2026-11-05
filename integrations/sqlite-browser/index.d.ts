@@ -80,6 +80,8 @@ export class SQLiteWorkspace {
   prepareDefinitelyNotSent(...args: Parameters<Workspace['prepareDefinitelyNotSent']>): WorkspaceVaultPlan;
   preparePolicyChanges(...args: Parameters<Workspace['preparePolicyChanges']>): WorkspaceVaultPlan;
   prepareOutcome(...args: Parameters<Workspace['prepareOutcome']>): WorkspaceVaultPlan;
+  /** Persist mapping retirement before activating it; old markers remain expired after reopen. */
+  prepareForget(...args: Parameters<Workspace['prepareForget']>): WorkspaceVaultPlan;
   prepareRecovery(...args: Parameters<Workspace['prepareRecovery']>): WorkspaceVaultPlan;
   prepareWithOperation(...args: Parameters<Workspace['prepareWithOperation']>): WorkspaceVaultPlan;
   prepareBatchWithOperation(...args: Parameters<Workspace['prepareBatchWithOperation']>): WorkspaceVaultPlan;
