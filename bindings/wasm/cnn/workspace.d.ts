@@ -1,5 +1,4 @@
-import type {ScanConfig, Workspace, WorkspaceHead, WorkspacePreview, WorkspaceFinding, PreparedWorkspaceChange} from '../index.js';
-import type {ModelScanResult} from '../models/index.js';
+import type {Finding, ScanConfig, Workspace, WorkspaceHead, WorkspacePreview, WorkspaceFinding, PreparedWorkspaceChange} from '../index.js';
 
 export class BrowserWorkspaceError extends Error {readonly code: string;}
 export interface BrowserWorkspaceReview {
@@ -24,9 +23,9 @@ export interface BrowserWorkspaceOwner {
   close(): Promise<void>;
 }
 export interface BrowserWorkspaceDetector {
-  scan(text: string, config?: ScanConfig): Promise<ModelScanResult>;
-  setEnabled(enabled: boolean): Promise<void>;
-  close(): Promise<void>;
+  scan(text: string, config?: ScanConfig): Promise<{readonly findings: readonly Finding[]}>;
+  setEnabled(enabled: boolean): Promise<unknown>;
+  close(): Promise<void> | void;
 }
 /** Adopt exclusively: do not use the supplied detector or owner behind this coordinator. */
 export class BrowserWorkspace {
