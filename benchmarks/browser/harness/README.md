@@ -12,7 +12,7 @@ The flow uses the versioned JSON scenario contract documented in [the benchmark 
 - network access for the first `npm pack` of the four pinned published packages. Later trials reuse their hashed archives from the run artifact cache.
 - Unix `zip`, `tar` (npm's platform tooling), and `ps` for extension packaging and browser process RSS sampling.
 
-The runner does not fall back to Playwright's bundled Chromium. If retail Chrome is unavailable, provide a supported installed Chrome binary with `--chrome-executable`; otherwise record coverage as unavailable.
+The runner does not fall back to Playwright's bundled Chromium. Chrome 137 and later ignore command-line unpacked-extension load flags in branded builds, so the runner starts retail Chrome with `--enable-unsafe-extension-debugging` and installs the staged MV3 extension through browser CDP `Extensions.loadUnpacked`. If retail Chrome is unavailable, provide a supported installed Chrome binary with `--chrome-executable`.
 
 ## One trial
 
@@ -47,7 +47,7 @@ node benchmarks/browser/harness/run-matrix.mjs \
   --trials 30 --run-kind pilot --run-id pilot-2026-11-11
 ```
 
-Use enough independent fresh-profile pairs for any percentile you intend to report. Repeated steps inside one long-history profile are correlated and the analyzer must treat them as one trial. Store `pilot` and `final` runs in separate roots; never pool them. `final` receipts must reference a clean frozen source commit. The matrix runs a complete catalog, so use a filtered catalog file when executing a planned subset.
+Use enough independent fresh-profile pairs for any percentile you intend to report. Repeated steps inside one long-history profile are correlated and the analyzer must treat them as one trial. Store `pilot` and `final` runs in separate roots; never pool them. `final` receipts must reference a clean frozen source commit. The matrix runs a complete catalog, so use a filtered catalog file when executing a planned subset. Matrix output roots are immutable: choose a new `--run-id` for each invocation. The runner refuses to overwrite an existing root or truncate a previous matrix ledger.
 
 ## Timed lifecycle
 
@@ -59,7 +59,7 @@ The runner closes Chrome completely and relaunches it with the same temporary pr
 
 Receipts include the fixture digest, repository/harness commit, exact published package tarball hashes, loaded extension artifact hash, Chrome binary/version, OS/CPU/RAM, backend settings, trial order, named timing boundaries, correctness gates, resource estimates and admission/failure result. Receipts also include the complete set of observed Core candidate-bundle byte sizes. That is the serialized plaintext Workspace bundle passed to the adapter. The sealed on-disk ciphertext artifact size is explicitly unavailable because neither published adapter exposes it through its public API. Browser `StorageManager.estimate()` is an origin-level storage estimate, not per-file accounting. Browser process RSS samples include only the Chrome main process; renderer/utility process memory, Worker heap, WASM heap and reliable bytes-written counters are labeled unavailable. Main-thread stalls use the extension page's `PerformanceObserver` long-task entries.
 
-FogVault 0.1.0 and its Core-owned adapter expose authenticated Workspace bundle recovery but no standalone encrypted backup export API. The runner times that bundle-recovery route and marks the backup archive export interval unavailable. SQLite's published adapter exposes encrypted backup export/import, which the flow verifies in a fresh vault while checking restored mappings and observed-send authority.
+FogVault 0.1.0 and its Core-owned adapter expose authenticated Workspace bundle recovery but no standalone encrypted backup export API. The runner reports that migration separately and marks backup archive export/import unavailable; it does not count bundle migration as backup qualification. SQLite's published adapter exposes encrypted backup export/import, which the flow verifies in a fresh vault while checking restored mappings and observed-send authority.
 
 Per-trial gates directly cover exact restoration before/after full browser restart, confirmed-save-before-handoff ordering, wrong-password rejection, conversation scope and recovery. Conflict, lost-save-reply, lock-during-save and stale-plan fault paths remain `unsupported` in this timing flow unless a separate qualification receipt is supplied by the integrated conformance step. Unsupported gates never become passes by omission. This keeps adversarial fault work outside the timed interval and prevents those trials from being described as fully correctness-qualified until their package-hash-bound evidence is integrated.
 
@@ -68,3 +68,29 @@ Per-trial gates directly cover exact restoration before/after full browser resta
 ```sh
 node --test benchmarks/browser/harness/test/*.test.mjs
 ```
+
+
+## Qualification and artifact identities
+
+After a pilot has populated the run artifact cache, run the installed-package adapter suites and retain their JSON receipts. Build one qualification receipt per backend with the exact package artifact manifest from that cache:
+
+```sh
+node integrations/sqlite-browser/test/run-installed.mjs
+node integrations/fogvault-browser/test/run-installed.mjs
+
+node benchmarks/browser/harness/qualify.mjs \
+  --backend sqlite \
+  --suite-receipt <sqlite-suite-receipt.json> \
+  --package-manifest <run-artifact-cache>/package-artifact-manifest.json \
+  --output target/browser-pseudonymization/qualification/sqlite.json
+
+node benchmarks/browser/harness/qualify.mjs \
+  --backend fogvault \
+  --suite-receipt <fogvault-suite-receipt.json> \
+  --package-manifest <run-artifact-cache>/package-artifact-manifest.json \
+  --output target/browser-pseudonymization/qualification/fogvault.json
+```
+
+Use the receipt paths actually emitted by each installed-package suite. The qualification command records the clean source commit, package archive hashes, and suite receipt hashes; the matrix runner forwards corresponding evidence with `--sqlite-qualification` and `--fogvault-qualification`. Each staging cache retains `resolved-dependencies.json`, with every installed dependency version and content digest. Preserve package/dependency manifests, suite receipts, and qualification receipts with the run artifacts.
+
+Prior failed pilot receipts must be retained with their failure reason. Do not replace them when rerunning with a fresh trial ID and profile.

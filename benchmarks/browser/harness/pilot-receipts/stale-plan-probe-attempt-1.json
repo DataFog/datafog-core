@@ -1,0 +1,194 @@
+{
+  "schema": "datafog-browser-pseudonymization-receipt/v1",
+  "schemaVersion": 1,
+  "runId": "review-pilot-cdp",
+  "runKind": "pilot",
+  "trialId": "review-pilot-cdp-sqlite-r5",
+  "profileId": "sqlite-review-pilot-cdp-sqlite-r5",
+  "orderBlock": "manual",
+  "backend": "sqlite",
+  "timestampUtc": "2026-11-11T22:17:06.946Z",
+  "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+  "scenarioVersion": 1,
+  "scenario": {
+    "scenarioVersion": 1,
+    "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+    "mode": "storage_workspace",
+    "seed": 1,
+    "mappingTarget": 10,
+    "historyProfile": "fresh",
+    "valueReuse": "mostly_new",
+    "inputShape": "unicode",
+    "fixtureRef": "synthetic://browser-pseudonymization/v1/storage_workspace-m10-fresh-mostly_new-unicode-s1"
+  },
+  "fixtureSha256": "4a911d0d32ef3fe35c6ff425b0ab420933b9982c10b601268b521daa639a1fc8",
+  "repositoryCommit": "a1e2abe200f3eff5e57e3647ecf771f0c45ccd1d",
+  "harnessCommit": "a1e2abe200f3eff5e57e3647ecf771f0c45ccd1d",
+  "repositoryDirty": true,
+  "repositoryStatus": "M benchmarks/browser/harness/README.md\n M benchmarks/browser/harness/flow.mjs\n M benchmarks/browser/harness/run-matrix.mjs\n M benchmarks/browser/harness/run.mjs",
+  "runtime": {
+    "node": "v25.8.2",
+    "host": "sids-MacBook-Pro-2.local",
+    "platform": "darwin",
+    "kernelRelease": "25.6.0",
+    "macProductVersion": "26.6.2",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 51539607552,
+    "powerState": "unavailable"
+  },
+  "browser": {
+    "name": "Google Chrome retail",
+    "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "channel": "installed retail binary",
+    "headless": true,
+    "version": "157.0.8103.40",
+    "profileId": "sqlite-review-pilot-cdp-sqlite-r5",
+    "profileLifecycle": "unique temporary user-data directory per trial; same directory reused across the deliberate full process restart"
+  },
+  "packageArtifacts": [
+    {
+      "name": "@datafog/wasm",
+      "version": "1.1.0",
+      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-sqlite-browser",
+      "version": "1.1.0",
+      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/fogvault-browser",
+      "version": "0.1.0",
+      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-fogvault-browser",
+      "version": "1.1.0",
+      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
+      "source": "npm registry exact version"
+    }
+  ],
+  "extensionArtifact": {
+    "path": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/mv3-extension-c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0.zip",
+    "bytes": 40880678,
+    "sha256": "9761c350d9e8886a7ac158cfbcd97c00cd3ccc16e04421ccbcb07b0c42b58336",
+    "loadedDirectorySha256": "c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0"
+  },
+  "backendConfiguration": null,
+  "admission": {
+    "status": "unknown"
+  },
+  "correctness": {
+    "gates": {
+      "exact_restore_after_browser_restart": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "no_handoff_before_confirmed_save_and_activation": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "wrong_credentials_rejected": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "conflicting_save_rejected_without_overwrite": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "lost_save_reply_recovers_without_duplicate_activation": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "lock_during_save_prevents_handoff": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "stale_review_rejected": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "conversation_scope_enforced": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      },
+      "backup_recovery_preserves_mappings_and_authority": {
+        "status": "unsupported",
+        "detail": "not exercised by the per-trial flow"
+      }
+    }
+  },
+  "timings": {
+    "sdkInitialization": {
+      "durationMs": 9.799999997019768,
+      "clock": "performance.now",
+      "startEvent": "WASM init() called",
+      "endEvent": "WASM init() resolved",
+      "status": "measured"
+    }
+  },
+  "measurements": {
+    "browserProcessMemorySamples": [
+      {
+        "sampledAtUtc": "2026-11-11T22:17:15.023Z",
+        "pid": 77172,
+        "rssBytes": 217350144,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      }
+    ],
+    "pageErrors": [],
+    "externalRequests": []
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "exclusionReason": "trial failed before all correctness gates completed",
+  "resolvedDependencyManifest": {
+    "path": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/resolved-dependencies-eb80843efbbfc6fd84687c0e8efe1459b92a3b187a2e5324a88830768ae64ceb.json",
+    "sha256": "eb80843efbbfc6fd84687c0e8efe1459b92a3b187a2e5324a88830768ae64ceb",
+    "bytes": 21309
+  },
+  "status": "failed",
+  "completedAtUtc": "2026-11-11T22:17:15.660Z",
+  "failure": {
+    "name": "Error",
+    "message": "invalid_finding",
+    "stack": "Error: invalid_finding\n    at file:///Users/sid/projects/datafog/datafog-core-browser-harness/benchmarks/browser/harness/run.mjs:249:48"
+  },
+  "flowFailure": {
+    "name": "DataFogError",
+    "code": "invalid_finding",
+    "message": "invalid_finding"
+  },
+  "browserProcessMemory": {
+    "status": "measured",
+    "process": "Chrome main browser process",
+    "sampleCount": 1,
+    "minRssBytes": 217350144,
+    "maxRssBytes": 217350144,
+    "meanRssBytes": 217350144
+  },
+  "instrumentation": {
+    "browserProcessSampling": {
+      "status": "measured",
+      "method": "ps RSS at one second intervals; includes browser process, not child renderer/utility processes"
+    },
+    "performanceClock": "performance.now in extension page",
+    "hostClock": "Node process wall clock",
+    "observerOverhead": "process sampling runs on host at one-second intervals; page timing excludes host-side process sampling"
+  },
+  "failureWorkspace": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/sqlite-r5/failure-workspace"
+}

@@ -1,5 +1,5 @@
 import {spawnSync} from 'node:child_process';
-import {mkdir, readFile, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile, access} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -19,6 +19,8 @@ const runKind = settings['--run-kind'];
 if (!['pilot', 'final'].includes(runKind)) throw new Error('--run-kind must be pilot or final');
 const runId = settings['--run-id'] || `browser-matrix-${runKind}`;
 const outputRoot = path.resolve(settings['--output-root'] || path.join(root, 'target/browser-pseudonymization', runKind, runId));
+try { await access(outputRoot); throw new Error(`matrix output root already exists; choose a fresh --run-id or --output-root: ${outputRoot}`); }
+catch (error) { if (error.code !== 'ENOENT') throw error; }
 const artifactCache = path.join(outputRoot, 'artifacts');
 const fixtureDir = path.join(outputRoot, 'fixtures');
 const trialDir = path.join(outputRoot, 'trials');

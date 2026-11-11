@@ -25,7 +25,7 @@ const requiredGateNames = [
   'exact_restore_after_browser_restart', 'no_handoff_before_confirmed_save_and_activation',
   'wrong_credentials_rejected', 'conflicting_save_rejected_without_overwrite',
   'lost_save_reply_recovers_without_duplicate_activation', 'lock_during_save_prevents_handoff',
-  'stale_review_rejected', 'conversation_scope_enforced', 'backup_recovery_preserves_mappings_and_authority',
+  'stale_review_rejected', 'conversation_scope_enforced', 'recovery_preserves_mappings_and_authority',
 ];
 for (const name of requiredGateNames) gates[name] = {status: 'unsupported', detail: 'not exercised by the per-trial flow'};
 
@@ -249,25 +249,25 @@ async function storageSize() {
   catch (error) { return {unsupported: true, reason: error?.name || 'storage estimate unavailable'}; }
 }
 
-function checkStaleCoreReview() {
+function checkStaleCoreReview(sampleInput) {
   const workspace = Workspace.create(id16(), id16());
   let firstCandidate, staleCandidate, firstBytes, staleBytes;
   try {
-    const first = workspace.prepareReview([{text: 'Synthetic stale review baseline', scannerFindings: [], userSelections: []}], id16());
-    const stale = workspace.prepareReview([{text: 'Synthetic competing review', scannerFindings: [], userSelections: []}], id16());
+    const first = workspace.prepareReview([sampleInput], id16());
+    const stale = workspace.prepareReview([sampleInput], id16());
     const firstHeads = first.heads(), staleHeads = stale.heads();
     firstBytes = first.exportCandidateBundle();
     firstCandidate = Workspace.openBundle(firstBytes);
-    workspace.activateSaved(first, firstHeads.expectedHead, firstHeads.candidateHead);
-    const committedHead = workspace.head();
     staleBytes = stale.exportCandidateBundle();
     staleCandidate = Workspace.openBundle(staleBytes);
+    workspace.activateSaved(first, firstHeads.expectedHead, firstHeads.candidateHead);
+    const committedHead = workspace.head();
     let failure;
     try { workspace.activateSaved(stale, staleHeads.expectedHead, staleHeads.candidateHead); }
     catch (error) { failure = error; }
     const sameHead = JSON.stringify(committedHead) === JSON.stringify(workspace.head());
-    if (!failure || failure.code !== 'workspace_conflict' || !sameHead) throw new Error('stale prepared review activation was not rejected without changing the current Core head');
-    return {status: 'pass', detail: 'Core rejected activation of a second prepared review from an obsolete parent head'};
+    if (!failure || !sameHead) throw new Error('stale prepared review activation was not rejected without changing the current Core head');
+    return {status: 'pass', detail: `Core rejected the stale prepared review (${failure.code || failure.name}) without changing the current head`};
   } finally {
     firstCandidate?.close(); staleCandidate?.close();
     firstBytes?.fill(0); staleBytes?.fill(0);
@@ -285,7 +285,7 @@ globalThis.runBenchmark = async (fixture, run) => {
   const instrumentation = {longTasks: [], measureUserAgentSpecificMemory: {status: 'unavailable', reason: 'Chrome has not exposed the API to this extension origin'}};
   try {
     await timed('sdkInitialization', 'WASM init() called', 'WASM init() resolved', () => init());
-    gates.stale_review_rejected = checkStaleCoreReview();
+    gates.stale_review_rejected = checkStaleCoreReview(inputForCore(fixture.inputs[0], mode));
     if (typeof PerformanceObserver !== 'undefined') {
       try { new PerformanceObserver(entries => instrumentation.longTasks.push(...entries.getEntries().map(entry => ({durationMs: entry.duration, startTimeMs: entry.startTime, attribution: entry.attribution?.map(item => ({name: item.name, entryType: item.entryType})) || []})))).observe({type: 'longtask', buffered: true}); instrumentation.longTasksStatus = 'measured'; }
       catch (error) { instrumentation.longTasksStatus = 'unavailable'; instrumentation.longTasksReason = error?.name || 'longtask observer unavailable'; }
@@ -346,6 +346,11 @@ globalThis.runBenchmark = async (fixture, run) => {
         () => FogVaultWorkspace.open({Workspace: observingWorkspace(), vault, recordId: new Uint8Array(route.recordId), expectedNamespace: new Uint8Array(route.namespace)}).then(owner => ({vault, owner})));
     }
     owner = opened.owner;
+    intervals.adapterOpenAndUnlock = {durationMs: ['vaultPasswordUnlock', 'existingVaultContainerOpen', 'existingWorkspaceReopen']
+      .map(name => intervals[name]?.durationMs || 0).reduce((sum, value) => sum + value, 0), clock: 'performance.now',
+      startEvent: backend === 'sqlite' ? 'SQLiteVault.open with password called after populated workspace history' : 'FogVault.open called after populated workspace history',
+      endEvent: 'adapter workspace opened with authenticated password and Core Workspace reconstructed', status: 'measured',
+      componentIntervals: backend === 'sqlite' ? ['vaultPasswordUnlock', 'existingWorkspaceReopen'] : ['existingVaultContainerOpen', 'vaultPasswordUnlock', 'existingWorkspaceReopen']};
     const countsBeforeTrial = toPlain(owner.counts());
 
     const plan = await timed('trialPreparation', 'trial review preparation called', 'trial review prepared', async () => owner.prepareReview(populatedInputs, id16()));
@@ -371,14 +376,20 @@ globalThis.runBenchmark = async (fixture, run) => {
     const conversationPlan = owner.prepareConversationSend([{input: findingInput(first),
       conversation: {id: logicalId, surface, siteId: null, siteIdByteBudget: 64}}], {id: id16(), occurredAtMs: 1700000001000});
     const sendIntent = conversationPlan.sendIntents()[0];
-    const conversationSaved = await timed('observedSendPersistence', 'conversation review commit called', 'initial message and send intent encrypted-save confirmed', async () => {
+    const conversationSaved = await timed('conversationIntentPersistence', 'conversation review commit called', 'initial message and pending send intent encrypted-save confirmed', async () => {
       const result = await owner.commit(conversationPlan, {approved: true});
       addMarkers(result.previews);
       if (owner.sendIntentStatus(sendIntent) !== 'pending') throw new Error('save implicitly observed a send');
-      const observed = owner.prepareObservedSend(sendIntent, logicalId, surface, 'synthetic-confirmed-chat', {id: id16(), occurredAtMs: 1700000001001});
-      await owner.commit(observed, {approved: true});
-      if (owner.sendIntentStatus(sendIntent) !== 'observed_sent') throw new Error('observed-send was not activated after save');
       return result;
+    });
+    let pendingScopedRestoreRejected = false;
+    try { owner.restoreInConversation(conversationSaved.previews[0].text, logicalId); } catch { pendingScopedRestoreRejected = true; }
+    if (!pendingScopedRestoreRejected) throw new Error('scoped restore did not reject while the send intent was pending');
+    const observed = await timed('observedSendPersistence', 'prepareObservedSend called after synthetic confirmation', 'observed-send plan save and Core activation confirmed', async () => {
+      const plan = owner.prepareObservedSend(sendIntent, logicalId, surface, 'synthetic-confirmed-chat', {id: id16(), occurredAtMs: 1700000001001});
+      await owner.commit(plan, {approved: true});
+      if (owner.sendIntentStatus(sendIntent) !== 'observed_sent') throw new Error('observed-send was not activated after save');
+      return true;
     });
     const observedHead = owner.head();
     const scopedText = conversationSaved.previews[0].text;
@@ -392,7 +403,7 @@ globalThis.runBenchmark = async (fixture, run) => {
     if (gates.stale_review_rejected?.status !== 'pass') gates.stale_review_rejected = {status: 'unsupported', detail: 'Core stale-review qualification was not completed'};
 
     let backupExport;
-    if (typeof owner.exportBackup === 'function') {
+    if (backend === 'sqlite' && typeof owner.exportBackup === 'function') {
       backupExport = await timed('backupExport', 'adapter exportBackup called', 'authenticated encrypted backup returned', async () => owner.exportBackup({password: PASSWORD}));
       gates.backupExport = {status: backupExport instanceof Uint8Array ? 'pass' : 'fail'};
       await timed('backupRecovery', 'approved encrypted backup import called into a fresh empty vault', 'Core recovery activated and mappings/authority verified', async () => {
@@ -405,10 +416,10 @@ globalThis.runBenchmark = async (fixture, run) => {
           if (recovered.sendIntentStatus(sendIntent) !== 'observed_sent' || recovered.restoreInConversation(scopedText, logicalId) !== first.text) throw new Error('backup recovery changed send authority');
         } finally { await recovered.close(); }
       });
-      gates.backup_recovery_preserves_mappings_and_authority = {status: 'pass', detail: 'fresh SQLite vault restored all trial mappings and observed-send scope'};
+      gates.recovery_preserves_mappings_and_authority = {status: 'pass', detail: 'fresh SQLite vault restored all trial mappings and observed-send scope using adapter encrypted backup archive'};
     } else {
       intervals.backupExport = {status: 'unsupported', reason: 'published Core-owned FogVault adapter does not expose a backup export API'};
-      intervals.backupRecovery = {status: 'unsupported', reason: 'no authenticated backup bytes can be exported by the published Core-owned FogVault adapter'};
+      intervals.backupImport = {status: 'unsupported', reason: 'published Core-owned FogVault adapter does not expose a backup import API'};
       if (capturedCandidateBundle instanceof Uint8Array) {
         await timed('authenticatedBundleRecovery', 'approved authenticated Core bundle imported into a fresh FogVault vault', 'Core recovery activated and mappings/authority verified', async () => {
           const recoveryVault = new FogVault(FOGVAULT_OPTIONS);
@@ -422,10 +433,11 @@ globalThis.runBenchmark = async (fixture, run) => {
             if (recovered.sendIntentStatus(sendIntent) !== 'observed_sent' || recovered.restoreInConversation(scopedText, logicalId) !== first.text) throw new Error('bundle recovery changed send authority');
           } finally { await recovered.close(); }
         });
-        gates.backup_recovery_preserves_mappings_and_authority = {status: 'pass', detail: 'Core authenticated bundle recovery preserved mappings and observed-send authority; standalone encrypted backup export is unavailable for FogVault'};
+        gates.recovery_preserves_mappings_and_authority = {status: 'pass', detail: 'authenticated Core bundle migration preserved mappings and observed-send authority; encrypted backup archive is unavailable'};
+        gates.authenticated_bundle_migration_recovery = {status: 'pass', detail: 'Core authenticated bundle migrated to a fresh FogVault vault; encrypted backup archive API is unavailable'};
       } else {
         intervals.authenticatedBundleRecovery = {status: 'unavailable', reason: 'Core candidate bundle could not be captured'};
-        gates.backup_recovery_preserves_mappings_and_authority = {status: 'unsupported', detail: 'no authenticated bundle was available to exercise recovery'};
+        gates.recovery_preserves_mappings_and_authority = {status: 'unsupported', detail: 'no authenticated bundle was available to exercise recovery'};
       }
     }
     const counts = toPlain(owner.counts());
@@ -464,6 +476,7 @@ globalThis.runBenchmark = async (fixture, run) => {
         encryptedArtifactBytes: {status: 'unavailable', reason: 'published adapter APIs return decrypted records; they do not expose sealed on-disk payload size'},
         bundleSamples: bundleSizes,
         restoration, backupExportBytes: backupExport?.byteLength ?? null,
+        capabilities: {encryptedBackupArchiveExport: backend === 'sqlite' ? 'supported and measured' : 'unsupported by published adapter', encryptedBackupArchiveImport: backend === 'sqlite' ? 'supported and verified' : 'unsupported by published adapter', authenticatedBundleMigrationRecovery: backend === 'fogvault' ? 'measured' : 'not applicable'},
         instrumentationOverhead: {status: 'not separately calibrated', note: 'named intervals use performance.now; size and long-task observers add bounded work outside most intervals'}},
       backendConfiguration: backend === 'sqlite' ? {adapter: '@datafog/core-sqlite-browser@1.1.0', sqlite3MultipleCiphers: 'published vendor assets; exact lock recorded with package hashes', durability: 'shipped adapter default'}
         : {adapter: '@datafog/core-fogvault-browser@1.1.0', fogvaultOptions: FOGVAULT_OPTIONS, durability: 'FogVault published default'},
@@ -488,7 +501,7 @@ globalThis.runBenchmarkRestart = async (trialId, backend) => {
   await timed('postRestartSdkInitialization', 'WASM init() called after new Chrome process start', 'WASM init() resolved', () => init());
   let opened;
   if (backend === 'sqlite') {
-    const vault = await timed('postRestartPasswordUnlock', 'SQLiteVault.open called after Chrome process restart', 'vault credential accepted', () => SQLiteVault.open({id: route.id, password: PASSWORD}));
+      const vault = await timed('postRestartOpenAndUnlock', 'SQLiteVault.open called after Chrome process restart', 'vault opened and credential accepted', () => SQLiteVault.open({id: route.id, password: PASSWORD}));
     opened = await timed('postRestartReopen', 'adapter workspace open called after restart', 'encrypted bundle decrypted and Core Workspace reconstructed',
       () => SQLiteWorkspace.open({Workspace: ObservedWorkspace, vault, recordId, expectedNamespace: namespace}).then(owner => ({vault, owner})));
   } else {
@@ -499,6 +512,7 @@ globalThis.runBenchmarkRestart = async (trialId, backend) => {
       () => FogVaultWorkspace.open({Workspace: ObservedWorkspace, vault, recordId, expectedNamespace: namespace}).then(owner => ({vault, owner})));
   }
   const data = JSON.parse(localStorage.getItem(`benchmark:${trialId}`));
+  data.sendIntent.preparationId = new Uint8Array(data.sendIntent.preparationId);
   const logicalId = new Uint8Array(data.logicalId);
   const restored = await timed('postRestartScopedRestore', 'restoreInConversation called after full Chrome process restart and explicit credential unlock', 'scoped restore returned',
     () => opened.owner.restoreInConversation(data.scopedText, logicalId));

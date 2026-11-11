@@ -40,7 +40,8 @@ const startedAt = new Date().toISOString();
 const fixture = await loadScenario(path.resolve(settings['--scenario']));
 const actualDigest = canonicalFixtureDigest(fixture);
 if (actualDigest !== fixture.fixtureSha256) throw new Error(`fixture digest mismatch: expected ${fixture.fixtureSha256}, computed ${actualDigest}`);
-const runtime = {node: process.version, host: os.hostname(), platform: `${os.platform()} ${os.release()}`, arch: os.arch(),
+const macProductVersion = process.platform === 'darwin' ? spawnSync('sw_vers', ['-productVersion'], {encoding: 'utf8'}).stdout?.trim() : undefined;
+const runtime = {node: process.version, host: os.hostname(), platform: os.platform(), kernelRelease: os.release(), ...(macProductVersion ? {macProductVersion} : {}), arch: os.arch(),
   cpu: os.cpus()[0]?.model || 'unavailable', logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), powerState: 'unavailable'};
 const packageSpecs = [
   ['@datafog/wasm', '1.1.0'],
@@ -66,6 +67,7 @@ const sha256 = value => createHash('sha256').update(value).digest('hex');
 const command = (executable, values, cwd = root) => execFileSync(executable, values, {cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
 const candidates = [];
 let context, restartResult, firstResult, runnerFailure;
+let resolvedDependencyManifest;
 const browserProcessSamples = [];
 let memoryTimer;
 let chromePid;
@@ -124,6 +126,26 @@ async function stagePackages() {
     const installed = JSON.parse(await readFile(path.join(extension, 'node_modules', candidate.name, 'package.json'), 'utf8'));
     if (installed.name !== candidate.name || installed.version !== candidate.version) throw new Error(`installed identity differs from registry archive: ${candidate.name}`);
   }
+  const dependencyTree = JSON.parse(command('npm', ['ls', '--all', '--json', '--omit=dev'], extension));
+  const resolvedDependencies = [];
+  async function recordDependencies(modulesDirectory) {
+    for (const entry of await readdir(modulesDirectory, {withFileTypes: true})) {
+      if (entry.name === '.bin') continue;
+      const packagePath = path.join(modulesDirectory, entry.name);
+      if (entry.name.startsWith('@') && entry.isDirectory()) { await recordDependencies(packagePath); continue; }
+      if (!entry.isDirectory()) continue;
+      try {
+        const packageJson = JSON.parse(await readFile(path.join(packagePath, 'package.json'), 'utf8'));
+        resolvedDependencies.push({name: packageJson.name, version: packageJson.version, directorySha256: await directoryDigest(packagePath)});
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      await recordDependencies(path.join(packagePath, 'node_modules')).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    }
+  }
+  await recordDependencies(path.join(extension, 'node_modules'));
+  const dependencyBytes = Buffer.from(JSON.stringify({schema: 'datafog-browser-resolved-dependencies/v1', npmTree: dependencyTree, packages: resolvedDependencies}, null, 2) + '\n');
+  const dependencyDigest = sha256(dependencyBytes);
+  resolvedDependencyManifest = {path: path.join(artifactDir, `resolved-dependencies-${dependencyDigest}.json`), sha256: dependencyDigest, bytes: dependencyBytes.byteLength};
+  try { await readFile(resolvedDependencyManifest.path); } catch { await writeFile(resolvedDependencyManifest.path, dependencyBytes); }
   const manifest = {manifest_version: 3, name: 'DataFog reversible pseudonymization benchmark', version: '1.0.0',
     background: {service_worker: 'background.mjs', type: 'module'},
     content_security_policy: {extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"}};
@@ -164,14 +186,17 @@ async function loadQualification() {
 
 async function launchChrome(chromium) {
   context = await chromium.launchPersistentContext(profile, {executablePath: chromeExecutable, headless: true,
-    ignoreDefaultArgs: ['--disable-extensions'], args: [
-    `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-first-run', '--no-default-browser-check',
-  ]});
+    ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging', '--no-first-run', '--no-default-browser-check']});
   await context.setOffline(true);
   context.on('request', request => { if (/^https?:/.test(request.url())) externalRequests.push(request.url()); });
   await startMemorySampling();
+  const cdp = await context.browser().newBrowserCDPSession();
+  const loaded = await cdp.send('Extensions.loadUnpacked', {path: extension});
+  if (!loaded.id) throw new Error('Chrome CDP Extensions.loadUnpacked did not return an extension id');
+  const extensionId = loaded.id;
+  await cdp.detach();
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', {timeout: 30000});
-  const extensionId = new URL(worker.url()).host;
+  if (new URL(worker.url()).host !== extensionId) throw new Error('loaded extension service worker id differs from CDP load result');
   const page = await context.newPage();
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto(`chrome-extension://${extensionId}/index.html`);
@@ -209,22 +234,23 @@ try {
   const extensionBytes = await readFile(extensionZip);
   receipt.extensionArtifact = {path: extensionZip, bytes: extensionBytes.byteLength,
     sha256: sha256(extensionBytes), loadedDirectorySha256};
+  receipt.resolvedDependencyManifest = resolvedDependencyManifest;
   const playwrightModule = path.join(root, 'bindings/wasm/node_modules/playwright/index.mjs');
   const {chromium} = await import(playwrightModule);
   const first = await launchChrome(chromium);
   receipt.browser.version = context.browser().version();
   receipt.browser.profileId = profileId;
   receipt.browser.profileLifecycle = 'unique temporary user-data directory per trial; same directory reused across the deliberate full process restart';
-  firstResult = await first.page.evaluate(async (testFixture, metadata) => {
+  firstResult = await first.page.evaluate(async ({testFixture, metadata}) => {
     try { return await globalThis.runBenchmark(testFixture, metadata); }
     catch (error) { return {...(globalThis.benchmarkDone || {}), failure: {name: error?.name || 'Error', code: error?.code || 'error', message: error?.message || String(error)}}; }
-  }, fixture,
-    {backend, trialId, profileId, runKind});
+  }, {testFixture: fixture, metadata: {backend, trialId, profileId, runKind}});
+  if (!firstResult) throw new Error(`benchmark flow returned no result; page state=${JSON.stringify(await first.page.evaluate(() => ({url: location.href, ready: globalThis.benchmarkReady, flowType: typeof globalThis.runBenchmark, done: globalThis.benchmarkDone})))}`);
   if (firstResult.failure) throw Object.assign(new Error(firstResult.failure.message), {code: firstResult.failure.code});
   await context.close(); context = undefined;
   if (memoryTimer) clearInterval(memoryTimer); memoryTimer = undefined; chromePid = undefined;
   const restarted = await launchChrome(chromium);
-  const restartedResult = await restarted.page.evaluate((id, kind) => globalThis.runBenchmarkRestart(id, kind), trialId, backend);
+  const restartedResult = await restarted.page.evaluate(({id, kind}) => globalThis.runBenchmarkRestart(id, kind), {id: trialId, kind: backend});
   restartResult = restartedResult;
   await context.close(); context = undefined;
   if (memoryTimer) clearInterval(memoryTimer); memoryTimer = undefined;
@@ -250,6 +276,7 @@ try {
   receipt.status = 'failed';
   receipt.completedAtUtc = new Date().toISOString();
   receipt.failure = {name: error?.name || 'Error', message: error?.message || String(error), stack: error?.stack};
+  if (firstResult?.failure) receipt.flowFailure = firstResult.failure;
   receipt.admission = firstResult?.admission || {status: 'unknown'};
   receipt.correctness = firstResult?.correctness || {gates: {harness: {status: 'fail', detail: error.message}}};
   receipt.timings = {...(firstResult?.timings || {}), ...(restartResult?.timings || {})};
