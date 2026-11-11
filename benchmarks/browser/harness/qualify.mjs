@@ -94,7 +94,7 @@ const qualification = {
   suiteReceipts: [{path: suitePath, sha256: hash(suiteBytes), schema: suite.schema}],
   suiteSourceIdentity: contentChecks, gates,
   ...(backend === 'sqlite' ? {wrongCredentials: {status: 'pass', cases: ['lock_revokes_owner_and_wrong_password_rejected']}} : {}),
-  engine: backend === 'sqlite' ? 'chromium from playwright integration runner' : suite.engine,
+  engine: suite.engine || 'not recorded by the installed-package suite',
   limitations: 'Adversarial correctness suite is separate from timed trials; its exact package-content identity is proven against the registry artifact. Browser-engine coverage follows the retained suite receipt.',
 };
 await writeFile(output, JSON.stringify(qualification, null, 2) + '\n', {flag: 'wx'});

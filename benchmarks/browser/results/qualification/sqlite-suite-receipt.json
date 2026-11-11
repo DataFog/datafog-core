@@ -1,0 +1,79 @@
+{
+  "schema": "datafog-sqlite-browser-proof/v1",
+  "revision": "67fcc506c55bce8854af5cd19d5c00c386c98986",
+  "git_status": "",
+  "candidates": {
+    "core": {
+      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9"
+    },
+    "sqlite": {
+      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc"
+    }
+  },
+  "sqlite": {
+    "version": "2.6.1",
+    "url": "https://github.com/utelle/SQLite3MultipleCiphers/releases/download/v2.6.1/sqlite3mc-2.6.1-sqlite-3.54.0-wasm.zip",
+    "sha256": "aba121490fd6123bcbef8404ee26df9b26c0301063781e2aa31f05aed6f48384",
+    "files": {
+      "sqlite3.mjs": "5308c7cc857408697c657a8d314e647a6f31c4aee67974ab8efd80c1a07161e0",
+      "sqlite3.wasm": "0b5a4bfff35f1ec87bf6f68ea293f425b86cbd661b77628a955cb827c9fbf524"
+    }
+  },
+  "cases": [
+    "raw_provider_mutation_rejected_after_transfer",
+    "approved_save_before_activation_and_exact_restore",
+    "lock_revokes_owner_and_wrong_password_rejected",
+    "password_rotation_and_independent_recovery",
+    "authenticated_encrypted_backup_fresh_destination_recovery_and_tamper_rejection",
+    "encrypted_opfs_close_and_reopen",
+    "forget_persists_retirement_revokes_streams_and_does_not_reissue_codes",
+    "conversation_pending_save_survives_encrypted_reopen_without_scoped_restore",
+    "lost_save_never_grants_handoff_and_reopens_complete_state",
+    "quota_save_never_grants_handoff_and_reopens_complete_state",
+    "late_save_never_grants_handoff_and_reopens_complete_state",
+    "crash_save_never_grants_handoff_and_reopens_complete_state",
+    "failed_credential_write_closes_owner_and_preserves_existing_credentials",
+    "invalid_options_do_not_transfer_or_strand_vault_ownership",
+    "interrupted_bootstrap_resumes_only_after_credential_authentication",
+    "competing_opfs_worker_rejected_without_mutation",
+    "stale_complete_storage_revision_cas_rejected",
+    "persistent_artifacts_contain_no_fixture_plaintext_and_page_tamper_rejects",
+    "browser_process_restart_preserves_exact_restore",
+    "browser_process_restart_preserves_expired_marker",
+    "conversation_pending_survives_process_restart_until_approved_observation_save",
+    "conversation_saved_observation_and_scoped_restore_survive_process_restart"
+  ],
+  "required": [
+    "failed_credential_write_closes_owner_and_preserves_existing_credentials",
+    "invalid_options_do_not_transfer_or_strand_vault_ownership",
+    "forget_persists_retirement_revokes_streams_and_does_not_reissue_codes",
+    "browser_process_restart_preserves_expired_marker",
+    "conversation_pending_save_survives_encrypted_reopen_without_scoped_restore",
+    "conversation_pending_survives_process_restart_until_approved_observation_save",
+    "conversation_saved_observation_and_scoped_restore_survive_process_restart",
+    "raw_provider_mutation_rejected_after_transfer",
+    "approved_save_before_activation_and_exact_restore",
+    "lock_revokes_owner_and_wrong_password_rejected",
+    "password_rotation_and_independent_recovery",
+    "authenticated_encrypted_backup_fresh_destination_recovery_and_tamper_rejection",
+    "encrypted_opfs_close_and_reopen",
+    "lost_save_never_grants_handoff_and_reopens_complete_state",
+    "quota_save_never_grants_handoff_and_reopens_complete_state",
+    "late_save_never_grants_handoff_and_reopens_complete_state",
+    "crash_save_never_grants_handoff_and_reopens_complete_state",
+    "interrupted_bootstrap_resumes_only_after_credential_authentication",
+    "competing_opfs_worker_rejected_without_mutation",
+    "stale_complete_storage_revision_cas_rejected",
+    "persistent_artifacts_contain_no_fixture_plaintext_and_page_tamper_rejects",
+    "browser_process_restart_preserves_exact_restore"
+  ],
+  "externalRequests": [],
+  "typecheck": true,
+  "passed": true,
+  "engine": "Google Chrome retail 157.0.8103.40 (headless, CDP Extensions.loadUnpacked)",
+  "browserVersion": "157.0.8103.40"
+}

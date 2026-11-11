@@ -1,0 +1,49 @@
+{
+  "schema": "datafog-browser-benchmark-qualification/v1",
+  "status": "pass",
+  "backend": "fogvault",
+  "qualifiedAtUtc": "2026-11-11T22:32:31.484Z",
+  "sourceCommit": "67fcc506c55bce8854af5cd19d5c00c386c98986",
+  "sourceDirty": false,
+  "packageArtifacts": {
+    "@datafog/wasm@1.1.0": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+    "@datafog/core-sqlite-browser@1.1.0": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+    "@datafog/fogvault-browser@0.1.0": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+    "@datafog/core-fogvault-browser@1.1.0": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8"
+  },
+  "suiteReceipts": [
+    {
+      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/fogvault-suite-receipt.json",
+      "sha256": "edd566f9275cb7d8d3a0b05ea0319d2309fff08caaf3f9533fca29de771efb27",
+      "schema": "datafog-fogvault-browser-proof/v1"
+    }
+  ],
+  "suiteSourceIdentity": {
+    "@datafog/core-fogvault-browser@1.1.0": {
+      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
+      "contentSha256": "a1e288886a4b59a51350acfa7c8f92417eecc2d75eccb7b66850270e77b6f0ec"
+    }
+  },
+  "gates": {
+    "conflicting_save_rejected_without_overwrite": {
+      "status": "pass",
+      "cases": [
+        "complete_head_cas_conflict_closes_stale_owner"
+      ]
+    },
+    "lost_save_reply_recovers_without_duplicate_activation": {
+      "status": "pass",
+      "cases": [
+        "lost_save_reply_reconciles_without_handoff_or_old_approval"
+      ]
+    },
+    "lock_during_save_prevents_handoff": {
+      "status": "pass",
+      "cases": [
+        "late_confirmed_save_after_lock_never_activates"
+      ]
+    }
+  },
+  "engine": "chromium",
+  "limitations": "Adversarial correctness suite is separate from timed trials; its exact package-content identity is proven against the registry artifact. Browser-engine coverage follows the retained suite receipt."
+}

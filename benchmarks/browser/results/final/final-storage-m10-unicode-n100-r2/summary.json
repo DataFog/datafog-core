@@ -1,0 +1,15 @@
+{
+  "schema": "datafog-browser-pseudonymization-matrix/v1",
+  "runId": "final-storage-m10-unicode-n100-r2",
+  "runKind": "final",
+  "createdAtUtc": "2026-11-11T22:46:45.397Z",
+  "scenarioCount": 1,
+  "independentPairsPerScenario": 100,
+  "sequential": true,
+  "backendOrderAlternates": true,
+  "statusCounts": {
+    "complete": 200
+  },
+  "matrixReceipt": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/matrix.jsonl",
+  "artifactCache": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts"
+}

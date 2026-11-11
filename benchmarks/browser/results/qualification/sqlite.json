@@ -1,0 +1,59 @@
+{
+  "schema": "datafog-browser-benchmark-qualification/v1",
+  "status": "pass",
+  "backend": "sqlite",
+  "qualifiedAtUtc": "2026-11-11T22:32:31.370Z",
+  "sourceCommit": "67fcc506c55bce8854af5cd19d5c00c386c98986",
+  "sourceDirty": false,
+  "packageArtifacts": {
+    "@datafog/wasm@1.1.0": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+    "@datafog/core-sqlite-browser@1.1.0": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+    "@datafog/fogvault-browser@0.1.0": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+    "@datafog/core-fogvault-browser@1.1.0": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8"
+  },
+  "suiteReceipts": [
+    {
+      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/sqlite-suite-receipt.json",
+      "sha256": "bb78b520f993307db291e4c1de3806a9eac40d042a8cbd43ae10b21a502fdbf0",
+      "schema": "datafog-sqlite-browser-proof/v1"
+    }
+  ],
+  "suiteSourceIdentity": {
+    "@datafog/wasm@1.1.0": {
+      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
+      "contentSha256": "4153285a5e3a60c13ece90b1e71bd91f0d4c2ae780df1b26cefa50c9d167196a"
+    },
+    "@datafog/core-sqlite-browser@1.1.0": {
+      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "contentSha256": "f924591db6b333036ed5dbfa0e6c2ccec26354f4d6577991151fdd6858f694df"
+    }
+  },
+  "gates": {
+    "conflicting_save_rejected_without_overwrite": {
+      "status": "pass",
+      "cases": [
+        "stale_complete_storage_revision_cas_rejected"
+      ]
+    },
+    "lost_save_reply_recovers_without_duplicate_activation": {
+      "status": "pass",
+      "cases": [
+        "lost_save_never_grants_handoff_and_reopens_complete_state"
+      ]
+    },
+    "lock_during_save_prevents_handoff": {
+      "status": "pass",
+      "cases": [
+        "late_save_never_grants_handoff_and_reopens_complete_state"
+      ]
+    }
+  },
+  "wrongCredentials": {
+    "status": "pass",
+    "cases": [
+      "lock_revokes_owner_and_wrong_password_rejected"
+    ]
+  },
+  "engine": "Google Chrome retail 157.0.8103.40 (headless, CDP Extensions.loadUnpacked)",
+  "limitations": "Adversarial correctness suite is separate from timed trials; its exact package-content identity is proven against the registry artifact. Browser-engine coverage follows the retained suite receipt."
+}

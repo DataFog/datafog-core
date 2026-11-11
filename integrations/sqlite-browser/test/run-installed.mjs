@@ -62,10 +62,11 @@ const launch = async () => {
   await browser.route(/^https?:/, route => { requests.push(route.request().url()); return route.abort(); });
   return browser;
 };
-const receipt = {schema: 'datafog-sqlite-browser-proof/v1', revision: run('git', ['rev-parse', 'HEAD']).trim(), git_status: run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), candidates: Object.fromEntries(Object.entries(candidates).map(([name, file]) => [name, {file, bytes: readFileSync(file).length, sha256: hash(readFileSync(file))}])), sqlite: lock, cases: []};
+const receipt = {schema: 'datafog-sqlite-browser-proof/v1', revision: run('git', ['rev-parse', 'HEAD']).trim(), git_status: run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), engine: 'Playwright Chromium', candidates: Object.fromEntries(Object.entries(candidates).map(([name, file]) => [name, {file, bytes: readFileSync(file).length, sha256: hash(readFileSync(file))}])), sqlite: lock, cases: []};
 let context;
 try {
   context = await launch();
+  receipt.browserVersion = context.browser().version();
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   const id = new URL(worker.url()).host;
   let page = await context.newPage();
