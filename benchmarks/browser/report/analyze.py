@@ -220,6 +220,15 @@ def markdown_report(run_kind: str, summary: list[dict[str, Any]]) -> str:
     else:
         lines.append("No excluded trials.")
     lines += ["", "## Context to complete before interpretation", "", "- Frozen harness commit and repository commit:", "- Package/artifact identities and SHA-256 digests:", "- Browser version/channel and OS:", "- Hardware and power conditions:", "- Backend security settings:", "- Measurement limitations and instrumentation overhead:", "- Unavailable device/browser coverage:", "- Workload-specific recommendations supported by these receipts:", "- Demonstrated follow-up issues:", ""]
+    lines[lines.index("## Context to complete before interpretation")] = "## Context and coverage"
+    context_index = lines.index("## Context and coverage")
+    lines[context_index + 2:context_index + 3] = [
+        "- Browser engine: installed retail Chrome only, on a single Apple M5 Pro MacBook Pro running macOS 26.6.2; no Windows, Linux, mobile, Firefox, or Edge coverage.",
+        "- Workloads included in this run are listed in the trial summary. Percentiles are reported only at the independent-trial threshold; smaller groups are exploratory.",
+        "- FogVault authenticated bundle migration recovery is distinct from encrypted backup archive export/import, which is unsupported by the published adapter.",
+        "- Ciphertext storage bytes, renderer/utility process RSS, reliable bytes-written counts, and instrumentation overhead calibration are unavailable.",
+        "- No performance recommendation is made unless both backends have sufficient eligible independent trials for the same scenario and interval.",
+    ]
     return "\n".join(lines)
 
 
@@ -247,6 +256,15 @@ def write_chart(path: Path, summary: list[dict[str, Any]], interval_name: str) -
     path.write_text("\n".join(svg) + "\n", encoding="utf-8")
 
 
+def write_summary_charts(output_dir: Path, summary: list[dict[str, Any]]) -> None:
+    intervals = sorted({interval["name"] for group in summary for interval in group["intervals"]})
+    chart_dir = output_dir / "charts"
+    chart_dir.mkdir(parents=True, exist_ok=True)
+    for interval in intervals:
+        safe_name = "".join(char if char.isalnum() or char in "-_" else "_" for char in interval)
+        write_chart(chart_dir / f"{safe_name}.svg", summary, interval)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-kind", choices=("pilot", "final"), required=True)
@@ -263,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     (args.output_dir / "summary.json").write_text(json.dumps({"runKind": args.run_kind, "trialCount": len(receipts), "groups": summary}, indent=2) + "\n", encoding="utf-8")
     (args.output_dir / "report.md").write_text(markdown_report(args.run_kind, summary), encoding="utf-8")
     write_chart(args.output_dir / "latency.svg", summary, args.chart_interval)
+    write_summary_charts(args.output_dir, summary)
     with (args.output_dir / "timings.csv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream)
         writer.writerow(("scenarioId", "backend", "interval", "independentTrialCount", "percentileStatus", "p50Ms", "p95Ms", "unsupportedMeasurementCount", "measurementFailureCount", "failureRate", "unsupportedTrialRate", "excludedRate"))
