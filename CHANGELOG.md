@@ -6,6 +6,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-11
+
+Promote 1.1.0-rc.1 to stable with the same runtime scope. The additions and fixes
+below remain unchanged; extension integration and acceptance are tracked separately.
+
 ## [1.1.0-rc.1] - 2026-11-04
 
 ### Added

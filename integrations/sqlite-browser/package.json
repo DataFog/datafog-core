@@ -1,6 +1,6 @@
 {
   "name": "@datafog/core-sqlite-browser",
-  "version": "1.1.0-rc.1",
+  "version": "1.1.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -30,7 +30,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "peerDependencies": {
-    "@datafog/wasm": "1.1.0-rc.1"
+    "@datafog/wasm": "1.1.0"
   },
   "scripts": {
     "prepare:vendor": "python3 ../../scripts/provision-sqlite-browser.py",
@@ -38,6 +38,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "next"
+    "tag": "latest"
   }
 }

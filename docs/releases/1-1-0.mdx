@@ -1,0 +1,54 @@
+---
+title: "1.1.0"
+description: "Browser-first embedded name/address detection and a second encrypted Workspace backend."
+---
+
+This stable release includes the bundled statements CNN to Rust Core and browser
+WASM, plus SQLite3 Multiple Ciphers persistence alongside FogVault. It provides
+stable packages for extension integration. Runtime scope is unchanged from RC1.
+
+## Install
+
+```sh
+npm install --save-exact @datafog/wasm@1.1.0 @datafog/core-sqlite-browser@1.1.0 @datafog/core-fogvault-browser@1.1.0 @datafog/fogvault-browser@0.1.0
+python -m pip install 'datafog-core==1.1.0'
+cargo add datafog-core@=1.1.0
+```
+
+Node's native SDK is `@datafog/node@1.1.0`. Core-owned FogVault adapters use
+the same stable version; Python's adapter is `datafog-fogvault==1.1.0`. Independent
+FogVault engines remain at 0.1.0. npm stable packages use `latest`. Pin exact versions during acceptance.
+
+## Changes
+
+- Core-owned CNN inference compiles into WASM with the quantized model bytes.
+  `BrowserWorkspace.open` loads it by default; `cnnEnabled` and
+  `setCnnEnabled` provide the host's disable control. No external inference
+  runtime or model download is needed. Existing synchronous scans stay
+  rule-based. Native Python/Node model sessions retain their existing engines.
+- The optional SQLite browser adapter encrypts complete Workspace bundles in
+  OPFS, retaining explicit review, conditional save-before-activation, lock/reopen,
+  independent recovery credentials, encrypted backups and fresh-destination
+  migration. FogVault remains supported.
+- The browser coordinator fences stale reviews on setting changes and supports
+  conversation preparation, saved observations and scoped restoration.
+- Host-selected mapping retirement is available in Rust, Node and WASM. Its
+  first use writes snapshot v4; Core 1.0 cannot read that format. Existing v3
+  operations and legacy reads retain their contracts.
+- Rule fixes keep adjacent separated identifiers inside their own spans.
+- Release qualification verifies installed offline MV3 packages and both vault
+  flows, and rejects missing exact-commit browser evidence before publication.
+  Python verification environments validate cached interpreters and refresh
+  candidate wheels.
+
+## Extension acceptance
+
+[Extension installation and testing instructions](1-1-0-extension-testing.md) cover package installation,
+asset layout, default-on and disabled detection, both vaults, restart, save
+failures and conversation observations. Core publication is independent of this testing; it does not claim acceptance
+in the shipping extension.
+
+The CNN is statement-specific and its supplied accuracy evidence is dev-only.
+The SQLite profile does not independently detect replay of older valid storage.
+Keep these limitations distinct from installed SDK correctness and the extension's
+actual browser/device acceptance.
