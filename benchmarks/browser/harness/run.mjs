@@ -178,6 +178,9 @@ async function loadQualification() {
   for (const [gate, entry] of Object.entries(evidence.gates || {})) {
     if (entry?.status === 'pass' && Array.isArray(entry.cases)) qualifiedGates.add(gate);
   }
+  if (evidence.wrongCredentials?.status === 'pass' && Array.isArray(evidence.wrongCredentials.cases) && evidence.wrongCredentials.cases.length > 0) {
+    qualifiedGates.add('wrong_credentials_rejected');
+  }
   const gates = {};
   for (const [gate, allowedCasesByBackend] of Object.entries(gateQualificationCases)) {
     const entry = evidence.gates?.[gate];
