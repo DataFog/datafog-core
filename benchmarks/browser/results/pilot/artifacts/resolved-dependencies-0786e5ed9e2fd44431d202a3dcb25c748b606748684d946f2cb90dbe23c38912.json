@@ -1,0 +1,444 @@
+{
+  "schema": "datafog-browser-resolved-dependencies/v1",
+  "npmTree": {
+    "version": "1.0.0",
+    "name": "datafog-browser-pseudonymization-benchmark",
+    "problems": [
+      "extraneous: @datafog/core-fogvault-browser@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/core-fogvault-browser",
+      "extraneous: @datafog/core-sqlite-browser@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/core-sqlite-browser",
+      "extraneous: @datafog/fogvault-browser@0.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/fogvault-browser",
+      "extraneous: @datafog/wasm@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/wasm",
+      "extraneous: @huggingface/tokenizers@0.2.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@huggingface/tokenizers",
+      "extraneous: @protobufjs/aspromise@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/aspromise",
+      "extraneous: @protobufjs/base64@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/base64",
+      "extraneous: @protobufjs/codegen@2.0.5 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/codegen",
+      "extraneous: @protobufjs/eventemitter@1.1.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/eventemitter",
+      "extraneous: @protobufjs/fetch@1.1.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/fetch",
+      "extraneous: @protobufjs/float@1.0.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/float",
+      "extraneous: @protobufjs/path@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/path",
+      "extraneous: @protobufjs/pool@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/pool",
+      "extraneous: @protobufjs/utf8@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/utf8",
+      "extraneous: @types/node@26.6.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@types/node",
+      "extraneous: flatbuffers@25.9.23 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/flatbuffers",
+      "extraneous: guid-typescript@1.0.9 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/guid-typescript",
+      "extraneous: long@5.3.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/long",
+      "extraneous: onnxruntime-common@1.31.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/onnxruntime-common",
+      "extraneous: onnxruntime-web@1.31.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/onnxruntime-web",
+      "extraneous: platform@1.3.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/platform",
+      "extraneous: protobufjs@7.6.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/protobufjs",
+      "extraneous: undici-types@8.9.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/undici-types"
+    ],
+    "dependencies": {
+      "@datafog/core-fogvault-browser": {
+        "version": "1.1.0",
+        "resolved": "file:/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp-final/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @datafog/core-fogvault-browser@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/core-fogvault-browser"
+        ],
+        "dependencies": {
+          "@datafog/fogvault-browser": {
+            "version": "0.1.0"
+          },
+          "@datafog/wasm": {
+            "version": "1.1.0"
+          }
+        }
+      },
+      "@datafog/core-sqlite-browser": {
+        "version": "1.1.0",
+        "resolved": "file:/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp-final/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @datafog/core-sqlite-browser@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/core-sqlite-browser"
+        ],
+        "dependencies": {
+          "@datafog/wasm": {
+            "version": "1.1.0"
+          }
+        }
+      },
+      "@datafog/fogvault-browser": {
+        "version": "0.1.0",
+        "resolved": "file:/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp-final/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @datafog/fogvault-browser@0.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/fogvault-browser"
+        ]
+      },
+      "@datafog/wasm": {
+        "version": "1.1.0",
+        "resolved": "file:/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp-final/artifacts/datafog-wasm-1.1.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @datafog/wasm@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@datafog/wasm"
+        ],
+        "dependencies": {
+          "@huggingface/tokenizers": {
+            "version": "0.2.0"
+          },
+          "onnxruntime-web": {
+            "version": "1.31.1"
+          }
+        }
+      },
+      "@huggingface/tokenizers": {
+        "version": "0.2.0",
+        "resolved": "https://registry.npmjs.org/@huggingface/tokenizers/-/tokenizers-0.2.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @huggingface/tokenizers@0.2.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@huggingface/tokenizers"
+        ]
+      },
+      "@protobufjs/aspromise": {
+        "version": "1.1.2",
+        "resolved": "https://registry.npmjs.org/@protobufjs/aspromise/-/aspromise-1.1.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/aspromise@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/aspromise"
+        ]
+      },
+      "@protobufjs/base64": {
+        "version": "1.1.2",
+        "resolved": "https://registry.npmjs.org/@protobufjs/base64/-/base64-1.1.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/base64@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/base64"
+        ]
+      },
+      "@protobufjs/codegen": {
+        "version": "2.0.5",
+        "resolved": "https://registry.npmjs.org/@protobufjs/codegen/-/codegen-2.0.5.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/codegen@2.0.5 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/codegen"
+        ]
+      },
+      "@protobufjs/eventemitter": {
+        "version": "1.1.1",
+        "resolved": "https://registry.npmjs.org/@protobufjs/eventemitter/-/eventemitter-1.1.1.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/eventemitter@1.1.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/eventemitter"
+        ]
+      },
+      "@protobufjs/fetch": {
+        "version": "1.1.1",
+        "resolved": "https://registry.npmjs.org/@protobufjs/fetch/-/fetch-1.1.1.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/fetch@1.1.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/fetch"
+        ],
+        "dependencies": {
+          "@protobufjs/aspromise": {
+            "version": "1.1.2"
+          }
+        }
+      },
+      "@protobufjs/float": {
+        "version": "1.0.2",
+        "resolved": "https://registry.npmjs.org/@protobufjs/float/-/float-1.0.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/float@1.0.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/float"
+        ]
+      },
+      "@protobufjs/path": {
+        "version": "1.1.2",
+        "resolved": "https://registry.npmjs.org/@protobufjs/path/-/path-1.1.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/path@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/path"
+        ]
+      },
+      "@protobufjs/pool": {
+        "version": "1.1.0",
+        "resolved": "https://registry.npmjs.org/@protobufjs/pool/-/pool-1.1.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/pool@1.1.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/pool"
+        ]
+      },
+      "@protobufjs/utf8": {
+        "version": "1.1.2",
+        "resolved": "https://registry.npmjs.org/@protobufjs/utf8/-/utf8-1.1.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @protobufjs/utf8@1.1.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@protobufjs/utf8"
+        ]
+      },
+      "@types/node": {
+        "version": "26.6.6",
+        "resolved": "https://registry.npmjs.org/@types/node/-/node-26.6.6.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: @types/node@26.6.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/@types/node"
+        ],
+        "dependencies": {
+          "undici-types": {
+            "version": "8.9.0"
+          }
+        }
+      },
+      "flatbuffers": {
+        "version": "25.9.23",
+        "resolved": "https://registry.npmjs.org/flatbuffers/-/flatbuffers-25.9.23.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: flatbuffers@25.9.23 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/flatbuffers"
+        ]
+      },
+      "guid-typescript": {
+        "version": "1.0.9",
+        "resolved": "https://registry.npmjs.org/guid-typescript/-/guid-typescript-1.0.9.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: guid-typescript@1.0.9 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/guid-typescript"
+        ]
+      },
+      "long": {
+        "version": "5.3.2",
+        "resolved": "https://registry.npmjs.org/long/-/long-5.3.2.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: long@5.3.2 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/long"
+        ]
+      },
+      "onnxruntime-common": {
+        "version": "1.31.1",
+        "resolved": "https://registry.npmjs.org/onnxruntime-common/-/onnxruntime-common-1.31.1.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: onnxruntime-common@1.31.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/onnxruntime-common"
+        ]
+      },
+      "onnxruntime-web": {
+        "version": "1.31.1",
+        "resolved": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.31.1.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: onnxruntime-web@1.31.1 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/onnxruntime-web"
+        ],
+        "dependencies": {
+          "flatbuffers": {
+            "version": "25.9.23"
+          },
+          "guid-typescript": {
+            "version": "1.0.9"
+          },
+          "long": {
+            "version": "5.3.2"
+          },
+          "onnxruntime-common": {
+            "version": "1.31.1"
+          },
+          "platform": {
+            "version": "1.3.6"
+          },
+          "protobufjs": {
+            "version": "7.6.6"
+          }
+        }
+      },
+      "platform": {
+        "version": "1.3.6",
+        "resolved": "https://registry.npmjs.org/platform/-/platform-1.3.6.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: platform@1.3.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/platform"
+        ]
+      },
+      "protobufjs": {
+        "version": "7.6.6",
+        "resolved": "https://registry.npmjs.org/protobufjs/-/protobufjs-7.6.6.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: protobufjs@7.6.6 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/protobufjs"
+        ],
+        "dependencies": {
+          "@protobufjs/aspromise": {
+            "version": "1.1.2"
+          },
+          "@protobufjs/base64": {
+            "version": "1.1.2"
+          },
+          "@protobufjs/codegen": {
+            "version": "2.0.5"
+          },
+          "@protobufjs/eventemitter": {
+            "version": "1.1.1"
+          },
+          "@protobufjs/fetch": {
+            "version": "1.1.1"
+          },
+          "@protobufjs/float": {
+            "version": "1.0.2"
+          },
+          "@protobufjs/path": {
+            "version": "1.1.2"
+          },
+          "@protobufjs/pool": {
+            "version": "1.1.0"
+          },
+          "@protobufjs/utf8": {
+            "version": "1.1.2"
+          },
+          "@types/node": {
+            "version": "26.6.6"
+          },
+          "long": {
+            "version": "5.3.2"
+          }
+        }
+      },
+      "undici-types": {
+        "version": "8.9.0",
+        "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-8.9.0.tgz",
+        "overridden": false,
+        "extraneous": true,
+        "problems": [
+          "extraneous: undici-types@8.9.0 /private/var/folders/kt/xxfb4y954tbfw5mpmgm4ybq00000gn/T/datafog-browser-bench-review-final-fogvault-001-aievbX/extension/node_modules/undici-types"
+        ]
+      }
+    }
+  },
+  "packages": [
+    {
+      "name": "@datafog/core-fogvault-browser",
+      "version": "1.1.0",
+      "directorySha256": "2f151d1d266fdd7f70bcb6f8b9929bd0ad583659cf500e5492e43d734f17eddc"
+    },
+    {
+      "name": "@datafog/core-sqlite-browser",
+      "version": "1.1.0",
+      "directorySha256": "ff46a747759f12d34abb1a1f33480eeac74e31fdcf74a930ed2025faac2a84bf"
+    },
+    {
+      "name": "@datafog/fogvault-browser",
+      "version": "0.1.0",
+      "directorySha256": "1372148f2bb623e709f1858df25ae07a12a69fc980091a87eabbe51e11237853"
+    },
+    {
+      "name": "@datafog/wasm",
+      "version": "1.1.0",
+      "directorySha256": "77e15680e084dd16e57b6db4e77862f4301bf077e93b3b6edfb2c31a9b6adbf2"
+    },
+    {
+      "name": "@huggingface/tokenizers",
+      "version": "0.2.0",
+      "directorySha256": "449934b699bd7dd6c7d27d43c2cdf6f9ca9b73a89ad2528290262551963481be"
+    },
+    {
+      "name": "@protobufjs/aspromise",
+      "version": "1.1.2",
+      "directorySha256": "de9c0aaa4bfd087ab805464d475c681c8f1c0ff79eecfe747b38f8a3c7c257c4"
+    },
+    {
+      "name": "@protobufjs/base64",
+      "version": "1.1.2",
+      "directorySha256": "614bd8df159bd268bf1faf9c39c263bf3123d69b812fc6e263a1ccc1b8aec6f2"
+    },
+    {
+      "name": "@protobufjs/codegen",
+      "version": "2.0.5",
+      "directorySha256": "0f11abb349be6be1f3e909edd71580c738b8557a01facfaf8d7278045aaba53f"
+    },
+    {
+      "name": "@protobufjs/eventemitter",
+      "version": "1.1.1",
+      "directorySha256": "b6c41a0854c0effe70449ae26eb890e1e2b953d71817e08c7e2de20315a01ca7"
+    },
+    {
+      "name": "@protobufjs/fetch",
+      "version": "1.1.1",
+      "directorySha256": "b0b1fc03aa91b3f851822006c1e3e2eca72eccd91bc4bac429944cfae504fa4a"
+    },
+    {
+      "name": "@protobufjs/float",
+      "version": "1.0.2",
+      "directorySha256": "fbf3c1e857d1128413004239607945e9d15e8a438e07f79ba2dc3f0f3b0b91f4"
+    },
+    {
+      "name": "@protobufjs/path",
+      "version": "1.1.2",
+      "directorySha256": "e674c972df7d5c38522c5339db35d7f17d7fd2788f42d521566d1fed22d42903"
+    },
+    {
+      "name": "@protobufjs/pool",
+      "version": "1.1.0",
+      "directorySha256": "f2326caa0748eae42cc703f575d1780a1e4b34817884ba42f292537006ecee81"
+    },
+    {
+      "name": "@protobufjs/utf8",
+      "version": "1.1.2",
+      "directorySha256": "987c63333f70a77940016f409b0b9768e585012db6e2da4b801c970a9f0172da"
+    },
+    {
+      "name": "@types/node",
+      "version": "26.6.6",
+      "directorySha256": "99f651f3ac069ea0d28059c4a027cfc0d735f085f7083687678521bde90c2776"
+    },
+    {
+      "name": "flatbuffers",
+      "version": "25.9.23",
+      "directorySha256": "55d292e91a2eb3affff1f82e88552894c8ad7913a8966458d09dac1653af78cb"
+    },
+    {
+      "name": "guid-typescript",
+      "version": "1.0.9",
+      "directorySha256": "b3bc55099e432c5ae86752f1a2a2edf0599a08b434541a7907b299b3ee8d12d1"
+    },
+    {
+      "name": "long",
+      "version": "5.3.2",
+      "directorySha256": "76d0bd47fefef38b451ab72d46d87c6735db3ad050722019a108670ef359d51c"
+    },
+    {
+      "name": "onnxruntime-common",
+      "version": "1.31.1",
+      "directorySha256": "1f2c3a6b5e96aee1a3d9666eb45e2748eb7f2584106566078ff4901ee83909c6"
+    },
+    {
+      "name": "onnxruntime-web",
+      "version": "1.31.1",
+      "directorySha256": "2b7d19d7565acbdd6248853d09ec2c8e596158d88ccba5cf275f29b65bf70aa8"
+    },
+    {
+      "name": "platform",
+      "version": "1.3.6",
+      "directorySha256": "418d385a1caf0e235161575bbee67b35e17ebbf13687dd66f68a3b310f4c7aa1"
+    },
+    {
+      "name": "protobufjs",
+      "version": "7.6.6",
+      "directorySha256": "e783df76815acfc0addc31596b26f98c9d67cd253d46973d6849cc5015cb6823"
+    },
+    {
+      "name": "undici-types",
+      "version": "8.9.0",
+      "directorySha256": "1dfb37b9f271000f99f5b599691386f4143201fd989937c8bd7960aae2127ed0"
+    }
+  ]
+}

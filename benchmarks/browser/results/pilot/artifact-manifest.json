@@ -1,0 +1,58 @@
+{
+  "schema": "datafog-browser-pilot-artifacts/v1",
+  "items": [
+    {
+      "receipt": "fogvault-final-schema-success.json",
+      "sha256": "d77875d457b8beff837fadc6d904f8e397c99b343d5164ecd0a24892836c32bf"
+    },
+    {
+      "receipt": "sqlite-final-schema-success.json",
+      "sha256": "747575f5af090f0729d9dbfe252f4244e6f3f6a2d3c6dc425535fa1dec9b43aa"
+    },
+    {
+      "artifact": "artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8"
+    },
+    {
+      "artifact": "artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc"
+    },
+    {
+      "artifact": "artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675"
+    },
+    {
+      "artifact": "artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9"
+    },
+    {
+      "artifact": "artifacts/mv3-extension-c36d2284be11a9b1915cc565b26eb302ac28a0fc98910493f8d72c7ce40f091c.zip",
+      "bytes": 40880667,
+      "sha256": "fdce82df48b1c05af61df6aba310028aadeb96fbc776fb226f9a3b97bff751d8"
+    },
+    {
+      "artifact": "artifacts/package-artifact-manifest.json",
+      "bytes": 1446,
+      "sha256": "df2b57c60aa929af7f4a9d4afcc4db30bddbea7627283c43540ec1e78414b2cc"
+    },
+    {
+      "artifact": "artifacts/resolved-dependencies-0786e5ed9e2fd44431d202a3dcb25c748b606748684d946f2cb90dbe23c38912.json",
+      "bytes": 21287,
+      "sha256": "0786e5ed9e2fd44431d202a3dcb25c748b606748684d946f2cb90dbe23c38912"
+    },
+    {
+      "artifact": "artifacts/resolved-dependencies-af1e501ecbb23126e09115909d6d5a81b1178fa895be0e8472370651b9477318.json",
+      "bytes": 21195,
+      "sha256": "af1e501ecbb23126e09115909d6d5a81b1178fa895be0e8472370651b9477318"
+    },
+    {
+      "artifact": "fixtures/storage_workspace-m10-fresh-mostly_new-unicode-s1.json",
+      "bytes": 4960,
+      "sha256": "1fbb8d8ba67f27b2b676658e3cb0ef2bdb35578c1707a56a3a014dee4c6ae900"
+    }
+  ]
+}
