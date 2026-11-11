@@ -9,18 +9,20 @@ This directory documents the features exposed by DataFog Core, organized by capa
 | [entities.md](entities.md) | PII and credential detection | Text and structured scans |
 | [transforms.md](transforms.md) | Privacy transformations | redact, mask, remove, pseudonymize, tokenize |
 | [sdk-surfaces.md](sdk-surfaces.md) | SDK API surfaces | Rust, Python, Node, Browser/WASM |
-| [models.md](models.md) | Model inference sessions | DataFog and GLiNER2 backends |
-| [workspace.md](workspace.md) | Workspace session management | Marker lifecycle, forget/expiry, snapshots |
+| [models.md](models.md) | Model inference sessions | DataFog, GLiNER2, and browser CNN |
+| [workspace.md](workspace.md) | Workspace session management | Marker lifecycle, forget/expiry, snapshots, browser vaults |
 
 ## Verification
 
 Run the full verification suite with `cargo dfv`:
 
 ```bash
-cargo dfv doctor   # Environment check
-cargo dfv build    # Build all bindings
-cargo dfv check    # Rule-based detector tests
-cargo dfv parity   # Cross-SDK span/offset comparison
+cargo dfv doctor           # Environment check
+cargo dfv build            # Build all bindings
+cargo dfv check            # Rule-based detector tests
+cargo dfv check --cnn      # Qualify browser CNN in MV3
+cargo dfv check --browser-v1-1  # Qualify CNN and both browser vaults
+cargo dfv parity           # Cross-SDK span/offset comparison
 ```
 
 Evidence is written to `target/dfv/runs/<timestamp>/`.

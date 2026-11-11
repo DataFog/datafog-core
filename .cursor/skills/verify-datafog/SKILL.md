@@ -65,6 +65,11 @@ cargo dfv check           # Rule-based detectors
 cargo dfv check --json    # Machine-readable output
 cargo dfv check --dry-run # Show commands without executing
 cargo dfv check --models  # Include model-based detector tier
+cargo dfv check --cnn             # Qualify embedded CNN in MV3
+cargo dfv check --sqlite-browser  # Qualify SQLite3 Multiple Ciphers in MV3
+cargo dfv check --browser-v1-1    # Qualify bundled CNN and both browser vault flows
+cargo dfv check --fogvault        # Verify native/browser Core–FogVault integration
+cargo dfv check --fogvault-languages  # Verify native Node/Python owners
 ```
 
 Check runs doctor first and stops early if required toolchains or bindings are missing.

@@ -2,6 +2,8 @@
 
 DataFog Core provides a Workspace API for privacy-preserving session management. Workspaces track PII transformations, issue marker codes for restored values, and maintain operation history. The forget API allows retiring committed marker codes after host-selected expiry.
 
+Browser extensions can use `BrowserWorkspace` from `@datafog/wasm/cnn/workspace` to coordinate the bundled CNN detector with either FogVault or SQLite persistence. See `docs/browser-workspace-v1-1.md`.
+
 ## Sub-features
 
 ### Core operations

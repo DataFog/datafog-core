@@ -288,4 +288,4 @@ Rust model APIs require the `models` feature:
 datafog-core = { version = "1.0", features = ["models"] }
 ```
 
-Browser/WASM model support is in the optional `@datafog/wasm/models` entry point using GLiNER2.5 Small ONNX. See `docs/browser-model.md`.
+Browser/WASM provides two model entry points: `@datafog/wasm/cnn` for the bundled statements CNN (`PERSON` and `ADDRESS`, no download), and `@datafog/wasm/models` for GLiNER2.5 Small ONNX. See `docs/browser-cnn.md` and `docs/browser-model.md`.
