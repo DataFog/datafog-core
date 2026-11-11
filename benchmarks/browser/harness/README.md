@@ -61,7 +61,7 @@ Receipts include the fixture digest, repository/harness commit, exact published 
 
 FogVault 0.1.0 and its Core-owned adapter expose authenticated Workspace bundle recovery but no standalone encrypted backup export API. The runner reports that migration separately and marks backup archive export/import unavailable; it does not count bundle migration as backup qualification. SQLite's published adapter exposes encrypted backup export/import, which the flow verifies in a fresh vault while checking restored mappings and observed-send authority.
 
-Per-trial gates directly cover exact restoration before/after full browser restart, confirmed-save-before-handoff ordering, wrong-password rejection, conversation scope and recovery. Conflict, lost-save-reply, lock-during-save and stale-plan fault paths remain `unsupported` in this timing flow unless a separate qualification receipt is supplied by the integrated conformance step. Unsupported gates never become passes by omission. This keeps adversarial fault work outside the timed interval and prevents those trials from being described as fully correctness-qualified until their package-hash-bound evidence is integrated.
+Per-trial gates directly cover exact restoration before/after full browser restart, confirmed-save-before-handoff ordering, wrong-password rejection, conversation scope and recovery. Conflict, lost-save-reply and lock-during-save gates are filled only from a package-hash-bound qualification receipt; unsupported gates exclude a trial from latency percentiles. Stale-review rejection is exercised by the timed Core flow. Analyze each immutable `runId` separately; the analyzer rejects input files that mix runs.
 
 ## Harness tests
 
@@ -72,7 +72,7 @@ node --test benchmarks/browser/harness/test/*.test.mjs
 
 ## Qualification and artifact identities
 
-After a pilot has populated the run artifact cache, run the installed-package adapter suites and retain their JSON receipts. Build one qualification receipt per backend with the exact package artifact manifest from that cache:
+After a pilot has populated the run artifact cache, freeze and commit the harness, then run the installed-package adapter suites and retain their JSON receipts. Build one qualification receipt per backend with the exact package artifact manifest from that cache. These fault-suite runs may use a different browser engine from timing trials, which the receipts report:
 
 ```sh
 node integrations/sqlite-browser/test/run-installed.mjs

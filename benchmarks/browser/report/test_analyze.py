@@ -65,6 +65,22 @@ class AnalyzerTests(unittest.TestCase):
             from analyze import validate_independent_profiles
             validate_independent_profiles([one, two])
 
+    def test_multiple_run_ids_cannot_be_pooled_into_one_percentile(self):
+        first, second = receipt("t1", "p1"), receipt("t2", "p2")
+        second["runId"] = "run-2"
+        with self.assertRaisesRegex(ReceiptError, "multiple runIds"):
+            from analyze import validate_independent_profiles
+            validate_independent_profiles([first, second])
+
+    def test_multiple_run_ids_are_rejected_by_loader(self):
+        first, second = receipt("t1", "p1"), receipt("t2", "p2")
+        second["runId"] = "run-2"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "receipts.jsonl"
+            path.write_text(json.dumps(first) + "\n" + json.dumps(second) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ReceiptError, "multiple runIds"):
+                load_receipts([path], "final")
+
     def test_loader_fails_closed_when_a_required_correctness_gate_is_missing(self):
         item = receipt("t1", "p1")
         del item["correctness"]["gates"]["recovery_preserves_mappings_and_authority"]

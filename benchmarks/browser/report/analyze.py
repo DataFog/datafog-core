@@ -40,6 +40,8 @@ def _require(condition: bool, message: str) -> None:
 
 
 def validate_independent_profiles(receipts: list[dict[str, Any]]) -> None:
+    run_ids = {receipt["runId"] for receipt in receipts}
+    _require(len(run_ids) == 1, "analysis inputs contain multiple runIds; analyze immutable runs separately")
     seen_trials: set[tuple[str, str, str]] = set()
     seen_profiles: set[tuple[str, str, str]] = set()
     for receipt in receipts:

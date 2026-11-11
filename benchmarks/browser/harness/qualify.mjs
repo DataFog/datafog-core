@@ -77,12 +77,16 @@ const requiredCases = backend === 'sqlite' ? {
   lost_save_reply_recovers_without_duplicate_activation: ['lost_save_reply_reconciles_without_handoff_or_old_approval'],
   lock_during_save_prevents_handoff: ['late_confirmed_save_after_lock_never_activates'],
 };
+if (backend === 'sqlite' && !observedCases.has('lock_revokes_owner_and_wrong_password_rejected')) {
+  throw new Error('SQLite conformance receipt omitted wrong-password rejection');
+}
 const gates = {};
 for (const [gate, cases] of Object.entries(requiredCases)) {
   const passedCases = cases.filter(id => observedCases.has(id));
   if (passedCases.length === cases.length) gates[gate] = {status: 'pass', cases: passedCases};
 }
 if (Object.keys(gates).length !== Object.keys(requiredCases).length) throw new Error('conformance receipt omitted one or more required fault cases');
+if (backend === 'fogvault' && !observedCases.has('complete_head_cas_conflict_closes_stale_owner')) throw new Error('FogVault conformance receipt omitted stale-review rejection');
 const output = path.resolve(settings['--output']);
 const qualification = {
   schema: 'datafog-browser-benchmark-qualification/v1', status: 'pass', backend,
@@ -90,6 +94,8 @@ const qualification = {
   packageArtifacts: Object.fromEntries(Object.entries(packageManifest.packages).map(([name, item]) => [name, item.sha256])),
   suiteReceipts: [{path: suitePath, sha256: hash(suiteBytes), schema: suite.schema}],
   suiteSourceIdentity: contentChecks, gates,
+  ...(backend === 'sqlite' ? {wrongCredentials: {status: 'pass', cases: ['lock_revokes_owner_and_wrong_password_rejected']}} : {}),
+  ...(backend === 'fogvault' ? {staleReview: {status: 'pass', cases: ['complete_head_cas_conflict_closes_stale_owner']}} : {}),
   engine: backend === 'sqlite' ? 'chromium from playwright integration runner' : suite.engine,
   limitations: 'Adversarial correctness suite is separate from timed trials; its exact package-content identity is proven against the registry artifact. Browser-engine coverage follows the retained suite receipt.',
 };

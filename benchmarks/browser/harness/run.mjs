@@ -167,6 +167,7 @@ async function loadQualification() {
     throw new Error('qualification package hashes do not exactly match the registry artifacts staged for this trial');
   }
   const suiteReceipts = [];
+  const qualifiedGates = new Set();
   for (const suite of evidence.suiteReceipts || []) {
     if (!suite.path || !/^[a-f0-9]{64}$/.test(suite.sha256 || '')) throw new Error('qualification suite receipt reference is malformed');
     const bytes = await readFile(path.resolve(suite.path));
@@ -174,6 +175,9 @@ async function loadQualification() {
     suiteReceipts.push({path: path.resolve(suite.path), sha256: suite.sha256});
   }
   if (suiteReceipts.length === 0) throw new Error('qualification evidence has no retained suite receipts');
+  for (const [gate, entry] of Object.entries(evidence.gates || {})) {
+    if (entry?.status === 'pass' && Array.isArray(entry.cases)) qualifiedGates.add(gate);
+  }
   const gates = {};
   for (const [gate, allowedCasesByBackend] of Object.entries(gateQualificationCases)) {
     const entry = evidence.gates?.[gate];
@@ -181,7 +185,13 @@ async function loadQualification() {
         entry.cases.some(id => !allowedCasesByBackend[backend].includes(id))) continue;
     gates[gate] = {...entry, status: 'pass', qualificationSuiteReceipts: suiteReceipts};
   }
-  return {schema: evidence.schema, sourceCommit: evidence.sourceCommit, packageArtifacts: expectedArtifacts, suiteReceipts, gates};
+  if (!['conflicting_save_rejected_without_overwrite', 'lost_save_reply_recovers_without_duplicate_activation', 'lock_during_save_prevents_handoff']
+    .every(gate => gates[gate]?.status === 'pass')) throw new Error('qualification evidence omitted required package-bound fault gates');
+  if (backend === 'sqlite' && !qualifiedGates.has('wrong_credentials_rejected')) throw new Error('qualification evidence omitted wrong-credential rejection');
+  if (backend === 'fogvault' && evidence.staleReview?.status !== 'pass') throw new Error('FogVault qualification omitted stale-review rejection');
+  return {schema: evidence.schema, sourceCommit: evidence.sourceCommit, packageArtifacts: expectedArtifacts, suiteReceipts, gates,
+    wrongCredentials: backend === 'sqlite' ? {status: 'pass', qualificationSuiteReceipts: suiteReceipts} : undefined,
+    staleReview: backend === 'fogvault' ? {status: 'pass', cases: evidence.staleReview.cases, qualificationSuiteReceipts: suiteReceipts} : undefined};
 }
 
 async function launchChrome(chromium) {
@@ -260,6 +270,12 @@ try {
   if (qualification) {
     for (const [gate, evidence] of Object.entries(qualification.gates)) {
       if (receipt.correctness.gates[gate]?.status === 'unsupported') receipt.correctness.gates[gate] = evidence;
+    }
+    if (backend === 'sqlite' && receipt.correctness.gates.wrong_credentials_rejected?.status === 'unsupported') {
+      receipt.correctness.gates.wrong_credentials_rejected = qualification.wrongCredentials;
+    }
+    if (backend === 'fogvault' && receipt.correctness.gates.stale_review_rejected?.status === 'unsupported' && qualification.gates.stale_review_rejected) {
+      receipt.correctness.gates.stale_review_rejected = qualification.staleReview;
     }
     receipt.qualificationEvidence = qualification;
   }
