@@ -1,6 +1,6 @@
 {
   "name": "@datafog/core-fogvault-node",
-  "version": "1.1.0-rc.1",
+  "version": "1.1.0",
   "type": "module",
   "description": "Optional native Core\u2013FogVault integration candidate",
   "license": "MIT",
@@ -36,6 +36,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "next"
+    "tag": "latest"
   }
 }

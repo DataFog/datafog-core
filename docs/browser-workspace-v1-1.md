@@ -1,9 +1,8 @@
 # Browser extension Workspace with embedded detection
 
-This candidate combines bundled CNN inference with reversible Workspace mappings
-and either FogVault or SQLite3 Multiple Ciphers persistence. Package versions
-remain unchanged pending the v1.1 release decision. Install the candidate
-artifacts together; these additions are not in the published 1.0.0 packages.
+Core 1.1.0 combines bundled CNN inference with reversible Workspace mappings
+and either FogVault or SQLite3 Multiple Ciphers persistence. Install the stable 1.1.0 SDK and Core-owned
+adapters together; independent FogVault remains 0.1.0. These additions are not in the 1.0.0 packages.
 
 The detector runs in its own Worker. The selected vault adapter exclusively owns
 the mutable Workspace and durable storage. A coordinator fences reviews when the
@@ -30,7 +29,7 @@ showLocalPreview(review.preview());
 const saved = await owner.commit(review, {approved: true});
 showApprovedText(saved.previews[0].text);
 
-// Josh's UI persists the preference and applies it through the coordinator.
+// The extension UI persists the preference and applies it through the coordinator.
 await owner.setCnnEnabled(false);
 const original = owner.restore(saved.previews[0].text);
 await owner.lock();
@@ -80,7 +79,7 @@ full browser-process restart with detection disabled and approved recovery from
 FogVault into a fresh SQLite destination. Reports identify the
 candidate archives and retain failure evidence. The SQLite profile does not
 provide independent rollback detection for replayed valid storage. Automated
-Chromium evidence does not replace acceptance in Josh's actual packaged extension
+Chromium evidence does not replace acceptance in the actual packaged extension
 or establish support for untested browser engines and devices.
 
 Publication requires a successful `Browser CNN and Workspace vaults` workflow

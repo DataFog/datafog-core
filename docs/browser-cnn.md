@@ -13,7 +13,7 @@ const detector = await CnnSession.open(); // cnnEnabled defaults to true
 const result = await detector.scan(text, {entities: ['PERSON', 'ADDRESS', 'EMAIL']});
 // Pass result.findings to the exclusive Workspace owner for local review.
 // Save the approved candidate with FogVault or SQLite before activating it.
-await detector.setEnabled(false); // Josh's UI can bind its setting to this call
+await detector.setEnabled(false); // The extension UI can bind its setting to this call
 const ruleResult = await detector.scan(text, {entities: ['PERSON', 'ADDRESS', 'EMAIL']});
 detector.close();
 ```
@@ -72,7 +72,7 @@ an actual unpacked MV3 Chromium extension offline. It checks default-on loading,
 reference spans and Unicode/window boundaries, disabling/re-enabling, corrupted
 embedded weights, cancellation, bounds and process restart. Reports identify
 package/model hashes and the browser. This synthetic test does not establish
-acceptance in Josh's shipping extension or every retail browser; those checks
+acceptance in the shipping extension or every retail browser; those checks
 must use the exact candidate before release.
 
 ## Model scope and provenance
