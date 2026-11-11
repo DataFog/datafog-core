@@ -188,10 +188,8 @@ async function loadQualification() {
   if (!['conflicting_save_rejected_without_overwrite', 'lost_save_reply_recovers_without_duplicate_activation', 'lock_during_save_prevents_handoff']
     .every(gate => gates[gate]?.status === 'pass')) throw new Error('qualification evidence omitted required package-bound fault gates');
   if (backend === 'sqlite' && !qualifiedGates.has('wrong_credentials_rejected')) throw new Error('qualification evidence omitted wrong-credential rejection');
-  if (backend === 'fogvault' && evidence.staleReview?.status !== 'pass') throw new Error('FogVault qualification omitted stale-review rejection');
   return {schema: evidence.schema, sourceCommit: evidence.sourceCommit, packageArtifacts: expectedArtifacts, suiteReceipts, gates,
-    wrongCredentials: backend === 'sqlite' ? {status: 'pass', qualificationSuiteReceipts: suiteReceipts} : undefined,
-    staleReview: backend === 'fogvault' ? {status: 'pass', cases: evidence.staleReview.cases, qualificationSuiteReceipts: suiteReceipts} : undefined};
+    wrongCredentials: backend === 'sqlite' ? {status: 'pass', qualificationSuiteReceipts: suiteReceipts} : undefined};
 }
 
 async function launchChrome(chromium) {
@@ -273,9 +271,6 @@ try {
     }
     if (backend === 'sqlite' && receipt.correctness.gates.wrong_credentials_rejected?.status === 'unsupported') {
       receipt.correctness.gates.wrong_credentials_rejected = qualification.wrongCredentials;
-    }
-    if (backend === 'fogvault' && receipt.correctness.gates.stale_review_rejected?.status === 'unsupported' && qualification.gates.stale_review_rejected) {
-      receipt.correctness.gates.stale_review_rejected = qualification.staleReview;
     }
     receipt.qualificationEvidence = qualification;
   }

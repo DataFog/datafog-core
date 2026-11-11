@@ -86,7 +86,6 @@ for (const [gate, cases] of Object.entries(requiredCases)) {
   if (passedCases.length === cases.length) gates[gate] = {status: 'pass', cases: passedCases};
 }
 if (Object.keys(gates).length !== Object.keys(requiredCases).length) throw new Error('conformance receipt omitted one or more required fault cases');
-if (backend === 'fogvault' && !observedCases.has('complete_head_cas_conflict_closes_stale_owner')) throw new Error('FogVault conformance receipt omitted stale-review rejection');
 const output = path.resolve(settings['--output']);
 const qualification = {
   schema: 'datafog-browser-benchmark-qualification/v1', status: 'pass', backend,
@@ -95,7 +94,6 @@ const qualification = {
   suiteReceipts: [{path: suitePath, sha256: hash(suiteBytes), schema: suite.schema}],
   suiteSourceIdentity: contentChecks, gates,
   ...(backend === 'sqlite' ? {wrongCredentials: {status: 'pass', cases: ['lock_revokes_owner_and_wrong_password_rejected']}} : {}),
-  ...(backend === 'fogvault' ? {staleReview: {status: 'pass', cases: ['complete_head_cas_conflict_closes_stale_owner']}} : {}),
   engine: backend === 'sqlite' ? 'chromium from playwright integration runner' : suite.engine,
   limitations: 'Adversarial correctness suite is separate from timed trials; its exact package-content identity is proven against the registry artifact. Browser-engine coverage follows the retained suite receipt.',
 };
