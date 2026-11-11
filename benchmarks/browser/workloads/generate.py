@@ -24,7 +24,7 @@ GATES = (
     "lock_during_save_prevents_handoff",
     "stale_review_rejected",
     "conversation_scope_enforced",
-    "backup_recovery_preserves_mappings_and_authority",
+    "recovery_preserves_mappings_and_authority",
 )
 
 

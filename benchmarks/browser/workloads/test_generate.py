@@ -71,6 +71,8 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual({case["mappingTarget"] for case in result["scenarios"]}, {10, 100, 1_000, 10_000})
         self.assertEqual({case["inputShape"] for case in result["scenarios"]}, {"chat", "statement", "batch", "unicode", "table"})
         self.assertEqual(len(GATES), 9)
+        self.assertIn("recovery_preserves_mappings_and_authority", GATES)
+        self.assertNotIn("backup_recovery_preserves_mappings_and_authority", GATES)
 
 
 if __name__ == "__main__":

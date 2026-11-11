@@ -67,7 +67,7 @@ class AnalyzerTests(unittest.TestCase):
 
     def test_loader_fails_closed_when_a_required_correctness_gate_is_missing(self):
         item = receipt("t1", "p1")
-        del item["correctness"]["gates"]["backup_recovery_preserves_mappings_and_authority"]
+        del item["correctness"]["gates"]["recovery_preserves_mappings_and_authority"]
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "receipts.jsonl"
             path.write_text(json.dumps(item) + "\n", encoding="utf-8")
