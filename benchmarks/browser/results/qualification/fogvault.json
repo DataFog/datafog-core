@@ -13,14 +13,14 @@
   },
   "suiteReceipts": [
     {
-      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/fogvault-suite-receipt.json",
-      "sha256": "edd566f9275cb7d8d3a0b05ea0319d2309fff08caaf3f9533fca29de771efb27",
+      "path": "benchmarks/browser/results/qualification/fogvault-suite-receipt.json",
+      "sha256": "1f9f415929f1f027e6e4bfbe67b264960abd4583fbc6252c1199bb2fd2344724",
       "schema": "datafog-fogvault-browser-proof/v1"
     }
   ],
   "suiteSourceIdentity": {
     "@datafog/core-fogvault-browser@1.1.0": {
-      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
+      "sourceArchive": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
       "contentSha256": "a1e288886a4b59a51350acfa7c8f92417eecc2d75eccb7b66850270e77b6f0ec"
     }
   },

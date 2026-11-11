@@ -1,58 +1,146 @@
 {
   "schema": "datafog-browser-pilot-artifacts/v1",
+  "itemCount": 28,
   "items": [
     {
-      "receipt": "fogvault-final-schema-success.json",
-      "sha256": "d77875d457b8beff837fadc6d904f8e397c99b343d5164ecd0a24892836c32bf"
+      "path": "benchmarks/browser/harness/pilot-receipts/evaluate-argument-attempt.json",
+      "bytes": 7443,
+      "sha256": "2addb2feb7d20ad419c2b1230dd15f45aa8ee420780c450d4cb9de96f9521d87"
     },
     {
-      "receipt": "sqlite-final-schema-success.json",
-      "sha256": "747575f5af090f0729d9dbfe252f4244e6f3f6a2d3c6dc425535fa1dec9b43aa"
+      "path": "benchmarks/browser/harness/pilot-receipts/fogvault-final-schema-success.json",
+      "bytes": 20749,
+      "sha256": "f92917c9714cfaacba69c657317cac6e6a03cdd85a581325574a215be51e26bd"
     },
     {
-      "artifact": "artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "path": "benchmarks/browser/harness/pilot-receipts/fogvault-success.json",
+      "bytes": 20361,
+      "sha256": "9a89850dbab2df55ca1d27d2c444596814ca4abadcceab00d981fc50ca30d7ac"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/initial-load-attempt-1.json",
+      "bytes": 11105,
+      "sha256": "c622be56ca28c812d61e3fc0a4d2be7996949fb07e0692d73b19a13535b2e625"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/initial-load-attempt-2.json",
+      "bytes": 11105,
+      "sha256": "4174618f152f0bac16e52d4430712d1fe0f1d849550f80cbf74b1a9a3e0539e9"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/sqlite-final-schema-success.json",
+      "bytes": 19390,
+      "sha256": "5fc2ad209e04cd30f67af8b69bb9acb687269347ed680813153f3122d3bfa84b"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/sqlite-success.json",
+      "bytes": 18961,
+      "sha256": "53d7de3db618a37ba441405053a85f61017085d00470b11fe9b7a84d6f140596"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/stale-plan-probe-attempt-1.json",
+      "bytes": 7240,
+      "sha256": "04c78e497520928505daef964955023b45a9c91e97953f2d6f128b000bb167bd"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/stale-plan-probe-attempt-2.json",
+      "bytes": 7232,
+      "sha256": "cdf0aa79646971093364ca0a219082ebc6f855147ffac3dfe4dff2f54dfabc19"
+    },
+    {
+      "path": "benchmarks/browser/harness/pilot-receipts/stale-plan-probe-attempt-3.json",
+      "bytes": 7233,
+      "sha256": "1841fec35123a097768322f99e4be7765af37fc0ef083d6afcacba42f80a4d09"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
       "bytes": 10957,
       "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8"
     },
     {
-      "artifact": "artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "path": "benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
       "bytes": 591484,
       "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc"
     },
     {
-      "artifact": "artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "path": "benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz",
       "bytes": 578991,
       "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675"
     },
     {
-      "artifact": "artifacts/datafog-wasm-1.1.0.tgz",
+      "path": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
       "bytes": 2031540,
       "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9"
     },
     {
-      "artifact": "artifacts/mv3-extension-c36d2284be11a9b1915cc565b26eb302ac28a0fc98910493f8d72c7ce40f091c.zip",
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-057e866a57eea9d59ead4be9b3e8b3776b9ec4e5ff4a481ef0d1f964d062102d.zip",
+      "bytes": 40880620,
+      "sha256": "93a2f09782ab0417371b60071ad02d13e7be3ac6eb01118c7c7ebba1adcc7c41"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-2d5cd924660ac9473c6b74b24a786a10ee0db5c77dfc2dbdda02705eb2885489.zip",
+      "bytes": 40880651,
+      "sha256": "d6e36768034345b63369c723fd1c8ff5fd3d56aa5a4f87187d1d446634a427cf"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-51f34611a1adbae567d6095ecdd6d222ed3352b24ff5238e64af94eb6376d330.zip",
+      "bytes": 40880639,
+      "sha256": "e4157851c486f38b6e84cc3d9e9a1683344b85e79c7103702f76ad9e9d632095"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-529d149200a999b5ebbf318dde65b5cd580136324858f064c8ccf7a8ea16e990.zip",
+      "bytes": 40880324,
+      "sha256": "2adf56ab6e97a922e3a0f9c2b8b6e7be1d89e21e9fb29a10f9a83fbd2ddd8afa"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-6cd3467ecfe35146d48788be4945eca66713d13b6a592826cafbfefd363d19fe.zip",
+      "bytes": 40880619,
+      "sha256": "f2809ca3f11ce4d3869adc0c60d3a336a5080539eb73444a7f00b20327846eec"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0.zip",
+      "bytes": 40880678,
+      "sha256": "9761c350d9e8886a7ac158cfbcd97c00cd3ccc16e04421ccbcb07b0c42b58336"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-c36d2284be11a9b1915cc565b26eb302ac28a0fc98910493f8d72c7ce40f091c.zip",
       "bytes": 40880667,
       "sha256": "fdce82df48b1c05af61df6aba310028aadeb96fbc776fb226f9a3b97bff751d8"
     },
     {
-      "artifact": "artifacts/package-artifact-manifest.json",
-      "bytes": 1446,
-      "sha256": "df2b57c60aa929af7f4a9d4afcc4db30bddbea7627283c43540ec1e78414b2cc"
+      "path": "benchmarks/browser/results/pilot/artifacts/package-artifact-manifest.json",
+      "bytes": 1106,
+      "sha256": "a0ed324d729de8c767f0045dc2c6aadf2ce415fe0347b558cdce4e44c4edb6d7"
     },
     {
-      "artifact": "artifacts/resolved-dependencies-0786e5ed9e2fd44431d202a3dcb25c748b606748684d946f2cb90dbe23c38912.json",
-      "bytes": 21287,
-      "sha256": "0786e5ed9e2fd44431d202a3dcb25c748b606748684d946f2cb90dbe23c38912"
+      "path": "benchmarks/browser/results/pilot/artifacts/resolved-dependencies-59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6.json",
+      "bytes": 16327,
+      "sha256": "59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6"
     },
     {
-      "artifact": "artifacts/resolved-dependencies-af1e501ecbb23126e09115909d6d5a81b1178fa895be0e8472370651b9477318.json",
-      "bytes": 21195,
-      "sha256": "af1e501ecbb23126e09115909d6d5a81b1178fa895be0e8472370651b9477318"
+      "path": "benchmarks/browser/results/pilot/fixtures/storage_workspace-m10-fresh-mostly_new-unicode-s1.json",
+      "bytes": 5680,
+      "sha256": "42420f41c95862c465475379bd489b01376a0d9cb870cb5abf8110b8a103db30"
     },
     {
-      "artifact": "fixtures/storage_workspace-m10-fresh-mostly_new-unicode-s1.json",
-      "bytes": 4960,
-      "sha256": "1fbb8d8ba67f27b2b676658e3cb0ef2bdb35578c1707a56a3a014dee4c6ae900"
+      "path": "benchmarks/browser/results/pilot/fogvault-final-schema-success.json",
+      "bytes": 20642,
+      "sha256": "0f12b27e7f5cca140323babcc4a3b3f385770fd49311308b38d7af84162258d7"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/fogvault-final-schema-success.jsonl",
+      "bytes": 16037,
+      "sha256": "22f12bb02ae0af9527dfe8bc464e9203e2cf1aa85b0d656629a3d4c366627030"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/sqlite-final-schema-success.json",
+      "bytes": 19283,
+      "sha256": "3e6d9c30478be96c226496fbcd37aadffd8c64da26be4354b21e0dd3fcf0e872"
+    },
+    {
+      "path": "benchmarks/browser/results/pilot/sqlite-final-schema-success.jsonl",
+      "bytes": 15025,
+      "sha256": "92c9ed1f1eb838897ee6b41e64bacaced54702995eb3cfabb214ef53b0a4c6cd"
     }
   ]
 }

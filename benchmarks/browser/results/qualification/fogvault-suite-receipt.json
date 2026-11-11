@@ -149,22 +149,22 @@
   },
   "candidates": {
     "core": {
-      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/core-input.tgz",
+      "path": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/core-input.tgz",
       "bytes": 2031540,
       "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
-      "source_archive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz"
+      "source_archive": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz"
     },
     "vault": {
-      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/vault-input.tgz",
+      "path": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/vault-input.tgz",
       "bytes": 578991,
       "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
-      "source_archive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz"
+      "source_archive": "benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz"
     },
     "adapter": {
-      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
+      "path": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
       "bytes": 10957,
       "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
-      "source_archive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz"
+      "source_archive": "benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz"
     }
   },
   "installed_assets": {
@@ -513,11 +513,11 @@
         "--json",
         "--ignore-scripts",
         "--pack-destination",
-        "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp/artifacts"
+        "target/fogvault-browser/browser-consumer-MQ5icp/artifacts"
       ],
-      "cwd": "/Users/sid/projects/datafog/datafog-core-benchmark/integrations/fogvault-browser",
+      "cwd": "integrations/fogvault-browser",
       "exit_code": 0,
-      "log": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-pack.log",
+      "log": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-pack.log",
       "log_sha256": "7e0bcfe1028fff6e2d81f54e411ecaa5a8cd35661f87d97d153288dde652066a"
     },
     {
@@ -528,20 +528,20 @@
         "--ignore-scripts",
         "--no-audit",
         "--no-fund",
-        "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp/artifacts/core-input.tgz",
-        "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp/artifacts/vault-input.tgz",
-        "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp/artifacts/adapter-input.tgz"
+        "target/fogvault-browser/browser-consumer-MQ5icp/artifacts/core-input.tgz",
+        "target/fogvault-browser/browser-consumer-MQ5icp/artifacts/vault-input.tgz",
+        "target/fogvault-browser/browser-consumer-MQ5icp/artifacts/adapter-input.tgz"
       ],
-      "cwd": "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp",
+      "cwd": "target/fogvault-browser/browser-consumer-MQ5icp",
       "exit_code": 0,
-      "log": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/candidate-install.log",
+      "log": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/candidate-install.log",
       "log_sha256": "4d7bb44e0756061f349055948ef68e1929628adcd2c69a4c4d2385bb93e21915"
     },
     {
       "id": "installed-types",
       "command": [
         "/Users/sid/.nvm/versions/node/v25.8.2/bin/node",
-        "/Users/sid/projects/datafog/datafog-core-benchmark/bindings/wasm/node_modules/typescript/bin/tsc",
+        "bindings/wasm/node_modules/typescript/bin/tsc",
         "--noEmit",
         "--strict",
         "--module",
@@ -552,9 +552,9 @@
         "es2022,dom",
         "types.ts"
       ],
-      "cwd": "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/browser-consumer-MQ5icp",
+      "cwd": "target/fogvault-browser/browser-consumer-MQ5icp",
       "exit_code": 0,
-      "log": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/installed-types.log",
+      "log": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/installed-types.log",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ],

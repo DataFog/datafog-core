@@ -144,8 +144,9 @@ async function stagePackages() {
   await recordDependencies(path.join(extension, 'node_modules'));
   const dependencyBytes = Buffer.from(JSON.stringify({schema: 'datafog-browser-resolved-dependencies/v1', npmTree: dependencyTree, packages: resolvedDependencies}, null, 2) + '\n');
   const dependencyDigest = sha256(dependencyBytes);
-  resolvedDependencyManifest = {path: path.join(artifactDir, `resolved-dependencies-${dependencyDigest}.json`), sha256: dependencyDigest, bytes: dependencyBytes.byteLength};
-  try { await readFile(resolvedDependencyManifest.path); } catch { await writeFile(resolvedDependencyManifest.path, dependencyBytes); }
+  const dependencyPath = path.join(artifactDir, `resolved-dependencies-${dependencyDigest}.json`);
+  resolvedDependencyManifest = {path: path.relative(root, dependencyPath), sha256: dependencyDigest, bytes: dependencyBytes.byteLength};
+  try { await readFile(dependencyPath); } catch { await writeFile(dependencyPath, dependencyBytes); }
   const manifest = {manifest_version: 3, name: 'DataFog reversible pseudonymization benchmark', version: '1.0.0',
     background: {service_worker: 'background.mjs', type: 'module'},
     content_security_policy: {extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self'; worker-src 'self'"}};
@@ -157,7 +158,7 @@ async function stagePackages() {
 
 async function loadQualification() {
   if (!settings['--qualification-receipt']) return undefined;
-  const file = path.resolve(settings['--qualification-receipt']);
+  const file = path.resolve(root, settings['--qualification-receipt']);
   const evidence = JSON.parse(await readFile(file, 'utf8'));
   if (evidence.schema !== 'datafog-browser-benchmark-qualification/v1' || evidence.status !== 'pass' || evidence.backend !== backend) throw new Error('qualification receipt schema, status, or backend is invalid');
   if (evidence.sourceCommit !== sourceCommit || evidence.sourceDirty !== false) throw new Error('qualification evidence was not produced from this clean frozen source commit');
@@ -170,9 +171,9 @@ async function loadQualification() {
   const qualifiedGates = new Set();
   for (const suite of evidence.suiteReceipts || []) {
     if (!suite.path || !/^[a-f0-9]{64}$/.test(suite.sha256 || '')) throw new Error('qualification suite receipt reference is malformed');
-    const bytes = await readFile(path.resolve(suite.path));
+    const bytes = await readFile(path.resolve(root, suite.path));
     if (sha256(bytes) !== suite.sha256) throw new Error(`qualification suite receipt digest mismatch: ${suite.path}`);
-    suiteReceipts.push({path: path.resolve(suite.path), sha256: suite.sha256});
+    suiteReceipts.push({path: path.relative(root, path.resolve(root, suite.path)), sha256: suite.sha256});
   }
   if (suiteReceipts.length === 0) throw new Error('qualification evidence has no retained suite receipts');
   for (const [gate, entry] of Object.entries(evidence.gates || {})) {
@@ -227,7 +228,7 @@ const receipt = {
   scenario: fixture.scenario, fixtureSha256: fixture.fixtureSha256,
   repositoryCommit: sourceCommit, harnessCommit: sourceCommit, repositoryDirty: Boolean(sourceDirty), repositoryStatus: sourceDirty,
   runtime, browser: {name: 'Google Chrome retail', executable: chromeExecutable, channel: 'installed retail binary', headless: true},
-  packageArtifacts: candidates, extensionArtifact: null, backendConfiguration: null,
+  packageArtifacts: [], extensionArtifact: null, backendConfiguration: null,
   admission: {status: 'unknown'}, correctness: {gates: {}}, timings: {}, measurements: {},
   externalRequests, pageErrors, exclusionReason: null,
 };
@@ -236,14 +237,14 @@ try {
   if (runKind === 'final' && sourceDirty) throw new Error('final trials require a clean frozen harness commit');
   await stagePackages();
   await writeFile(path.join(artifactDir, 'package-artifact-manifest.json'), JSON.stringify({schema: 'datafog-browser-package-artifacts/v1', source: 'npm registry exact versions',
-    packages: Object.fromEntries(candidates.map(item => [`${item.name}@${item.version}`, {path: item.file, bytes: item.bytes, sha256: item.sha256}]))}, null, 2) + '\n');
+    packages: Object.fromEntries(candidates.map(item => [`${item.name}@${item.version}`, {path: path.relative(root, item.file), bytes: item.bytes, sha256: item.sha256}]))}, null, 2) + '\n');
   const qualification = await loadQualification();
   const loadedDirectorySha256 = await directoryDigest(extension);
   const extensionZip = path.join(artifactDir, `mv3-extension-${loadedDirectorySha256}.zip`);
   try { await readFile(extensionZip); }
   catch { command('zip', ['-qr', extensionZip, 'extension'], workspaceRoot); }
   const extensionBytes = await readFile(extensionZip);
-  receipt.extensionArtifact = {path: extensionZip, bytes: extensionBytes.byteLength,
+  receipt.extensionArtifact = {path: path.relative(root, extensionZip), bytes: extensionBytes.byteLength,
     sha256: sha256(extensionBytes), loadedDirectorySha256};
   receipt.resolvedDependencyManifest = resolvedDependencyManifest;
   const playwrightModule = path.join(root, 'bindings/wasm/node_modules/playwright/index.mjs');
@@ -306,11 +307,12 @@ try {
   if (runnerFailure) {
     const failureWorkspace = path.join(output, 'failure-workspace');
     await rename(workspaceRoot, failureWorkspace).catch(() => {});
-    receipt.failureWorkspace = failureWorkspace;
+    receipt.failureWorkspace = path.relative(root, failureWorkspace);
   } else {
     await rm(workspaceRoot, {recursive: true, force: true});
     receipt.measurements.temporaryBrowserProfile = {status: 'removed after successful trial', uniquePerTrial: true, reusedAcrossRestart: true};
   }
+  receipt.packageArtifacts = candidates.map(item => ({...item, file: path.relative(root, item.file)}));
   await writeFile(path.join(output, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n');
   await writeFile(path.join(output, 'receipt.jsonl'), JSON.stringify(receipt) + '\n');
   console.log(JSON.stringify({status: receipt.status, receipt: path.join(output, 'receipt.json'), backend, trialId, runKind}));

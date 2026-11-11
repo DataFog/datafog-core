@@ -10,6 +10,6 @@
   "statusCounts": {
     "complete": 200
   },
-  "matrixReceipt": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/matrix.jsonl",
-  "artifactCache": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts"
+  "matrixReceipt": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/matrix.jsonl",
+  "artifactCache": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts"
 }

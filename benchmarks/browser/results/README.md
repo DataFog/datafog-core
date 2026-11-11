@@ -8,4 +8,4 @@
 
 `final/final-storage-m10-unicode-n100-r2/` contains 100 independent fresh-profile trials per backend, alternated sequentially, on one synthetic storage/Workspace Unicode scenario. Raw receipts, matrix ledger, fixture, package and extension artifacts, dependency manifests, generated report, CSV, and per-interval SVG charts are retained. The final source commit used by the trials is recorded in every receipt and in the artifact manifest.
 
-All artifacts are SHA-256 indexed. Percentiles are reported only for at least 100 independent eligible trials in the same scenario/backend/interval. The result supports only the workload and hardware/browser coverage in the report; it does not establish a product-wide winner.
+Artifact references are repository-root-relative and indexed in `artifact-manifest.json`; resolve them from the repository root after cloning or moving the checkout. Percentiles are reported only for at least 100 independent eligible trials in the same scenario/backend/interval. The result supports only the workload and hardware/browser coverage in the report; it does not establish a product-wide winner.

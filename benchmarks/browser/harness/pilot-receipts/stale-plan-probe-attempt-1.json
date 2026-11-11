@@ -51,7 +51,7 @@
     {
       "name": "@datafog/wasm",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-wasm-1.1.0.tgz",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
       "bytes": 2031540,
       "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
       "source": "npm registry exact version"
@@ -59,7 +59,7 @@
     {
       "name": "@datafog/core-sqlite-browser",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
       "bytes": 591484,
       "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
       "source": "npm registry exact version"
@@ -67,7 +67,7 @@
     {
       "name": "@datafog/fogvault-browser",
       "version": "0.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz",
       "bytes": 578991,
       "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
       "source": "npm registry exact version"
@@ -75,14 +75,14 @@
     {
       "name": "@datafog/core-fogvault-browser",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
       "bytes": 10957,
       "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
       "source": "npm registry exact version"
     }
   ],
   "extensionArtifact": {
-    "path": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/mv3-extension-c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0.zip",
+    "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0.zip",
     "bytes": 40880678,
     "sha256": "9761c350d9e8886a7ac158cfbcd97c00cd3ccc16e04421ccbcb07b0c42b58336",
     "loadedDirectorySha256": "c0a467ce910f10e5fe6ee17a2d6bc888381d55461127ea0cd88100cb602f24d0"
@@ -157,9 +157,9 @@
   "pageErrors": [],
   "exclusionReason": "trial failed before all correctness gates completed",
   "resolvedDependencyManifest": {
-    "path": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/artifacts/resolved-dependencies-eb80843efbbfc6fd84687c0e8efe1459b92a3b187a2e5324a88830768ae64ceb.json",
-    "sha256": "eb80843efbbfc6fd84687c0e8efe1459b92a3b187a2e5324a88830768ae64ceb",
-    "bytes": 21309
+    "path": "benchmarks/browser/results/pilot/artifacts/resolved-dependencies-59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6.json",
+    "sha256": "59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6",
+    "bytes": 16327
   },
   "status": "failed",
   "completedAtUtc": "2026-11-11T22:17:15.660Z",
@@ -190,5 +190,6 @@
     "hostClock": "Node process wall clock",
     "observerOverhead": "process sampling runs on host at one-second intervals; page timing excludes host-side process sampling"
   },
-  "failureWorkspace": "/Users/sid/projects/datafog/datafog-core-browser-harness/target/browser-pseudonymization/pilot/review-pilot-cdp/sqlite-r5/failure-workspace"
+  "failureWorkspace": null,
+  "failureWorkspaceOmitted": true
 }

@@ -57,8 +57,8 @@ for (const descriptor of catalog.scenarios) {
       const qualification = settings[backend === 'sqlite' ? '--sqlite-qualification' : '--fogvault-qualification'];
       if (qualification) commandArgs.push('--qualification-receipt', path.resolve(qualification));
       const child = spawnSync(process.execPath, commandArgs, {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
-      const row = {ordinal: ordinal++, scenarioId: descriptor.scenarioId, fixture: fixturePath, repeat: repeat + 1, backend,
-        orderBlock: `${descriptor.scenarioId}-repeat-${repeat + 1}`, outputDir, status: child.status === 0 ? 'complete' : 'failed',
+      const row = {ordinal: ordinal++, scenarioId: descriptor.scenarioId, fixture: path.relative(root, fixturePath), repeat: repeat + 1, backend,
+        orderBlock: `${descriptor.scenarioId}-repeat-${repeat + 1}`, outputDir: path.relative(root, outputDir), status: child.status === 0 ? 'complete' : 'failed',
         stdout: child.stdout || '', stderr: child.stderr || '', exitCode: child.status ?? -1};
       rows.push(row); await writeFile(matrixFile, `${JSON.stringify(row)}\n`, {flag: 'a'});
     }
@@ -67,6 +67,6 @@ for (const descriptor of catalog.scenarios) {
 const summary = {schema: 'datafog-browser-pseudonymization-matrix/v1', runId, runKind, createdAtUtc: new Date().toISOString(),
   scenarioCount: catalog.scenarios.length, independentPairsPerScenario: trials, sequential: true, backendOrderAlternates: true,
   statusCounts: rows.reduce((counts, row) => { counts[row.status] = (counts[row.status] || 0) + 1; return counts; }, {}),
-  matrixReceipt: matrixFile, artifactCache};
+  matrixReceipt: path.relative(root, matrixFile), artifactCache: path.relative(root, artifactCache)};
 await writeFile(path.join(outputRoot, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
 console.log(JSON.stringify(summary));

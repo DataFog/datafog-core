@@ -19,9 +19,9 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim();
 const dirty = execFileSync('git', ['status', '--porcelain'], {cwd: root, encoding: 'utf8'}).trim();
 if (dirty) throw new Error('qualification evidence requires a clean source commit');
-const suitePath = path.resolve(settings['--suite-receipt']);
+const suitePath = path.resolve(root, settings['--suite-receipt']);
 const suiteBytes = await readFile(suitePath), suite = JSON.parse(suiteBytes.toString('utf8'));
-const packageManifestPath = path.resolve(settings['--package-manifest']);
+const packageManifestPath = path.resolve(root, settings['--package-manifest']);
 const packageManifest = JSON.parse(await readFile(packageManifestPath, 'utf8'));
 if (packageManifest.schema !== 'datafog-browser-package-artifacts/v1') throw new Error('invalid package artifact manifest');
 
@@ -63,7 +63,7 @@ for (const [name, localPath] of Object.entries(suiteCandidates)) {
   if (!localPath) throw new Error(`conformance receipt omitted its packaged ${name} candidate`);
   const published = packageManifest.packages[name];
   if (!published) throw new Error(`published artifact manifest omitted ${name}`);
-  contentChecks[name] = {sourceArchive: path.resolve(localPath), contentSha256: samePackageContents(published.path, path.resolve(localPath), name)};
+  contentChecks[name] = {sourceArchive: path.relative(root, path.resolve(root, localPath)), contentSha256: samePackageContents(published.path, path.resolve(root, localPath), name)};
 }
 let observedCases;
 if (backend === 'sqlite') observedCases = new Set(suite.cases || []);
@@ -86,12 +86,12 @@ for (const [gate, cases] of Object.entries(requiredCases)) {
   if (passedCases.length === cases.length) gates[gate] = {status: 'pass', cases: passedCases};
 }
 if (Object.keys(gates).length !== Object.keys(requiredCases).length) throw new Error('conformance receipt omitted one or more required fault cases');
-const output = path.resolve(settings['--output']);
+const output = path.resolve(root, settings['--output']);
 const qualification = {
   schema: 'datafog-browser-benchmark-qualification/v1', status: 'pass', backend,
   qualifiedAtUtc: new Date().toISOString(), sourceCommit, sourceDirty: false,
   packageArtifacts: Object.fromEntries(Object.entries(packageManifest.packages).map(([name, item]) => [name, item.sha256])),
-  suiteReceipts: [{path: suitePath, sha256: hash(suiteBytes), schema: suite.schema}],
+  suiteReceipts: [{path: path.relative(root, suitePath), sha256: hash(suiteBytes), schema: suite.schema}],
   suiteSourceIdentity: contentChecks, gates,
   ...(backend === 'sqlite' ? {wrongCredentials: {status: 'pass', cases: ['lock_revokes_owner_and_wrong_password_rejected']}} : {}),
   engine: suite.engine || 'not recorded by the installed-package suite',

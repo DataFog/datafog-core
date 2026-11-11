@@ -51,7 +51,7 @@
     {
       "name": "@datafog/wasm",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-wasm-1.1.0.tgz",
+      "file": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-wasm-1.1.0.tgz",
       "bytes": 2031540,
       "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
       "source": "npm registry exact version"
@@ -59,7 +59,7 @@
     {
       "name": "@datafog/core-sqlite-browser",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "file": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
       "bytes": 591484,
       "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
       "source": "npm registry exact version"
@@ -67,7 +67,7 @@
     {
       "name": "@datafog/fogvault-browser",
       "version": "0.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "file": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-fogvault-browser-0.1.0.tgz",
       "bytes": 578991,
       "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
       "source": "npm registry exact version"
@@ -75,14 +75,14 @@
     {
       "name": "@datafog/core-fogvault-browser",
       "version": "1.1.0",
-      "file": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "file": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
       "bytes": 10957,
       "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
       "source": "npm registry exact version"
     }
   ],
   "extensionArtifact": {
-    "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/mv3-extension-ae7b3a8d032b7b204778c84e13a5a1721907d34dd97166cebc36f0fd09be383f.zip",
+    "path": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/mv3-extension-ae7b3a8d032b7b204778c84e13a5a1721907d34dd97166cebc36f0fd09be383f.zip",
     "bytes": 40880674,
     "sha256": "fda14d7c55d980a18aadf25a8263c0788ed9819e299d5f35f88c70b2a2fe8f3a",
     "loadedDirectorySha256": "ae7b3a8d032b7b204778c84e13a5a1721907d34dd97166cebc36f0fd09be383f"
@@ -129,7 +129,7 @@
         ],
         "qualificationSuiteReceipts": [
           {
-            "path": "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/benchmark-qualification.json",
+            "path": "target/fogvault-browser/benchmark-qualification.json",
             "sha256": "f42a151df2d716dc5572d3d3bed414cdd29bb01c4668d203f8c514c5801199f6"
           }
         ]
@@ -141,7 +141,7 @@
         ],
         "qualificationSuiteReceipts": [
           {
-            "path": "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/benchmark-qualification.json",
+            "path": "target/fogvault-browser/benchmark-qualification.json",
             "sha256": "f42a151df2d716dc5572d3d3bed414cdd29bb01c4668d203f8c514c5801199f6"
           }
         ]
@@ -153,7 +153,7 @@
         ],
         "qualificationSuiteReceipts": [
           {
-            "path": "/Users/sid/projects/datafog/datafog-core-benchmark/target/fogvault-browser/benchmark-qualification.json",
+            "path": "target/fogvault-browser/benchmark-qualification.json",
             "sha256": "f42a151df2d716dc5572d3d3bed414cdd29bb01c4668d203f8c514c5801199f6"
           }
         ]
@@ -591,9 +591,9 @@
   "pageErrors": [],
   "exclusionReason": null,
   "resolvedDependencyManifest": {
-    "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/resolved-dependencies-502e44ec4eec34ea54378f1fc99a484012ab1cf7e7424b27e04283e79ccead73.json",
-    "sha256": "502e44ec4eec34ea54378f1fc99a484012ab1cf7e7424b27e04283e79ccead73",
-    "bytes": 23055
+    "path": "benchmarks/browser/results/final/final-storage-m10-unicode-n100-r2/artifacts/resolved-dependencies-4ed0929f44d1dd69af87b146563bcdf0ba045327cba5042ce6b6f1bb5f66fb36.json",
+    "sha256": "4ed0929f44d1dd69af87b146563bcdf0ba045327cba5042ce6b6f1bb5f66fb36",
+    "bytes": 16463
   },
   "qualificationEvidence": {
     "schema": "datafog-browser-benchmark-qualification/v1",
@@ -610,14 +610,14 @@
     },
     "suiteReceipts": [
       {
-        "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/fogvault-suite-receipt.json",
-        "sha256": "edd566f9275cb7d8d3a0b05ea0319d2309fff08caaf3f9533fca29de771efb27",
+        "path": "benchmarks/browser/results/qualification/fogvault-suite-receipt.json",
+        "sha256": "1f9f415929f1f027e6e4bfbe67b264960abd4583fbc6252c1199bb2fd2344724",
         "schema": "datafog-fogvault-browser-proof/v1"
       }
     ],
     "suiteSourceIdentity": {
       "@datafog/core-fogvault-browser@1.1.0": {
-        "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
+        "sourceArchive": "benchmarks/browser/results/qualification/artifacts/fogvault-suite/adapter-input.tgz",
         "contentSha256": "a1e288886a4b59a51350acfa7c8f92417eecc2d75eccb7b66850270e77b6f0ec"
       }
     },

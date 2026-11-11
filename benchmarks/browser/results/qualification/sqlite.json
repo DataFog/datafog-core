@@ -13,18 +13,18 @@
   },
   "suiteReceipts": [
     {
-      "path": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/qualification/sqlite-suite-receipt.json",
-      "sha256": "bb78b520f993307db291e4c1de3806a9eac40d042a8cbd43ae10b21a502fdbf0",
+      "path": "benchmarks/browser/results/qualification/sqlite-suite-receipt.json",
+      "sha256": "9754ef5b577b5767e74e0095140d43ef1729fc3baf2ca40faed362022d7fec6c",
       "schema": "datafog-sqlite-browser-proof/v1"
     }
   ],
   "suiteSourceIdentity": {
     "@datafog/wasm@1.1.0": {
-      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
+      "sourceArchive": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
       "contentSha256": "4153285a5e3a60c13ece90b1e71bd91f0d4c2ae780df1b26cefa50c9d167196a"
     },
     "@datafog/core-sqlite-browser@1.1.0": {
-      "sourceArchive": "/Users/sid/projects/datafog/datafog-core-benchmark/benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "sourceArchive": "benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
       "contentSha256": "f924591db6b333036ed5dbfa0e6c2ccec26354f4d6577991151fdd6858f694df"
     }
   },
