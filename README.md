@@ -38,7 +38,7 @@ Choose the exact 1.1.0 package for your application:
 | --- | --- | --- |
 | [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.1.0` | Python 3.10+ |
 | [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.1.0` | Node.js 24+ |
-| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.0.0` | Rust 1.88+ |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.1.0` | Rust 1.88+ |
 | [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.1.0` | Browser with WebAssembly support |
 
 ### Python
@@ -194,12 +194,12 @@ npm install --save-exact @datafog/wasm@1.1.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-Install the exact 1.0.0 SDK:
+Install the exact 1.1.0 SDK:
 
 ```bash
 python -m pip install 'datafog-core==1.1.0'
 npm install --save-exact @datafog/node@1.1.0
-cargo add datafog-core@=1.0.0 --features models
+cargo add datafog-core@=1.1.0 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:

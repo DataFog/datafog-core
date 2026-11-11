@@ -1,8 +1,8 @@
 # Browser extension Workspace with embedded detection
 
 Core 1.1.0 combines bundled CNN inference with reversible Workspace mappings
-and either FogVault or SQLite3 Multiple Ciphers persistence. Install the stable 1.1.0 SDK and Core-owned adapters together; independent
-FogVault remains 0.1.0. These additions are not in the 1.0.0 packages.
+and either FogVault or SQLite3 Multiple Ciphers persistence. Install the stable 1.1.0 SDK and Core-owned
+adapters together; independent FogVault remains 0.1.0. These additions are not in the 1.0.0 packages.
 
 The detector runs in its own Worker. The selected vault adapter exclusively owns
 the mutable Workspace and durable storage. A coordinator fences reviews when the
