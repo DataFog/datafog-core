@@ -4,6 +4,13 @@ import {cpSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const settings = {};
+const runnerArgs = process.argv.slice(2);
+for (let index = 0; index < runnerArgs.length; index += 2) {
+  const key = runnerArgs[index], value = runnerArgs[index + 1];
+  if (!['--core-tarball', '--sqlite-tarball'].includes(key) || !value || settings[key]) throw Error(`invalid or duplicate runner argument: ${key || ''}`);
+  settings[key] = path.resolve(value);
+}
 const output = path.join(root, 'target/sqlite-browser', new Date().toISOString().replaceAll(':', '-'));
 mkdirSync(output, {recursive: true});
 const run = (cmd, args, cwd = root) => execFileSync(cmd, args, {cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024});
@@ -27,9 +34,14 @@ const required = [
   'persistent_artifacts_contain_no_fixture_plaintext_and_page_tamper_rejects', 'browser_process_restart_preserves_exact_restore',
 ];
 const candidates = {};
-for (const [name, directory] of [['core', 'bindings/wasm'], ['sqlite', 'integrations/sqlite-browser']]) {
-  const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', output], path.join(root, directory)))[0];
-  candidates[name] = path.join(output, packed.filename);
+for (const [name, directory, setting] of [
+  ['core', 'bindings/wasm', '--core-tarball'], ['sqlite', 'integrations/sqlite-browser', '--sqlite-tarball'],
+]) {
+  if (settings[setting]) candidates[name] = settings[setting];
+  else {
+    const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', output], path.join(root, directory)))[0];
+    candidates[name] = path.join(output, packed.filename);
+  }
 }
 const extension = path.join(output, 'extension'); mkdirSync(extension);
 writeFileSync(path.join(extension, 'package.json'), '{"private":true,"type":"module"}');

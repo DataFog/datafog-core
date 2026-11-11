@@ -75,8 +75,12 @@ node --test benchmarks/browser/harness/test/*.test.mjs
 After a pilot has populated the run artifact cache, freeze and commit the harness, then run the installed-package adapter suites and retain their JSON receipts. Build one qualification receipt per backend with the exact package artifact manifest from that cache. These fault-suite runs may use a different browser engine from timing trials, which the receipts report:
 
 ```sh
-node integrations/sqlite-browser/test/run-installed.mjs
-node integrations/fogvault-browser/test/run-installed.mjs
+node integrations/sqlite-browser/test/run-installed.mjs \
+  --core-tarball <published-datafog-wasm-1.1.0.tgz> \
+  --sqlite-tarball <published-core-sqlite-browser-1.1.0.tgz>
+node integrations/fogvault-browser/test/run-installed.mjs \
+  --core-tarball <published-datafog-wasm-1.1.0.tgz> \
+  --vault-tarball <published-fogvault-browser-0.1.0.tgz>
 
 node benchmarks/browser/harness/qualify.mjs \
   --backend sqlite \
