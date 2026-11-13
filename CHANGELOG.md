@@ -8,6 +8,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Compose the development container from shared DataFog devcontainer features
+  (`build-tools`, `node-pinned`, `python-tools`, `rust-pinned`, `playwright`)
+  instead of the hand-rolled `.cursor` image build, pin the resolved feature
+  digests in `.devcontainer/devcontainer-lock.json`, and add
+  `scripts/check-devcontainer-pins.sh` so feature options cannot drift from
+  `.nvmrc`, `rust-toolchain.toml`, `Cargo.lock` and the playwright pin.
+
 - Add a state-machine reference for Core workspace, restore, conversation,
   model-session, native/browser vault owners, and host persistence lifecycles,
   including retry and concurrency invariants and regression evidence.

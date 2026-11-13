@@ -1,0 +1,34 @@
+{
+  "features": {
+    "ghcr.io/datafog/devcontainer-features/build-tools:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/datafog/devcontainer-features/build-tools@sha256:43b2e1c0f3e37a6889d4d39ad88a3c90c4fa3db86a847f6fcefb3be2458a2c86",
+      "integrity": "sha256:43b2e1c0f3e37a6889d4d39ad88a3c90c4fa3db86a847f6fcefb3be2458a2c86"
+    },
+    "ghcr.io/datafog/devcontainer-features/node-pinned:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/datafog/devcontainer-features/node-pinned@sha256:92ac985e3dd74481f142f28e456e252583ca5b80e4051418721eb20df3de3387",
+      "integrity": "sha256:92ac985e3dd74481f142f28e456e252583ca5b80e4051418721eb20df3de3387"
+    },
+    "ghcr.io/datafog/devcontainer-features/playwright:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/datafog/devcontainer-features/playwright@sha256:973b341f9869e9820034d471ee194244982a4f5ab0e0746bd2deb5f97b625061",
+      "integrity": "sha256:973b341f9869e9820034d471ee194244982a4f5ab0e0746bd2deb5f97b625061"
+    },
+    "ghcr.io/datafog/devcontainer-features/python-tools:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/datafog/devcontainer-features/python-tools@sha256:d67cf8b0d292de0fd561ca48e6abf7e99c56a1ccdf90ca4fa5244ab524409a05",
+      "integrity": "sha256:d67cf8b0d292de0fd561ca48e6abf7e99c56a1ccdf90ca4fa5244ab524409a05"
+    },
+    "ghcr.io/datafog/devcontainer-features/rust-pinned:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/datafog/devcontainer-features/rust-pinned@sha256:0098cd06bb0106fa0bd37266ad54d1e3a1031dd63e4f0634ea25dab5d69e5368",
+      "integrity": "sha256:0098cd06bb0106fa0bd37266ad54d1e3a1031dd63e4f0634ea25dab5d69e5368"
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "version": "2.7.1",
+      "resolved": "ghcr.io/devcontainers/features/common-utils@sha256:e76a6a8a35d1ad824daad1540725e0ec9f8ed2dc00d2850e990a9830013c7d08",
+      "integrity": "sha256:e76a6a8a35d1ad824daad1540725e0ec9f8ed2dc00d2850e990a9830013c7d08"
+    }
+  }
+}
