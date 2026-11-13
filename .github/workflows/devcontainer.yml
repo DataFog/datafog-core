@@ -70,10 +70,13 @@ jobs:
           container_id=$(docker create datafog-devcontainer:ci sleep infinity)
           trap 'docker rm --force "$container_id" > /dev/null' EXIT
           docker start "$container_id"
+          # The image bakes no USER/WORKDIR (the devcontainer sets both at run
+          # time), so be explicit here.
+          docker exec --user root "$container_id" mkdir -p /workspace
           git archive HEAD | docker exec --interactive --user root "$container_id" tar --extract --directory=/workspace
           docker exec --user root "$container_id" chown -R ubuntu:ubuntu /workspace
-          docker exec "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
-          docker exec "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
+          docker exec --user ubuntu --workdir /workspace "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
+          docker exec --user ubuntu --workdir /workspace "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
 
   # The Cursor cloud environment still builds .cursor/Dockerfile, which reads
   # its versions from the same pin files. Keep it building.
