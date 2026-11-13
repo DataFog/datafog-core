@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: devcontainer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
@@ -51,6 +52,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install devcontainer CLI
         run: npm install --global @devcontainers/cli
+      # The feature packages live in DataFog/devcontainer-features. Use a PAT
+      # (secrets.GHCR_TOKEN, read:packages) when the repo has no package access.
+      - name: Authenticate to GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          token='${{ secrets.GHCR_TOKEN }}'
+          [ -n "$token" ] || token='${{ secrets.GITHUB_TOKEN }}'
+          echo "$token" | docker login ghcr.io --username '${{ github.actor }}' --password-stdin
       - name: Build development image from the devcontainer
         run: devcontainer build --workspace-folder . --image-name datafog-devcontainer:ci
       - name: Build bindings and verify the container environment
