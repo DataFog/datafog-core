@@ -1,12 +1,37 @@
 {
   "name": "DataFog Core",
-  "build": {
-    "context": "..",
-    "dockerfile": "../.cursor/Dockerfile"
-  },
+  "image": "ubuntu:24.04",
   "remoteUser": "ubuntu",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
+  "containerEnv": {
+    "CARGO_HOME": "/opt/cargo",
+    "RUSTUP_HOME": "/opt/rustup",
+    "PLAYWRIGHT_BROWSERS_PATH": "/opt/pw-browsers",
+    "PATH": "/opt/cargo/bin:${containerEnv:PATH}"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "ubuntu",
+      "installZsh": false
+    },
+    "ghcr.io/datafog/devcontainer-features/build-tools:1": {},
+    "ghcr.io/datafog/devcontainer-features/node-pinned:1": {
+      "version": "24"
+    },
+    "ghcr.io/datafog/devcontainer-features/python-tools:1": {
+      "pip_packages": "maturin huggingface_hub"
+    },
+    "ghcr.io/datafog/devcontainer-features/rust-pinned:1": {
+      "toolchain": "1.88.0",
+      "components": "rustfmt,clippy",
+      "targets": "wasm32-unknown-unknown",
+      "wasm_bindgen": "0.2.127"
+    },
+    "ghcr.io/datafog/devcontainer-features/playwright:1": {
+      "version": "1.62.1"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [

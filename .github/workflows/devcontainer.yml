@@ -7,6 +7,7 @@ on:
       - ".cursor/environment.json"
       - ".devcontainer/**"
       - "scripts/pin.sh"
+      - "scripts/check-devcontainer-pins.sh"
       - "rust-toolchain.toml"
       - ".nvmrc"
       - "Cargo.lock"
@@ -19,6 +20,7 @@ on:
       - ".cursor/environment.json"
       - ".devcontainer/**"
       - "scripts/pin.sh"
+      - "scripts/check-devcontainer-pins.sh"
       - "rust-toolchain.toml"
       - ".nvmrc"
       - "Cargo.lock"
@@ -34,13 +36,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  pins:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Feature options match the pin files
+        run: bash scripts/check-devcontainer-pins.sh
+
   build-and-doctor:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Build development image
-        run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-devcontainer:ci .
+      - name: Install devcontainer CLI
+        run: npm install --global @devcontainers/cli
+      - name: Build development image from the devcontainer
+        run: devcontainer build --workspace-folder . --image-name datafog-devcontainer:ci
       - name: Build bindings and verify the container environment
         shell: bash
         run: |
@@ -52,3 +64,13 @@ jobs:
           docker exec --user root "$container_id" chown -R ubuntu:ubuntu /workspace
           docker exec "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
           docker exec "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
+
+  # The Cursor cloud environment still builds .cursor/Dockerfile, which reads
+  # its versions from the same pin files. Keep it building.
+  build-cursor-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Cursor cloud image
+        run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-cursor:ci .
