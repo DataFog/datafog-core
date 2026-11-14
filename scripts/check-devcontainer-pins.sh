@@ -10,6 +10,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$REPO_ROOT/.devcontainer/devcontainer.json"
+LOCK="$REPO_ROOT/.devcontainer/devcontainer-lock.json"
 FEATURE_PREFIX="ghcr.io/datafog/devcontainer-features"
 
 fail=0
@@ -26,6 +27,15 @@ key = next((k for k in features if k.split(":")[0] == feature), None)
 value = features.get(key, {}).get(option) if key else None
 print("" if value is None else value)
 PY
+}
+
+digest_state() {
+    # $1 = image reference. Plain `case` inside a command substitution does not
+    # parse on the bash 3.2 shipped with macOS.
+    case "$1" in
+        *@sha256:*) echo "sha256:" ;;
+        *) echo "(tag only)" ;;
+    esac
 }
 
 expect() {
@@ -64,5 +74,16 @@ expect "wasm-bindgen matches Cargo.lock" \
 expect "playwright matches bindings/wasm/package.json" \
     "$(python3 -c "import json;print(json.load(open('$REPO_ROOT/bindings/wasm/package.json'))['devDependencies']['playwright'])")" \
     "$(option_value playwright version)"
+
+# The base image must be pinned by digest. The tag stays in the reference so the
+# Cursor image build stays comparable; `devcontainer build --frozen-lockfile`
+# covers the feature digests, not this one.
+base_image="$(python3 -c "import json, sys; print(json.load(open(sys.argv[1])).get('image', ''))" "$CONFIG")"
+
+expect "image is pinned to a digest" "sha256:" "$(digest_state "$base_image")"
+
+expect "image base matches .cursor/Dockerfile" \
+    "$(awk '$1 == "FROM" {print $2; exit}' "$REPO_ROOT/.cursor/Dockerfile")" \
+    "${base_image%%@*}"
 
 exit "$fail"
