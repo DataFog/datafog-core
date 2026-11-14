@@ -1,0 +1,434 @@
+{
+  "runKind": "final",
+  "trialCount": 200,
+  "groups": [
+    {
+      "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+      "backend": "fogvault",
+      "trialCount": 100,
+      "independentProfileCount": 100,
+      "failedTrialCount": 0,
+      "failureRate": 0.0,
+      "unsupportedTrialCount": 0,
+      "unsupportedRate": 0.0,
+      "excludedTrialCount": 0,
+      "excludedRate": 0.0,
+      "eligibleTrialCount": 100,
+      "exclusions": [],
+      "intervals": [
+        {
+          "name": "adapterOpenAndUnlock",
+          "n": 100,
+          "p50Ms": 120.75,
+          "p95Ms": 155.42000000625848,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "approvalToSavedActivation",
+          "n": 100,
+          "p50Ms": 3.7999999970197678,
+          "p95Ms": 5.414999991655349,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "authenticatedBundleRecovery",
+          "n": 100,
+          "p50Ms": 124.59999999403954,
+          "p95Ms": 163.55999999940394,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "backupExport",
+          "n": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "percentileStatus": "exploratory_insufficient_independent_trials",
+          "unsupportedCount": 100,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "backupImport",
+          "n": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "percentileStatus": "exploratory_insufficient_independent_trials",
+          "unsupportedCount": 100,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "conversationIntentPersistence",
+          "n": 100,
+          "p50Ms": 2.5,
+          "p95Ms": 3.520000000298022,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "existingVaultContainerOpen",
+          "n": 100,
+          "p50Ms": 10.199999995529652,
+          "p95Ms": 13.645000008493659,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "existingWorkspaceReopen",
+          "n": 100,
+          "p50Ms": 1.2999999970197678,
+          "p95Ms": 1.5999999947845935,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "historyPopulation",
+          "n": 100,
+          "p50Ms": 0.09999999403953552,
+          "p95Ms": 0.10000000894069672,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "initialVaultPasswordUnlock",
+          "n": 100,
+          "p50Ms": 110.35000000149012,
+          "p95Ms": 148.32999999746679,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "initialWorkspaceOpen",
+          "n": 100,
+          "p50Ms": 1.4000000059604645,
+          "p95Ms": 2.0050000004470347,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "observedSendPersistence",
+          "n": 100,
+          "p50Ms": 2.0999999940395355,
+          "p95Ms": 2.9000000059604645,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartPasswordUnlock",
+          "n": 100,
+          "p50Ms": 111.95000000298023,
+          "p95Ms": 141.62499999701976,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartReopen",
+          "n": 100,
+          "p50Ms": 4.399999991059303,
+          "p95Ms": 5.104999993741512,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartScopedRestore",
+          "n": 100,
+          "p50Ms": 0.5999999940395355,
+          "p95Ms": 0.7000000029802322,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartSdkInitialization",
+          "n": 100,
+          "p50Ms": 7.200000002980232,
+          "p95Ms": 10.814999997615814,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartVaultOpen",
+          "n": 100,
+          "p50Ms": 15.5,
+          "p95Ms": 23.43499999120831,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "sdkInitialization",
+          "n": 100,
+          "p50Ms": 7.100000001490116,
+          "p95Ms": 11.504999999701976,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "trialPreparation",
+          "n": 100,
+          "p50Ms": 0.5999999940395355,
+          "p95Ms": 0.7000000029802322,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "vaultContainerOpen",
+          "n": 100,
+          "p50Ms": 10.699999995529652,
+          "p95Ms": 14.705000002682208,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "vaultCreate",
+          "n": 100,
+          "p50Ms": 127.0,
+          "p95Ms": 170.05,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "vaultPasswordUnlock",
+          "n": 100,
+          "p50Ms": 109.39999999850988,
+          "p95Ms": 141.9600000053644,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "warmScopedRestore",
+          "n": 100,
+          "p50Ms": 0.10000000894069672,
+          "p95Ms": 0.20000000298023224,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "workspaceCreate",
+          "n": 100,
+          "p50Ms": 4.5,
+          "p95Ms": 6.609999994188547,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+      "backend": "sqlite",
+      "trialCount": 100,
+      "independentProfileCount": 100,
+      "failedTrialCount": 0,
+      "failureRate": 0.0,
+      "unsupportedTrialCount": 0,
+      "unsupportedRate": 0.0,
+      "excludedTrialCount": 0,
+      "excludedRate": 0.0,
+      "eligibleTrialCount": 100,
+      "exclusions": [],
+      "intervals": [
+        {
+          "name": "adapterOpenAndUnlock",
+          "n": 100,
+          "p50Ms": 95.85000000149012,
+          "p95Ms": 115.17999999448656,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "approvalToSavedActivation",
+          "n": 100,
+          "p50Ms": 6.549999997019768,
+          "p95Ms": 9.615000008791684,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "backupExport",
+          "n": 100,
+          "p50Ms": 38.75,
+          "p95Ms": 43.619999994337554,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "backupRecovery",
+          "n": 100,
+          "p50Ms": 139.84999999403954,
+          "p95Ms": 174.71000000238416,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "conversationIntentPersistence",
+          "n": 100,
+          "p50Ms": 4.4000000059604645,
+          "p95Ms": 6.309999997168779,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "existingWorkspaceReopen",
+          "n": 100,
+          "p50Ms": 1.2999999970197678,
+          "p95Ms": 2.6049999944865703,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "historyPopulation",
+          "n": 100,
+          "p50Ms": 0.09999999403953552,
+          "p95Ms": 0.10500000789761516,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "initialVaultPasswordUnlock",
+          "n": 100,
+          "p50Ms": 93.6000000089407,
+          "p95Ms": 125.31999998912215,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "initialWorkspaceOpen",
+          "n": 100,
+          "p50Ms": 1.5,
+          "p95Ms": 2.809999997168779,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "observedSendPersistence",
+          "n": 100,
+          "p50Ms": 3.9000000059604645,
+          "p95Ms": 4.799999997019768,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartOpenAndUnlock",
+          "n": 100,
+          "p50Ms": 99.29999999701977,
+          "p95Ms": 129.70500000268214,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartReopen",
+          "n": 100,
+          "p50Ms": 4.5999999940395355,
+          "p95Ms": 6.069999999552961,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartScopedRestore",
+          "n": 100,
+          "p50Ms": 0.5999999940395355,
+          "p95Ms": 0.7050000026822087,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "postRestartSdkInitialization",
+          "n": 100,
+          "p50Ms": 7.250000007450581,
+          "p95Ms": 11.509999999403952,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "sdkInitialization",
+          "n": 100,
+          "p50Ms": 7.199999995529652,
+          "p95Ms": 12.014999999850987,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "trialPreparation",
+          "n": 100,
+          "p50Ms": 0.6000000014901161,
+          "p95Ms": 0.8999999910593033,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "vaultCreate",
+          "n": 100,
+          "p50Ms": 118.94999999552965,
+          "p95Ms": 150.16500000581144,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "vaultPasswordUnlock",
+          "n": 100,
+          "p50Ms": 94.5,
+          "p95Ms": 113.09500000029801,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "warmScopedRestore",
+          "n": 100,
+          "p50Ms": 0.09999999403953552,
+          "p95Ms": 0.20000000298023224,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        },
+        {
+          "name": "workspaceCreate",
+          "n": 100,
+          "p50Ms": 5.0999999940395355,
+          "p95Ms": 7.114999993890523,
+          "percentileStatus": "reported",
+          "unsupportedCount": 0,
+          "measurementFailureCount": 0
+        }
+      ]
+    }
+  ]
+}

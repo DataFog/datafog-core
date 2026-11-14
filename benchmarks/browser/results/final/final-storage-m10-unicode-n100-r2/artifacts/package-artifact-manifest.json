@@ -1,0 +1,26 @@
+{
+  "schema": "datafog-browser-package-artifacts/v1",
+  "source": "npm registry exact versions",
+  "packages": {
+    "@datafog/wasm@1.1.0": {
+      "path": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9"
+    },
+    "@datafog/core-sqlite-browser@1.1.0": {
+      "path": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc"
+    },
+    "@datafog/fogvault-browser@0.1.0": {
+      "path": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675"
+    },
+    "@datafog/core-fogvault-browser@1.1.0": {
+      "path": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100-r2/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8"
+    }
+  }
+}
