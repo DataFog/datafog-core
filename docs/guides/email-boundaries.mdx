@@ -3,13 +3,18 @@ title: "Email boundaries in source files"
 description: "Preserve environment assignments and SQL string delimiters with explicit scan context."
 ---
 
-Email local parts can contain apostrophes and equals signs. Without document
-context, `SUPPORT_EMAIL=support@example.com` can be an assignment or one address.
-Core's default text scanner retains its existing local-part coverage. Select
-`format: "env"` or `format: "sql"` explicitly when scanning those source formats.
-This setting changes email boundaries only; other detectors keep their existing
-behavior. It does not validate the file or guarantee syntax preservation for
-every entity type or SQL dialect.
+Email local parts can contain apostrophes and equals signs, and the same
+characters also separate labels from values. Text scanning resolves that by
+treating a leading `identifier=` prefix and a wrapping opening quote as label
+syntax, so `email=alice@example.com` reports `alice@example.com` by default and
+the authored text around it is untouched. Inner `=` stays in the local part:
+`EMAIL=customer=tag@example.com` reports `customer=tag@example.com`.
+
+`format: "env"` and `format: "sql"` remain available for documents where the
+whole scan should follow one source syntax, including the parts of a value that
+text mode leaves alone. This setting changes email boundaries only; other
+detectors keep their existing behavior. It does not validate the file or
+guarantee syntax preservation for every entity type or SQL dialect.
 
 ## Usage
 
@@ -17,7 +22,7 @@ every entity type or SQL dialect.
 from datafog_core import scan, transform
 
 text = "SUPPORT_EMAIL=support@example.com"
-findings = scan(text, {"format": "env"})
+findings = scan(text)  # text mode trims the label by default
 assert findings[0].matched_text == "support@example.com"
 assert findings[0].byte_range.start == 14
 result = transform(text, findings, {

@@ -3,9 +3,63 @@ use crate::{Candidate, ScanFormat, detect_email};
 
 pub(super) fn detect(text: &str, format: ScanFormat, candidates: &mut Vec<Candidate>) {
     match format {
-        ScanFormat::Text => detect_email(text, candidates),
+        ScanFormat::Text => {
+            let first = candidates.len();
+            detect_email(text, candidates);
+            refine_text_candidates(text, candidates, first);
+        }
         ScanFormat::Env => detect_env(text, candidates),
         ScanFormat::Sql => detect_sql(text, candidates),
+    }
+}
+
+/// Text mode applies the raw RFC local-part alphabet, which also admits the
+/// punctuation that label-style syntaxes put in front of a value, so a match
+/// can start inside `label=` or swallow an opening quote. Shrink each
+/// candidate the way the env and sql formats already delimit their slices:
+/// drop a wrapping leading quote, then a leading identifier-prefixed `=`.
+/// Inner `=` stays part of the local part, matching the reviewed env
+/// fixture semantics. A quote without its closing partner is a real local-part
+/// character and is kept.
+fn refine_text_candidates(text: &str, candidates: &mut [Candidate], first: usize) {
+    for candidate in &mut candidates[first..] {
+        let mut start = candidate.start_byte;
+        let end = candidate.end_byte;
+        let bytes = text.as_bytes();
+        let Some(at) = text[start..end].find('@').map(|offset| start + offset) else {
+            continue;
+        };
+        if matches!(bytes.get(start), Some(b'\'' | b'"')) && bytes.get(end) == Some(&bytes[start]) {
+            start += 1;
+        }
+        if let Some(value_start) = label_value_start(text, start, at) {
+            start = value_start;
+        }
+        if start != candidate.start_byte {
+            candidate.start_byte = start;
+        }
+    }
+}
+
+/// End of the `identifier=` prefix when the candidate's local part starts with
+/// one, or None. The identifier follows the env assignment rules (alphabetic
+/// or `_` first, then letters, digits, `_` and `-`), and at least one
+/// local-part character must remain before the `@`.
+fn label_value_start(text: &str, start: usize, at: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut cursor = start;
+    match bytes.get(cursor) {
+        Some(byte) if byte.is_ascii_alphabetic() || *byte == b'_' => cursor += 1,
+        _ => return None,
+    }
+    while matches!(bytes.get(cursor), Some(byte) if byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+    {
+        cursor += 1;
+    }
+    if bytes.get(cursor) == Some(&b'=') && cursor + 1 < at {
+        Some(cursor + 1)
+    } else {
+        None
     }
 }
 

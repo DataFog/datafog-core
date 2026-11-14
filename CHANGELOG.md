@@ -57,6 +57,14 @@ superseded rather than yanked.
 
 ### Changed
 
+- Text-mode email scanning trims label syntax by default: a leading
+  `identifier=` prefix and a wrapping opening quote no longer belong to the
+  reported span, so `email=alice@example.com` reports `alice@example.com` and
+  fenced or quoted values report the address itself. Inner `=` stays in the
+  local part, and digit-led or punctuation-led local parts are unchanged.
+  `format: "env"` and `format: "sql"` keep their existing slice semantics. This
+  adds and re-spans EMAIL findings, so it is a MINOR. See ADR 006.
+
 - `Development Status` is now `5 - Production/Stable`.
 - `PERSON` and `ADDRESS` prose coverage no longer implies a model download or an
   external interpreter.
