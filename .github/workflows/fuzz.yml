@@ -1,0 +1,46 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, off the top of the hour to avoid the busiest runner window.
+    - cron: "37 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [workspace_snapshot, utf16_range]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/core/fuzz
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz ${{ matrix.target }} for 60s
+        # `-max_total_time` is the budget; libFuzzer exits non-zero with the crash
+        # in `artifacts/<target>/`. Seeds are committed, so a fresh target starts
+        # from real snapshots and range pairs.
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=60
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: crates/core/fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
