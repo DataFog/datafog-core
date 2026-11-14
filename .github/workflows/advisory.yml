@@ -1,0 +1,40 @@
+name: Advisory scan
+
+on:
+  schedule:
+    # Advisories are published independently of our commits, so scan daily.
+    - cron: "17 6 * * *"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - ".github/workflows/advisory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the pinned Rust toolchain
+        id: rust-version
+        run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      # rust-cache also caches ~/.cargo/bin, so the cargo-audit build is reused
+      # after the first run.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Scan Cargo.lock for RustSec advisories
+        run: cargo audit --deny warnings
