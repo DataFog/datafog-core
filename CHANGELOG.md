@@ -41,6 +41,15 @@ superseded rather than yanked.
 - `Development Status` is now `5 - Production/Stable`.
 - `PERSON` and `ADDRESS` prose coverage no longer implies a model download or an
   external interpreter.
+- Release the GIL for the Rust work behind the synchronous Python `transform`,
+  `scan_and_transform`, `scan_structured`, `discover_fields`,
+  `transform_structured`, and `scan_and_transform_structured` calls, so other
+  threads keep running during a scan or transform and a Rust panic surfaces as a
+  `RuntimeError`.
+- Correct the dev environment docs to describe the composed devcontainer instead
+  of a `.cursor/Dockerfile` build, pin the devcontainer base image and feature
+  digests, and enforce the lock in CI.
+
 - Correct the dev environment docs to describe the composed devcontainer instead
   of a `.cursor/Dockerfile` build, pin the devcontainer base image and feature
   digests, and enforce the lock in CI.
