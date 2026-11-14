@@ -31,6 +31,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
   protection. This adds findings, so it is a MINOR, not a patch: 1.2.0 is
   superseded.
 
+## [1.3.1] - 2026-11-14
+
+Promotes the entries above. Verification tooling, the Python binding's GIL
+release, and dev environment enforcement only: no finding, span or label
+changes, so this is a PATCH under `VERSIONING.md`.
+
 ## [1.3.0] - 2026-11-14
 
 Promotes the fix above. 1.2.0 published before it merged, so 1.2.0 is
