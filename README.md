@@ -26,20 +26,20 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable:** [1.2.0](https://github.com/DataFog/datafog-core/releases/tag/v1.2.0) · [Release notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+**Stable:** [1.3.0](https://github.com/DataFog/datafog-core/releases/tag/v1.3.0) · [Release notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-Choose the exact 1.2.0 package for your application:
+Choose the exact 1.3.0 package for your application:
 
-| SDK | Install 1.2.0 | Requirements |
+| SDK | Install 1.3.0 | Requirements |
 | --- | --- | --- |
-| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.2.0` | Python 3.10+ |
-| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.2.0` | Node.js 24+ |
-| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.2.0` | Rust 1.88+ |
-| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.2.0` | Browser with WebAssembly support |
+| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.3.0` | Python 3.10+ |
+| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.3.0` | Node.js 24+ |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.3.0` | Rust 1.88+ |
+| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.3.0` | Browser with WebAssembly support |
 
 ### Python
 
@@ -184,7 +184,7 @@ vault core through the registered native adapter.
 Install the browser integration:
 
 ```bash
-npm install --save-exact @datafog/wasm@1.2.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.2.0
+npm install --save-exact @datafog/wasm@1.3.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.3.0
 ```
 
 [Integration guide and supported profiles →](docs/integrations/fogvault.md)
@@ -196,18 +196,18 @@ npm install --save-exact @datafog/wasm@1.2.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-Install the exact 1.2.0 SDK:
+Install the exact 1.3.0 SDK:
 
 ```bash
-python -m pip install 'datafog-core==1.2.0'
-npm install --save-exact @datafog/node@1.2.0
-cargo add datafog-core@=1.2.0 --features models
+python -m pip install 'datafog-core==1.3.0'
+npm install --save-exact @datafog/node@1.3.0
+cargo add datafog-core@=1.3.0 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-python -m pip install 'datafog-core[gliner2]==1.2.0'
+python -m pip install 'datafog-core[gliner2]==1.3.0'
 ```
 
 ### Embedded name and address detection

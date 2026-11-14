@@ -6,6 +6,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-14
+
+### Fixed
+
+- Phone detection accepts exchange codes starting with 1. The North American
+  Numbering Plan forbids it, but `(555) 123-4567` and similar form and fictional
+  data are everywhere, and the area-code check already carries the Unix-timestamp
+  protection. This adds findings, so it is a MINOR, not a patch: 1.2.0 is
+  superseded.
+
 ### Added
 
 - `EmbeddedCnnDetector` in the Python binding: the pinned `statements-v1` CNN for
