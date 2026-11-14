@@ -134,7 +134,7 @@
       ]
     },
     {
-      "left": "+4\u20034\u20032\u20030\u20037\u20039\u20034\u20036\u20030\u20039\u20035\u20038",
+      "left": "+4 4 2 0 7 9 4 6 0 9 5 8",
       "leftType": "PHONE",
       "right": "jane@example.com",
       "rightType": "EMAIL",
