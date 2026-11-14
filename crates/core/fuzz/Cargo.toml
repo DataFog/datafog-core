@@ -1,0 +1,30 @@
+[package]
+name = "datafog-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+datafog-core = { path = "..", default-features = true }
+
+# Kept out of the root workspace so libfuzzer link flags never reach the
+# published crates and bindings.
+[workspace]
+
+[[bin]]
+name = "workspace_snapshot"
+path = "fuzz_targets/workspace_snapshot.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "utf16_range"
+path = "fuzz_targets/utf16_range.rs"
+test = false
+doc = false
+bench = false
