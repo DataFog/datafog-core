@@ -86,4 +86,23 @@ expect "image base matches .cursor/Dockerfile" \
     "$(awk '$1 == "FROM" {print $2; exit}' "$REPO_ROOT/.cursor/Dockerfile")" \
     "${base_image%%@*}"
 
+# `--frozen-lockfile` rejects a lock that disagrees with the registry, but it
+# cannot see features that never made it into the lock. Compare the two lists.
+expect "lockfile covers exactly the configured features" "match" \
+    "$(python3 - "$CONFIG" "$LOCK" <<'PY'
+import json, sys
+
+config_path, lock_path = sys.argv[1:3]
+configured = set(json.load(open(config_path)).get("features", {}))
+locked = set(json.load(open(lock_path)).get("features", {}))
+
+if configured == locked:
+    print("match")
+else:
+    print("missing from lock: %s; not in config: %s"
+          % (", ".join(sorted(configured - locked)) or "none",
+             ", ".join(sorted(locked - configured)) or "none"))
+PY
+)"
+
 exit "$fail"

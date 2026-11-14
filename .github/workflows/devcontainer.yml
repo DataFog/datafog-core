@@ -51,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install devcontainer CLI
+        # Pinned: --frozen-lockfile is what enforces .devcontainer/devcontainer-lock.json.
         run: npm install --global @devcontainers/cli@0.90.0
       # The feature packages live in DataFog/devcontainer-features. Use a PAT
       # (secrets.GHCR_TOKEN, read:packages) when the repo has no package access.
@@ -62,7 +63,10 @@ jobs:
           [ -n "$token" ] || token='${{ secrets.GITHUB_TOKEN }}'
           echo "$token" | docker login ghcr.io --username '${{ github.actor }}' --password-stdin
       - name: Build development image from the devcontainer
-        run: devcontainer build --workspace-folder . --image-name datafog-devcontainer:ci
+        # --frozen-lockfile fails when a feature resolves to a digest the lock
+        # does not record, or when a feature is missing from the lock. Without
+        # it the CLI resolves the mutable :1 tags and rewrites the lock.
+        run: devcontainer build --workspace-folder . --image-name datafog-devcontainer:ci --frozen-lockfile
       - name: Build bindings and verify the container environment
         shell: bash
         run: |
