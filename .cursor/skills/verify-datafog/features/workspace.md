@@ -63,7 +63,7 @@ Restore operations can report marker issues:
 | 1 | beta.1 | Initial format |
 | 2 | beta.2 | beta.1 cannot open |
 | 3 | beta.3 | beta.1/beta.2 cannot open |
-| 4 | 1.1.0-rc.1 | Core 1.0 cannot open; supports retired mappings |
+| 4 | 1.1.0 | Core 1.0 cannot open; supports retired mappings |
 
 ## How to get to it (user POV)
 
