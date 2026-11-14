@@ -54,7 +54,7 @@ jobs:
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: python3 scripts/check-release.py python
       - uses: PyO3/maturin-action@v1
         with:
@@ -62,7 +62,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
           args: --release --locked --compatibility pypi --manifest-path bindings/python/Cargo.toml --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.target }}
           path: dist
@@ -72,13 +72,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: python3 scripts/check-release.py python
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --manifest-path bindings/python/Cargo.toml --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: source-distribution
           path: dist
@@ -94,7 +94,7 @@ jobs:
       actions: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require exact-commit Core and FogVault qualification for v1+
         run: python3 scripts/check-fogvault-release.py
         env:
@@ -103,7 +103,7 @@ jobs:
         run: python3 scripts/check-model-integration.py
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: "*"
           path: dist

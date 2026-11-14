@@ -33,7 +33,7 @@ jobs:
       PYTHONUTF8: "1"
       DATAFOG_REQUIRE_GLINER2: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -48,7 +48,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -57,7 +57,7 @@ jobs:
 
       # GLiNER2 model caching and provisioning
       - name: Restore cached GLiNER2 assets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: gliner2-cache
         with:
           path: ${{ runner.temp }}/gliner2-download
@@ -71,7 +71,7 @@ jobs:
             --revision 1cb4166094dc58fa8d836429f060d6c95f62b495 --local-dir "$RUNNER_TEMP/gliner2-download"
 
       - name: Cache GLiNER2 assets
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: steps.gliner2-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/gliner2-download
@@ -85,7 +85,7 @@ jobs:
 
       # Issue #87 reproduces on gliner2-base-v1 with a four-label described schema.
       - name: Restore cached GLiNER2 base-v1 assets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: gliner2-base-cache
         with:
           path: ${{ runner.temp }}/gliner2-base-v1-download
@@ -101,7 +101,7 @@ jobs:
             --local-dir "$RUNNER_TEMP/gliner2-base-v1-download"
 
       - name: Cache GLiNER2 base-v1 assets
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: steps.gliner2-base-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/gliner2-base-v1-download
@@ -117,7 +117,7 @@ jobs:
 
       # DataFog model caching and provisioning
       - name: Restore cached DataFog assets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: datafog-cache
         with:
           path: ${{ runner.temp }}/datafog-download
@@ -131,7 +131,7 @@ jobs:
             --revision 7cadd41e21f59b2a149e31378d073cf6ca057531 --local-dir "$RUNNER_TEMP/datafog-download"
 
       - name: Cache DataFog assets
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: steps.datafog-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/datafog-download
@@ -243,7 +243,7 @@ jobs:
 
       - name: Set up Node for nightly parity
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -268,7 +268,7 @@ jobs:
         run: cargo dfv parity --live --full --json
 
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dfv-model-reports
           path: target/dfv/runs/
