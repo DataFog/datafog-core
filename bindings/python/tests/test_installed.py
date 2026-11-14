@@ -6,6 +6,7 @@ import json
 import asyncio
 from pathlib import Path
 import capabilities_conformance
+import embedded_cnn_conformance
 import german_conformance
 import credential_overlap_conformance
 import jwt_conformance
@@ -309,6 +310,7 @@ def main() -> None:
     verify_account_number()
     verify_street_address()
     capabilities_conformance.verify()
+    embedded_cnn_conformance.verify()
     german_conformance.verify()
     credential_overlap_conformance.verify()
     jwt_conformance.verify()

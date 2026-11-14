@@ -1,4 +1,5 @@
 use ::datafog_core as core;
+mod cnn;
 mod models;
 mod workspace;
 use pyo3::create_exception;
@@ -1312,6 +1313,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan_structured, module)?)?;
     module.add_class::<TextRange>()?;
     module.add_class::<Finding>()?;
+    module.add_class::<cnn::EmbeddedCnnDetector>()?;
     module.add_class::<Transformation>()?;
     module.add_class::<TransformResult>()?;
     module.add_class::<Restoration>()?;

@@ -26,20 +26,20 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable:** [1.1.0](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0) · [Release notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+**Stable:** [1.2.0](https://github.com/DataFog/datafog-core/releases/tag/v1.2.0) · [Release notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-Choose the exact 1.1.0 package for your application:
+Choose the exact 1.2.0 package for your application:
 
-| SDK | Install 1.1.0 | Requirements |
+| SDK | Install 1.2.0 | Requirements |
 | --- | --- | --- |
-| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.1.0` | Python 3.10+ |
-| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.1.0` | Node.js 24+ |
-| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.1.0` | Rust 1.88+ |
-| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.1.0` | Browser with WebAssembly support |
+| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.2.0` | Python 3.10+ |
+| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.2.0` | Node.js 24+ |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.2.0` | Rust 1.88+ |
+| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.2.0` | Browser with WebAssembly support |
 
 ### Python
 
@@ -133,8 +133,10 @@ Python and Node.js packages include prebuilt native binaries for Linux x64 and A
 | German identifiers | IBAN, VAT ID, tax ID, social security number, postal code, passport number, residence permit number | Explicit [German locale](docs/reference/german-entities.mdx) |
 | UUIDs | [`UUID`](docs/reference/uuid.mdx) | Explicit `detect_uuid` setting |
 | Names in JSON fields | `PERSON` | [Structured scans](docs/guides/person-discovery.mdx), using name-field aliases or explicit JSON Pointer mappings |
+| Names and address blocks in prose | `PERSON`, `ADDRESS` | `EmbeddedCnnDetector`: weights compiled into the extension, no download or runtime |
+| Caller-defined labels | any | GLiNER2 [model sessions](#local-models-beta) |
 
-Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, or [local models](#local-models-beta) to detect names and unlabelled street addresses in prose.
+Use [structured scans](docs/guides/person-discovery.mdx) to find names by JSON field, `EmbeddedCnnDetector` for recipient names and mailing-address blocks in prose, or [model sessions](#local-models-beta) for caller-defined labels.
 
 Each finding includes its entity type, matched text, byte and code-point ranges, optional confidence, and detector name/version. Ranges are zero-based and end-exclusive. Node.js and WASM also provide UTF-16 ranges for JavaScript `slice`. Rule-based findings have no confidence score. [Findings and ranges →](docs/concepts/findings-and-ranges.mdx)
 
@@ -182,7 +184,7 @@ vault core through the registered native adapter.
 Install the browser integration:
 
 ```bash
-npm install --save-exact @datafog/wasm@1.1.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.1.0
+npm install --save-exact @datafog/wasm@1.2.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.2.0
 ```
 
 [Integration guide and supported profiles →](docs/integrations/fogvault.md)
@@ -194,19 +196,32 @@ npm install --save-exact @datafog/wasm@1.1.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-Install the exact 1.1.0 SDK:
+Install the exact 1.2.0 SDK:
 
 ```bash
-python -m pip install 'datafog-core==1.1.0'
-npm install --save-exact @datafog/node@1.1.0
-cargo add datafog-core@=1.1.0 --features models
+python -m pip install 'datafog-core==1.2.0'
+npm install --save-exact @datafog/node@1.2.0
+cargo add datafog-core@=1.2.0 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-python -m pip install 'datafog-core[gliner2]==1.1.0'
+python -m pip install 'datafog-core[gliner2]==1.2.0'
 ```
+
+### Embedded name and address detection
+
+`EmbeddedCnnDetector` carries the pinned `statements-v1` CNN in the extension itself: no model download, no files, no subprocess and no inference runtime. It is the same detector the browser build embeds and returns the same `ModelScanResult` contract as `ModelSession`.
+
+```python
+from datafog_core import EmbeddedCnnDetector
+
+detector = EmbeddedCnnDetector()          # authenticates the embedded weights once
+result = detector.scan(text, {"entities": ["PERSON", "ADDRESS", "EMAIL"]})
+```
+
+Limits are 65,536 input bytes and 8,192 tokens per request and 1,024 findings. Inference is synchronous and in-process, so `ModelCancellation` cannot interrupt it; keep a detector per worker thread. `scan_model` returns model-only findings, and `EmbeddedCnnDetector.scan_disabled` validates the same selection with no inference. [Embedded CNN reference →](docs/reference/embedded-cnn.mdx)
 
 GLiNER2 supports the PII checkpoint and compatible general-purpose span models with caller-defined labels. The GLiNER2 runner ships in the Python package and also serves Node.js and Rust callers. Download and verify model files separately, then use `ModelSession.open`, text `scan`, and `close`. Reuse sessions across calls. Both backends return consistent results and errors, with cancellation and cleanup support.
 

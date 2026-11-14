@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 create_exception!(datafog_core, DataFogModelError, PyRuntimeError);
 
-fn model_error(py: Python<'_>, error: models::ModelError) -> PyErr {
+pub(super) fn model_error(py: Python<'_>, error: models::ModelError) -> PyErr {
     let exception = if error.code == "invalid_configuration" {
         PyErr::new::<DataFogConfigurationError, _>(error.to_string())
     } else {
@@ -25,7 +25,7 @@ fn model_error(py: Python<'_>, error: models::ModelError) -> PyErr {
     }
 }
 
-fn json_object(py: Python<'_>, value: &impl serde::Serialize) -> PyResult<Py<PyAny>> {
+pub(super) fn json_object(py: Python<'_>, value: &impl serde::Serialize) -> PyResult<Py<PyAny>> {
     let json = serde_json::to_string(value)
         .map_err(|_| internal_error(py, "model metadata serialization failed"))?;
     Ok(py.import("json")?.call_method1("loads", (json,))?.unbind())
