@@ -50,7 +50,7 @@
     "test:package": "node ../../scripts/test-wasm-package.mjs"
   },
   "devDependencies": {
-    "playwright": "1.62.1",
+    "playwright": "1.65.0",
     "typescript": "7.0.2"
   },
   "dependencies": {
