@@ -6,8 +6,24 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- `EmbeddedCnnDetector` in the Python binding: the pinned `statements-v1` CNN for
+  prose recipient names (`PERSON`) and mailing-address blocks (`ADDRESS`),
+  compiled into the extension behind `embedded-cnn`. `scan`, `scan_model`,
+  `describe` and `scan_disabled` mirror the browser detector and reuse the
+  65,536-byte, 8,192-token and 1,024-finding limits. Weights authenticate at
+  construction; input over a limit fails rather than truncating.
+- `musllinux_1_2` x86_64 and aarch64 wheels, so Alpine and other musl images
+  install from a wheel instead of the sdist and a Rust toolchain.
+- `s390x`, `powerpc64le` and `aarch64-pc-windows-msvc` wheels.
+- `VERSIONING.md` and `docs/reference/embedded-cnn.mdx`.
+
 ### Changed
 
+- `Development Status` is now `5 - Production/Stable`.
+- `PERSON` and `ADDRESS` prose coverage no longer implies a model download or an
+  external interpreter.
 - Compose the development container from shared DataFog devcontainer features
   (`build-tools`, `node-pinned`, `python-tools`, `rust-pinned`, `playwright`)
   instead of the hand-rolled `.cursor` image build, pin the resolved feature

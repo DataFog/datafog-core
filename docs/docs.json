@@ -47,8 +47,8 @@
       "og:image:width": "1200",
       "og:image:height": "630",
       "og:image:type": "image/png",
-      "og:image:alt": "datafog documentation — Guides for MCP and Core SDK.",
-      "twitter:image:alt": "datafog documentation — Guides for MCP and Core SDK.",
+      "og:image:alt": "datafog documentation \u2014 Guides for MCP and Core SDK.",
+      "twitter:image:alt": "datafog documentation \u2014 Guides for MCP and Core SDK.",
       "og:site_name": "datafog documentation"
     }
   },
@@ -137,6 +137,7 @@
                   "reference/us-routing-number",
                   "reference/account-number",
                   "reference/street-address",
+                  "reference/embedded-cnn",
                   "reference/npi",
                   "reference/credential-uri"
                 ]

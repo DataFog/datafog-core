@@ -1,0 +1,65 @@
+---
+title: 'Embedded name and address detection'
+description: 'The pinned statements-v1 CNN for recipient names and mailing-address blocks, compiled into the SDK.'
+---
+
+`EmbeddedCnnDetector` carries the statements-v1 CNN inside the extension. It
+detects recipient names (`PERSON`) and full mailing-address blocks (`ADDRESS`),
+including United States and United Kingdom layouts. Weights are compiled into the
+artifact: no model download, no files, no ONNX runtime, no external interpreter.
+
+The browser binding owns the same detector in a dedicated Worker. Python and
+Node.js expose it directly and expect the caller to keep it off the main thread
+for sustained throughput. Rust callers use `datafog_core::cnn::CnnDetector` behind
+the `embedded-cnn` feature.
+
+```python
+from datafog_core import EmbeddedCnnDetector
+
+detector = EmbeddedCnnDetector()  # authenticates the embedded weights once
+result = detector.scan(text, {"entities": ["PERSON", "ADDRESS", "EMAIL"]})
+for finding in result.findings:
+    print(finding.entity_type, finding.matched_text)
+```
+
+```javascript
+import { EmbeddedCnnDetector } from "@datafog/node";
+
+const detector = new EmbeddedCnnDetector();
+const result = detector.scan(text, { entities: ["PERSON", "ADDRESS", "EMAIL"] });
+```
+
+`ADDRESS` is the full block and is distinct from
+[`STREET_ADDRESS`](street-address). `PERSON` from this detector is prose
+coverage; the rule engine's `PERSON` remains structured-field-only.
+
+## Methods
+
+| Member | Behaviour |
+| --- | --- |
+| `EmbeddedCnnDetector()` | Authenticates embedded weights and builds the contract |
+| `describe()` | Model id, digest, labels, adapter version, score scale, thresholds |
+| `scan(text, config=None)` | Rule detectors plus requested model labels. Result carries `contract_version`, `model`, `findings` and `evidence` |
+| `scan_model(text)` | Model-only findings, for parity and evaluation |
+| `EmbeddedCnnDetector.scan_disabled(text, config=None)` | Validates the same selection with no weight authentication or inference. Model-only selections return no findings |
+
+Omitting `config` equals `{}`: every enabled rule detector plus the model's
+remaining labels. Selection is validated even while disabled, so an unknown label
+fails in both states.
+
+## Limits and behaviour
+
+- 65,536 input bytes and 8,192 tokens per request; larger input fails rather than
+  truncating.
+- At most 1,024 findings.
+- Inputs over 256 tokens use 256-token windows with 64-token overlap.
+- Inference is synchronous and in-process. `ModelCancellation` does not interrupt
+  it, unlike `ModelSession.scan`.
+- Errors never return partial detections. There is no silent fallback to rule
+  findings when model loading or inference fails.
+- Raw tag evidence is not calibrated confidence; the CNN publishes no calibrated
+  score.
+
+Ranges follow the normal finding contract: UTF-8 byte and Unicode code-point
+ranges everywhere, plus UTF-16 ranges in JavaScript. `ADDRESS` and `PERSON`
+findings deduplicate against rule findings on the same span.
