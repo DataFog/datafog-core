@@ -11,6 +11,10 @@ repository = "https://github.com/DataFog/datafog-core"
 name = "datafog_core"
 crate-type = ["cdylib"]
 
+[dev-dependencies]
+# Only tests need a live interpreter; keeps the released cdylib build unchanged.
+pyo3 = { version = "0.29", features = ["auto-initialize"] }
+
 [dependencies]
 datafog-core = { version = "=1.3.0", path = "../../crates/core", features = ["models", "embedded-cnn"] }
 pyo3 = { version = "0.29", features = ["abi3-py310"] }

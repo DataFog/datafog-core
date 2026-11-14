@@ -471,6 +471,12 @@ impl Workspace {
     pub fn open_bundle(bytes: &[u8]) -> Result<Self> {
         Self::from_state(codec::decode(bytes)?)
     }
+    /// Run the canonical snapshot decoder over untrusted bytes and return the
+    /// canonical re-encoding, without keeping a workspace open. Used by the
+    /// fuzz harness to reach both halves of the codec from one input.
+    pub fn decode_snapshot(bytes: &[u8]) -> Result<Vec<u8>> {
+        codec::decode(bytes).and_then(|state| codec::encode(&state))
+    }
     pub fn export_bundle(&self) -> Result<Vec<u8>> {
         codec::encode(self.state()?)
     }

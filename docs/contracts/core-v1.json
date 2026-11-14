@@ -89,6 +89,7 @@
     "WorkspaceReviewInput",
     "capabilities",
     "discover_fields",
+    "panic_probe",
     "scan",
     "scan_and_transform",
     "scan_and_transform_structured",
@@ -176,7 +177,7 @@
     "_WorkspaceSnapshotFormat",
     "_WorkspaceTransformation"
    ],
-   "declarationsSha256": "ee3b021840a858de86bb149109efb5e4658917d3e18bfcb7d632398873e28d2d"
+   "declarationsSha256": "ef107569e046c6cd3c3a59ae7d5389cdf88e3186b82dac325f86187e0c257c97"
   }
  },
  "workspaceErrorCodes": [

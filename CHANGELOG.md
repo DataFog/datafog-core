@@ -6,6 +6,19 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Release the GIL for the Rust work behind the synchronous Python `transform`,
+  `scan_and_transform`, `scan_structured`, `discover_fields`,
+  `transform_structured`, and `scan_and_transform_structured` calls, so other
+  threads keep running during a scan or transform and a Rust panic surfaces as a
+  `RuntimeError`.
+
+- Correct the dev environment docs to describe the composed devcontainer instead
+  of a `.cursor/Dockerfile` build, pin the devcontainer base image by digest, and
+  build with `--frozen-lockfile` so a stale feature lock fails instead of being
+  rewritten.
+
 ### Fixed
 
 - Stop tracking the 24MB `datafog_core.abi3.so` build artifact that

@@ -494,6 +494,9 @@ def transform_structured(
 def scan_and_transform_structured(
     data: _JsonDocument, config: _StructuredScanAndTransformConfig
 ) -> StructuredTransformResult: ...
+def panic_probe() -> None:
+    '''Force a Rust panic through the detached-work path, for tests.'''
+    ...
 
 # Workspace result dictionaries retain the shared contract's camelCase fields.
 # Revisions are Python integers and preserve the full Core uint64 range.

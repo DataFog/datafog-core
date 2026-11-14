@@ -6,6 +6,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyTuple};
+use std::panic::UnwindSafe;
 
 create_exception!(datafog_core, DataFogConfigurationError, PyValueError);
 create_exception!(datafog_core, DataFogFindingError, PyValueError);
@@ -851,6 +852,29 @@ fn configuration_conversion_error(py: Python<'_>, path: &str, message: &str) -> 
     exception
 }
 
+/// Run pure-Rust work with the GIL released, turning a Rust panic into a
+/// `DataFogInternalError` instead of aborting the interpreter.
+///
+/// Callers must convert every borrowed Python value into owned Rust data first;
+/// Python strings are immutable, so other threads may run during the work.
+fn run_detached<T: Send>(
+    py: Python<'_>,
+    context: &str,
+    work: impl FnOnce() -> T + UnwindSafe + Send,
+) -> PyResult<T> {
+    py.detach(|| std::panic::catch_unwind(work))
+        .map_err(|payload| {
+            // Keep the panic text: it is the only clue a caller gets, and Rust
+            // panic messages carry no scan values.
+            let detail = payload
+                .downcast_ref::<&str>()
+                .map(|message| (*message).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic payload".to_owned());
+            internal_error(py, &format!("{context}: {detail}"))
+        })
+}
+
 fn internal_error(py: Python<'_>, message: &str) -> PyErr {
     let exception = PyErr::new::<DataFogInternalError, _>(message.to_owned());
     let value = exception.value(py);
@@ -977,10 +1001,9 @@ fn scan(py: Python<'_>, text: &str, config: Option<&Bound<'_, PyAny>>) -> PyResu
     } else {
         core::ScanConfig::default()
     };
-    // Python strings are immutable, so other threads may run during the scan.
-    let findings = py
-        .detach(|| std::panic::catch_unwind(|| core::scan_with_config(text, &config)))
-        .map_err(|_| internal_error(py, "unexpected Rust scan failure"))?;
+    let findings = run_detached(py, "unexpected Rust scan failure", || {
+        core::scan_with_config(text, &config)
+    })?;
     Ok(findings.into_iter().map(Finding::from).collect())
 }
 
@@ -999,7 +1022,10 @@ fn transform(
         .iter()
         .map(|finding| finding.bind(py).borrow().to_core())
         .collect();
-    core::transform(text, &core_findings, &config)
+    let result = run_detached(py, "unexpected Rust transform failure", || {
+        core::transform(text, &core_findings, &config)
+    })?;
+    result
         .map(TransformResult::from)
         .map_err(|error| privacy_error(py, error))
 }
@@ -1014,9 +1040,21 @@ fn scan_and_transform(
     let config = py_to_json(py, config, "")?;
     let config =
         core::parse_scan_and_transform_config(&config).map_err(|error| privacy_error(py, error))?;
-    core::scan_and_transform(text, &config)
+    let result = run_detached(py, "unexpected Rust scan and transform failure", || {
+        core::scan_and_transform(text, &config)
+    })?;
+    result
         .map(TransformResult::from)
         .map_err(|error| privacy_error(py, error))
+}
+
+/// Force a panic inside the detached work so callers can prove that a Rust panic
+/// reaches Python as a `DataFogInternalError`.
+#[pyfunction]
+fn panic_probe(py: Python<'_>) -> PyResult<()> {
+    run_detached(py, "unexpected Rust panic probe failure", || -> () {
+        panic!("forced panic probe")
+    })
 }
 
 #[pyclass(frozen, skip_from_py_object)]
@@ -1119,7 +1157,12 @@ fn discover_fields(
     data: &Bound<'_, PyAny>,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Vec<FieldMapping>> {
-    core::structured::discover_fields(&structured_data(py, data)?, &structured_config(py, config)?)
+    let data = structured_data(py, data)?;
+    let config = structured_config(py, config)?;
+    let mappings = run_detached(py, "unexpected Rust field discovery failure", || {
+        core::structured::discover_fields(&data, &config)
+    })?;
+    mappings
         .map(|mappings| mappings.into_iter().map(FieldMapping::from).collect())
         .map_err(|error| privacy_error(py, error))
 }
@@ -1131,9 +1174,12 @@ fn scan_structured(
     data: &Bound<'_, PyAny>,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<StructuredScanResult> {
-    let result =
-        core::structured::scan(&structured_data(py, data)?, &structured_config(py, config)?)
-            .map_err(|error| privacy_error(py, error))?;
+    let data = structured_data(py, data)?;
+    let config = structured_config(py, config)?;
+    let result = run_detached(py, "unexpected Rust structured scan failure", || {
+        core::structured::scan(&data, &config)
+    })?;
+    let result = result.map_err(|error| privacy_error(py, error))?;
     Ok(StructuredScanResult {
         mappings: result
             .mappings
@@ -1253,8 +1299,10 @@ fn transform_structured(
         .iter()
         .map(|finding| finding.bind(py).borrow().to_core())
         .collect();
-    let result = core::structured::transform(&data, &findings, &config)
-        .map_err(|error| privacy_error(py, error))?;
+    let result = run_detached(py, "unexpected Rust structured transform failure", || {
+        core::structured::transform(&data, &findings, &config)
+    })?;
+    let result = result.map_err(|error| privacy_error(py, error))?;
     structured_transform_result(py, result)
 }
 
@@ -1268,8 +1316,12 @@ fn scan_and_transform_structured(
     let config =
         core::structured::parse_scan_and_transform_config(&structured_options(py, config, "")?)
             .map_err(|error| privacy_error(py, error))?;
-    let result = core::structured::scan_and_transform(&data, &config)
-        .map_err(|error| privacy_error(py, error))?;
+    let result = run_detached(
+        py,
+        "unexpected Rust structured scan and transform failure",
+        || core::structured::scan_and_transform(&data, &config),
+    )?;
+    let result = result.map_err(|error| privacy_error(py, error))?;
     structured_transform_result(py, result)
 }
 
@@ -1323,6 +1375,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;
+    module.add_function(wrap_pyfunction!(panic_probe, module)?)?;
     Ok(())
 }
 
@@ -1351,4 +1404,36 @@ fn structured_options(
             "structured request options must be JSON-compatible",
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detached_work_converts_a_panic_into_an_internal_error() {
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        Python::attach(|py| {
+            let error = run_detached(py, "unexpected Rust test failure", || -> () {
+                panic!("forced test failure")
+            })
+            .expect_err("a panicking closure must produce an error");
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert!(error.is_instance_of::<DataFogInternalError>(py));
+            assert_eq!(
+                error
+                    .value(py)
+                    .getattr("code")
+                    .and_then(|code| code.extract::<String>())
+                    .expect("internal errors carry a code"),
+                "internal_error"
+            );
+            assert_eq!(
+                error.value(py).to_string(),
+                "unexpected Rust test failure: forced test failure"
+            );
+        });
+        std::panic::set_hook(hook);
+    }
 }

@@ -173,6 +173,25 @@ fn review_flags_do_not_change_overlap_selection_or_saved_activation() {
 }
 
 #[test]
+fn decode_snapshot_round_trips_accepted_bytes_and_rejects_non_canonical_ones() {
+    let (workspace, _) = saved_person([1; 16]);
+    let saved = workspace.export_bundle().unwrap();
+    assert_eq!(Workspace::decode_snapshot(&saved).unwrap(), saved);
+    assert_eq!(
+        Workspace::decode_snapshot(&[]).unwrap_err().code,
+        ErrorCode::InvalidSnapshot
+    );
+    // The decoder accepts canonical bytes only, so a trailing byte is rejected
+    // even though a permissive CBOR reader would ignore it.
+    let mut padded = saved.clone();
+    padded.push(0);
+    assert_eq!(
+        Workspace::decode_snapshot(&padded).unwrap_err().code,
+        ErrorCode::InvalidSnapshot
+    );
+}
+
+#[test]
 fn recovery_stages_a_fresh_head_and_preserves_known_markers() {
     let (workspace, jane) = saved_person([1; 16]);
     let backup = workspace.export_bundle().unwrap();

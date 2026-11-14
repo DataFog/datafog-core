@@ -13,7 +13,23 @@ Zero local setup. Open the repo in:
 - **Cursor**: Same flow as VS Code
 - **GitHub Codespaces**: Click "Code → Codespaces → New codespace"
 
-The container builds from `.cursor/Dockerfile`, which reads the pin files automatically.
+`.devcontainer/devcontainer.json` composes the environment from feature packages in
+`ghcr.io/datafog/devcontainer-features`, on an `ubuntu:24.04` base pinned by digest in the
+same file; `.devcontainer/devcontainer-lock.json` pins every feature digest. Features install
+at image-build time, before the checkout is mounted, so their versions are feature options in
+`devcontainer.json` and are not read from the pin files. The pin files stay the source of truth
+for CI and local installs, and `scripts/check-devcontainer-pins.sh` fails when an option
+disagrees with one of them. Update the pin file and the matching feature option in the same
+commit; when a feature legitimately resolves to a new digest, refresh the lock with
+`devcontainer upgrade --workspace-folder .`. CI builds with `devcontainer build
+--frozen-lockfile`, which fails instead of silently rewriting a stale lock. A
+Dependabot devcontainer PR therefore needs the same commit to refresh the lock
+and, for pinned tools, the matching pin file.
+
+The Cursor **cloud** environment builds `.cursor/environment.json` → `.cursor/Dockerfile`
+rather than the devcontainer, and that Dockerfile reads the pin files through `scripts/pin.sh`.
+That is the reason it still exists. Its `FROM` keeps the plain `ubuntu:24.04` tag and is not
+digest-pinned; only the devcontainer reference is.
 
 ### Option B: Local install
 
@@ -191,6 +207,15 @@ branch change.
 python3 scripts/test-changelog.py
 python3 scripts/check-changelog.py --base origin/main
 ```
+
+The Python binding has its own checks once a wheel is built:
+`.venv/bin/python bindings/python/tests/test_installed.py` and
+`.venv/bin/python bindings/python/tests/test_typing.py`. The GIL release
+conformance runs as part of `test_installed.py`.
+
+The fuzz targets live in `crates/core/fuzz` and are not part of the workspace.
+Run them with `cargo dfv fuzz run <target>`; `cargo dfv fuzz build` catches
+compile breaks without fuzzing. See `crates/core/fuzz/README.md`.
 
 The checker reads committed changes. Fetch the target branch first, and use that
 branch for `--base` when checking a stacked PR. Missing base refs and malformed

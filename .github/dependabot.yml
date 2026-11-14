@@ -1,0 +1,114 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "rust"]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      cargo-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      github-actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: npm
+    directory: "/bindings/node"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "node"]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      node-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      node-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: npm
+    directory: "/bindings/wasm"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "wasm"]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      wasm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      wasm-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: pip
+    directory: "/bindings/python"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      python-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: devcontainers
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      devcontainers-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      devcontainers-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: cargo
+    # The fuzz crate is its own workspace, so the root entry does not see it.
+    directory: "/crates/core/fuzz"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "rust"]
+    commit-message:
+      prefix: chore
+      include: scope

@@ -1,0 +1,15 @@
+/target/
+/artifacts/
+
+# libFuzzer writes 40-hex-named entries here. Keep the curated seeds and named
+# regression inputs tracked; add an unignore line for each new regression input.
+/corpus/utf16_range/*
+!/corpus/utf16_range/ascii_whole_range.bin
+!/corpus/utf16_range/astral_past_the_end.bin
+!/corpus/utf16_range/multibyte_mid_character.bin
+/corpus/workspace_snapshot/*
+!/corpus/workspace_snapshot/empty.cbor
+!/corpus/workspace_snapshot/entries.cbor
+!/corpus/workspace_snapshot/legacy_v1.cbor
+!/corpus/workspace_snapshot/legacy_v2.cbor
+!/corpus/workspace_snapshot/retired.cbor
