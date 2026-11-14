@@ -55,7 +55,7 @@ jobs:
         with:
           workspaces: crates/core/fuzz
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        run: cargo install cargo-fuzz --locked --version 0.13.2
       - name: Fuzz ${{ matrix.target }} for 60s
         # `-max_total_time` is the budget; libFuzzer exits non-zero with the crash
         # in `artifacts/<target>/`. Seeds are committed, so a fresh target starts

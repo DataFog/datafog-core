@@ -101,3 +101,14 @@ updates:
       devcontainers-major:
         patterns: ["*"]
         update-types: ["major"]
+
+  - package-ecosystem: cargo
+    # The fuzz crate is its own workspace, so the root entry does not see it.
+    directory: "/crates/core/fuzz"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "rust"]
+    commit-message:
+      prefix: chore
+      include: scope
