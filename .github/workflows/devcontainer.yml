@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install devcontainer CLI
-        run: npm install --global @devcontainers/cli
+        run: npm install --global @devcontainers/cli@0.90.0
       # The feature packages live in DataFog/devcontainer-features. Use a PAT
       # (secrets.GHCR_TOKEN, read:packages) when the repo has no package access.
       - name: Authenticate to GHCR
