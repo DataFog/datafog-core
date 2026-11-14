@@ -83,11 +83,6 @@ jobs:
           .venv/bin/python -m pip install -r bindings/python/tests/requirements-typing.txt
           .venv/bin/python bindings/python/tests/test_installed.py
           .venv/bin/python bindings/python/tests/test_typing.py
-      - if: steps.scope.outputs.code == 'true' && matrix.os == 'ubuntu-latest'
-        name: Verify synchronous calls release the GIL
-        run: |
-          .venv/bin/python -m pip install pytest==9.2.0
-          .venv/bin/pytest bindings/python/tests/test_gil_release.py -q
       - if: steps.scope.outputs.code == 'true' && (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10')
         name: Verify typing survives a source distribution rebuild
         run: |

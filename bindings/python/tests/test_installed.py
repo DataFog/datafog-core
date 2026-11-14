@@ -7,6 +7,7 @@ import asyncio
 from pathlib import Path
 import capabilities_conformance
 import embedded_cnn_conformance
+import gil_release_conformance
 import german_conformance
 import credential_overlap_conformance
 import jwt_conformance
@@ -311,6 +312,7 @@ def main() -> None:
     verify_street_address()
     capabilities_conformance.verify()
     embedded_cnn_conformance.verify()
+    gil_release_conformance.verify()
     german_conformance.verify()
     credential_overlap_conformance.verify()
     jwt_conformance.verify()

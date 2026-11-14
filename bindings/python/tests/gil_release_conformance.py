@@ -12,8 +12,6 @@ import threading
 import time
 from contextlib import contextmanager
 
-import pytest
-
 from datafog_core import (
     DataFogInternalError,
     StructuredFinding,
@@ -153,26 +151,28 @@ WORKLOADS = [
 ]
 
 
-@pytest.mark.parametrize("call, work", WORKLOADS, ids=[label for label, _ in WORKLOADS])
-def test_synchronous_calls_release_the_gil(call, work):
-    assert_progress(*measure_worker_progress(work), call)
-
-
-def test_rust_panic_becomes_internal_error():
-    with pytest.raises(DataFogInternalError) as caught:
-        panic_probe()
-    assert isinstance(caught.value, RuntimeError)
-    assert caught.value.code == "internal_error"
-    assert str(caught.value) == (
-        "unexpected Rust panic probe failure: forced panic probe"
-    )
-
-
-def main():
+def verify_synchronous_calls_release_the_gil():
     for call, work in WORKLOADS:
         assert_progress(*measure_worker_progress(work), call)
-    test_rust_panic_becomes_internal_error()
+
+
+def verify_rust_panic_becomes_internal_error():
+    try:
+        panic_probe()
+    except DataFogInternalError as error:
+        assert isinstance(error, RuntimeError)
+        assert error.code == "internal_error"
+        assert str(error) == (
+            "unexpected Rust panic probe failure: forced panic probe"
+        )
+    else:
+        raise AssertionError("panic_probe did not raise DataFogInternalError")
+
+
+def verify():
+    verify_synchronous_calls_release_the_gil()
+    verify_rust_panic_becomes_internal_error()
 
 
 if __name__ == "__main__":
-    main()
+    verify()

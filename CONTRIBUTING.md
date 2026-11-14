@@ -209,9 +209,9 @@ python3 scripts/check-changelog.py --base origin/main
 ```
 
 The Python binding has its own checks once a wheel is built:
-`.venv/bin/python bindings/python/tests/test_installed.py`,
-`.venv/bin/python bindings/python/tests/test_typing.py`, and
-`.venv/bin/pytest bindings/python/tests/test_gil_release.py`.
+`.venv/bin/python bindings/python/tests/test_installed.py` and
+`.venv/bin/python bindings/python/tests/test_typing.py`. The GIL release
+conformance runs as part of `test_installed.py`.
 
 The fuzz targets live in `crates/core/fuzz` and are not part of the workspace.
 Run them with `cargo +nightly fuzz run <target>`; `cargo +nightly build --release
