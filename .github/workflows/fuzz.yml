@@ -2,16 +2,8 @@ name: Fuzz
 
 on:
   workflow_dispatch:
-  # Catch compile breaks in the targets or the decoder they reach without
-  # spending fuzz time on every pull request.
+  # Pull requests only build the targets. A fuzz run is nightly work.
   pull_request:
-    paths:
-      - "crates/core/fuzz/**"
-      - "crates/core/src/**"
-      - "crates/core/tests/**"
-      - "crates/core/Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/fuzz.yml"
   schedule:
     # Nightly, off the top of the hour to avoid the busiest runner window.
     - cron: "37 3 * * *"
@@ -20,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -30,16 +22,39 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
+        with:
+          fetch-depth: 0
+      # Docs-only changes skip the remaining steps but still report success, so
+      # a required check never waits for a run that path filters would not start.
+      - name: Detect docs-only changes
+        id: scope
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          code=true
+          files="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
+          if [[ -n "$files" ]]; then
+            code=false
+            while IFS= read -r file; do
+              case "$file" in docs/*|*.md|*.mdx) ;; *) code=true ;; esac
+            done <<< "$files"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.code == 'true'
+        uses: dtolnay/rust-toolchain@nightly
+      - if: steps.scope.outputs.code == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/core/fuzz
-      - name: Check formatting and build the fuzz targets
+      - if: steps.scope.outputs.code == 'true'
+        name: Check formatting and build the fuzz targets
         run: |
           cargo +nightly fmt --manifest-path crates/core/fuzz/Cargo.toml -- --check
           cargo +nightly build --release --bins --manifest-path crates/core/fuzz/Cargo.toml
 
   fuzz:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:

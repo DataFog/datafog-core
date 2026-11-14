@@ -104,6 +104,12 @@ async def restore_batch(scope: str, items: list[dict]) -> list[dict]:
 Exceptions expose stable `code`, optional `reason`, optional `path`, and
 optional `finding_index` attributes. See [Errors](/reference/errors).
 
+## Testing hook
+
+`panic_probe()` forces a Rust panic through the detached-work path and raises
+`DataFogInternalError` (code `internal_error`, message including the panic text).
+Use it to check that your own error handling covers the Rust boundary.
+
 ## Structured JSON and PERSON fields
 
 Use `discover_fields(data, config=None)`, `scan_structured(data, config=None)`,

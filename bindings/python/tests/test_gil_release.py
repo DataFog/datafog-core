@@ -55,8 +55,8 @@ def measure_worker_progress(work, maximum_repeats=1_000_000):
     before the call cannot be mistaken for progress. Repeats double until the
     call is long enough to judge, so the test also holds on a fast release
     build. The ceiling is high enough for the cheapest workload on fast
-    hardware; memory stays in the tens of megabytes because only the repeats
-    count grows.
+    hardware; at the ceiling the largest workloads peak at a few gigabytes, so
+    the repeats count is the only thing that grows.
     """
     repeats = 2000
     while True:

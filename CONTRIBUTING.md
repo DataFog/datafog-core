@@ -22,7 +22,9 @@ for CI and local installs, and `scripts/check-devcontainer-pins.sh` fails when a
 disagrees with one of them. Update the pin file and the matching feature option in the same
 commit; when a feature legitimately resolves to a new digest, refresh the lock with
 `devcontainer upgrade --workspace-folder .`. CI builds with `devcontainer build
---frozen-lockfile`, which fails instead of silently rewriting a stale lock.
+--frozen-lockfile`, which fails instead of silently rewriting a stale lock. A
+Dependabot devcontainer PR therefore needs the same commit to refresh the lock
+and, for pinned tools, the matching pin file.
 
 The Cursor **cloud** environment builds `.cursor/environment.json` → `.cursor/Dockerfile`
 rather than the devcontainer, and that Dockerfile reads the pin files through `scripts/pin.sh`.

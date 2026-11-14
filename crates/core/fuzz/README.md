@@ -16,7 +16,7 @@ flags and the nightly-only sanitizer setup must not reach the published crates.
 
 ```bash
 rustup toolchain install nightly
-cargo install cargo-fuzz --locked
+cargo install cargo-fuzz --locked --version 0.13.2
 cargo +nightly fuzz run workspace_snapshot
 cargo +nightly fuzz run utf16_range
 ```
