@@ -13,7 +13,21 @@ Zero local setup. Open the repo in:
 - **Cursor**: Same flow as VS Code
 - **GitHub Codespaces**: Click "Code → Codespaces → New codespace"
 
-The container builds from `.cursor/Dockerfile`, which reads the pin files automatically.
+`.devcontainer/devcontainer.json` composes the environment from feature packages in
+`ghcr.io/datafog/devcontainer-features`, on an `ubuntu:24.04` base pinned by digest in the
+same file; `.devcontainer/devcontainer-lock.json` pins every feature digest. Features install
+at image-build time, before the checkout is mounted, so their versions are feature options in
+`devcontainer.json` and are not read from the pin files. The pin files stay the source of truth
+for CI and local installs, and `scripts/check-devcontainer-pins.sh` fails when an option
+disagrees with one of them. Update the pin file and the matching feature option in the same
+commit; when a feature legitimately resolves to a new digest, refresh the lock with
+`devcontainer upgrade --workspace-folder .`. CI builds with `devcontainer build
+--frozen-lockfile`, which fails instead of silently rewriting a stale lock.
+
+The Cursor **cloud** environment builds `.cursor/environment.json` → `.cursor/Dockerfile`
+rather than the devcontainer, and that Dockerfile reads the pin files through `scripts/pin.sh`.
+That is the reason it still exists. Its `FROM` keeps the plain `ubuntu:24.04` tag and is not
+digest-pinned; only the devcontainer reference is.
 
 ### Option B: Local install
 

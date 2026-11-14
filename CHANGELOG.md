@@ -41,6 +41,10 @@ superseded rather than yanked.
 - `Development Status` is now `5 - Production/Stable`.
 - `PERSON` and `ADDRESS` prose coverage no longer implies a model download or an
   external interpreter.
+- Correct the dev environment docs to describe the composed devcontainer instead
+  of a `.cursor/Dockerfile` build, pin the devcontainer base image and feature
+  digests, and enforce the lock in CI.
+
 - Compose the development container from shared DataFog devcontainer features
   (`build-tools`, `node-pinned`, `python-tools`, `rust-pinned`, `playwright`)
   instead of the hand-rolled `.cursor` image build, pin the resolved feature
