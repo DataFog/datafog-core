@@ -17,7 +17,7 @@ import pytest
 from datafog_core import (
     DataFogInternalError,
     StructuredFinding,
-    _panic_probe,
+    panic_probe,
     discover_fields,
     scan,
     scan_and_transform,
@@ -48,13 +48,15 @@ def long_switch_interval():
         sys.setswitchinterval(previous)
 
 
-def measure_worker_progress(work, maximum_repeats=128000):
+def measure_worker_progress(work, maximum_repeats=1_000_000):
     """Run `work` on a worker thread and count counter-thread ticks meanwhile.
 
     The counter thread waits until the worker has started, so ticks recorded
     before the call cannot be mistaken for progress. Repeats double until the
     call is long enough to judge, so the test also holds on a fast release
-    build.
+    build. The ceiling is high enough for the cheapest workload on fast
+    hardware; memory stays in the tens of megabytes because only the repeats
+    count grows.
     """
     repeats = 2000
     while True:
@@ -158,10 +160,12 @@ def test_synchronous_calls_release_the_gil(call, work):
 
 def test_rust_panic_becomes_internal_error():
     with pytest.raises(DataFogInternalError) as caught:
-        _panic_probe()
+        panic_probe()
     assert isinstance(caught.value, RuntimeError)
     assert caught.value.code == "internal_error"
-    assert str(caught.value) == "unexpected Rust panic probe failure"
+    assert str(caught.value) == (
+        "unexpected Rust panic probe failure: forced panic probe"
+    )
 
 
 def main():

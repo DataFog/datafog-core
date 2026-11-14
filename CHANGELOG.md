@@ -50,16 +50,15 @@ superseded rather than yanked.
   of a `.cursor/Dockerfile` build, pin the devcontainer base image and feature
   digests, and enforce the lock in CI.
 
-- Correct the dev environment docs to describe the composed devcontainer instead
-  of a `.cursor/Dockerfile` build, pin the devcontainer base image and feature
-  digests, and enforce the lock in CI.
-
 - Compose the development container from shared DataFog devcontainer features
   (`build-tools`, `node-pinned`, `python-tools`, `rust-pinned`, `playwright`)
   instead of the hand-rolled `.cursor` image build, pin the resolved feature
   digests in `.devcontainer/devcontainer-lock.json`, and add
   `scripts/check-devcontainer-pins.sh` so feature options cannot drift from
-  `.nvmrc`, `rust-toolchain.toml`, `Cargo.lock` and the playwright pin.
+  `.nvmrc`, `rust-toolchain.toml`, `Cargo.lock` and the playwright pin. The base
+  image is pinned by digest and CI builds with `--frozen-lockfile`, so a stale
+  lock fails instead of being rewritten; the dev environment docs now describe
+  the composed container rather than the `.cursor` build.
 
 - Add a state-machine reference for Core workspace, restore, conversation,
   model-session, native/browser vault owners, and host persistence lifecycles,

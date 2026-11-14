@@ -4,7 +4,6 @@ mod models;
 mod workspace;
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
-use pyo3::marker::Ungil;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyTuple};
 use std::panic::UnwindSafe;
@@ -858,13 +857,22 @@ fn configuration_conversion_error(py: Python<'_>, path: &str, message: &str) -> 
 ///
 /// Callers must convert every borrowed Python value into owned Rust data first;
 /// Python strings are immutable, so other threads may run during the work.
-fn run_detached<T: Ungil + Send>(
+fn run_detached<T: Send>(
     py: Python<'_>,
-    panic_message: &str,
+    context: &str,
     work: impl FnOnce() -> T + UnwindSafe + Send,
 ) -> PyResult<T> {
     py.detach(|| std::panic::catch_unwind(work))
-        .map_err(|_| internal_error(py, panic_message))
+        .map_err(|payload| {
+            // Keep the panic text: it is the only clue a caller gets, and Rust
+            // panic messages carry no scan values.
+            let detail = payload
+                .downcast_ref::<&str>()
+                .map(|message| (*message).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic payload".to_owned());
+            internal_error(py, &format!("{context}: {detail}"))
+        })
 }
 
 fn internal_error(py: Python<'_>, message: &str) -> PyErr {
@@ -1040,10 +1048,10 @@ fn scan_and_transform(
         .map_err(|error| privacy_error(py, error))
 }
 
-/// Force a panic inside the detached work so tests can prove that a Rust panic
+/// Force a panic inside the detached work so callers can prove that a Rust panic
 /// reaches Python as a `DataFogInternalError`.
 #[pyfunction]
-fn _panic_probe(py: Python<'_>) -> PyResult<()> {
+fn panic_probe(py: Python<'_>) -> PyResult<()> {
     run_detached(py, "unexpected Rust panic probe failure", || -> () {
         panic!("forced panic probe")
     })
@@ -1367,7 +1375,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;
-    module.add_function(wrap_pyfunction!(_panic_probe, module)?)?;
+    module.add_function(wrap_pyfunction!(panic_probe, module)?)?;
     Ok(())
 }
 
@@ -1421,7 +1429,10 @@ mod tests {
                     .expect("internal errors carry a code"),
                 "internal_error"
             );
-            assert_eq!(error.value(py).to_string(), "unexpected Rust test failure");
+            assert_eq!(
+                error.value(py).to_string(),
+                "unexpected Rust test failure: forced test failure"
+            );
         });
         std::panic::set_hook(hook);
     }

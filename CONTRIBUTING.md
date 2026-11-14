@@ -206,6 +206,16 @@ python3 scripts/test-changelog.py
 python3 scripts/check-changelog.py --base origin/main
 ```
 
+The Python binding has its own checks once a wheel is built:
+`.venv/bin/python bindings/python/tests/test_installed.py`,
+`.venv/bin/python bindings/python/tests/test_typing.py`, and
+`.venv/bin/pytest bindings/python/tests/test_gil_release.py`.
+
+The fuzz targets live in `crates/core/fuzz` and are not part of the workspace.
+Run them with `cargo +nightly fuzz run <target>`; `cargo +nightly build --release
+--bins --manifest-path crates/core/fuzz/Cargo.toml` catches compile breaks without
+fuzzing. See `crates/core/fuzz/README.md`.
+
 The checker reads committed changes. Fetch the target branch first, and use that
 branch for `--base` when checking a stacked PR. Missing base refs and malformed
 event data fail the check. Local checks do not consult GitHub labels unless an

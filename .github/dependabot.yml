@@ -84,3 +84,20 @@ updates:
       python-major:
         patterns: ["*"]
         update-types: ["major"]
+
+  - package-ecosystem: devcontainers
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      devcontainers-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      devcontainers-major:
+        patterns: ["*"]
+        update-types: ["major"]
