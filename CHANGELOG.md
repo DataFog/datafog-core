@@ -6,6 +6,19 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Compose the development container from shared DataFog devcontainer features
+  (`build-tools`, `node-pinned`, `python-tools`, `rust-pinned`, `playwright`)
+  instead of the hand-rolled `.cursor` image build, pin the resolved feature
+  digests in `.devcontainer/devcontainer-lock.json`, and add
+  `scripts/check-devcontainer-pins.sh` so feature options cannot drift from
+  `.nvmrc`, `rust-toolchain.toml`, `Cargo.lock` and the playwright pin.
+
+- Add a state-machine reference for Core workspace, restore, conversation,
+  model-session, native/browser vault owners, and host persistence lifecycles,
+  including retry and concurrency invariants and regression evidence.
+
 ## [1.1.0] - 2026-11-11
 
 Promote 1.1.0-rc.1 to stable with the same runtime scope. The additions and fixes
@@ -188,7 +201,6 @@ below remain unchanged; extension integration and acceptance are tracked separat
 
 - Detect bounded English street lines after explicit street/shipping/billing
   address labels across SDKs, retaining broader model address coverage.
-
 
 - Detect explicitly account-labelled four-digit endings and bounded X/asterisk
   masks without inferring hidden digits or changing workspace literal identity.

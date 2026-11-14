@@ -1,0 +1,18 @@
+# Build context for the devcontainer / Cursor image.
+# Only pin files, bindings manifests and scripts are consumed, so keep the
+# context small — the repo itself is bind-mounted at runtime.
+.git
+.github
+.codex-work
+target
+coverage.xml
+.coverage
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+models

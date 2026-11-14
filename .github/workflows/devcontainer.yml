@@ -7,6 +7,7 @@ on:
       - ".cursor/environment.json"
       - ".devcontainer/**"
       - "scripts/pin.sh"
+      - "scripts/check-devcontainer-pins.sh"
       - "rust-toolchain.toml"
       - ".nvmrc"
       - "Cargo.lock"
@@ -19,6 +20,7 @@ on:
       - ".cursor/environment.json"
       - ".devcontainer/**"
       - "scripts/pin.sh"
+      - "scripts/check-devcontainer-pins.sh"
       - "rust-toolchain.toml"
       - ".nvmrc"
       - "Cargo.lock"
@@ -28,19 +30,39 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: devcontainer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  pins:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Feature options match the pin files
+        run: bash scripts/check-devcontainer-pins.sh
+
   build-and-doctor:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Build development image
-        run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-devcontainer:ci .
+      - name: Install devcontainer CLI
+        run: npm install --global @devcontainers/cli
+      # The feature packages live in DataFog/devcontainer-features. Use a PAT
+      # (secrets.GHCR_TOKEN, read:packages) when the repo has no package access.
+      - name: Authenticate to GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          token='${{ secrets.GHCR_TOKEN }}'
+          [ -n "$token" ] || token='${{ secrets.GITHUB_TOKEN }}'
+          echo "$token" | docker login ghcr.io --username '${{ github.actor }}' --password-stdin
+      - name: Build development image from the devcontainer
+        run: devcontainer build --workspace-folder . --image-name datafog-devcontainer:ci
       - name: Build bindings and verify the container environment
         shell: bash
         run: |
@@ -48,7 +70,20 @@ jobs:
           container_id=$(docker create datafog-devcontainer:ci sleep infinity)
           trap 'docker rm --force "$container_id" > /dev/null' EXIT
           docker start "$container_id"
+          # The image bakes no USER/WORKDIR (the devcontainer sets both at run
+          # time), so be explicit here.
+          docker exec --user root "$container_id" mkdir -p /workspace
           git archive HEAD | docker exec --interactive --user root "$container_id" tar --extract --directory=/workspace
           docker exec --user root "$container_id" chown -R ubuntu:ubuntu /workspace
-          docker exec "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
-          docker exec "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
+          docker exec --user ubuntu --workdir /workspace "$container_id" bash -c 'set -euo pipefail; test "$(id -un)" = ubuntu; cargo dfv build; cargo dfv doctor --json'
+          docker exec --user ubuntu --workdir /workspace "$container_id" node --input-type=module -e 'import { chromium } from "./bindings/wasm/node_modules/playwright/index.mjs"; const browser = await chromium.launch(); console.log(await browser.version()); await browser.close();'
+
+  # The Cursor cloud environment still builds .cursor/Dockerfile, which reads
+  # its versions from the same pin files. Keep it building.
+  build-cursor-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Cursor cloud image
+        run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-cursor:ci .
