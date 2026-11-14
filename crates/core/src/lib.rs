@@ -3249,18 +3249,22 @@ fn is_valid_phone(candidate: &str) -> bool {
     follows_nanp_rule(national_number.as_bytes())
 }
 
-/// Checks that the 1st and 4th digits of a 10-digit North American number are
-/// between 2 and 9. These are the first digits of the area code and the
-/// exchange code, and the North American Numbering Plan does not allow either
-/// to start with 0 or 1.
+/// Checks the 1st and 4th digits of a 10-digit North American number: the area
+/// code must start 2-9 and the exchange must start 1-9.
 ///
-/// This is a special case to stop Unix timestamps, such as `1800005580`, being
-/// detected as phone numbers. It only works while timestamps start with 1,
-/// which is true until 2033. It is not full phone number validation. If better
-/// vetting is needed, Google's libphonenumber is a good alternative.
+/// The area-code check is a special case to stop Unix timestamps, such as
+/// `1800005580`, being detected as phone numbers. It only works while timestamps
+/// start with 1, which is true until 2033.
+///
+/// The exchange check is looser than the North American Numbering Plan, which
+/// forbids a leading 0 or 1. Fictional and form data routinely use
+/// `(555) 123-4567`, and the area-code check already carries the timestamp
+/// protection, so rejecting exchanges that start with 1 loses real hits. This is
+/// not full phone number validation; Google's libphonenumber does that.
 fn follows_nanp_rule(national_number: &[u8]) -> bool {
-    let is_valid_code_start = |digit: u8| (b'2'..=b'9').contains(&digit);
-    is_valid_code_start(national_number[0]) && is_valid_code_start(national_number[3])
+    let is_valid_area_start = |digit: u8| (b'2'..=b'9').contains(&digit);
+    let is_valid_exchange_start = |digit: u8| (b'1'..=b'9').contains(&digit);
+    is_valid_area_start(national_number[0]) && is_valid_exchange_start(national_number[3])
 }
 
 fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
@@ -5354,11 +5358,19 @@ mod tests {
             "Call 0125550100.",       // area code starts with 0
             "Call (112) 555-0100.",   // area code starts with 1
             "Call 212-055-0100.",     // exchange code starts with 0
-            "Call 1-212-155-0100.",   // exchange code starts with 1
             "\"start\": 1800005580,", // Unix timestamp
             "\"end\": 1800021600",    // Unix timestamp
         ] {
             assert!(scan(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn accepts_exchange_codes_starting_with_one() {
+        // The NANP forbids it, but (555) 123-4567 style data is everywhere and
+        // the area-code check still carries the timestamp protection.
+        for phone in ["Call (555) 123-4567.", "Call 1-212-155-0100."] {
+            assert_eq!(scan(phone).len(), 1, "{phone}");
         }
     }
 
