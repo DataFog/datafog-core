@@ -41,6 +41,7 @@ from .datafog_core import (
     scan as scan,
     scan_and_transform as scan_and_transform,
     scan_and_transform_structured as scan_and_transform_structured,
+    _panic_probe as _panic_probe,
     scan_structured as scan_structured,
     transform as transform,
     transform_structured as transform_structured,
