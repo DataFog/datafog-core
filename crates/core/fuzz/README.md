@@ -30,7 +30,8 @@ Crash artefacts land in `artifacts/` (git-ignored). Reproduce one with
 
 ## Corpus
 
-`corpus/<target>/` is committed and holds three small seeds per target so a fresh
-clone has something to bite on. Extend it with real bytes, not comments:
-snapshots from `Workspace::export_bundle`, and `<mode><start><end><text>` byte
-strings for `utf16_range`.
+`corpus/<target>/` holds a handful of small curated seeds per target so a fresh
+clone has something to bite on: snapshots from `Workspace::export_bundle`,
+`<mode><start><end><text>` byte strings for `utf16_range`. A run also grows the
+corpus locally; commit only curated seeds and regression inputs, not the
+generated output, so the tree stays reviewable.
