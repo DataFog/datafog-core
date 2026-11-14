@@ -6,8 +6,6 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
-## [1.3.0] - 2026-11-14
-
 ### Fixed
 
 - Phone detection accepts exchange codes starting with 1. The North American
@@ -15,6 +13,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
   data are everywhere, and the area-code check already carries the Unix-timestamp
   protection. This adds findings, so it is a MINOR, not a patch: 1.2.0 is
   superseded.
+
+## [1.3.0] - 2026-11-14
+
+Promotes the fix above. 1.2.0 published before it merged, so 1.2.0 is
+superseded rather than yanked.
 
 ### Added
 
