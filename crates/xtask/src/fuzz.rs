@@ -29,11 +29,12 @@ fn cargo_fuzz_available() -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-fn check_environment() -> Result<(), String> {
+/// `build` only needs the nightly toolchain; `run` also needs cargo-fuzz.
+fn check_environment(needs_cargo_fuzz: bool) -> Result<(), String> {
     if nightly_available().is_none() {
         return Err("nightly toolchain missing (fix: rustup toolchain install nightly)".to_owned());
     }
-    if cargo_fuzz_available().is_none() {
+    if needs_cargo_fuzz && cargo_fuzz_available().is_none() {
         return Err(
             "cargo-fuzz missing (fix: cargo install cargo-fuzz --locked --version 0.13.2)"
                 .to_owned(),
@@ -85,7 +86,7 @@ pub fn run_fuzz(args: &[String], json_output: bool) -> ExitCode {
 
     match (sub, args.get(1).map(String::as_str)) {
         (Some("build"), _) => {
-            if let Err(message) = check_environment() {
+            if let Err(message) = check_environment(false) {
                 eprintln!("{message}");
                 print_environment_help();
                 return ExitCode::FAILURE;
@@ -111,16 +112,17 @@ pub fn run_fuzz(args: &[String], json_output: bool) -> ExitCode {
             run_and_report(command, "fuzz build", dry_run, json_output)
         }
         (Some("run"), Some(target)) if target_names(&root).contains(&target.to_owned()) => {
-            if let Err(message) = check_environment() {
+            if let Err(message) = check_environment(true) {
                 eprintln!("{message}");
                 print_environment_help();
                 return ExitCode::FAILURE;
             }
             let mut command = Command::new("cargo");
+            // cargo-fuzz takes its own crate directory, not a manifest path.
             command
                 .args(["+nightly", "fuzz", "run", target])
-                .arg("--manifest-path")
-                .arg(&manifest_path);
+                .arg("--fuzz-dir")
+                .arg(root.join("crates/core/fuzz"));
             // Everything after `--` belongs to libFuzzer; keep it verbatim.
             if let Some(position) = args.iter().position(|a| a == "--") {
                 command.arg("--").args(&args[position + 1..]);

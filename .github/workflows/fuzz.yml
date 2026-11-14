@@ -49,9 +49,9 @@ jobs:
           workspaces: crates/core/fuzz
       - if: steps.scope.outputs.code == 'true'
         name: Check formatting and build the fuzz targets
-        run: |
-          cargo +nightly fmt --manifest-path crates/core/fuzz/Cargo.toml -- --check
-          cargo +nightly build --release --bins --manifest-path crates/core/fuzz/Cargo.toml
+        # `dfv fuzz build` formats with the default toolchain (the nightly
+        # install ships no rustfmt component) and builds with nightly.
+        run: cargo dfv fuzz build
 
   fuzz:
     if: github.event_name != 'pull_request'
@@ -75,7 +75,7 @@ jobs:
         # `-max_total_time` is the budget; libFuzzer exits non-zero with the crash
         # in `artifacts/<target>/`. Seeds are committed, so a fresh target starts
         # from real snapshots and range pairs.
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=60
+        run: cargo dfv fuzz run ${{ matrix.target }} -- -max_total_time=60
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@v4
