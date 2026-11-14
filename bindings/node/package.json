@@ -46,7 +46,7 @@
     "prepublishOnly": "napi prepublish -t npm --no-gh-release"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.8.6",
+    "@napi-rs/cli": "3.10.12",
     "typescript": "7.0.2"
   }
 }
