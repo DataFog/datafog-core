@@ -1,4 +1,5 @@
 use crate::doctor::{CheckStatus, run_doctor_internal};
+use crate::reach;
 use crate::report::{create_run_directory, workspace_root};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -16,6 +17,8 @@ pub struct CheckResult {
     pub run_directory: PathBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doctor_failures: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reachability_failures: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dry_run: Option<bool>,
 }
@@ -451,6 +454,7 @@ Run without --models to verify rule-based detectors:
             duration_seconds: 0.0,
             run_directory: run_dir.clone().unwrap_or_default(),
             doctor_failures: Some(failures.clone()),
+            reachability_failures: None,
             dry_run: None,
         };
 
@@ -488,6 +492,42 @@ Run without --models to verify rule-based detectors:
             println!("Environment OK. Running tests...");
             println!();
         }
+    }
+
+    // New crates and test modules are easy to add and easy to forget. Fail
+    // before any test runs so the gap is the only thing to fix.
+    let reachability_failures = reach::check_reachability(&workspace_root());
+    if !reachability_failures.is_empty() && !dry_run {
+        let run_dir = create_run_directory().ok();
+        let check_result = CheckResult {
+            pass: false,
+            doctor_pass: true,
+            tests: HashMap::new(),
+            duration_seconds: 0.0,
+            run_directory: run_dir.clone().unwrap_or_default(),
+            doctor_failures: None,
+            reachability_failures: Some(reachability_failures.clone()),
+            dry_run: None,
+        };
+        if let Some(ref dir) = run_dir {
+            if let Ok(json) = serde_json::to_string_pretty(&check_result) {
+                let _ = fs::write(dir.join("check.json"), json);
+            }
+        }
+        if json_output {
+            println!("{}", serde_json::to_string_pretty(&check_result).unwrap());
+        } else {
+            eprintln!();
+            eprintln!("Verification coverage check failed. New code must be reachable by dfv:");
+            for failure in &reachability_failures {
+                eprintln!("  - {failure}");
+            }
+            if let Some(ref dir) = run_dir {
+                eprintln!();
+                eprintln!("Report saved to: {}", dir.display());
+            }
+        }
+        return ExitCode::FAILURE;
     }
 
     let start = Instant::now();
@@ -573,6 +613,7 @@ Run without --models to verify rule-based detectors:
         duration_seconds: duration,
         run_directory: run_dir.clone(),
         doctor_failures: None,
+        reachability_failures: None,
         dry_run: if dry_run { Some(true) } else { None },
     };
 

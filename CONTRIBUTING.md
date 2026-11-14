@@ -214,9 +214,8 @@ The Python binding has its own checks once a wheel is built:
 conformance runs as part of `test_installed.py`.
 
 The fuzz targets live in `crates/core/fuzz` and are not part of the workspace.
-Run them with `cargo +nightly fuzz run <target>`; `cargo +nightly build --release
---bins --manifest-path crates/core/fuzz/Cargo.toml` catches compile breaks without
-fuzzing. See `crates/core/fuzz/README.md`.
+Run them with `cargo dfv fuzz run <target>`; `cargo dfv fuzz build` catches
+compile breaks without fuzzing. See `crates/core/fuzz/README.md`.
 
 The checker reads committed changes. Fetch the target branch first, and use that
 branch for `--base` when checking a stacked PR. Missing base refs and malformed

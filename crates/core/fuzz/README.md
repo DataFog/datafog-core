@@ -21,8 +21,9 @@ cargo +nightly fuzz run workspace_snapshot
 cargo +nightly fuzz run utf16_range
 ```
 
-A short bounded run, for example `cargo +nightly fuzz run utf16_range -- -runs=20000`,
-is enough for a smoke check. `cargo +nightly fuzz list` lists the targets.
+A short bounded run, for example `cargo dfv fuzz run utf16_range -- -runs=20000`,
+is enough for a smoke check. `cargo dfv fuzz list` lists the targets and
+`cargo dfv fuzz build` format-checks and builds both without fuzzing.
 
 Crash artefacts land in `artifacts/` (git-ignored). Reproduce one with
 `cargo +nightly fuzz run <target> artifacts/<target>/<file>`, and keep it in

@@ -7,10 +7,13 @@ mod doctor;
 mod engines;
 mod eval;
 mod fogvault;
+mod fuzz;
 mod models;
 mod parity;
 mod python_env;
+mod reach;
 mod report;
+mod reports;
 mod smoke;
 mod workspace_parity;
 
@@ -59,6 +62,8 @@ fn main() -> ExitCode {
             }
         }
         "eval" => eval::run_eval(&args[1..], json_output),
+        "fuzz" => fuzz::run_fuzz(&args[1..], json_output),
+        "reports" => reports::run_reports(&args[1..], json_output),
         "bench" => bench::run_bench(&args[1..], json_output),
         "smoke" => smoke::run_smoke(&args[1..], json_output),
         "parity" => {
@@ -101,6 +106,8 @@ COMMANDS:
     bench     Measure median latency against committed baselines
     smoke     Install and test built packages as a user would
     parity    Cross-SDK span/offset comparison
+    fuzz      Build or run the cargo-fuzz targets (crates/core/fuzz)
+    reports   List verification run reports, optionally prune them
 
 OPTIONS:
     --json           Machine-readable JSON output
@@ -130,6 +137,14 @@ BENCH OPTIONS:
 SMOKE OPTIONS:
     --sdk <name>       Test only one SDK (python, node, wasm)
 
+FUZZ OPTIONS:
+    build              Format-check and release-build both targets (nightly)
+    run <target>       Fuzz one target; pass libFuzzer args after --
+    list               Print target names
+
+REPORTS OPTIONS:
+    --prune-keep N     Keep the newest N run directories, remove the rest
+
 PARITY OPTIONS:
     --workspace        Blocking installed workspace contract matrix (Rust/Python/Node/browser WASM)
     --plan-memory-diagnostic  Opt-in Node 80-cycle RSS/heap investigation with --workspace
@@ -154,8 +169,17 @@ EXAMPLES:
     cargo dfv smoke                    # Install and test all packages
     cargo dfv parity                   # Fixture offset consistency
     cargo dfv parity --live            # Cross-SDK actual output diff
+    cargo dfv fuzz run workspace_snapshot -- -runs=20000
+    cargo dfv reports --prune-keep 20
 
-Reports are written to target/dfv/runs/<timestamp>/ and never deleted by this CLI.
-Each run directory includes metadata.json with git commit SHA, branch, and tool versions."#
+Node is a floor, not an exact pin: the major version must be at least the
+.nvmrc value, because newer majors keep working while exact toolchains
+(Rust, wasm-bindgen, Playwright) must match. `check` also fails when a crate
+or a bindings/python/tests/test_*.py module is not reachable by any command
+above.
+
+Reports are written to target/dfv/runs/<timestamp>/ and never deleted by this
+CLI unless `reports --prune-keep` says so. Each run directory includes
+metadata.json with git commit SHA, branch, and tool versions."#
     );
 }

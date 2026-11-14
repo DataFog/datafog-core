@@ -17,11 +17,15 @@ cargo dfv bench               # Latency benchmark against baseline
 cargo dfv smoke               # Install and test packages as a user would
 cargo dfv parity              # Cross-SDK fixture offset verification
 cargo dfv parity --live       # Run scan() through each SDK and diff outputs
+cargo dfv fuzz                # Build or run the cargo-fuzz targets (crates/core/fuzz)
+cargo dfv reports             # List run reports; --prune-keep N removes old ones
 ```
 
 Run `cargo dfv check` after any detection change. It runs doctor first and stops early if toolchains or bindings are missing.
 
-**Doctor behavior:** `cargo dfv doctor` reads version pins from repository files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`). A missing pin file is a hard error. On mismatch, it prints the required vs found version and the exact command to fix it. It never installs anything and exits non-zero on failure. Agents run doctor first, install what it says if they can, and report a blocker otherwise.
+**Reachability rule:** every crate under `crates/` or `bindings/` must be a root workspace member or listed in the nested-workspace exemption (`crates/core/fuzz`, reached through `cargo dfv fuzz`), and every `bindings/python/tests/test_*.py` module must be imported by `test_installed.py`. `cargo dfv check` fails with the exact fix otherwise, so new code cannot bypass the aggregate verification.
+
+**Doctor behavior:** `cargo dfv doctor` reads version pins from repository files (`rust-toolchain.toml`, `.nvmrc`, `Cargo.lock`, `bindings/wasm/package.json`). A missing pin file is a hard error. On mismatch, it prints the required vs found version and the exact command to fix it. It never installs anything and exits non-zero on failure. Node is a floor: the major version must be at least the `.nvmrc` value, because newer majors keep working; Rust, wasm-bindgen, and Playwright must match exactly. Agents run doctor first, install what it says if they can, and report a blocker otherwise.
 
 **Thresholds:**
 - Rule-based: any precision/recall drop fails.
@@ -44,7 +48,7 @@ If the manifest is missing, doctor emits a warning but does not fail. Model weig
 
 Provisioning scripts produce per-engine bundles with their own manifests. Registry-driven provisioning will follow the unified model-engine interface (see [ROADMAP.md](ROADMAP.md)). The GLiNER2 baseline belongs with [issue #87](https://github.com/DataFog/datafog-core/issues/87).
 
-Reports are written to `target/dfv/runs/<timestamp>/` and never deleted by the CLI.
+Reports are written to `target/dfv/runs/<timestamp>/` and never deleted automatically; `cargo dfv reports --prune-keep N` removes all but the newest N on request.
 
 **Scripts wrapped by dfv:**
 - `check --models`: scripts/provision-gliner2-model.py, scripts/provision-datafog-model.py, scripts/test-model-manifest.py, scripts/check-model-integration.py, scripts/model-qualification.py, scripts/model-fault-conformance.py, scripts/check-gliner2-entity-count.py
