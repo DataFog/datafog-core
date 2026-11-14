@@ -8,6 +8,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Stop tracking the 24MB `datafog_core.abi3.so` build artifact that
+  `maturin develop` leaves in `bindings/python/python/datafog_core/`, and ignore
+  it. It was committed by accident in 1.2.0.
+
 - Phone detection accepts exchange codes starting with 1. The North American
   Numbering Plan forbids it, but `(555) 123-4567` and similar form and fictional
   data are everywhere, and the area-code check already carries the Unix-timestamp

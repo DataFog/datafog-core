@@ -19,3 +19,8 @@ workers/**/*.egg-info/
 workers/**/__pycache__/
 /models/
 /models-cache/
+
+# maturin develop artifacts
+bindings/python/python/datafog_core/*.so
+bindings/python/python/datafog_core/*.pyd
+bindings/python/python/datafog_core/__pycache__/
