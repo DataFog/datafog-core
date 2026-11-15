@@ -36,7 +36,7 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Redact complete IPv4-mapped IPv6 addresses, reject ambiguous short IPv6 shapes, and keep query fields, dotted keys, markup, and Unicode mailbox characters out of incorrect email spans.
 - Combined scan-and-transform calls preserve intersecting detector coverage across SDKs and JSON fields; explicit transforms retain strict review requirements.
-- Avoid CREDIT_CARD findings inside German IBANs or spanning phone-plus-ZIP groups and IMEI labels, skip isolated-digit card candidates efficiently, and recognize JCB, Diners, Maestro and Luhn-valid UnionPay prefixes. Recognize ISO date prefixes before `T` timestamps; reject phone matches across lines, labelled tax IDs and decimal fractions, and ZIP fragments inside prices or hyphenated IDs.
+- Avoid CREDIT_CARD findings inside German IBANs or spanning phone-plus-ZIP groups and IMEI labels, scan isolated-digit card runs linearly while retaining valid bounded cards, and recognize JCB, Diners, Maestro and Luhn-valid UnionPay prefixes. Recognize ISO date prefixes before `T` timestamps; reject phone matches across lines, labelled tax IDs and decimal fractions, and ZIP fragments inside prices or hyphenated IDs.
 - Recognize escaped-newline PEM and OpenPGP private-key armor, API credentials in URL userinfo, and trim trailing punctuation from embedded-model spans.
 - Python findings and ranges support hashing, pickling and copying, validate reversed ranges, expose their defining module and package version, and use Python-style representations. The legacy panic test helper is deprecated and no longer panics.
 
