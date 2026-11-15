@@ -3804,6 +3804,7 @@ fn leading_card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
 
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
+    let mut ibans = german::iban_ranges(text).peekable();
     let mut start = 0;
 
     while start < bytes.len() {
@@ -3818,6 +3819,16 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
             continue;
         }
         if let Some(end) = card_end_at(bytes, start).or_else(|| leading_card_end_at(bytes, start)) {
+            while ibans.peek().is_some_and(|iban| iban.end <= start) {
+                ibans.next();
+            }
+            if ibans
+                .peek()
+                .is_some_and(|iban| iban.start <= start && end <= iban.end)
+            {
+                start = end;
+                continue;
+            }
             candidates.push(Candidate {
                 label: Label::CreditCard,
                 start_byte: start,
@@ -4447,7 +4458,7 @@ fn detect_ip_address_in(
             (run_end > start && last_colon.is_some_and(|colon| colon >= start)).then_some(run_end);
         if let Some(mut end) = ipv6_end {
             // An IPv4-mapped address must be validated and redacted as a whole.
-            if bytes.get(end) == Some(&b'.') {
+            if bytes.get(end) == Some(&b'.') && bytes.get(end + 1).is_some_and(u8::is_ascii_digit) {
                 while end < segment_end && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
                     end += 1;
                 }

@@ -133,7 +133,7 @@ fn locale_selection_preserves_german_spans_and_suppresses_identifier_false_posit
         let config = parse_scan_config(&json!({"locale":"de"})).unwrap();
         let findings = scan_with_config(text, &config);
         assert!(findings.iter().any(|f| f.entity_type == label), "{text}");
-        if ["DE_TAX_ID", "DE_POSTAL_CODE"].contains(&label) {
+        if ["DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE"].contains(&label) {
             assert!(!findings.iter().any(|f| f.entity_type == generic));
         } else {
             assert!(

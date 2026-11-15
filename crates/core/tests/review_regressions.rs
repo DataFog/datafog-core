@@ -179,3 +179,17 @@ fn private_keys_in_escaped_env_and_pgp_armor_keep_source_offsets() {
         .is_empty()
     );
 }
+
+#[test]
+fn iban_digit_groups_are_never_relabelled_as_cards() {
+    for text in [
+        "IBAN DE44 5001 0517 5407 3249 31 ist gueltig.",
+        "DE44\t4111111111111111\t11",
+    ] {
+        assert!(values(text, "CREDIT_CARD").is_empty(), "{text}");
+    }
+    // Additional card networks remain detectable outside an IBAN.
+    for card in ["3530111333300000", "30569309025904", "6759649826438453"] {
+        assert_eq!(values(card, "CREDIT_CARD"), [card]);
+    }
+}
