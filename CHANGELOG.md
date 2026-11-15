@@ -19,6 +19,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
   build with `--frozen-lockfile` so a stale feature lock fails instead of being
   rewritten.
 
+- Text-mode email scanning trims label syntax by default: a leading
+  `identifier=` prefix and a wrapping opening quote no longer belong to the
+  reported span, so `email=alice@example.com` reports `alice@example.com` and
+  fenced or quoted values report the address itself. Inner `=` stays in the
+  local part, and digit-led or punctuation-led local parts are unchanged.
+  `format: "env"` and `format: "sql"` keep their existing slice semantics. This
+  adds and re-spans EMAIL findings, so it is a MINOR. See ADR 006.
+
 ### Fixed
 
 - Stop tracking the 24MB `datafog_core.abi3.so` build artifact that
@@ -56,6 +64,7 @@ superseded rather than yanked.
 - `VERSIONING.md` and `docs/reference/embedded-cnn.mdx`.
 
 ### Changed
+
 
 - `Development Status` is now `5 - Production/Stable`.
 - `PERSON` and `ADDRESS` prose coverage no longer implies a model download or an
