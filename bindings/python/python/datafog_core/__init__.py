@@ -41,7 +41,7 @@ from .datafog_core import (
     scan as scan,
     scan_and_transform as scan_and_transform,
     scan_and_transform_structured as scan_and_transform_structured,
-    panic_probe as panic_probe,
+    __version__ as __version__,
     scan_structured as scan_structured,
     transform as transform,
     transform_structured as transform_structured,
@@ -84,5 +84,26 @@ __all__ = [
     "scan_structured",
     "transform_structured",
     "scan_and_transform_structured",
-    "panic_probe",
 ]
+
+
+def panic_probe() -> None:
+    """Deprecated compatibility stub; never invokes a Rust panic.
+
+    The original test helper is supported by datafog-core==1.4.0. This stub
+    remains until the 2.0 removal window permits removing the name.
+    """
+    import warnings
+    warnings.warn(
+        "panic_probe is deprecated and no longer invokes a Rust panic; "
+        "the original helper is available in datafog-core==1.4.0. "
+        "The name will be removed in 2.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    error = DataFogInternalError("panic_probe is a deprecated test helper")
+    error.code = "internal_error"
+    error.reason = None
+    error.path = None
+    error.finding_index = None
+    raise error

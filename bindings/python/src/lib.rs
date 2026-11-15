@@ -5,17 +5,28 @@ mod workspace;
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyTuple};
+use pyo3::types::{PyAny, PyBool, PyDict, PyList, PyString, PyTuple, PyType};
+use std::cell::Cell;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::panic::UnwindSafe;
+use std::sync::Once;
 
 create_exception!(datafog_core, DataFogConfigurationError, PyValueError);
 create_exception!(datafog_core, DataFogFindingError, PyValueError);
 create_exception!(datafog_core, DataFogInternalError, PyRuntimeError);
 create_exception!(datafog_core, DataFogKeyProviderError, PyRuntimeError);
 
+fn python_hash(value: &impl Hash) -> isize {
+    let mut state = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut state);
+    let hash = state.finish() as isize;
+    if hash == -1 { -2 } else { hash }
+}
+
 /// A zero-based, end-exclusive text range.
-#[pyclass(frozen, skip_from_py_object)]
-#[derive(Clone, PartialEq, Eq)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct TextRange {
     #[pyo3(get)]
     start: usize,
@@ -36,12 +47,23 @@ impl From<core::TextRange> for TextRange {
 #[pymethods]
 impl TextRange {
     #[new]
-    fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+    fn new(start: usize, end: usize) -> PyResult<Self> {
+        if start > end {
+            return Err(PyValueError::new_err("range start must not exceed end"));
+        }
+        Ok(Self { start, end })
     }
 
     fn __repr__(&self) -> String {
         format!("TextRange(start={}, end={})", self.start, self.end)
+    }
+
+    fn __hash__(&self) -> isize {
+        python_hash(self)
+    }
+
+    fn __reduce__(&self, py: Python<'_>) -> (Py<PyType>, (usize, usize)) {
+        (py.get_type::<Self>().unbind(), (self.start, self.end))
     }
 
     fn __eq__(&self, other: PyRef<'_, TextRange>) -> bool {
@@ -50,7 +72,7 @@ impl TextRange {
 }
 
 /// A piece of potentially sensitive content detected in input text.
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone, PartialEq)]
 struct Finding {
     #[pyo3(get)]
@@ -121,18 +143,68 @@ impl Finding {
         }
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            "Finding(entity_type={:?}, matched_text={:?}, byte_range={:?}, \
-             codepoint_range={:?}, confidence={:?}, detector_name={:?}, \
-             detector_version={:?})",
-            self.entity_type,
-            self.matched_text,
-            (self.byte_range.start, self.byte_range.end),
-            (self.codepoint_range.start, self.codepoint_range.end),
-            self.confidence,
-            self.detector_name,
-            self.detector_version,
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let confidence = self
+            .confidence
+            .map_or_else(|| "None".to_owned(), |value| value.to_string());
+        let version = match &self.detector_version {
+            Some(value) => PyString::new(py, value).repr()?.to_str()?.to_owned(),
+            None => "None".to_owned(),
+        };
+        Ok(format!(
+            "Finding(entity_type={}, matched_text={}, byte_range={}, codepoint_range={}, confidence={}, detector_name={}, detector_version={})",
+            PyString::new(py, &self.entity_type).repr()?,
+            PyString::new(py, &self.matched_text).repr()?,
+            self.byte_range.__repr__(),
+            self.codepoint_range.__repr__(),
+            confidence,
+            PyString::new(py, &self.detector_name).repr()?,
+            version,
+        ))
+    }
+
+    fn __hash__(&self) -> isize {
+        let confidence = self
+            .confidence
+            .map(|value| if value == 0.0 { 0 } else { value.to_bits() });
+        python_hash(&(
+            &self.entity_type,
+            &self.matched_text,
+            &self.byte_range,
+            &self.codepoint_range,
+            confidence,
+            &self.detector_name,
+            &self.detector_version,
+        ))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn __reduce__(
+        &self,
+        py: Python<'_>,
+    ) -> (
+        Py<PyType>,
+        (
+            String,
+            String,
+            TextRange,
+            TextRange,
+            String,
+            Option<f32>,
+            Option<String>,
+        ),
+    ) {
+        (
+            py.get_type::<Self>().unbind(),
+            (
+                self.entity_type.clone(),
+                self.matched_text.clone(),
+                self.byte_range.clone(),
+                self.codepoint_range.clone(),
+                self.detector_name.clone(),
+                self.confidence,
+                self.detector_version.clone(),
+            ),
         )
     }
 
@@ -168,7 +240,7 @@ impl Finding {
 }
 
 /// One privacy transformation applied to source text.
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone, PartialEq)]
 struct Transformation {
     #[pyo3(get)]
@@ -262,7 +334,7 @@ impl Transformation {
 }
 
 /// Text and audit records produced by a transformation.
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct TransformResult {
     #[pyo3(get)]
@@ -292,7 +364,7 @@ impl TransformResult {
     }
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct Restoration {
     #[pyo3(get)]
@@ -309,7 +381,7 @@ struct Restoration {
     resolved_token_version: String,
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 struct RestoreResult {
     #[pyo3(get)]
     text: String,
@@ -405,6 +477,15 @@ impl core::KeyProvider for PythonKeyProvider {
                     .ok_or_else(|| PyErr::new::<PyRuntimeError, _>("key provider is required"))?
                     .bind(py)
                     .call_method1("resolve_key", (selector.key_ref(), selector.key_version()))?;
+                if !py
+                    .import("inspect")?
+                    .call_method1("isawaitable", (&awaitable,))?
+                    .is_truthy()?
+                {
+                    return Err(PyTypeError::new_err(
+                        "provider methods must return an awaitable",
+                    ));
+                }
                 pyo3_async_runtimes::tokio::into_future(awaitable)
             })
             .map_err(|error| core::KeyProviderError::new(provider_error_kind(&error)))?;
@@ -471,6 +552,15 @@ impl core::TokenProvider for PythonTokenProvider {
                 let awaitable = provider
                     .bind(py)
                     .call_method1("tokenize_batch", (scope, requests))?;
+                if !py
+                    .import("inspect")?
+                    .call_method1("isawaitable", (&awaitable,))?
+                    .is_truthy()?
+                {
+                    return Err(PyTypeError::new_err(
+                        "provider methods must return an awaitable",
+                    ));
+                }
                 pyo3_async_runtimes::tokio::into_future(awaitable)
             })
             .map_err(|error| core::TokenProviderError::new(token_provider_error_kind(&error)))?;
@@ -529,6 +619,15 @@ impl core::TokenProvider for PythonTokenProvider {
                 let awaitable = provider
                     .bind(py)
                     .call_method1("restore_batch", (scope, requests))?;
+                if !py
+                    .import("inspect")?
+                    .call_method1("isawaitable", (&awaitable,))?
+                    .is_truthy()?
+                {
+                    return Err(PyTypeError::new_err(
+                        "provider methods must return an awaitable",
+                    ));
+                }
                 pyo3_async_runtimes::tokio::into_future(awaitable)
             })
             .map_err(|error| core::TokenProviderError::new(token_provider_error_kind(&error)))?;
@@ -560,7 +659,7 @@ impl core::TokenProvider for PythonTokenProvider {
 }
 
 /// Provider-backed asynchronous privacy manager.
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 struct PrivacyManager {
     key_provider: Option<Py<PyAny>>,
     token_provider: Option<Py<PyAny>>,
@@ -852,6 +951,36 @@ fn configuration_conversion_error(py: Python<'_>, path: &str, message: &str) -> 
     exception
 }
 
+thread_local! {
+    static PRIVATE_PANIC_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+struct PrivatePanicGuard;
+
+impl PrivatePanicGuard {
+    fn enter() -> Self {
+        static INSTALL_HOOK: Once = Once::new();
+        INSTALL_HOOK.call_once(|| {
+            let previous = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                // Retain the application's hook for other threads and work. Do not
+                // print a scan-time panic: slice-boundary messages can contain PII.
+                if !PRIVATE_PANIC_DEPTH.with(|depth| depth.get() > 0) {
+                    previous(info);
+                }
+            }));
+        });
+        PRIVATE_PANIC_DEPTH.with(|depth| depth.set(depth.get() + 1));
+        Self
+    }
+}
+
+impl Drop for PrivatePanicGuard {
+    fn drop(&mut self) {
+        PRIVATE_PANIC_DEPTH.with(|depth| depth.set(depth.get() - 1));
+    }
+}
+
 /// Run pure-Rust work with the GIL released, turning a Rust panic into a
 /// `DataFogInternalError` instead of aborting the interpreter.
 ///
@@ -862,17 +991,11 @@ fn run_detached<T: Send>(
     context: &str,
     work: impl FnOnce() -> T + UnwindSafe + Send,
 ) -> PyResult<T> {
-    py.detach(|| std::panic::catch_unwind(work))
-        .map_err(|payload| {
-            // Keep the panic text: it is the only clue a caller gets, and Rust
-            // panic messages carry no scan values.
-            let detail = payload
-                .downcast_ref::<&str>()
-                .map(|message| (*message).to_owned())
-                .or_else(|| payload.downcast_ref::<String>().cloned())
-                .unwrap_or_else(|| "unknown panic payload".to_owned());
-            internal_error(py, &format!("{context}: {detail}"))
-        })
+    py.detach(|| {
+        let _guard = PrivatePanicGuard::enter();
+        std::panic::catch_unwind(work)
+    })
+    .map_err(|_| internal_error(py, context))
 }
 
 fn internal_error(py: Python<'_>, message: &str) -> PyErr {
@@ -886,6 +1009,50 @@ fn internal_error(py: Python<'_>, message: &str) -> PyErr {
 }
 
 fn py_to_json(py: Python<'_>, value: &Bound<'_, PyAny>, path: &str) -> PyResult<serde_json::Value> {
+    py_to_json_inner(py, value, path, 0, &mut HashSet::new())
+}
+
+fn py_to_json_inner(
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
+    path: &str,
+    depth: usize,
+    ancestors: &mut HashSet<usize>,
+) -> PyResult<serde_json::Value> {
+    // Bound Rust recursion before traversing caller-controlled containers. Keep
+    // only ancestors so repeated references to an acyclic value stay valid.
+    if depth > 64 {
+        return Err(configuration_conversion_error(
+            py,
+            path,
+            "configuration nesting exceeds 64 levels",
+        ));
+    }
+    let container = value.is_instance_of::<PyDict>()
+        || value.is_instance_of::<PyList>()
+        || value.is_instance_of::<PyTuple>();
+    let identity = value.as_ptr() as usize;
+    if container && !ancestors.insert(identity) {
+        return Err(configuration_conversion_error(
+            py,
+            path,
+            "configuration contains a cycle",
+        ));
+    }
+    let result = py_to_json_value(py, value, path, depth, ancestors);
+    if container {
+        ancestors.remove(&identity);
+    }
+    result
+}
+
+fn py_to_json_value(
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
+    path: &str,
+    depth: usize,
+    ancestors: &mut HashSet<usize>,
+) -> PyResult<serde_json::Value> {
     if value.is_none() {
         return Ok(serde_json::Value::Null);
     }
@@ -915,7 +1082,10 @@ fn py_to_json(py: Python<'_>, value: &Bound<'_, PyAny>, path: &str) -> PyResult<
                 configuration_conversion_error(py, path, "configuration keys must be strings")
             })?;
             let child_path = format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"));
-            object.insert(key, py_to_json(py, &value, &child_path)?);
+            object.insert(
+                key,
+                py_to_json_inner(py, &value, &child_path, depth + 1, ancestors)?,
+            );
         }
         return Ok(serde_json::Value::Object(object));
     }
@@ -923,7 +1093,9 @@ fn py_to_json(py: Python<'_>, value: &Bound<'_, PyAny>, path: &str) -> PyResult<
         return list
             .iter()
             .enumerate()
-            .map(|(index, value)| py_to_json(py, &value, &format!("{path}/{index}")))
+            .map(|(index, value)| {
+                py_to_json_inner(py, &value, &format!("{path}/{index}"), depth + 1, ancestors)
+            })
             .collect::<PyResult<Vec<_>>>()
             .map(serde_json::Value::Array);
     }
@@ -931,7 +1103,9 @@ fn py_to_json(py: Python<'_>, value: &Bound<'_, PyAny>, path: &str) -> PyResult<
         return tuple
             .iter()
             .enumerate()
-            .map(|(index, value)| py_to_json(py, &value, &format!("{path}/{index}")))
+            .map(|(index, value)| {
+                py_to_json_inner(py, &value, &format!("{path}/{index}"), depth + 1, ancestors)
+            })
             .collect::<PyResult<Vec<_>>>()
             .map(serde_json::Value::Array);
     }
@@ -1051,13 +1225,13 @@ fn scan_and_transform(
 /// Force a panic inside the detached work so callers can prove that a Rust panic
 /// reaches Python as a `DataFogInternalError`.
 #[pyfunction]
-fn panic_probe(py: Python<'_>) -> PyResult<()> {
+fn _panic_probe(py: Python<'_>) -> PyResult<()> {
     run_detached(py, "unexpected Rust panic probe failure", || -> () {
         panic!("forced panic probe")
     })
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct FieldMapping {
     #[pyo3(get)]
@@ -1080,7 +1254,7 @@ impl From<core::structured::FieldMapping> for FieldMapping {
     }
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct StructuredFinding {
     #[pyo3(get)]
@@ -1089,7 +1263,7 @@ struct StructuredFinding {
     finding: Finding,
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 struct StructuredScanResult {
     #[pyo3(get)]
     mappings: Vec<FieldMapping>,
@@ -1216,7 +1390,7 @@ impl StructuredFinding {
     }
 }
 
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct StructuredTransformation {
     #[pyo3(get)]
@@ -1224,14 +1398,14 @@ struct StructuredTransformation {
     #[pyo3(get)]
     transformation: Transformation,
 }
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 struct StructuredTransformResult {
     #[pyo3(get)]
     data: Py<PyAny>,
     #[pyo3(get)]
     transformations: Vec<StructuredTransformation>,
 }
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 #[derive(Clone)]
 struct StructuredRestoration {
     #[pyo3(get)]
@@ -1239,7 +1413,7 @@ struct StructuredRestoration {
     #[pyo3(get)]
     restoration: Restoration,
 }
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 struct StructuredRestoreResult {
     #[pyo3(get)]
     data: Py<PyAny>,
@@ -1363,6 +1537,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan_and_transform_structured, module)?)?;
     module.add_function(wrap_pyfunction!(discover_fields, module)?)?;
     module.add_function(wrap_pyfunction!(scan_structured, module)?)?;
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_class::<TextRange>()?;
     module.add_class::<Finding>()?;
     module.add_class::<cnn::EmbeddedCnnDetector>()?;
@@ -1375,7 +1550,7 @@ fn datafog_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan, module)?)?;
     module.add_function(wrap_pyfunction!(transform, module)?)?;
     module.add_function(wrap_pyfunction!(scan_and_transform, module)?)?;
-    module.add_function(wrap_pyfunction!(panic_probe, module)?)?;
+    module.add_function(wrap_pyfunction!(_panic_probe, module)?)?;
     Ok(())
 }
 
@@ -1412,8 +1587,6 @@ mod tests {
 
     #[test]
     fn detached_work_converts_a_panic_into_an_internal_error() {
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
         Python::attach(|py| {
             let error = run_detached(py, "unexpected Rust test failure", || -> () {
                 panic!("forced test failure")
@@ -1429,11 +1602,7 @@ mod tests {
                     .expect("internal errors carry a code"),
                 "internal_error"
             );
-            assert_eq!(
-                error.value(py).to_string(),
-                "unexpected Rust test failure: forced test failure"
-            );
+            assert_eq!(error.value(py).to_string(), "unexpected Rust test failure");
         });
-        std::panic::set_hook(hook);
     }
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import asyncio
 from pathlib import Path
+import binding_safety_conformance
 import capabilities_conformance
 import embedded_cnn_conformance
 import gil_release_conformance
@@ -672,6 +673,7 @@ def verify_ssn_person_priority() -> None:
 
 
 if __name__ == "__main__":
+    binding_safety_conformance.verify()
     verify_adjacent_entities()
     workspace_conformance.verify_workspace()
     workspace_streaming_conformance.verify_streaming()

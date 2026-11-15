@@ -145,7 +145,12 @@ fn review_value(value: w::ReviewResult) -> Value {
     json!({"head":head_value(value.head),"candidates":candidates,"conflicts":value.conflicts})
 }
 
-#[pyclass(frozen, skip_from_py_object, name = "WorkspaceHead")]
+#[pyclass(
+    module = "datafog_core",
+    frozen,
+    skip_from_py_object,
+    name = "WorkspaceHead"
+)]
 #[derive(Clone)]
 pub(super) struct WorkspaceHead {
     inner: w::Head,
@@ -177,7 +182,12 @@ impl WorkspaceHead {
     }
 }
 
-#[pyclass(frozen, skip_from_py_object, name = "WorkspaceFinding")]
+#[pyclass(
+    module = "datafog_core",
+    frozen,
+    skip_from_py_object,
+    name = "WorkspaceFinding"
+)]
 #[derive(Clone)]
 pub(super) struct WorkspaceFinding {
     inner: w::WorkspaceFinding,
@@ -297,7 +307,12 @@ fn findings(
     Ok(items.iter().map(|f| f.borrow(py).inner.clone()).collect())
 }
 
-#[pyclass(frozen, skip_from_py_object, name = "WorkspaceInput")]
+#[pyclass(
+    module = "datafog_core",
+    frozen,
+    skip_from_py_object,
+    name = "WorkspaceInput"
+)]
 #[derive(Clone)]
 pub(super) struct WorkspaceInput {
     text: String,
@@ -340,7 +355,12 @@ fn workspace_inputs(
     Ok(inputs)
 }
 
-#[pyclass(frozen, skip_from_py_object, name = "WorkspaceReviewCorrection")]
+#[pyclass(
+    module = "datafog_core",
+    frozen,
+    skip_from_py_object,
+    name = "WorkspaceReviewCorrection"
+)]
 #[derive(Clone)]
 pub(super) struct WorkspaceReviewCorrection {
     candidate_key: String,
@@ -372,7 +392,12 @@ impl ReviewOwned {
         }
     }
 }
-#[pyclass(frozen, skip_from_py_object, name = "WorkspaceReviewInput")]
+#[pyclass(
+    module = "datafog_core",
+    frozen,
+    skip_from_py_object,
+    name = "WorkspaceReviewInput"
+)]
 #[derive(Clone)]
 pub(super) struct WorkspaceReviewInput {
     text: String,
@@ -465,7 +490,7 @@ impl NativeError {
 fn lock<T>(value: &std::sync::Mutex<T>) -> NativeResult<std::sync::MutexGuard<'_, T>> {
     value.lock().map_err(|_| NativeError::Unavailable)
 }
-#[pyclass(name = "WorkspacePreparedChange")]
+#[pyclass(module = "datafog_core", name = "WorkspacePreparedChange")]
 pub(super) struct WorkspacePreparedChange {
     inner: PlanCell,
     closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -571,7 +596,7 @@ impl WorkspacePreparedChange {
     }
 }
 
-#[pyclass(name = "Workspace")]
+#[pyclass(module = "datafog_core", name = "Workspace")]
 pub(super) struct Workspace {
     inner: w::Workspace,
     plans: std::sync::Mutex<Vec<WeakPlan>>,

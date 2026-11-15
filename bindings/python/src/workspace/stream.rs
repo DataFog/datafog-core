@@ -265,7 +265,7 @@ fn close(py: Python<'_>, cell: &Cell) -> PyResult<()> {
     })();
     result.map_err(|error| error.into_python(py))
 }
-#[pyclass(name = "WorkspaceBufferedRestore")]
+#[pyclass(module = "datafog_core", name = "WorkspaceBufferedRestore")]
 pub(super) struct WorkspaceBufferedRestore {
     inner: Cell,
 }
@@ -300,7 +300,7 @@ impl WorkspaceBufferedRestore {
         Ok(false)
     }
 }
-#[pyclass(name = "WorkspaceProgressiveRestore")]
+#[pyclass(module = "datafog_core", name = "WorkspaceProgressiveRestore")]
 pub(super) struct WorkspaceProgressiveRestore {
     inner: Cell,
 }

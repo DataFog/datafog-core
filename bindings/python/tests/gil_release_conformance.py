@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from datafog_core import (
     DataFogInternalError,
     StructuredFinding,
-    panic_probe,
     discover_fields,
     scan,
     scan_and_transform,
@@ -24,6 +23,8 @@ from datafog_core import (
     transform,
     transform_structured,
 )
+
+from datafog_core.datafog_core import _panic_probe
 
 REDACT_EMAIL = {"transform": {"default": {"strategy": "redact"}, "entities": ["EMAIL"]}}
 REDACT_EMAIL_PLAIN = {"default": {"strategy": "redact"}, "entities": ["EMAIL"]}
@@ -158,12 +159,12 @@ def verify_synchronous_calls_release_the_gil():
 
 def verify_rust_panic_becomes_internal_error():
     try:
-        panic_probe()
+        _panic_probe()
     except DataFogInternalError as error:
         assert isinstance(error, RuntimeError)
         assert error.code == "internal_error"
         assert str(error) == (
-            "unexpected Rust panic probe failure: forced panic probe"
+            "unexpected Rust panic probe failure"
         )
     else:
         raise AssertionError("panic_probe did not raise DataFogInternalError")

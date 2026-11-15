@@ -31,7 +31,7 @@ pub(super) fn json_object(py: Python<'_>, value: &impl serde::Serialize) -> PyRe
     Ok(py.import("json")?.call_method1("loads", (json,))?.unbind())
 }
 
-#[pyclass(frozen)]
+#[pyclass(module = "datafog_core", frozen)]
 pub(super) struct ModelScanResult {
     #[pyo3(get)]
     contract_version: u32,
@@ -60,7 +60,7 @@ impl From<models::ModelScanResult> for ModelScanResult {
 }
 
 /// Share between threads to cancel one request without waiting for the GIL.
-#[pyclass(frozen)]
+#[pyclass(module = "datafog_core", frozen)]
 #[derive(Default)]
 pub(super) struct ModelCancellation {
     cancellation: Arc<models::Cancellation>,
@@ -76,7 +76,7 @@ impl ModelCancellation {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(module = "datafog_core", frozen)]
 pub(super) struct ModelSession {
     session: models::ModelSession,
 }
