@@ -91,13 +91,14 @@ def panic_probe() -> None:
     """Deprecated compatibility stub; never invokes a Rust panic.
 
     The original test helper is supported by datafog-core==1.4.0. This stub
-    remains until the 2.0 removal window permits removing the name.
+    is deprecated in 2.0 and remains until at least 3.0 and the required
+    90-day deprecation window.
     """
     import warnings
     warnings.warn(
         "panic_probe is deprecated and no longer invokes a Rust panic; "
         "the original helper is available in datafog-core==1.4.0. "
-        "The name will be removed in 2.0.",
+        "The name will be removed no earlier than 3.0 and the 90-day deprecation window.",
         DeprecationWarning,
         stacklevel=2,
     )
