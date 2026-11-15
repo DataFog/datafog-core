@@ -205,7 +205,7 @@ pub fn transform(text: &str, findings: JsValue, config: JsValue) -> Result<JsVal
 pub fn scan_and_transform(text: &str, config: JsValue) -> Result<JsValue, JsValue> {
     let config = config_value(config)?;
     let config = datafog_core::parse_scan_and_transform_config(&config).map_err(privacy_error)?;
-    let findings = datafog_core::scan_with_config(text, config.scan_config());
+    let findings = datafog_core::findings_for_scan_and_transform(text, &config);
     if let Some(selector) =
         datafog_core::required_key_selectors(text, &findings, config.transformation_config())
             .map_err(privacy_error)?

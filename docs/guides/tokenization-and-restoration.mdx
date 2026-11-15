@@ -27,6 +27,8 @@ case-sensitive request scope:
 { "scope": "tenant-a" }
 ```
 
+Source documents reserve the `DFTOKENv` prefix. Tokenization rejects malformed or unsupported pre-existing token envelopes before calling a provider, ensuring it cannot produce output that restoration cannot parse. Header parsing bounds version and length fields to 20 digits.
+
 ## Provider contract
 
 A token provider implements two asynchronous batch methods:

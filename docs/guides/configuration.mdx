@@ -101,6 +101,10 @@ datafog core processes a request in this order:
 5. Choose the per-entity override or default strategy.
 6. Transform selected findings in document order.
 
+Combined scan-and-transform calls merge intersecting scanner-produced spans into their union after selection and allowlists, retaining the preferred detector label and applying that label’s strategy. This preserves all detected coverage; explicit `transform` continues to reject partial overlaps that would lose coverage.
+
+Mask reveal counts are capped so at least one code point remains masked, including when the requested count exceeds the finding length. Caller-supplied entity labels must contain only ASCII letters, digits, underscores, or hyphens.
+
 Valid configuration for an unselected entity remains dormant. Invalid fields
 are rejected even when their entity is not selected.
 

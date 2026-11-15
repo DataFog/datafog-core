@@ -32,6 +32,13 @@ fn refine_text_candidates(text: &str, candidates: &mut [Candidate], first: usize
         if matches!(bytes.get(start), Some(b'\'' | b'"')) && bytes.get(end) == Some(&bytes[start]) {
             start += 1;
         }
+        // Field delimiters and markup are syntax rather than mailbox identity.
+        if let Some(delimiter) = text[start..at].rfind(['&', '?', ';', '|']) {
+            start += delimiter + 1;
+        }
+        while start < at && matches!(bytes[start], b'*' | b'{' | b'/' | b'|') {
+            start += 1;
+        }
         if let Some(value_start) = label_value_start(text, start, at) {
             start = value_start;
         }
@@ -52,7 +59,7 @@ fn label_value_start(text: &str, start: usize, at: usize) -> Option<usize> {
         Some(byte) if byte.is_ascii_alphabetic() || *byte == b'_' => cursor += 1,
         _ => return None,
     }
-    while matches!(bytes.get(cursor), Some(byte) if byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+    while matches!(bytes.get(cursor), Some(byte) if byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-' || *byte == b'.')
     {
         cursor += 1;
     }
