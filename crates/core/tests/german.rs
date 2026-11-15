@@ -113,7 +113,7 @@ fn context_is_local_and_config_validation_is_preserved() {
 }
 
 #[test]
-fn generic_overlaps_are_retained_and_existing_selection_prefers_german_spans() {
+fn locale_selection_preserves_german_spans_and_suppresses_identifier_false_positives() {
     for (text, label, generic, expected) in [
         (
             "DE44\t4111111111111111\t11",
@@ -133,10 +133,14 @@ fn generic_overlaps_are_retained_and_existing_selection_prefers_german_spans() {
         let config = parse_scan_config(&json!({"locale":"de"})).unwrap();
         let findings = scan_with_config(text, &config);
         assert!(findings.iter().any(|f| f.entity_type == label), "{text}");
-        assert!(
-            findings.iter().any(|f| f.entity_type == generic),
-            "{text}: {findings:?}"
-        );
+        if ["DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE"].contains(&label) {
+            assert!(!findings.iter().any(|f| f.entity_type == generic));
+        } else {
+            assert!(
+                findings.iter().any(|f| f.entity_type == generic),
+                "{text}: {findings:?}"
+            );
+        }
         let result = transform(
             text,
             &findings,
@@ -150,14 +154,6 @@ fn generic_overlaps_are_retained_and_existing_selection_prefers_german_spans() {
                 findings
                     .iter()
                     .find(|f| f.entity_type == label)
-                    .unwrap()
-                    .byte_range,
-                TextRange { start: 10, end: 21 }
-            );
-            assert_eq!(
-                findings
-                    .iter()
-                    .find(|f| f.entity_type == generic)
                     .unwrap()
                     .byte_range,
                 TextRange { start: 10, end: 21 }

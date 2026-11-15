@@ -59,7 +59,9 @@ export function verifyGerman(api, records) {
     ["DE-10115","DE_POSTAL_CODE","ZIP_CODE","[DE_POSTAL_CODE]"],
   ]) {
     const findings = api.scan(text,{locale:"de"});
-    if (![label,generic].every(label => findings.some(f => f.entityType === label))) throw new Error("missing overlap");
+    if (!findings.some(f => f.entityType === label)) throw new Error("missing German finding");
+    const suppressed = ["DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE"].includes(label);
+    if (findings.some(f => f.entityType === generic) === suppressed) throw new Error("generic identifier precision regression");
     equal(api.scanAndTransform(text,{scan:{locale:"de"},transform:{default:{strategy:"redact"}}}).text,expected,"overlap selection");
   }
 }

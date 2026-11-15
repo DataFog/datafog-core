@@ -26,20 +26,20 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Stable:** [1.4.0](https://github.com/DataFog/datafog-core/releases/tag/v1.4.0) · [Release notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+**Published:** Python [1.4.0](https://github.com/DataFog/datafog-core/releases/tag/python-v1.4.0); Rust, Node.js and WASM [1.1.0](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0) · [Python 1.4.0 notes](CHANGELOG.md#140---2026-11-15) · [Cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-Choose the exact 1.4.0 package for your application:
+Choose a published version for your application. Registry versions advance independently; the Python 1.4.0 findings are newer than the Rust and npm 1.1.0 findings:
 
-| SDK | Install 1.4.0 | Requirements |
+| SDK | Published install | Requirements |
 | --- | --- | --- |
 | [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.4.0` | Python 3.10+ |
-| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.4.0` | Node.js 24+ |
-| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.4.0` | Rust 1.88+ |
-| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.4.0` | Browser with WebAssembly support |
+| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.1.0` | Node.js 24+ |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.1.0` | Rust 1.88+ |
+| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.1.0` | Browser with WebAssembly support |
 
 ### Python
 
@@ -119,7 +119,17 @@ console.log(result.text); // Email [EMAIL]
 
 </details>
 
-Python and Node.js packages include prebuilt native binaries for Linux x64 and ARM64 (GNU), macOS Intel and Apple Silicon, and Windows x64 (MSVC).
+Python 1.4.0 ships CPython 3.10+ ABI3 wheels for Linux x64 and ARM64
+(`manylinux_2_28` and `musllinux_1_2`), Linux s390x and ppc64le
+(`manylinux_2_28`), macOS Intel 10.12+ and Apple Silicon 11+, and Windows
+x64/ARM64. Node.js 1.1.0 ships Linux x64/ARM64 GNU, macOS Intel/Apple
+Silicon, and Windows x64 binaries.
+
+PyPy, free-threaded CPython, older glibc/musl and other architectures fall back
+to a source build. That route requires Rust 1.88+, Cargo, a native linker and
+access to the Rust build dependencies; installation can take several minutes.
+To require a prebuilt wheel, use `python -m pip install --only-binary=:all:
+datafog-core==1.4.0`. See [installation requirements](docs/get-started/installation.mdx).
 
 ## Detection coverage
 
@@ -148,7 +158,7 @@ For scanning files from AI agents, use [datafog MCP](https://github.com/DataFog/
 - **Select checks:** `scan(text, {"entities": ["EMAIL", "SSN"]})` in Python runs only the selected text detectors. Omit `entities` to use all enabled detectors. Selections must be nonempty, unique, exact entity names. Selecting a German type or UUID does not activate it; set `locale` or `detect_uuid` too.
 - **German locale:** `{"locale": "de"}` enables the seven German detectors. These use format/context rules; IBAN checksums and account existence are not verified. See the [German reference](docs/reference/german-entities.mdx) for detector rules.
 - **ENV and SQL:** choose `format: "env"` or `format: "sql"` to handle email boundaries in assignments and quoted strings. [Source-context rules →](docs/guides/email-boundaries.mdx)
-- **Phone numbers:** numbers without `+` use North American checks: ten digits, optionally preceded by `1`, with area and exchange codes starting with `2`–`9`. Numbers starting with `+` use a permissive 7–15 digit check, including shortened examples such as `+1-555-1002`. Country codes and assigned numbers are not validated; numeric identifiers can still match.
+- **Phone numbers:** numbers without `+` use North American checks: ten digits, optionally preceded by `1`, with area codes starting with `2`–`9` and exchange codes starting with `1`–`9`. Numbers starting with `+` use a permissive 7–15 digit check, including shortened examples such as `+1-555-1002`. Country codes and assigned numbers are not validated; numeric identifiers can still match.
 - **Decimal numbers and CSV:** contiguous card digits after a digit and `.` or `,` are suppressed, so `3.4111111111111111` and `3,4111111111111111` do not produce card findings. Cards containing spaces or hyphens still undergo normal checks. Parse CSV/TSV into cells before scanning so delimiters and adjacent fields do not affect matching.
 
 Use [`capabilities()`](docs/reference/capabilities.mdx) in Rust or Python to discover supported entities and their activation rules.
@@ -184,7 +194,7 @@ vault core through the registered native adapter.
 Install the browser integration:
 
 ```bash
-npm install --save-exact @datafog/wasm@1.4.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.4.0
+npm install --save-exact @datafog/wasm@1.1.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.1.0
 ```
 
 [Integration guide and supported profiles →](docs/integrations/fogvault.md)
@@ -196,12 +206,12 @@ npm install --save-exact @datafog/wasm@1.4.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-Install the exact 1.4.0 SDK:
+Install the published SDK version for your registry:
 
 ```bash
 python -m pip install 'datafog-core==1.4.0'
-npm install --save-exact @datafog/node@1.4.0
-cargo add datafog-core@=1.4.0 --features models
+npm install --save-exact @datafog/node@1.1.0
+cargo add datafog-core@=1.1.0 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:

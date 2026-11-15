@@ -370,6 +370,19 @@ impl CnnDetector {
             }
             current = Some(label);
         }
+        for span in &mut spans {
+            while span.end > span.start {
+                let last = text[span.start..span.end]
+                    .chars()
+                    .next_back()
+                    .expect("nonempty span");
+                if last.is_alphanumeric() {
+                    break;
+                }
+                span.end -= last.len_utf8();
+            }
+        }
+        spans.retain(|span| span.end > span.start);
         Ok(spans)
     }
 }

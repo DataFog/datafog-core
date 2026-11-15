@@ -20,7 +20,7 @@ from datafog_core import (
     Restoration, RestoreResult, FieldMapping, StructuredFinding,
     StructuredScanResult, StructuredTransformation, StructuredTransformResult,
     StructuredRestoration, StructuredRestoreResult, PrivacyManager,
-    capabilities, scan, transform, scan_and_transform, discover_fields, scan_structured,
+    __version__, capabilities, scan, transform, scan_and_transform, discover_fields, scan_structured,
     transform_structured, scan_and_transform_structured,
 )
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         _RestoreItem, _RestoreResult, _ResolvedKey, _Capabilities,
     )
 
+assert_type(__version__, str)
 assert_type(capabilities(), _Capabilities)
 assert_type(capabilities()["supported_entities"], list[str])
 assert_type(capabilities()["locales"]["de"]["enabled_entities"], list[str])
@@ -304,11 +305,31 @@ def verify_metadata() -> None:
         and not node.name.startswith("_")
     }
     native_module = importlib.import_module("datafog_core.datafog_core")
-    exports = set(native_module.__all__)
-    assert set(datafog_core.__all__) == exports
-    assert set(declarations) == exports, (
-        set(declarations) - exports,
-        exports - set(declarations),
+    # PyO3 includes module metadata and its private conformance probe in the
+    # extension's generated __all__. The package exposes only reviewed API.
+    native_exports = set(native_module.__all__)
+    exports = set(datafog_core.__all__)
+    assert native_exports - exports == {"__version__", "_panic_probe"}
+    assert exports - native_exports == set()
+    assert (
+        datafog_core.__version__ == native_module.__version__ == distribution.version
+    )
+    version_declarations = [
+        node for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "__version__"
+    ]
+    assert len(version_declarations) == 1
+    assert ast.unparse(version_declarations[0].annotation) == "str"
+    # The deprecated, non-panicking compatibility stub remains importable but
+    # is intentionally absent from star imports and the native extension.
+    assert "panic_probe" not in exports
+    assert callable(datafog_core.panic_probe)
+    expected_declarations = exports | {"panic_probe"}
+    assert set(declarations) == expected_declarations, (
+        set(declarations) - expected_declarations,
+        expected_declarations - set(declarations),
     )
     for name, declaration in declarations.items():
         value = getattr(datafog_core, name)

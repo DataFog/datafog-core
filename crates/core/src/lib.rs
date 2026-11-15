@@ -1684,6 +1684,8 @@ pub enum FindingValidationError {
     InconsistentRanges,
     /// `matched_text` differs from the source substring selected by the range.
     MatchedTextMismatch,
+    /// The entity label cannot be used safely in a redaction marker.
+    InvalidEntityType,
     /// Confidence is non-finite or outside `0.0..=1.0`.
     InvalidConfidence,
 }
@@ -1870,6 +1872,11 @@ impl PrivacyError {
                 PrivacyErrorReason::MatchedTextMismatch,
                 "matched_text",
                 "finding text does not match the selected source span",
+            ),
+            FindingValidationError::InvalidEntityType => (
+                PrivacyErrorReason::InvalidValue,
+                "entity_type",
+                "finding entity type must contain only letters, digits, underscores or hyphens",
             ),
             FindingValidationError::InvalidConfidence => (
                 PrivacyErrorReason::InvalidConfidence,
@@ -2277,7 +2284,9 @@ pub fn required_tokenization_items(
             selections[0].1.clone(),
         ));
     }
-    let existing_tokens = parse_tokens_lenient(text);
+    // Reject malformed reserved prefixes before contacting a token provider.
+    // Otherwise tokenize could create a document that strict restore cannot read.
+    let existing_tokens = parse_tokens(text)?;
     let mut items = Vec::with_capacity(selections.len());
     for (index, path) in selections {
         let finding = &selected[index];
@@ -2390,7 +2399,12 @@ fn decode_canonical_component(value: &str) -> Result<Vec<u8>, PrivacyError> {
 
 fn parse_token_at(text: &str, start: usize) -> Result<ParsedToken, PrivacyError> {
     let tail = &text[start + TOKEN_PREFIX.len()..];
-    let open = tail.find('(').ok_or_else(PrivacyError::invalid_token)?;
+    let open = tail
+        .bytes()
+        .take(21)
+        .position(|b| !b.is_ascii_digit())
+        .filter(|&index| tail.as_bytes()[index] == b'(')
+        .ok_or_else(PrivacyError::invalid_token)?;
     let version_text = &tail[..open];
     if version_text.is_empty() || !version_text.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(PrivacyError::invalid_token());
@@ -2400,7 +2414,10 @@ fn parse_token_at(text: &str, start: usize) -> Result<ParsedToken, PrivacyError>
     }
     let after_open = &tail[open + 1..];
     let close = after_open
-        .find("):")
+        .bytes()
+        .take(21)
+        .position(|b| !b.is_ascii_digit())
+        .filter(|&index| after_open.as_bytes().get(index..index + 2) == Some(b"):"))
         .ok_or_else(PrivacyError::invalid_token)?;
     let length_text = &after_open[..close];
     if length_text.is_empty() || !length_text.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -2459,22 +2476,6 @@ fn parse_tokens(text: &str) -> Result<Vec<ParsedToken>, PrivacyError> {
         tokens.push(token);
     }
     Ok(tokens)
-}
-
-fn parse_tokens_lenient(text: &str) -> Vec<ParsedToken> {
-    let mut tokens = Vec::new();
-    let mut cursor = 0;
-    while let Some(relative) = text[cursor..].find("DFTOKENv1(") {
-        let start = cursor + relative;
-        match parse_token_at(text, start) {
-            Ok(token) => {
-                cursor = token.end;
-                tokens.push(token);
-            }
-            Err(_) => cursor = start + "DFTOKENv1(".len(),
-        }
-    }
-    tokens
 }
 
 /// Parse and deduplicate all canonical tokens before a provider restore call.
@@ -2756,9 +2757,14 @@ fn apply_transformations(
                     .map(|(index, source)| {
                         let revealed = match config.reveal {
                             MaskReveal::None => false,
-                            MaskReveal::First(count) => index < count,
+                            MaskReveal::First(count) => {
+                                index < count.min(codepoint_count.saturating_sub(1))
+                            }
                             MaskReveal::Last(count) => {
-                                index >= codepoint_count.saturating_sub(count)
+                                index
+                                    >= codepoint_count.saturating_sub(
+                                        count.min(codepoint_count.saturating_sub(1)),
+                                    )
                             }
                         };
                         if revealed { source } else { config.character }
@@ -2867,7 +2873,11 @@ impl<P: KeyProvider, T> PrivacyManager<P, T> {
     ) -> Result<TransformResult, PrivacyError> {
         self.transform(
             text,
-            &scan_with_config(text, config.scan_config()),
+            &scanner_transform_findings(
+                text,
+                &scan_with_config(text, config.scan_config()),
+                config.transformation_config(),
+            ),
             config.transformation_config(),
         )
         .await
@@ -2930,7 +2940,11 @@ impl<P: KeyProvider, T: TokenProvider> PrivacyManager<P, T> {
     ) -> Result<TransformResult, PrivacyError> {
         self.transform_with_context(
             text,
-            &scan_with_config(text, config.scan_config()),
+            &scanner_transform_findings(
+                text,
+                &scan_with_config(text, config.scan_config()),
+                config.transformation_config(),
+            ),
             config.transformation_config(),
             context,
         )
@@ -2970,10 +2984,69 @@ pub fn scan_and_transform(
 ) -> Result<TransformResult, PrivacyError> {
     transform(
         text,
-        &scan_with_config(text, config.scan_config()),
+        &scanner_transform_findings(
+            text,
+            &scan_with_config(text, config.scan_config()),
+            config.transformation_config(),
+        ),
         config.transformation_config(),
     )
     .map_err(|error| error.prefixed("/transform"))
+}
+
+/// Scan and normalize overlapping detector coverage for a combined transformation.
+/// Provider-backed bindings use these same findings when preparing their batches.
+pub fn findings_for_scan_and_transform(
+    text: &str,
+    config: &ScanAndTransformConfig,
+) -> Vec<Finding> {
+    scanner_transform_findings(
+        text,
+        &scan_with_config(text, config.scan_config()),
+        config.transformation_config(),
+    )
+}
+
+/// Preserve all scanner coverage when neighboring detectors partially overlap.
+/// Explicit `transform` still requires the caller to review supplied conflicts.
+fn scanner_transform_findings(
+    text: &str,
+    findings: &[Finding],
+    config: &TransformationConfig,
+) -> Vec<Finding> {
+    let mut eligible: Vec<_> = findings
+        .iter()
+        .filter(|f| config.includes(f) && !config.allows(f))
+        .cloned()
+        .collect();
+    eligible.sort_by_key(|f| (f.byte_range.start, f.byte_range.end));
+    let mut merged: Vec<Finding> = Vec::new();
+    for finding in eligible {
+        if let Some(previous) = merged
+            .last_mut()
+            .filter(|previous| previous.byte_range.end > finding.byte_range.start)
+        {
+            let start = previous.byte_range.start;
+            let end = previous.byte_range.end.max(finding.byte_range.end);
+            let cp_start = previous.codepoint_range.start;
+            let cp_end = previous
+                .codepoint_range
+                .end
+                .max(finding.codepoint_range.end);
+            if overlap_preference(&finding, previous).is_lt() {
+                *previous = finding;
+            }
+            previous.byte_range = TextRange { start, end };
+            previous.codepoint_range = TextRange {
+                start: cp_start,
+                end: cp_end,
+            };
+            previous.matched_text = text[start..end].to_owned();
+        } else {
+            merged.push(finding);
+        }
+    }
+    merged
 }
 
 fn duplicate_preference(candidate: &Finding, existing: &Finding) -> std::cmp::Ordering {
@@ -3106,6 +3179,14 @@ fn validate_finding_with_index(
     finding: &Finding,
     offsets: &mut TextIndex<'_>,
 ) -> Result<(), FindingValidationError> {
+    if finding.entity_type.is_empty()
+        || !finding
+            .entity_type
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+    {
+        return Err(FindingValidationError::InvalidEntityType);
+    }
     if finding.byte_range.start >= finding.byte_range.end {
         return Err(FindingValidationError::EmptyOrReversedByteRange);
     }
@@ -3273,7 +3354,27 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
             continue;
         }
 
-        if !is_valid_phone(matched.as_str()) {
+        let before = &text[..matched.start()];
+        let context = before
+            .chars()
+            .rev()
+            .take(48)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if follows_decimal_separator(text.as_bytes(), matched.start())
+            || matched.as_str().contains(['\r', '\n'])
+            || ["steuer-id", "steuerid", "tax-id", "imei"]
+                .iter()
+                .any(|label| {
+                    context
+                        .trim_end_matches([' ', ':', '#', '-'])
+                        .ends_with(label)
+                })
+            || !is_valid_phone(matched.as_str())
+        {
             continue;
         }
 
@@ -3287,13 +3388,17 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
 
 static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,}",
+        r"(?i)[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+(?:\.[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+)*@(?:[\p{L}\p{M}\p{N}](?:[\p{L}\p{M}\p{N}-]{0,61}[\p{L}\p{M}\p{N}])?\.)+[\p{L}\p{M}]{2,}",
     )
     .expect("email regex is valid")
 });
 
 fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
     for matched in EMAIL_RE.find_iter(text) {
+        // Never turn a malformed dotted local part into a valid suffix.
+        if matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'.' {
+            continue;
+        }
         candidates.push(Candidate {
             label: Label::Email,
             start_byte: email_start_after_neighbor(text, matched.start(), matched.end()),
@@ -3369,7 +3474,7 @@ fn email_start_after_neighbor(text: &str, start: usize, end: usize) -> usize {
         && contact_end + 1 < at
         && matches!(
             bytes[contact_end],
-            b'/' | b'-' | b'.' | b'=' | b'_' | b'|' | b'+'
+            b'/' | b'-' | b'.' | b'=' | b'_' | b'|' | b'+' | b'&' | b'?' | b';' | b'\'' | b'#'
         )
         && EMAIL_RE
             .find_at(text, contact_end + 1)
@@ -3385,12 +3490,6 @@ fn digits_value(digits: &[u8]) -> u16 {
     digits
         .iter()
         .fold(0, |value, digit| value * 10 + u16::from(*digit - b'0'))
-}
-
-fn digits_value_u32(digits: &[u8]) -> u32 {
-    digits
-        .iter()
-        .fold(0, |value, digit| value * 10 + u32::from(*digit - b'0'))
 }
 
 /// Whether any byte of a little-endian word is an ASCII digit. Each lane is
@@ -3542,7 +3641,13 @@ fn has_supported_card_prefix(digits: &[u8]) -> bool {
         [b'6', b'0', b'1', b'1', ..] => true, // Discover 6011
         [b'6', b'5', ..] => true,             // Discover 65
         [b'6', b'4', third, ..] if (b'4'..=b'9').contains(third) => true, // Discover 644–649
-        [b'6', b'2', _, _, _, _, ..] => (622126..=622925).contains(&digits_value_u32(&digits[..6])),
+        [b'6', b'2', ..] => true,             // UnionPay (Luhn-validated subset)
+        [b'3', b'5', _, _, ..] => (3528..=3589).contains(&digits_value(&digits[..4])), // JCB
+        [b'3', b'0', third, ..] if (b'0'..=b'5').contains(third) => true, // Diners
+        [b'3', b'6' | b'8' | b'9', ..] => true, // Diners
+        [b'5', b'0', ..] | [b'5', b'6'..=b'9', ..] | [b'6', b'3', ..] | [b'6', b'6'..=b'9', ..] => {
+            true
+        } // Maestro
         _ => false,
     }
 }
@@ -3618,8 +3723,17 @@ fn card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
         return None;
     }
 
-    ((13..=19).contains(&digits.len()) && has_supported_card_prefix(digits) && passes_luhn(digits))
-        .then_some(end)
+    let groups: Vec<_> = bytes[start..end]
+        .split(|b| !b.is_ascii_digit())
+        .filter(|g| !g.is_empty())
+        .map(|g| g.len())
+        .collect();
+    let phone_zip = groups == [3, 3, 4, 5];
+    (!phone_zip
+        && (13..=19).contains(&digits.len())
+        && has_supported_card_prefix(digits)
+        && passes_luhn(digits))
+    .then_some(end)
 }
 
 /// Digit-group lengths a formatted card is written in: one contiguous group,
@@ -3680,8 +3794,31 @@ fn leading_card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
         })
 }
 
+/// Consume a maximal run of single digits separated by one space or hyphen.
+/// Mixed-width groups use the ordinary card parser. Overlong single-digit runs
+/// cannot be one card and must not be retried at every suffix.
+fn isolated_digit_run(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
+    let mut cursor = start;
+    let mut count = 0;
+    loop {
+        if bytes.get(cursor + 1).is_some_and(u8::is_ascii_digit) {
+            return None;
+        }
+        count += 1;
+        cursor += 1;
+        if bytes.get(cursor).is_some_and(|b| matches!(b, b' ' | b'-'))
+            && bytes.get(cursor + 1).is_some_and(u8::is_ascii_digit)
+        {
+            cursor += 1;
+        } else {
+            return Some((cursor, count));
+        }
+    }
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
+    let mut ibans = german::iban_ranges(text).peekable();
     let mut start = 0;
 
     while start < bytes.len() {
@@ -3691,7 +3828,39 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         };
         start = next;
 
+        let isolated_run = if bytes.get(start + 1).is_none_or(|b| !b.is_ascii_digit()) {
+            isolated_digit_run(bytes, start)
+        } else {
+            None
+        };
+        if let Some((end, count)) = isolated_run {
+            if !(13..=19).contains(&count) {
+                start = end;
+                continue;
+            }
+        }
+        let context_end = bytes[..start]
+            .iter()
+            .rposition(|b| !matches!(b, b' ' | b'\t' | b':' | b'#' | b'-'))
+            .map_or(0, |i| i + 1);
+        if context_end >= 4
+            && bytes[context_end - 4..context_end].eq_ignore_ascii_case(b"IMEI")
+            && (context_end == 4 || !bytes[context_end - 5].is_ascii_alphanumeric())
+        {
+            start += 1;
+            continue;
+        }
         if let Some(end) = card_end_at(bytes, start).or_else(|| leading_card_end_at(bytes, start)) {
+            while ibans.peek().is_some_and(|iban| iban.end <= start) {
+                ibans.next();
+            }
+            if ibans
+                .peek()
+                .is_some_and(|iban| iban.start <= start && end <= iban.end)
+            {
+                start = end;
+                continue;
+            }
             candidates.push(Candidate {
                 label: Label::CreditCard,
                 start_byte: start,
@@ -3699,7 +3868,7 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
             });
             start = end;
         } else {
-            start += 1;
+            start = isolated_run.map_or(start + 1, |(end, _)| end);
         }
     }
 }
@@ -3942,7 +4111,10 @@ fn date_at(bytes: &[u8], start: usize) -> Option<usize> {
         return None;
     }
     let (end, year, month, day) = date_parts_at(bytes, start)?;
-    if end < bytes.len() && bytes[end].is_ascii_alphanumeric() {
+    if end < bytes.len()
+        && bytes[end].is_ascii_alphanumeric()
+        && !(bytes[end] == b'T' && bytes.get(end + 1).is_some_and(u8::is_ascii_digit))
+    {
         return None;
     }
     is_valid_date(year, month, day).then_some(end)
@@ -4124,6 +4296,12 @@ fn detect_zip_code(text: &str, candidates: &mut Vec<Candidate>) {
             continue;
         }
 
+        if (start > 0 && matches!(bytes[start - 1], b'$' | b'-' | b'.'))
+            || (bytes.get(end) == Some(&b'.') && bytes.get(end + 1).is_some_and(u8::is_ascii_digit))
+        {
+            start += 1;
+            continue;
+        }
         candidates.push(Candidate {
             label: Label::ZipCode,
             start_byte: start,
@@ -4173,6 +4351,11 @@ fn ipv6_end_at(bytes: &[u8], start: usize) -> Option<usize> {
         end += 1;
     }
 
+    if has_colon && bytes.get(end) == Some(&b'.') {
+        while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+            end += 1;
+        }
+    }
     has_colon.then_some(end)
 }
 
@@ -4197,7 +4380,7 @@ fn is_valid_ipv4(bytes: &[u8], start: usize, end: usize) -> bool {
 
 // Eight four-digit groups and seven colons; hexadecimal-and-colon text any
 // longer cannot parse, so it is rejected without validating the whole run.
-const MAX_IPV6_HEX_COLON_LENGTH: usize = 39;
+const MAX_IPV6_HEX_COLON_LENGTH: usize = 45;
 
 fn is_valid_ipv6(bytes: &[u8], start: usize, end: usize) -> bool {
     if end - start > MAX_IPV6_HEX_COLON_LENGTH {
@@ -4207,7 +4390,17 @@ fn is_valid_ipv6(bytes: &[u8], start: usize, end: usize) -> bool {
         return false;
     };
 
-    candidate.parse::<Ipv6Addr>().is_ok()
+    // Ambiguous short hex pairs resemble source-language paths or clock times.
+    // Keep loopback and complete addresses, but exclude bare :: and short pairs.
+    let groups: Vec<_> = candidate
+        .split(':')
+        .filter(|part| !part.is_empty())
+        .collect();
+    let plausible = candidate == "::1"
+        || candidate.contains('.')
+        || groups.len() >= 3
+        || (groups.len() >= 2 && groups.iter().any(|part| part.len() >= 3));
+    plausible && candidate.parse::<Ipv6Addr>().is_ok()
 }
 
 // IPv4 addresses contain a period and IPv6 addresses a colon.
@@ -4295,7 +4488,13 @@ fn detect_ip_address_in(
         }
         let ipv6_end =
             (run_end > start && last_colon.is_some_and(|colon| colon >= start)).then_some(run_end);
-        if let Some(end) = ipv6_end {
+        if let Some(mut end) = ipv6_end {
+            // An IPv4-mapped address must be validated and redacted as a whole.
+            if bytes.get(end) == Some(&b'.') && bytes.get(end + 1).is_some_and(u8::is_ascii_digit) {
+                while end < segment_end && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+                    end += 1;
+                }
+            }
             if has_ip_boundaries(bytes, start, end) && is_valid_ipv6(bytes, start, end) {
                 candidates.push(Candidate {
                     label: Label::IpAddress,
@@ -4503,10 +4702,7 @@ mod ip_segment_tests {
                 }
             }
             if let Some(end) = ipv6_end_at(bytes, start) {
-                if has_ip_boundaries(bytes, start, end)
-                    && std::str::from_utf8(&bytes[start..end])
-                        .is_ok_and(|candidate| candidate.parse::<Ipv6Addr>().is_ok())
-                {
+                if has_ip_boundaries(bytes, start, end) && is_valid_ipv6(bytes, start, end) {
                     candidates.push(Candidate {
                         label: Label::IpAddress,
                         start_byte: start,
@@ -4540,15 +4736,7 @@ mod ip_segment_tests {
         for text in ["a:".repeat(200_000), ":".repeat(400_000)] {
             let mut found = Vec::new();
             detect_ip_address(&text, &mut found);
-            let expected = if text.starts_with('a') {
-                Vec::new()
-            } else {
-                vec![Candidate {
-                    label: Label::IpAddress,
-                    start_byte: text.len() - 2,
-                    end_byte: text.len(),
-                }]
-            };
+            let expected = Vec::new();
             assert_eq!(found, expected);
         }
     }
@@ -6254,7 +6442,7 @@ mod tests {
             transform(text, &findings, &config(reveal_all))
                 .unwrap()
                 .text,
-            text
+            "Email *ane@example.com"
         );
     }
 

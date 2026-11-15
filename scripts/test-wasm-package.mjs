@@ -761,9 +761,9 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
             reveal: { direction: "first", count: 99 },
           },
         },
-      }).text !== "Email jane@example.com"
+      }).text !== "Email jane@example.co*"
     ) {
-      throw new Error("oversized reveal count should preserve the finding");
+      throw new Error("oversized reveal count must leave one character masked");
     }
 
     const removed = scanAndTransform("Email jane@example.com today", {

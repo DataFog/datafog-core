@@ -70,6 +70,16 @@ fn ascii_boundary(text: &str, start: usize, end: usize) -> bool {
             .is_some_and(u8::is_ascii_alphanumeric)
 }
 
+/// Avoid interpreting digit groups inside an IBAN as a card, even when locale
+/// detection itself is not selected. Reuse the locale detector's lexical shape.
+pub(super) fn iban_ranges(text: &str) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+    DETECTORS[0]
+        .1
+        .find_iter(text)
+        .filter(|matched| ascii_boundary(text, matched.start(), matched.end()))
+        .map(|matched| matched.range())
+}
+
 pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
     detect_selected(text, &ScanConfig::default(), candidates);
 }

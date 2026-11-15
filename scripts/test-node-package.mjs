@@ -354,7 +354,7 @@ assert.equal(
       },
     },
   }).text,
-  "Email jane@example.com",
+  "Email jane@example.co*",
 );
 
 const removed = scanAndTransform("Email jane@example.com today", {

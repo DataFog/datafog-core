@@ -521,7 +521,7 @@ pub fn prepare_scan_and_transform(
     let config: serde_json::Value = env.from_js_value(config)?;
     let config =
         datafog_core::parse_scan_and_transform_config(&config).map_err(js_privacy_error)?;
-    let findings = datafog_core::scan_with_config(&text, config.scan_config());
+    let findings = datafog_core::findings_for_scan_and_transform(&text, &config);
     let selectors =
         datafog_core::required_key_selectors(&text, &findings, config.transformation_config())
             .map_err(js_privacy_error)?;
@@ -1028,9 +1028,8 @@ pub fn prepare_structured_scan_and_transform(
     let config =
         datafog_core::structured::parse_scan_and_transform_config(&env.from_js_value(config)?)
             .map_err(js_privacy_error)?;
-    let findings = datafog_core::structured::scan(&data, &config.scan)
-        .map_err(js_privacy_error)?
-        .findings;
+    let findings = datafog_core::structured::findings_for_scan_and_transform(&data, &config)
+        .map_err(js_privacy_error)?;
     let selectors =
         datafog_core::structured::required_key_selectors(&data, &findings, &config.transform)
             .map_err(js_privacy_error)?;

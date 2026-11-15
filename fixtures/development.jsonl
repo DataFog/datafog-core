@@ -98,3 +98,11 @@
 {"id":"dev-0098","text":"DEV negative 13: version 2026.12.x, order 1212, and prose only.","entities":[],"category":"negative"}
 {"id":"dev-0099","text":"DEV negative 14: faux date 19/39/2013 is deliberately malformed.","entities":[],"category":"negative"}
 {"id":"dev-0100","text":"DEV negative 15: test card-like token 4111-xxxx-0000-0000 is not a label.","entities":[],"category":"negative"}
+{"id":"review-mapped-ipv6","text":"👋 ::ffff:192.168.1.1","entities":[{"label":"IP_ADDRESS","text":"::ffff:192.168.1.1","start":2,"end":20}],"category":"review_regression"}
+{"id":"review-unicode-email","text":"👋 mail jörg@müller.de","entities":[{"label":"EMAIL","text":"jörg@müller.de","start":7,"end":21}],"category":"review_regression"}
+{"id":"review-query-email","text":"id=42&email=bob@example.com","entities":[{"label":"EMAIL","text":"bob@example.com","start":12,"end":27}],"category":"review_regression"}
+{"id":"review-two-emails","text":"bob@example.com|jane@example.com","entities":[{"label":"EMAIL","text":"bob@example.com","start":0,"end":15},{"label":"EMAIL","text":"jane@example.com","start":16,"end":32}],"category":"review_regression"}
+{"id":"review-iso-date","text":"2024-01-02T03:04:05Z","entities":[{"label":"DATE","text":"2024-01-02","start":0,"end":10}],"category":"review_regression"}
+{"id":"review-phone-zip","text":"555-123-4567 94105","entities":[{"label":"PHONE","text":"555-123-4567","start":0,"end":12},{"label":"ZIP_CODE","text":"94105","start":13,"end":18}],"category":"review_regression"}
+{"id":"review-ambiguous-ipv6","text":"x :: y; a::b; 12::34; cafe::","entities":[],"category":"review_regression"}
+{"id":"review-zip-price","text":"amount $12345.67","entities":[],"category":"review_regression"}

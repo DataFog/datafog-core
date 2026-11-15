@@ -1,0 +1,42 @@
+---
+title: "Migrating to Core 2.0"
+description: "Privacy fixes and transformation behavior changes from Core 1.4."
+---
+
+Core 2.0 changes transformation behavior, so it uses a package major under
+`VERSIONING.md`. Model, Workspace and capability wire contract identifiers remain
+unchanged. Pin `datafog-core==1.4.0` to retain the previous package behavior.
+
+- Mask reveal counts leave at least one code point masked. A count greater than
+  or equal to the finding length no longer returns the entire value unmasked.
+- Combined scan-and-transform operations merge intersecting detector spans after
+  entity selection and allowlists. The preferred detector label determines the
+  replacement strategy, and the entire union is transformed. Explicit
+  `transform` still rejects partial overlaps that would leave detected text
+  uncovered; applications reviewing explicit findings keep that workflow.
+- Tokenization rejects malformed or unsupported `DFTOKENv` literals before
+  contacting the provider. Reserve that prefix for complete canonical tokens;
+  otherwise remove the literal before requesting tokenization. Already-issued
+  canonical tokens retain their envelope and restore behavior.
+- Caller-supplied entity labels accept ASCII letters, digits, underscores and
+  hyphens; whitespace and marker punctuation now raise an invalid-finding error.
+- Python async providers must return awaitables. Synchronous callbacks now raise
+  a provider error promptly instead of leaving the awaiting request suspended.
+
+Detection changes affect `EMAIL`, `IP_ADDRESS`, `DATE`, `PHONE`, `ZIP_CODE`,
+`CREDIT_CARD`, `API_KEY`, `PRIVATE_KEY`, and embedded-model span punctuation.
+Re-run your application’s expected spans and redacted outputs when updating.
+Unicode mailbox letters are supported; query fields and markup are trimmed from
+text-mode emails. ISO date prefixes are recognized before a `T` timestamp.
+IPv4-mapped IPv6 findings include the entire dotted tail. Ambiguous short IPv6
+pairs, phone-plus-ZIP cards, labelled tax-ID phones and ZIP fragments inside
+prices or hyphenated IDs are excluded.
+
+Detection is lexical, not an identity validator. Bare valid-format SSNs and
+10-digit order numbers may match SSN or PHONE, respectively. Date parsing accepts
+`YYYY-MM-DD`, two-digit month-first `MM/DD/YYYY` or `MM-DD-YYYY`, and English
+`Month D, YYYY`; it does not infer locale-dependent day-first dates or short years.
+Cards require 13–19 Luhn-valid digits with a supported network prefix and use
+contiguous digits, single spaces or hyphens. Repeated spaces and periods are not
+accepted as card separators. German postal findings retain their documented
+label-prefixed span (`PLZ 10115`) so existing German fixtures remain stable.

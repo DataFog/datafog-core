@@ -12,7 +12,7 @@ use models::{ModelScanResult, model_error};
 
 /// Explicit embedded detector. Construction authenticates the embedded weights
 /// once; `open()` is the only way to create one.
-#[pyclass(frozen, skip_from_py_object)]
+#[pyclass(module = "datafog_core", frozen, skip_from_py_object)]
 pub(super) struct EmbeddedCnnDetector {
     detector: CnnDetector,
 }

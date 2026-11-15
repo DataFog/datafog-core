@@ -60,8 +60,14 @@ A platform is supported when the release publishes wheels for it. Targets are:
 - macOS 10.12+ x86_64, macOS 11+ arm64
 - Windows amd64 and arm64
 
-The sdist builds with the pinned toolchain in `rust-toolchain.toml` for anything
-else. Dropping a target is a MINOR. Adding one is a MINOR.
+The ABI3 wheels support GIL-enabled CPython 3.10 and newer. PyPy and
+free-threaded CPython require a source build, as do glibc older than 2.28,
+musl older than 1.2, and targets outside the list above. Source builds require
+Rust 1.88 or newer, Cargo and a target linker, and may fetch build dependencies.
+The sdist includes `rust-toolchain.toml` and builds with that exact pin when
+Rustup is installed. An offline host needs the toolchain and Cargo dependencies
+provisioned already. `pip install --only-binary=:all: datafog-core` fails clearly
+when no compatible wheel exists instead of starting a source build. Dropping a target is a MINOR. Adding one is a MINOR.
 
 ## Support window
 

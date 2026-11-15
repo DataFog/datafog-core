@@ -572,11 +572,42 @@ pub fn parse_scan_and_transform_config(
     Ok(StructuredScanAndTransformConfig { scan, transform })
 }
 
+/// Prepare scanner-produced findings with complete overlapping coverage per field.
+pub fn findings_for_scan_and_transform(
+    data: &Value,
+    config: &StructuredScanAndTransformConfig,
+) -> Result<Vec<StructuredFinding>, PrivacyError> {
+    let scanned = scan(data, &config.scan)?.findings;
+    let mut grouped: BTreeMap<String, Vec<Finding>> = BTreeMap::new();
+    for located in scanned {
+        grouped
+            .entry(located.path)
+            .or_default()
+            .push(located.finding);
+    }
+    let mut result = Vec::new();
+    for (path, findings) in grouped {
+        let text = data
+            .pointer(&path)
+            .and_then(Value::as_str)
+            .ok_or_else(invalid_data)?;
+        result.extend(
+            scanner_transform_findings(text, &findings, &config.transform)
+                .into_iter()
+                .map(|finding| StructuredFinding {
+                    path: path.clone(),
+                    finding,
+                }),
+        );
+    }
+    Ok(result)
+}
+
 pub fn scan_and_transform(
     data: &Value,
     config: &StructuredScanAndTransformConfig,
 ) -> Result<StructuredTransformResult, PrivacyError> {
-    let findings = scan(data, &config.scan)?.findings;
+    let findings = findings_for_scan_and_transform(data, config)?;
     transform(data, &findings, &config.transform).map_err(|error| error.prefixed("/transform"))
 }
 
@@ -626,7 +657,7 @@ impl<P: KeyProvider, T: TokenProvider> PrivacyManager<P, T> {
         config: &StructuredScanAndTransformConfig,
         context: Option<&PrivacyContext>,
     ) -> Result<StructuredTransformResult, PrivacyError> {
-        let findings = scan(data, &config.scan)?.findings;
+        let findings = findings_for_scan_and_transform(data, config)?;
         self.transform_structured(data, &findings, &config.transform, context)
             .await
             .map_err(|error| error.prefixed("/transform"))

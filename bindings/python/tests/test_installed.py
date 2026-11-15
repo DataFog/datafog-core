@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import asyncio
 from pathlib import Path
+import binding_safety_conformance
 import capabilities_conformance
 import embedded_cnn_conformance
 import gil_release_conformance
@@ -377,7 +378,7 @@ def main() -> None:
         partially_masked.transformations[0].output_byte_range.end,
     ) == (6, 46)
 
-    unchanged = scan_and_transform(
+    bounded_mask = scan_and_transform(
         "Email jane@example.com",
         {
             "transform": {
@@ -388,7 +389,7 @@ def main() -> None:
             }
         },
     )
-    assert unchanged.text == "Email jane@example.com"
+    assert bounded_mask.text == "Email jane@example.co*"
 
     removed = scan_and_transform(
         "Email jane@example.com today",
@@ -672,6 +673,7 @@ def verify_ssn_person_priority() -> None:
 
 
 if __name__ == "__main__":
+    binding_safety_conformance.verify()
     verify_adjacent_entities()
     workspace_conformance.verify_workspace()
     workspace_streaming_conformance.verify_streaming()

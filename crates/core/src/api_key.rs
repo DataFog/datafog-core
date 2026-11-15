@@ -20,11 +20,9 @@ pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
         let start = prefix.start();
         // A token must begin its maximal run; a prefix inside a longer run is
         // never a supported shape because validation strips the prefix itself.
-        if text[..start]
-            .chars()
-            .next_back()
-            .is_some_and(|previous| TOKEN_RUN.is_match(previous.encode_utf8(&mut [0; 4])))
-        {
+        if text[..start].chars().next_back().is_some_and(|previous| {
+            previous != '/' && TOKEN_RUN.is_match(previous.encode_utf8(&mut [0; 4]))
+        }) {
             continue;
         }
         let Some(matched) = TOKEN_RUN.find_at(text, start) else {
@@ -134,7 +132,6 @@ mod tests {
             (".", ""),
             ("~", ""),
             ("+", ""),
-            ("/", ""),
             (" ", "."),
             ("(", ")"),
             ("\"", "\""),
