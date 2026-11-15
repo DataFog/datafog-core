@@ -32,8 +32,11 @@ pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
             .unwrap_or(raw_line)
             .trim_end_matches('\r');
         let begin = line.find("-----BEGIN ").and_then(|start| {
-            let (key_type, _) = line[start + 11..].split_once("-----")?;
-            KEY_TYPES.contains(&key_type).then_some((key_type, start))
+            let (key_type, tail) = line[start + 11..].split_once("-----")?;
+            let prefix = &line[..start];
+            let wrapped = prefix.ends_with(['"', '\'', '=']);
+            (KEY_TYPES.contains(&key_type) && tail.is_empty() && (start == 0 || wrapped))
+                .then_some((key_type, start))
         });
         if let Some((key_type, header_start)) = begin {
             active = Some((key_type, offset + header_start));
@@ -42,8 +45,9 @@ pub(super) fn detect(text: &str, candidates: &mut Vec<Candidate>) {
         } else if let Some((key_type, start_byte)) = active {
             let pgp = key_type == "PGP PRIVATE KEY BLOCK";
             if let Some((end_type, footer_end)) = line.find("-----END ").and_then(|start| {
-                let (end_type, _) = line[start + 9..].split_once("-----")?;
-                Some((end_type, start + 9 + end_type.len() + 5))
+                let (end_type, tail) = line[start + 9..].split_once("-----")?;
+                (start == 0 && (tail.is_empty() || tail.starts_with(['"', '\''])))
+                    .then_some((end_type, start + 9 + end_type.len() + 5))
             }) {
                 if end_type == key_type && body_length > 0 && body_length.is_multiple_of(4) {
                     candidates.push(Candidate {
