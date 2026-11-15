@@ -8,6 +8,8 @@ version = "1.4.0"
 description = "Fast structured PII detection implemented in Rust"
 readme = "../../README.md"
 license = "MIT"
+# Distribution copies retain the repository and embedded-model notices.
+license-files = ["licenses/*"]
 requires-python = ">=3.10"
 authors = [{ name = "DataFog" }]
 keywords = ["pii", "privacy", "detection", "rust"]
@@ -45,3 +47,8 @@ Issues = "https://github.com/DataFog/datafog-core/issues"
 [tool.maturin]
 python-source = "python"
 module-name = "datafog_core.datafog_core"
+
+include = [
+  { path = "rust-toolchain.toml", format = "sdist" },
+  { path = "LICENSE", format = "sdist" },
+]
