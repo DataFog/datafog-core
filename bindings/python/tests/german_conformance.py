@@ -130,10 +130,11 @@ def verify():
         ("DE-10115", "DE_POSTAL_CODE", "ZIP_CODE", "[DE_POSTAL_CODE]"),
     ]:
         findings = api.scan(text, {"locale": "de"})
-        assert all(
-            any(f.entity_type == entity for f in findings)
-            for entity in [label, generic]
-        )
+        assert any(f.entity_type == label for f in findings)
+        if label in {"DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE"}:
+            assert not any(f.entity_type == generic for f in findings)
+        else:
+            assert any(f.entity_type == generic for f in findings)
         assert (
             api.scan_and_transform(
                 text,

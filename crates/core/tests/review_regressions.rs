@@ -193,3 +193,19 @@ fn iban_digit_groups_are_never_relabelled_as_cards() {
         assert_eq!(values(card, "CREDIT_CARD"), [card]);
     }
 }
+
+#[test]
+fn context_suppression_and_encoded_wrappers_cover_review_edges() {
+    assert!(values("IMEI 490154203237518 123", "CREDIT_CARD").is_empty());
+    assert_eq!(
+        values("mail jo\u{0308}rg@mu\u{0308}ller.de", "EMAIL"),
+        ["jo\u{0308}rg@mu\u{0308}ller.de"]
+    );
+    let key = r"-----BEGIN PRIVATE KEY-----\nYWJjZA==\n-----END PRIVATE KEY-----";
+    for wrapped in [
+        format!("PRIVATE_KEY=\"{key}\""),
+        format!("{{\"key\":\"{key}\"}}"),
+    ] {
+        assert_eq!(values(&wrapped, "PRIVATE_KEY"), [key]);
+    }
+}

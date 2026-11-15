@@ -378,7 +378,7 @@ def main() -> None:
         partially_masked.transformations[0].output_byte_range.end,
     ) == (6, 46)
 
-    unchanged = scan_and_transform(
+    bounded_mask = scan_and_transform(
         "Email jane@example.com",
         {
             "transform": {
@@ -389,7 +389,7 @@ def main() -> None:
             }
         },
     )
-    assert unchanged.text == "Email jane@example.com"
+    assert bounded_mask.text == "Email jane@example.co*"
 
     removed = scan_and_transform(
         "Email jane@example.com today",

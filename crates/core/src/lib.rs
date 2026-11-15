@@ -3388,7 +3388,7 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
 
 static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)[\p{L}\p{N}!#$%&'*+/=?^_`{|}~-]+(?:\.[\p{L}\p{N}!#$%&'*+/=?^_`{|}~-]+)*@(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.)+[\p{L}]{2,}",
+        r"(?i)[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+(?:\.[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+)*@(?:[\p{L}\p{M}\p{N}](?:[\p{L}\p{M}\p{N}-]{0,61}[\p{L}\p{M}\p{N}])?\.)+[\p{L}\p{M}]{2,}",
     )
     .expect("email regex is valid")
 });
@@ -3729,15 +3729,7 @@ fn card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
         .map(|g| g.len())
         .collect();
     let phone_zip = groups == [3, 3, 4, 5];
-    let imei = bytes[..start]
-        .iter()
-        .rev()
-        .take(8)
-        .copied()
-        .collect::<Vec<_>>()
-        .windows(4)
-        .any(|w| w.eq_ignore_ascii_case(b"IEMI"));
-    ((!phone_zip && !imei)
+    (!phone_zip
         && (13..=19).contains(&digits.len())
         && has_supported_card_prefix(digits)
         && passes_luhn(digits))
@@ -3815,6 +3807,17 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         start = next;
 
         if bytes.get(start + 1).is_some_and(|b| !b.is_ascii_digit()) {
+            start += 1;
+            continue;
+        }
+        let context_end = bytes[..start]
+            .iter()
+            .rposition(|b| !matches!(b, b' ' | b'\t' | b':' | b'#' | b'-'))
+            .map_or(0, |i| i + 1);
+        if context_end >= 4
+            && bytes[context_end - 4..context_end].eq_ignore_ascii_case(b"IMEI")
+            && (context_end == 4 || !bytes[context_end - 5].is_ascii_alphanumeric())
+        {
             start += 1;
             continue;
         }
