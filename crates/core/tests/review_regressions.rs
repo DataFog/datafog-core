@@ -158,6 +158,11 @@ fn precision_and_datetime_review_cases() {
         values(&format!("https://{token}@github.com/"), "API_KEY"),
         [token]
     );
+    let single_digit_card = "4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1";
+    assert_eq!(
+        values(single_digit_card, "CREDIT_CARD"),
+        [single_digit_card]
+    );
     let single_digits = "4 ".repeat(100_000);
     assert!(values(&single_digits, "CREDIT_CARD").is_empty());
 }

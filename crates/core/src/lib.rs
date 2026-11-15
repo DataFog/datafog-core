@@ -3794,6 +3794,28 @@ fn leading_card_end_at(bytes: &[u8], start: usize) -> Option<usize> {
         })
 }
 
+/// Consume a maximal run of single digits separated by one space or hyphen.
+/// Mixed-width groups use the ordinary card parser. Overlong single-digit runs
+/// cannot be one card and must not be retried at every suffix.
+fn isolated_digit_run(bytes: &[u8], start: usize) -> Option<(usize, usize)> {
+    let mut cursor = start;
+    let mut count = 0;
+    loop {
+        if bytes.get(cursor + 1).is_some_and(u8::is_ascii_digit) {
+            return None;
+        }
+        count += 1;
+        cursor += 1;
+        if bytes.get(cursor).is_some_and(|b| matches!(b, b' ' | b'-'))
+            && bytes.get(cursor + 1).is_some_and(u8::is_ascii_digit)
+        {
+            cursor += 1;
+        } else {
+            return Some((cursor, count));
+        }
+    }
+}
+
 fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
     let bytes = text.as_bytes();
     let mut ibans = german::iban_ranges(text).peekable();
@@ -3806,9 +3828,16 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
         };
         start = next;
 
-        if bytes.get(start + 1).is_some_and(|b| !b.is_ascii_digit()) {
-            start += 1;
-            continue;
+        let isolated_run = if bytes.get(start + 1).is_none_or(|b| !b.is_ascii_digit()) {
+            isolated_digit_run(bytes, start)
+        } else {
+            None
+        };
+        if let Some((end, count)) = isolated_run {
+            if !(13..=19).contains(&count) {
+                start = end;
+                continue;
+            }
         }
         let context_end = bytes[..start]
             .iter()
@@ -3839,7 +3868,7 @@ fn detect_credit_card(text: &str, candidates: &mut Vec<Candidate>) {
             });
             start = end;
         } else {
-            start += 1;
+            start = isolated_run.map_or(start + 1, |(end, _)| end);
         }
     }
 }
