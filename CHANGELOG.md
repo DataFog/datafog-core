@@ -39,6 +39,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
   protection. This adds findings, so it is a MINOR, not a patch: 1.2.0 is
   superseded.
 
+## [1.4.0] - 2026-11-15
+
+Promotes the entries above. Text-mode email scanning now trims label syntax,
+which adds and re-spans EMAIL findings, so this is a MINOR under
+`VERSIONING.md`.
+
 ## [1.3.1] - 2026-11-14
 
 Promotes the entries above. Verification tooling, the Python binding's GIL
