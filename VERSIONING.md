@@ -7,8 +7,10 @@ enforced by `scripts/check-core-contract.py`.
 
 ## What the numbers mean
 
-- **MAJOR** — an inventoried export, signature, error code, range unit or
-  transformation semantic changes incompatibly, or a contract version bumps.
+- **MAJOR** — an inventoried export, signature, error code or range unit is
+  removed or redesigned incompatibly, a documented transformation is intentionally
+  redesigned, or a contract version bumps. Corrective privacy fixes follow the
+  minor-release rule below.
 - **MINOR** — additive work. New detectors, new entities, new transformations, new
   bindings or targets, new optional engines.
 - **PATCH** — fixes that do not change findings, spans, or error codes for an
@@ -19,6 +21,18 @@ enforced by `scripts/check-core-contract.py`.
 The finding set is part of the contract. A patch must not start matching more or
 fewer spans. If a fix changes what is found, it ships as a MINOR with the affected
 entities named in the changelog.
+
+### Corrective privacy behavior is a minor change
+
+Privacy fixes that restore masking, complete detected-span coverage, safe input
+validation or confidentiality ship as a MINOR when public entry points and wire
+contracts remain available. They may tighten unsafe edge cases and change
+finding or transformation output; document the behavior and cover it with tests.
+This differs from removing an API or intentionally redesigning a transformation.
+
+Core 1.5 applies this rule to bounded mask reveal, scanner-overlap normalization,
+reserved-token validation and safe Python provider/configuration handling. It
+retains the API surface and the existing model and Workspace contract identifiers.
 
 ### Contract versions are major
 

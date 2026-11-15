@@ -91,7 +91,7 @@ def panic_probe() -> None:
     """Deprecated compatibility stub; never invokes a Rust panic.
 
     The original test helper is supported by datafog-core==1.4.0. This stub
-    is deprecated in 2.0 and remains until at least 3.0 and the required
+    is deprecated in 1.5 and remains until at least 3.0 and the required
     90-day deprecation window.
     """
     import warnings

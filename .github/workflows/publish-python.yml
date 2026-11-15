@@ -51,7 +51,9 @@ jobs:
             target: s390x-unknown-linux-gnu
             manylinux: "2_28"
             smoke_platform: linux/s390x
-            smoke_image: python:3.12-slim-bookworm
+            # The official Python slim manifest does not include s390x.
+            smoke_image: quay.io/pypa/manylinux_2_28_s390x@sha256:a65b6b9997e71847fc062067c4a7de9733d1dd9b83abcead084fdad0e3abc0b7
+            smoke_python: /opt/python/cp312-cp312/bin/python
             emulated: true
           - os: ubuntu-latest
             target: powerpc64le-unknown-linux-gnu
@@ -91,7 +93,7 @@ jobs:
         run: >-
           docker run --rm --platform "${{ matrix.smoke_platform }}"
           -v "${{ github.workspace }}:/io" -w /io "${{ matrix.smoke_image }}"
-          python scripts/check-python-distributions.py dist --smoke
+          "${{ matrix.smoke_python || 'python' }}" scripts/check-python-distributions.py dist --smoke
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wheels-${{ matrix.target }}
