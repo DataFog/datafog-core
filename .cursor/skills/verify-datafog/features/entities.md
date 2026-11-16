@@ -8,7 +8,7 @@ DataFog Core detects PII and credentials using rule-based detectors and optional
 
 | Entity | Detector | Notes |
 |--------|----------|-------|
-| EMAIL | Rule | Format-aware boundaries for `env` and `sql` contexts |
+| EMAIL | Rule | Trims label syntax in text mode; `env` and `sql` formats for source files |
 | PHONE | Rule | North American and international formats |
 | SSN | Rule | US Social Security Number patterns |
 | CREDIT_CARD | Rule | Luhn-validated card numbers |
@@ -151,10 +151,20 @@ Tests live in:
 
 ### Email boundary handling
 
-The `format` option affects email detection boundaries:
-- Default: standard email extraction
-- `format: "env"`: handles `EMAIL=jane@example.com` assignments
-- `format: "sql"`: handles quoted strings in SQL
+Text mode (default) now trims label syntax from email spans:
+- Leading `identifier=` prefix: `EMAIL=jane@example.com` reports `jane@example.com`
+- Wrapping opening quotes (when matching close follows)
+- Query/field delimiters (`&`, `?`, `;`, `|`)
+- Dotted keys (`user.email=`)
+- Opening `*`, `{`, or URL slashes
+
+Inner `=` stays in the local part: `EMAIL=customer=tag@example.com` reports `customer=tag@example.com`.
+
+The `format` option changes scanning for entire documents:
+- `format: "env"`: line-start assignments with optional quoting and comments
+- `format: "sql"`: string literals and identifiers inside SQL delimiters
+
+See `docs/guides/email-boundaries.mdx` and ADR 006 for full details.
 
 ### Phone number validation
 
