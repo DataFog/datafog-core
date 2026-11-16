@@ -26,17 +26,17 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Published:** Python [1.4.0](https://github.com/DataFog/datafog-core/releases/tag/python-v1.4.0); Rust, Node.js and WASM [1.1.0](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0) · [Python 1.4.0 notes](CHANGELOG.md#140---2026-11-15) · [Cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+**Published:** [Python release history](https://pypi.org/project/datafog-core/#history); Rust, Node.js and WASM [1.1.0](https://github.com/DataFog/datafog-core/releases/tag/v1.1.0) · [Release notes](https://github.com/DataFog/datafog-core/releases) · [Cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-Choose a published version for your application. Registry versions advance independently; the Python 1.4.0 findings are newer than the Rust and npm 1.1.0 findings:
+Registry versions advance independently. The Python commands below install the published release; applications should lock the exact version they have qualified. Check the [Python release history](https://pypi.org/project/datafog-core/#history) before updating.
 
 | SDK | Published install | Requirements |
 | --- | --- | --- |
-| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.4.0` | Python 3.10+ |
+| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core` | Python 3.10+ |
 | [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.1.0` | Node.js 24+ |
 | [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.1.0` | Rust 1.88+ |
 | [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.1.0` | Browser with WebAssembly support |
@@ -119,7 +119,7 @@ console.log(result.text); // Email [EMAIL]
 
 </details>
 
-Python 1.4.0 ships CPython 3.10+ ABI3 wheels for Linux x64 and ARM64
+The Python package ships CPython 3.10+ ABI3 wheels for Linux x64 and ARM64
 (`manylinux_2_28` and `musllinux_1_2`), Linux s390x and ppc64le
 (`manylinux_2_28`), macOS Intel 10.12+ and Apple Silicon 11+, and Windows
 x64/ARM64. Node.js 1.1.0 ships Linux x64/ARM64 GNU, macOS Intel/Apple
@@ -129,7 +129,7 @@ PyPy, free-threaded CPython, older glibc/musl and other architectures fall back
 to a source build. That route requires Rust 1.88+, Cargo, a native linker and
 access to the Rust build dependencies; installation can take several minutes.
 To require a prebuilt wheel, use `python -m pip install --only-binary=:all:
-datafog-core==1.4.0`. See [installation requirements](docs/get-started/installation.mdx).
+datafog-core`. See [installation requirements](docs/get-started/installation.mdx).
 
 ## Detection coverage
 
@@ -209,7 +209,7 @@ Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 
 Install the published SDK version for your registry:
 
 ```bash
-python -m pip install 'datafog-core==1.4.0'
+python -m pip install 'datafog-core'
 npm install --save-exact @datafog/node@1.1.0
 cargo add datafog-core@=1.1.0 --features models
 ```
@@ -217,7 +217,7 @@ cargo add datafog-core@=1.1.0 --features models
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-python -m pip install 'datafog-core[gliner2]==1.4.0'
+python -m pip install 'datafog-core[gliner2]'
 ```
 
 ### Embedded name and address detection
