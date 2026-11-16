@@ -3,7 +3,8 @@ use datafog_core::{
     parse_scan_config, parse_transformation_config, scan, scan_and_transform, scan_with_config,
     transform, utf16_range,
     workspace::{
-        ChoiceDisposition, PolicyEdits, ReviewInput, ValueChoiceEdit, Workspace, WorkspaceFinding,
+        ChoiceDisposition, PolicyEdits, ReviewInput, TypeRule, TypeRuleEdit, ValueChoiceEdit,
+        Workspace, WorkspaceFinding,
     },
 };
 use serde_json::json;
@@ -188,67 +189,74 @@ fn explicit_deny_wins_filters_and_all_allowlist_forms() {
 }
 
 #[test]
-fn workspace_not_sensitive_cannot_override_a_current_explicit_deny() {
+fn workspace_saved_keep_or_not_sensitive_cannot_override_a_current_explicit_deny() {
     let text = "Project Atlas";
-    let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
-    let mut plan = workspace
-        .prepare_policy_changes(
-            &PolicyEdits {
-                rules: vec![],
-                choices: vec![ValueChoiceEdit {
-                    entity_type: "DENYLIST".into(),
-                    value: text.into(),
-                    disposition: Some(ChoiceDisposition::NotSensitive),
-                }],
-            },
-            [3; 16],
-        )
-        .unwrap();
-    let expected = plan.expected_head().unwrap();
-    let next = plan.candidate_head().unwrap();
-    workspace.activate_saved(&mut plan, expected, next).unwrap();
-    let core = denied(text, json!([{"phrase":text}])).remove(0);
-    let mut finding = WorkspaceFinding::new(core.entity_type, core.matched_text, core.byte_range);
-    finding.detector_name = Some(core.detector_name);
-    let findings = [finding.clone()];
-    let review = workspace
-        .review(ReviewInput {
-            text,
-            scanner_findings: &findings,
-            user_selections: &[],
-            corrections: &[],
-        })
-        .unwrap();
-    assert!(review.conflicts.is_empty());
-    assert!(review.candidates.iter().any(|c| c.eligible && c.selected));
-    let mut duplicate = finding.clone();
-    duplicate.detector_name = Some("aaa/custom".into());
-    for (scanner, user) in [
-        (&findings[..], std::slice::from_ref(&duplicate)),
-        (std::slice::from_ref(&duplicate), &findings[..]),
+    for edits in [
+        PolicyEdits {
+            rules: vec![],
+            choices: vec![ValueChoiceEdit {
+                entity_type: "DENYLIST".into(),
+                value: text.into(),
+                disposition: Some(ChoiceDisposition::NotSensitive),
+            }],
+        },
+        PolicyEdits {
+            rules: vec![TypeRuleEdit {
+                entity_type: "DENYLIST".into(),
+                rule: Some(TypeRule::Keep),
+            }],
+            choices: vec![],
+        },
     ] {
+        let mut workspace = Workspace::create([1; 16], [2; 16]).unwrap();
+        let mut plan = workspace.prepare_policy_changes(&edits, [3; 16]).unwrap();
+        let expected = plan.expected_head().unwrap();
+        let next = plan.candidate_head().unwrap();
+        workspace.activate_saved(&mut plan, expected, next).unwrap();
+        let core = denied(text, json!([{"phrase":text}])).remove(0);
+        let mut finding =
+            WorkspaceFinding::new(core.entity_type, core.matched_text, core.byte_range);
+        finding.detector_name = Some(core.detector_name);
+        let findings = [finding.clone()];
         let review = workspace
             .review(ReviewInput {
                 text,
-                scanner_findings: scanner,
-                user_selections: user,
+                scanner_findings: &findings,
+                user_selections: &[],
                 corrections: &[],
             })
             .unwrap();
         assert!(review.conflicts.is_empty());
         assert!(review.candidates.iter().any(|c| c.eligible && c.selected));
+        let mut duplicate = finding.clone();
+        duplicate.detector_name = Some("aaa/custom".into());
+        for (scanner, user) in [
+            (&findings[..], std::slice::from_ref(&duplicate)),
+            (std::slice::from_ref(&duplicate), &findings[..]),
+        ] {
+            let review = workspace
+                .review(ReviewInput {
+                    text,
+                    scanner_findings: scanner,
+                    user_selections: user,
+                    corrections: &[],
+                })
+                .unwrap();
+            assert!(review.conflicts.is_empty());
+            assert!(review.candidates.iter().any(|c| c.eligible && c.selected));
+        }
+        let plan = workspace.prepare(text, &findings, [4; 16]).unwrap();
+        assert!(plan.preview().unwrap().text.starts_with("[[DENYLIST_"));
+        finding.detector_name = Some("custom/legacy".into());
+        let findings = [finding];
+        let review = workspace
+            .review(ReviewInput {
+                text,
+                scanner_findings: &findings,
+                user_selections: &[],
+                corrections: &[],
+            })
+            .unwrap();
+        assert!(review.candidates.iter().all(|c| !c.eligible));
     }
-    let plan = workspace.prepare(text, &findings, [4; 16]).unwrap();
-    assert!(plan.preview().unwrap().text.starts_with("[[DENYLIST_"));
-    finding.detector_name = Some("custom/legacy".into());
-    let findings = [finding];
-    let review = workspace
-        .review(ReviewInput {
-            text,
-            scanner_findings: &findings,
-            user_selections: &[],
-            corrections: &[],
-        })
-        .unwrap();
-    assert!(review.candidates.iter().all(|c| !c.eligible));
 }
