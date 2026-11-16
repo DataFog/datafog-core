@@ -132,6 +132,13 @@ void operationTypes;
 const ready: Promise<void> = init();
 const workspaceContractId: number = workspaceContractVersion();
 void workspaceContractId;
+scan("Project Atlas", {deny: [{phrase: "Project Atlas", case_sensitive: false, boundary: "word"}]});
+// @ts-expect-error A literal phrase is required.
+scan("", {deny: [{boundary: "word"}]});
+// @ts-expect-error Boundary modes are closed.
+scan("", {deny: [{phrase: "Atlas", boundary: "regex"}]});
+// @ts-expect-error Case sensitivity is boolean.
+scan("", {deny: [{phrase: "Atlas", case_sensitive: "false"}]});
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
 // @ts-expect-error Entity selection must be an array.
@@ -356,6 +363,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"workspace-conversation-conformance.mjs"),readFileSync(path.join(root,"scripts/workspace-conversation-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"workspace-streaming.json"),readFileSync(path.join(root,"fixtures/workspace/streaming-contract-v1.json")));
   writeFileSync(path.join(temporaryDirectory, "workspace-policy-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-policy-conformance.mjs")));
+  writeFileSync(path.join(temporaryDirectory, "denylist-conformance.mjs"), readFileSync(path.join(root, "scripts/denylist-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "adjacent-entities-conformance.mjs"), readFileSync(path.join(root, "scripts/adjacent-entities-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-forget-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-forget-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory, "workspace-conformance.mjs"), readFileSync(path.join(root, "scripts/workspace-conformance.mjs")));
@@ -914,6 +922,8 @@ if (!restoreRejected) throw new Error("structured restore accepted in WASM");
     await verifyWorkspaceOperations(workspaceApi);
     const {verifyWorkspaceForget} = await import("/workspace-forget-conformance.mjs");
     verifyWorkspaceForget(workspaceApi);
+    const {verifyDenylist} = await import("/denylist-conformance.mjs");
+    verifyDenylist(workspaceApi);
     const {verifyAdjacentEntities} = await import("/adjacent-entities-conformance.mjs");
     verifyAdjacentEntities(workspaceApi, await fetch("/adjacent-entities.json").then(r => r.json()));
     let coreFailure;

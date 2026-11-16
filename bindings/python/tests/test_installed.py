@@ -6,6 +6,7 @@ import json
 import asyncio
 from pathlib import Path
 import binding_safety_conformance
+import denylist_conformance
 import capabilities_conformance
 import embedded_cnn_conformance
 import gil_release_conformance
@@ -311,6 +312,7 @@ def main() -> None:
     verify_text_selection()
     verify_account_number()
     verify_street_address()
+    denylist_conformance.verify()
     capabilities_conformance.verify()
     embedded_cnn_conformance.verify()
     gil_release_conformance.verify()

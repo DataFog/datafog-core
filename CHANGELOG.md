@@ -6,6 +6,16 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Add request-local literal-phrase `deny` rules to text and structured scans in
+  Rust, Python, Node.js and browser WASM, with explicit case sensitivity and
+  Unicode letter/number/underscore word or substring boundaries. `DENYLIST`
+  findings preserve source offsets and take precedence over allowlists, entity
+  filters and Workspace not-sensitive choices while the rule is supplied.
+  Existing callers without rules retain their behavior. See the
+  [literal-denylist contract](docs/reference/literal-denylists.mdx).
+
 ### Changed
 
 - Update current SDK and companion installation examples to the coordinated 1.5.0 PyPI, crates.io and npm releases.

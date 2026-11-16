@@ -220,11 +220,19 @@ assert_type(recorded.buffered_restore_in_conversation(bytes(16)), WorkspaceBuffe
 assert_type(recorded.progressive_restore_in_conversation(bytes(16), "utf16"), WorkspaceProgressiveRestore)
 """
 
+VALID += """
+scan("Project Atlas", {"deny": [{"phrase": "Project Atlas", "case_sensitive": False, "boundary": "word"}]})
+scan_structured({"note": "Atlas"}, {"deny": [{"phrase": "Atlas"}]})
+"""
+
 # Each marked line must produce a diagnostic; a missing stub or Any cannot satisfy this.
 INVALID = """
 from datafog_core import capabilities, scan, transform, scan_structured, PrivacyManager, TransformResult
 capabilities(1)  # error
 scan(123)  # error
+scan("", {"deny": [{"boundary": "word"}]})  # error
+scan("", {"deny": [{"phrase": "Atlas", "boundary": "regex"}]})  # error
+scan("", {"deny": [{"phrase": "Atlas", "case_sensitive": "false"}]})  # error
 scan("text", {"format": "yaml"})  # error
 scan("text", {"locale": 123})  # error
 scan("text", {"detect_uuid": "true"})  # error
