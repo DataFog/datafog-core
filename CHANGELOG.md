@@ -36,6 +36,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
+- Validate the same bundled licence text across LF and Windows CRLF line endings, so combined Python release checks accept qualified Windows wheels while still rejecting missing or changed notices.
+
 - Install and smoke-test s390x Python wheels in the native PyPA manylinux 2.28 image with its CPython 3.12 interpreter, so release verification does not depend on a missing Docker Python architecture.
 
 - Redact complete IPv4-mapped IPv6 addresses, reject ambiguous short IPv6 shapes, and keep query fields, dotted keys, markup, and Unicode mailbox characters out of incorrect email spans.
