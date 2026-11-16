@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Prepare Core 1.5.0 as a minor privacy-correctness release with public APIs and model/Workspace wire contracts preserved; document the masking, coverage and validation corrections in the 1.5 migration guide.
+
 - Release the GIL for the Rust work behind the synchronous Python `transform`,
   `scan_and_transform`, `scan_structured`, `discover_fields`,
   `transform_structured`, and `scan_and_transform_structured` calls, so other
@@ -33,6 +35,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Reject malformed reserved token prefixes before provider side effects; bound token-header parsing and reject unsafe caller-supplied redaction labels. Mask reveal counts always leave at least one code point masked.
 
 ### Fixed
+
+- Install and smoke-test s390x Python wheels in the native PyPA manylinux 2.28 image with its CPython 3.12 interpreter, so release verification does not depend on a missing Docker Python architecture.
 
 - Redact complete IPv4-mapped IPv6 addresses, reject ambiguous short IPv6 shapes, and keep query fields, dotted keys, markup, and Unicode mailbox characters out of incorrect email spans.
 - Combined scan-and-transform calls preserve intersecting detector coverage across SDKs and JSON fields; explicit transforms retain strict review requirements.

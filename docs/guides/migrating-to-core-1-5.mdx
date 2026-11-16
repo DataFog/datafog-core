@@ -1,11 +1,12 @@
 ---
-title: "Migrating to Core 2.0"
+title: "Migrating to Core 1.5"
 description: "Privacy fixes and transformation behavior changes from Core 1.4."
 ---
 
-Core 2.0 changes transformation behavior, so it uses a package major under
-`VERSIONING.md`. Model, Workspace and capability wire contract identifiers remain
-unchanged. Pin `datafog-core==1.4.0` to retain the previous package behavior.
+Core 1.5 corrects privacy behavior while preserving public entry points and
+wire contracts. These changes ship as a minor release under the corrective
+privacy rule in `VERSIONING.md`. Model, Workspace and capability wire contract
+identifiers remain unchanged. Pin `datafog-core==1.4.0` to retain the previous package behavior.
 
 - Mask reveal counts leave at least one code point masked. A count greater than
   or equal to the finding length no longer returns the entire value unmasked.

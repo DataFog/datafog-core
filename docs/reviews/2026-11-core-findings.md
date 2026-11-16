@@ -1,10 +1,11 @@
 # Core 1.4 review disposition
 
-This maps the independent November 15, 2026 review to the Core 2.0 candidate.
+This maps the independent November 15, 2026 review to the Core 1.5 candidate.
 Detection fixes, transformation safety changes, binding safety and packaging
 have regression coverage; supported lexical limits are stated explicitly below.
-Core 2.0 is required by the existing version policy because masking and combined
-transformation behavior change. No wire contract identifier changes.
+Core 1.5 follows the owner-selected minor-release policy for corrective privacy
+behavior: public entry points remain available and no wire contract identifier
+changes. The versioning policy and migration guide describe the tightened edges.
 
 | Finding | Resolution | Evidence |
 | --- | --- | --- |
@@ -16,7 +17,7 @@ transformation behavior change. No wire contract identifier changes.
 | CORE-6 | Non-awaitable key/token/restore callback results raise a sanitized provider error promptly. | Installed timeout-bounded key/token/restore cases in `binding_safety_conformance.py`. |
 | CORE-7 | Combined operations merge scanner-produced intersecting spans into their union after selection and allowlists. Explicit transforms retain strict conflict review. Applied in Rust/Python, Node provider preparation, WASM and JSON fields. | Scanner coverage regression; existing explicit-conflict conformance; configuration/migration guide. |
 | CORE-8 | Reject bare `::`, ambiguous short hex pairs and single-hextet prefixes; retain loopback, full addresses and supported long multi-group forms. | Mapped/ambiguous IPv6 regression, cached-run tests and SDK fixtures. |
-| CORE-9 | ISO date prefixes before `T` plus a digit are recognized. Other reported formats remain intentionally unsupported: variable-width numeric, day-first, day-first English, month-first without a comma, `Sept`, dotted dates and short years. Supported exact formats are documented. | ISO timestamp regression; existing date negatives; Core 2 migration guide. |
+| CORE-9 | ISO date prefixes before `T` plus a digit are recognized. Other reported formats remain intentionally unsupported: variable-width numeric, day-first, day-first English, month-first without a comma, `Sept`, dotted dates and short years. Supported exact formats are documented. | ISO timestamp regression; existing date negatives; Core 1.5 migration guide. |
 | CORE-10 | README installation versions are per registry and link actual Python tags; Rust/npm remain at their verified published 1.1.0 versions until separately released. Phone rule and all ten Python wheel targets are accurately described. | Registry API verification; README/install documentation. |
 | CORE-11 | Mask reveal counts leave at least one code point masked, even when requested count exceeds length. Count four on a five-character ZIP deliberately still reveals four, preserving partial-mask configuration. | First/last/zero/oversized reveal regressions; updated existing expectation. |
 | CORE-12 | Wheel contains MIT, embedded Apache and CC0 notices with `License-File` metadata; sdist includes root MIT and Rust toolchain pin. | Archive-byte checks and extracted-source rebuild; `test-python-distributions.py`. |
@@ -34,7 +35,7 @@ SSN candidate. They cannot be disambiguated reliably without context. Card
 numbers use 13–19 Luhn-valid digits and supported issuer prefixes; repeated
 spaces and period separators remain unsupported. German postal findings retain
 the full label-prefixed value (`PLZ 10115`) for existing locale fixtures. These
-limits are documented in the Core 2 migration guide rather than presented as
+limits are documented in the Core 1.5 migration guide rather than presented as
 solved detection claims.
 
 The embedded CNN strips trailing punctuation from predicted spans (PY-L10).
