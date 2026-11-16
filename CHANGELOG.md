@@ -8,6 +8,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Changed
 
+- Update current SDK and companion installation examples to the coordinated 1.5.0 PyPI, crates.io and npm releases.
+
 - Prepare Core 1.5.0 as a minor privacy-correctness release with public APIs and model/Workspace wire contracts preserved; document the masking, coverage and validation corrections in the 1.5 migration guide.
 
 - Release the GIL for the Rust work behind the synchronous Python `transform`,

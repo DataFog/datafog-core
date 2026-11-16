@@ -2,6 +2,10 @@
 
 Optional encrypted browser persistence alongside FogVault. Core owns reversible mappings and review; the adapter saves the exact bundle before activation. This package uses SQLite3MC 2.6.1, authenticated ChaCha20-Poly1305, dedicated Worker, OPFS synchronous-access-handle pool, DELETE journal and FULL synchronization. It requires OPFS in a dedicated Worker; no memory or plaintext fallback is offered. Cross-origin isolation is not required by this profile.
 
+```sh
+npm install --save-exact @datafog/wasm@1.5.0 @datafog/core-sqlite-browser@1.5.0
+```
+
 ```js
 import {init, Workspace} from '@datafog/wasm';
 import {SQLiteVault, SQLiteWorkspace} from '@datafog/core-sqlite-browser';
@@ -21,6 +25,6 @@ The host owns UI approval, credential entry, routing and actual transport. The a
 
 Bundle `worker.mjs`, its imports and `vendor/sqlite3.mjs`/`.wasm` under the extension's own origin. Configure `workerUrl` if a bundler relocates assets. MV3 CSP needs `script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'`. Keep the owning page alive; service-worker memory is not persistence. The detector's Worker supplies findings and never owns this database.
 
-Provision with `python3 scripts/provision-sqlite-browser.py`, build Core WASM, then run `node integrations/sqlite-browser/test/run-installed.mjs`. The check packs and installs candidates into a clean extension consumer; it does not provision assets. Keep package versions unchanged until release approval.
+Provision with `python3 scripts/provision-sqlite-browser.py`, build Core WASM, then run `node integrations/sqlite-browser/test/run-installed.mjs`. The check packs and installs candidates into a clean extension consumer; it does not provision assets or publish packages.
 
 SQLite3MC upstream: https://github.com/utelle/SQLite3MultipleCiphers . Third-party notices must accompany shipped artifacts. Actual shipping-extension/device qualification remains distinct from synthetic Chromium tests.
