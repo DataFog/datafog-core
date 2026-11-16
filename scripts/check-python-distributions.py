@@ -21,6 +21,11 @@ LICENSES = {
 }
 
 
+def same_license_text(shipped, source):
+    """Allow Git's Windows CRLF checkout without accepting changed legal text."""
+    return shipped.replace(b"\r\n", b"\n") == source.replace(b"\r\n", b"\n")
+
+
 def check(path, version):
     """Check the bytes shipped to the registry, without extracting archives."""
     if path.suffix == ".whl":
@@ -35,7 +40,7 @@ def check(path, version):
             prefix = metadata_paths[0].removesuffix("METADATA") + "licenses/"
             for name, source in LICENSES.items():
                 matches = [notice for notice in notices if Path(notice).name == name]
-                if len(matches) != 1 or archive.read(prefix + matches[0]) != source.read_bytes():
+                if len(matches) != 1 or not same_license_text(archive.read(prefix + matches[0]), source.read_bytes()):
                     raise ValueError("wheel licence is missing or differs: " + name)
             if "datafog_core/py.typed" not in archive.namelist():
                 raise ValueError("wheel has no py.typed marker")
@@ -47,7 +52,11 @@ def check(path, version):
             prefix = next(iter(roots)) + "/"
             for name, source in {"LICENSE": ROOT / "LICENSE", "rust-toolchain.toml": ROOT / "rust-toolchain.toml"}.items():
                 member = archive.extractfile(prefix + name)
-                if member is None or member.read() != source.read_bytes():
+                if member is None:
+                    raise ValueError("sdist source file is missing or differs: " + name)
+                shipped, expected = member.read(), source.read_bytes()
+                matches = same_license_text(shipped, expected) if name == "LICENSE" else shipped == expected
+                if not matches:
                     raise ValueError("sdist source file is missing or differs: " + name)
             project = archive.extractfile(prefix + "pyproject.toml")
             if project is None or tomllib.loads(project.read().decode())["project"]["version"] != version:
