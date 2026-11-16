@@ -3,12 +3,12 @@
 This optional Rust package saves DataFog Core workspace bundles through the
 maintained registered FogVault native API. The engines remain separate: the
 integration owns the sequencing; Core owns workspace semantics; FogVault owns
-keys, authenticated records and persistence. Version `1.0.0` implements the
+keys, authenticated records and persistence. Version `1.5.0` implements the
 reviewed Core Workspace contract 1 with FogVault `0.1.0`. Production host and
 key-provider qualification remain separate.
 
 ```sh
-cargo add datafog-fogvault-native@=1.0.0
+cargo add datafog-fogvault-native@=1.5.0
 ```
 
 ## Build and verify
@@ -29,8 +29,8 @@ consumer runs the ten external tests. Core itself remains at Rust 1.88.
 Invoking Cargo with `--manifest-path` from Core's root does not select the nested
 toolchain, so the explicit `+1.94.1` matters. Core's Rust 1.88 baseline remains
 unchanged. The current Core dependency is a repository-relative path; FogVault is
-an exact public Git revision with backup disabled. A registry release needs a
-separate dependency/distribution decision. The test-only published Core dependency
+an exact public Git revision with backup disabled. Registry publication uses
+separately qualified archives and dependency checks. The test-only published Core dependency
 is exactly `=0.5.0-beta.3`, checked alongside the current Core source.
 
 ## Host integration

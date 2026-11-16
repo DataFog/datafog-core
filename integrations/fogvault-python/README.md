@@ -1,15 +1,15 @@
 # Optional native Python Core–FogVault owner
 
-`datafog_fogvault` is a separate `1.0.0` ABI3 extension for Python
+`datafog_fogvault` is a separate `1.5.0` ABI3 extension for Python
 3.10+. It delegates persistence, session authority and save/activation to the
 existing Rust `datafog-fogvault-native::Owner`; it does not load browser WASM,
 duplicate encryption, or change the existing `datafog_core` Python package.
 
-Install `datafog-fogvault==1.0.0` from PyPI. The Linux x64 wheel requires glibc
+Install `datafog-fogvault==1.5.0` from PyPI. The Linux x64 wheel requires glibc
 2.34 or later; native macOS ARM64 and Windows x64 wheels are also qualified.
 
 ```sh
-python -m pip install datafog-fogvault==1.0.0
+python -m pip install datafog-fogvault==1.5.0
 ```
 Its qualification build uses Rust 1.94.1, while Core keeps its Rust 1.88 floor.
 
