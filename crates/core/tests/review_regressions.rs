@@ -68,9 +68,42 @@ fn email_values_do_not_absorb_fields_or_markup() {
         values("bob@example.com|jane@example.com", "EMAIL"),
         ["bob@example.com", "jane@example.com"]
     );
-    assert!(values("bob..x@example.com", "EMAIL").is_empty());
+    assert_eq!(values("bob..x@example.com", "EMAIL"), ["x@example.com"]);
     assert_eq!(values("mail jörg@müller.de", "EMAIL"), ["jörg@müller.de"]);
     assert_eq!(values("a+b@example.com", "EMAIL"), ["a+b@example.com"]);
+}
+
+#[test]
+fn email_after_dots_is_reported_from_its_first_local_part_character() {
+    for text in [
+        "Contact (support).alice@example.com for help",
+        "See note [1].alice@example.com",
+        "Email me...alice@example.com",
+        ".alice@example.com",
+        "reply-to>.alice@example.com",
+        "'.alice@example.com'",
+        "Reach '.alice@example.com's",
+        "..alice@example.com",
+        "x&.alice@example.com",
+        ".email=.alice@example.com",
+    ] {
+        assert_eq!(values(text, "EMAIL"), ["alice@example.com"], "{text}");
+    }
+    // Dots are not an address on their own, and a dot before the `@` is still invalid.
+    for text in [".@example.com", "...@example.com", "alice.@example.com"] {
+        assert!(values(text, "EMAIL").is_empty(), "{text}");
+    }
+    // Label, quote and numeric-neighbor boundaries are unchanged.
+    for (text, email) in [
+        ("email=alice@example.com", "alice@example.com"),
+        ("note=customer=tag@example.com", "customer=tag@example.com"),
+        ("\"alice@example.com\"", "alice@example.com"),
+        ("94105.jane@example.com", "jane@example.com"),
+        ("219-09-9999.jane@example.com", "jane@example.com"),
+        ("first.last@example.com", "first.last@example.com"),
+    ] {
+        assert_eq!(values(text, "EMAIL"), [email], "{text}");
+    }
 }
 
 #[test]

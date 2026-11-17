@@ -27,11 +27,16 @@ pub(super) fn text_candidate_start(text: &str, mut start: usize, end: usize) -> 
     if let Some(delimiter) = text[start..at].rfind(['&', '?', ';', '|']) {
         start += delimiter + 1;
     }
-    while start < at && matches!(bytes[start], b'*' | b'{' | b'/' | b'|') {
+    // A local part cannot start with a dot, so one left in front by the
+    // trimming above or below is skipped rather than rejecting the address.
+    while start < at && matches!(bytes[start], b'*' | b'{' | b'/' | b'|' | b'.') {
         start += 1;
     }
-    let start = label_value_start(text, start, at).unwrap_or(start);
-    (start < at && bytes[start] != b'.').then_some(start)
+    let mut start = label_value_start(text, start, at).unwrap_or(start);
+    while start < at && bytes[start] == b'.' {
+        start += 1;
+    }
+    (start < at).then_some(start)
 }
 
 /// End of the `identifier=` prefix when the candidate's local part starts with

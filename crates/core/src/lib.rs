@@ -3434,12 +3434,14 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
 }
 
 fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_context: bool) {
-    let mut previous_end = None;
     for matched in EMAIL_RE.find_iter(text) {
-        // Text field syntax must be removed before judging the mailbox's own
-        // boundaries. Explicit ENV/SQL slices retain raw local-part validation.
+        // A match never starts on a dot, so an address written after dots
+        // (`see [1].alice@example.com`, `me...alice@example.com`) is reported
+        // from its first local-part character instead of being dropped.
         let neighbor_start = email_start_after_neighbor(text, matched.start(), matched.end());
         let start = if text_context {
+            // Text field syntax is removed from the span; explicit ENV/SQL
+            // slices keep their punctuation.
             let Some(start) =
                 email_context::text_candidate_start(text, neighbor_start, matched.end())
             else {
@@ -3449,24 +3451,11 @@ fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_c
         } else {
             neighbor_start
         };
-        let boundary_start = if text_context { start } else { matched.start() };
-        if boundary_start > 0 && text.as_bytes()[boundary_start - 1] == b'.' {
-            // A dot after another email or a double quote is prose punctuation;
-            // leading/doubled dots inside a local part still invalidate its suffix.
-            let dot = boundary_start - 1;
-            let after_neighbor = neighbor_start > matched.start() && start == neighbor_start;
-            if !text_context
-                || (!after_neighbor && previous_end != Some(dot) && !text[..dot].ends_with('"'))
-            {
-                continue;
-            }
-        }
         candidates.push(Candidate {
             label: Label::Email,
             start_byte: start,
             end_byte: matched.end(),
         });
-        previous_end = Some(matched.end());
     }
 }
 

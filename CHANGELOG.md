@@ -10,8 +10,14 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Restore EMAIL findings after surrounding source dots and field delimiters,
   including the four reported adjacent/prose cases missed in 1.5.0 and published
-  1.6.0. Validate refined text values while retaining raw ENV/SQL validation,
-  malformed-local rejection, mailbox punctuation and original-source offsets.
+  1.6.0. Refine text values while retaining ENV/SQL mailbox punctuation and
+  original-source offsets.
+- Report an EMAIL that directly follows one or more dots from its first
+  local-part character in text, ENV and SQL formats instead of dropping it,
+  restoring 1.4.0 coverage: `see [1].alice@example.com`, `me...alice@example.com` and
+  `KEY=".alice@example.com"` find `alice@example.com`, and `bob..x@example.com`
+  finds `x@example.com`. This replaces the 1.5.0 malformed-local rejection;
+  label, quote, field-delimiter and markup trimming are unchanged.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
