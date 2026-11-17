@@ -76,6 +76,8 @@ RUST_CASES = {
 }
 if os.name != "nt":
     RUST_CASES["native"].add("directory_ancestry_is_durable_before_snapshot_and_observers_repeat_sync")
+else:
+    RUST_CASES["native"].add("canonical_windows_drive_prefix_is_not_queried_as_a_directory_entry")
 
 
 def digest(path):

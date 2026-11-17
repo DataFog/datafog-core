@@ -85,6 +85,20 @@ fn root() -> tempfile::TempDir {
 fn canonical(temp: &tempfile::TempDir) -> PathBuf {
     temp.path().canonicalize().unwrap().join("app")
 }
+
+#[cfg(windows)]
+#[test]
+fn canonical_windows_drive_prefix_is_not_queried_as_a_directory_entry() {
+    let temp = root();
+    let path = canonical(&temp);
+    assert!(path.as_os_str().to_string_lossy().starts_with(r"\\?\"));
+    // The incomplete verbatim prefix alone cannot be statted on Windows.
+    // Root and actual components must nevertheless retain normal path checks.
+    reject_links(&path).unwrap();
+    let mut owner = ApplicationVault::open(options(&path)).unwrap();
+    let saved = commit(&mut owner, SECRET);
+    assert_eq!(owner.restore(&saved.texts[0]).unwrap(), SECRET);
+}
 fn commit(owner: &mut ApplicationVault, text: &str) -> Committed {
     owner
         .prepare_and_commit(text, &[finding(text)], random().unwrap())

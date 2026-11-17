@@ -238,6 +238,12 @@ fn reject_links(path: &Path) -> Result<()> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
+        // A Windows drive/device prefix is not a filesystem path until its
+        // RootDir is appended (canonical paths use e.g. \\?\C:). Validate every
+        // actual directory entry, without querying that incomplete prefix.
+        if matches!(component, std::path::Component::Prefix(_)) {
+            continue;
+        }
         match fs::symlink_metadata(&current) {
             Ok(m) if m.file_type().is_symlink() => return Err(Error::UnsafePath),
             Ok(_) => (),
@@ -283,7 +289,9 @@ fn ensure_directory(path: &Path) -> Result<()> {
         {
             ensure_directory(parent)?;
         }
-        let mut builder = fs::DirBuilder::new();
+        let builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        let mut builder = builder;
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
