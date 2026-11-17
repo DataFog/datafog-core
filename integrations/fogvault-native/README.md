@@ -3,7 +3,7 @@
 This optional Rust package saves DataFog Core workspace bundles through the
 maintained registered FogVault native API. The engines remain separate: the
 integration owns the sequencing; Core owns workspace semantics; FogVault owns
-keys, authenticated records and persistence. Version `1.6.0` implements the
+keys, authenticated records and persistence. Version `1.7.0` implements the
 reviewed Core Workspace contract 1 with FogVault `0.1.0`. Production host and
 key-provider qualification remain separate.
 
@@ -18,7 +18,7 @@ reconciliation and strict-restore constraints. Node helper parity is a follow-up
 the existing Node password owner continues to work.
 
 ```sh
-cargo add datafog-fogvault-native@=1.6.0
+cargo add datafog-fogvault-native@=1.7.0
 ```
 
 ## Build and verify

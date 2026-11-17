@@ -1,13 +1,13 @@
 # Optional native Node Core–FogVault integration
 
 `@datafog/core-fogvault-node` owns the Rust Core–FogVault adapter in a native
-N-API addon. Version `1.6.0` implements the reviewed Core Workspace contract 1;
+N-API addon. Version `1.7.0` implements the reviewed Core Workspace contract 1;
 production host and key-provider acceptance remain separate.
 Existing `@datafog/node` remains independent and retains its Rust 1.88 floor.
 This optional isolated package builds with Rust 1.94.1 and uses Node 24+.
 
 ```sh
-npm install --save-exact @datafog/core-fogvault-node@1.6.0
+npm install --save-exact @datafog/core-fogvault-node@1.7.0
 ```
 
 ## Build and installed proof

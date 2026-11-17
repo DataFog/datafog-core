@@ -1,11 +1,11 @@
 # Core bundle recovery staging
 
-This optional version `1.6.0`, Rust 1.88 crate validates an **already authenticated
+This optional version `1.7.0`, Rust 1.88 crate validates an **already authenticated
 and decrypted** Core bundle and prepares its existing Core recovery operation.
 It does not decrypt legacy backups or publish records into FogVault.
 
 ```sh
-cargo add datafog-fogvault-migration@=1.6.0
+cargo add datafog-fogvault-migration@=1.7.0
 ```
 
 ```rust
