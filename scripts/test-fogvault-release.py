@@ -42,7 +42,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_beta3_is_explicitly_nonrequired_and_does_not_fetch(self):
         self.assertEqual(run({}, "0.5.0-beta.3")["required"], False)
 
-    def test_exact_completed_stable_and_manual_runs_pass_all_seventeen_scopes(self):
+    def test_exact_completed_stable_and_manual_runs_pass_all_twenty_scopes(self):
         for event in ("push", "workflow_dispatch"):
             for version in ("1.0.0", "1.0.0-beta.1", "2.0.0"):
                 data = fixture()
@@ -51,7 +51,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                         pages[0]["workflow_runs"][0]["event"] = event
                 result = run(data, version)
                 self.assertTrue(result["required"])
-                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 17)
+                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 20)
                 self.assertTrue(all(p["head_sha"] == REVISION for p in result["proofs"]))
 
     def test_browser_sdk_extraction_is_required_at_exact_head(self):
@@ -61,6 +61,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
         data[key][0]["workflow_runs"][0]["head_sha"] = "b" * 40
         with self.assertRaises(ValueError):
             run(data)
+
+    def test_real_credential_providers_are_required_before_1_6_publication(self):
+        workflow = "credential-stores.yml"
+        expected = {f"Credential store / {platform}" for platform in gate.PLATFORMS}
+        self.assertEqual(gate.REQUIRED[workflow], expected)
+        self.assertEqual(len(run(fixture(), "1.6.0")["proofs"]), len(gate.REQUIRED))
+        key = f"actions/workflows/{workflow}/runs?head_sha={REVISION}&per_page=1"
+        data = fixture()
+        data[key][0]["workflow_runs"][0]["head_sha"] = "b" * 40
+        with self.assertRaises(ValueError):
+            run(data, "1.6.0")
 
     def test_embedded_detector_and_both_vaults_require_exact_head_browser_proof(self):
         self.assertEqual(gate.REQUIRED["browser-v1-1.yml"], {"installed-extension"})

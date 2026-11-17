@@ -15,6 +15,9 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ("ubuntu-24.04", "macos-15", "windows-2025")
 REQUIRED = {
+    "credential-stores.yml": {
+        f"Credential store / {platform}" for platform in PLATFORMS
+    },
     "application-vaults.yml": {
         f"Application vault / {platform}" for platform in (
             "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-2025")
