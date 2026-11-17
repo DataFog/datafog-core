@@ -194,7 +194,7 @@ pub(super) fn atomic_replace(temp: &Path, destination: &Path) -> Result<()> {
         )
     } == 0
     {
-        return Err(Error::Io);
+        return Err(Error::OutcomeUnknown);
     }
     Ok(())
 }
