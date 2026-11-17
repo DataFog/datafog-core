@@ -1,9 +1,5 @@
 # Native Core–FogVault adapter
 
-**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
-install commands below are for use after publication. Test this checkout locally
-while preparing the release.
-
 This optional Rust package saves DataFog Core workspace bundles through the
 maintained registered FogVault native API. The engines remain separate: the
 integration owns the sequencing; Core owns workspace semantics; FogVault owns

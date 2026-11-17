@@ -1,9 +1,5 @@
 # Optional native Node Core–FogVault integration
 
-**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
-install commands below are for use after publication. Test this checkout locally
-while preparing the release.
-
 `@datafog/core-fogvault-node` owns the Rust Core–FogVault adapter in a native
 N-API addon. Version `1.7.0` implements the reviewed Core Workspace contract 1;
 production host and key-provider acceptance remain separate.

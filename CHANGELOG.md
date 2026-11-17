@@ -6,11 +6,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-17
+
 ### Changed
 
-- Prepare coordinated Core SDK and companion packages at 1.7.0, including the
-  EMAIL and PHONE boundary fixes and Intel macOS retirement. Publication remains on hold;
-  1.6.0 is the latest published release.
+- Release coordinated Core SDK and companion packages at 1.7.0, including the
+  EMAIL and PHONE boundary fixes and Intel macOS retirement, and update current
+  SDK and companion installation examples to 1.7.0. Core 1.5.0 and 1.6.0
+  contain the EMAIL boundary regression tracked in #266; version constraints
+  such as `<1.7` must be updated to admit the fixed release.
 
 ### Fixed
 

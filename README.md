@@ -26,17 +26,17 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Prepared release:** Core 1.7.0 for Python, Rust, Node.js, WASM and Core-owned companion packages. **Publication is on hold; 1.7.0 is not available from registries.** See the [draft 1.7 release notes](docs/releases/1-7-0.mdx).
+**Release:** coordinated [Core 1.7.0](https://github.com/DataFog/datafog-core/releases/tag/v1.7.0) for Python, Rust, Node.js, WASM and the Core-owned companion packages · [1.7 release notes](docs/releases/1-7-0.mdx) · [Python release history](https://pypi.org/project/datafog-core/#history) · [1.5 migration guide](docs/guides/migrating-to-core-1-5.mdx) · [Earlier cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
-**Latest published:** [Core 1.6.0](https://github.com/DataFog/datafog-core/releases/tag/v1.6.0). Published 1.5.0 and 1.6.0 have the known [EMAIL boundary regression (#266)](https://github.com/DataFog/datafog-core/issues/266). The prepared 1.7.0 release includes the fixes ([#267](https://github.com/DataFog/datafog-core/pull/267), [#270](https://github.com/DataFog/datafog-core/pull/270)); consumers need to admit 1.7.0 in their version constraints to receive it after publication. [1.6 release notes](docs/releases/1-6-0.mdx) · [Python release history](https://pypi.org/project/datafog-core/#history) · [1.5 migration guide](docs/guides/migrating-to-core-1-5.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+Core 1.5.0 and 1.6.0 have the known [EMAIL boundary regression (#266)](https://github.com/DataFog/datafog-core/issues/266). Core 1.7.0 includes the fixes ([#267](https://github.com/DataFog/datafog-core/pull/267), [#270](https://github.com/DataFog/datafog-core/pull/270)); consumers need to admit 1.7.0 in their version constraints to receive them. Earlier notes: [1.6 release notes](docs/releases/1-6-0.mdx).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-The commands in this README target **prepared, unpublished 1.7.0** and become installable only after publication. Use a local build of this checkout for candidate testing. Applications should lock the exact version they have qualified. The `datafog` Python application and FogVault version independently of Core.
+The coordinated Core release is 1.7.0 across PyPI, crates.io and npm. Applications should lock the exact version they have qualified. The `datafog` Python application and FogVault version independently of Core.
 
-| SDK | Prepared install (after publication) | Requirements |
+| SDK | Published install | Requirements |
 | --- | --- | --- |
 | [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.7.0` | Python 3.10+ |
 | [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.7.0` | Node.js 24+ |
@@ -121,11 +121,11 @@ console.log(result.text); // Email [EMAIL]
 
 </details>
 
-The prepared Python 1.7.0 package targets CPython 3.10+ ABI3 wheels for Linux
-x64 and ARM64 (`manylinux_2_28` and `musllinux_1_2`), Linux s390x and ppc64le
-(`manylinux_2_28`), macOS Apple Silicon 11+, and Windows x64/ARM64. The prepared
-Node.js 1.7.0 package targets Linux x64/ARM64 GNU, macOS Apple Silicon, and
-Windows x64 binaries. Final candidate qualification remains required.
+The Python 1.7.0 package ships CPython 3.10+ ABI3 wheels for Linux x64 and
+ARM64 (`manylinux_2_28` and `musllinux_1_2`), Linux s390x and ppc64le
+(`manylinux_2_28`), macOS Apple Silicon 11+, and Windows x64/ARM64. The
+Node.js 1.7.0 package ships Linux x64/ARM64 GNU, macOS Apple Silicon, and
+Windows x64 binaries.
 
 After 1.6.0, release CI no longer builds or qualifies Intel macOS: future
 Python releases omit its wheel and future Node releases omit `darwin-x64`.
@@ -214,7 +214,7 @@ npm install --save-exact @datafog/wasm@1.7.0 @datafog/fogvault-browser@0.1.0 @da
 
 Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 in Rust, Python and Node.js. Model files are provisioned separately; model quality measurements remain separate from SDK correctness.
 
-After publication, install the prepared SDK version for your registry:
+Install the published SDK version for your registry:
 
 ```bash
 python -m pip install 'datafog-core==1.7.0'

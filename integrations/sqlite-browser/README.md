@@ -1,9 +1,5 @@
 # SQLite3 Multiple Ciphers browser Workspace owner
 
-**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
-install commands below are for use after publication. Test this checkout locally
-while preparing the release.
-
 Optional encrypted browser persistence alongside FogVault. Core owns reversible mappings and review; the adapter saves the exact bundle before activation. This package uses SQLite3MC 2.6.1, authenticated ChaCha20-Poly1305, dedicated Worker, OPFS synchronous-access-handle pool, DELETE journal and FULL synchronization. It requires OPFS in a dedicated Worker; no memory or plaintext fallback is offered. Cross-origin isolation is not required by this profile.
 
 ```sh

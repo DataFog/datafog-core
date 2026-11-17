@@ -1,9 +1,5 @@
 # Core–FogVault browser adapter
 
-**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
-install commands below are for use after publication. Test this checkout locally
-while preparing the release.
-
 This optional Core-owned package joins the maintained `@datafog/wasm` Workspace
 to `@datafog/fogvault-browser`. It stores the exact Workspace bundle as an opaque
 FogVault record, then activates only after a confirmed durable save. It contains
