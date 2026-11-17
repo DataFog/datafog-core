@@ -132,7 +132,8 @@ broader deployment workloads still required before a production latency promise.
 Local executed proof is macOS ARM64, Python 3.10 and 3.14; native Windows ACL tests also
 cross-compile for Windows x64, which is not execution proof. The application-vault
 CI matrix executes native/crash/installed Python 3.10 tests on Linux x64/ARM64,
-macOS Intel/ARM64 and Windows x64. Existing native language gates retain Python
+macOS ARM64 and Windows x64. The Intel macOS job was removed after 1.6.0.
+Existing native language gates retain Python
 3.14. Green results qualify those exact test environments, not every OS build,
 credential-provider policy or a physical power-loss test. Fault injection kills
 real child processes around rename and activation; storage-device power cuts

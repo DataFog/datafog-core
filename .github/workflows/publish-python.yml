@@ -61,8 +61,6 @@ jobs:
             smoke_platform: linux/ppc64le
             smoke_image: python:3.12-slim-bookworm
             emulated: true
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-latest

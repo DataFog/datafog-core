@@ -79,6 +79,13 @@ The Python registry currently publishes 1.4.0; Rust and npm publish 1.1.0. Use
 the versions from the [README](https://github.com/DataFog/datafog-core#quickstart)
 when matching findings across runtimes.
 
+## Intel macOS release policy
+
+Core 1.6.0 retains its published Intel macOS Python wheel and Node native
+package. Subsequent releases omit both prebuilt Intel artifacts and Intel
+macOS CI qualification. Python can fall back to its source distribution with
+the prerequisites above; Intel source builds are not qualified by current CI.
+
 ## Next step
 
 Continue to the [Quickstart](/get-started/quickstart) to scan and redact text.

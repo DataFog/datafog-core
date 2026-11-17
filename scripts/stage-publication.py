@@ -15,7 +15,7 @@ _release = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_release)
 
 ROOT = Path(__file__).resolve().parents[1]
-PLATFORMS = ('darwin-arm64', 'darwin-x64', 'linux-x64-gnu', 'linux-arm64-gnu', 'win32-x64-msvc')
+PLATFORMS = ('darwin-arm64', 'linux-x64-gnu', 'linux-arm64-gnu', 'win32-x64-msvc')
 
 
 def sha(path):
@@ -71,7 +71,7 @@ def stage_npm(kind, output):
             raise ValueError('Missing or extra native npm platform package')
         expected = {metadata['name'] + '-' + target: metadata['version'] for target in PLATFORMS}
         if metadata.get('optionalDependencies') != expected:
-            raise ValueError('Root npm package does not require the exact five native packages')
+            raise ValueError('Root npm package does not require the exact four native packages')
         for target in PLATFORMS:
             packages.append(pack(directory / 'npm' / target, output,
                                  metadata['name'] + '-' + target, metadata['version']))

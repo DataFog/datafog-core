@@ -15,14 +15,11 @@ jobs:
     needs: candidates
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Intel macOS checks are advisory: a failure is reported on the job but
-    # does not fail the run, and publication does not require these jobs.
-    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     strategy:
       fail-fast: false
       matrix:
         backend: [datafog, gliner2, gliner2-general]
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-latest]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-latest]
         include:
           - os: ubuntu-24.04
             platform: linux-x86_64
@@ -33,9 +30,6 @@ jobs:
           - os: macos-15
             platform: macos-arm64
             npm_platform: darwin-arm64
-          - os: macos-15-intel
-            platform: macos-x86_64
-            npm_platform: darwin-x64
           - os: windows-latest
             platform: windows-x86_64
             npm_platform: win32-x64-msvc
