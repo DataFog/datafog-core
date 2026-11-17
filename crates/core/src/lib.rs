@@ -3430,16 +3430,23 @@ static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
+    let mut previous_end = None;
     for matched in EMAIL_RE.find_iter(text) {
-        // Never turn a malformed dotted local part into a valid suffix.
         if matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'.' {
-            continue;
+            // Reject malformed dotted local parts, but a single dot directly
+            // after another email or a double quote separates source content.
+            // The quote is outside the supported unquoted local-part alphabet.
+            let dot = matched.start() - 1;
+            if previous_end != Some(dot) && !text[..dot].ends_with('"') {
+                continue;
+            }
         }
         candidates.push(Candidate {
             label: Label::Email,
             start_byte: email_start_after_neighbor(text, matched.start(), matched.end()),
             end_byte: matched.end(),
         });
+        previous_end = Some(matched.end());
     }
 }
 

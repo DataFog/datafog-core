@@ -6,6 +6,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore EMAIL findings after a single dot following another email or a double
+  quote, including the four reported adjacent/prose cases missed in 1.5.0 and
+  published 1.6.0. Keep malformed dotted-local rejection, supported mailbox
+  punctuation and original-source offsets intact.
+
 ### Removed
 
 - Remove Intel macOS from Core model, application-vault and publication CI. Future
