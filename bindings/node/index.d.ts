@@ -105,7 +105,18 @@ export interface TransformationConfig {
   readonly allow?: AllowConfig;
 }
 
+/** Literal text to protect independently of built-in entity selection. */
+export interface DenyRule {
+  readonly phrase: string;
+  /** Defaults to true; false uses Unicode simple case folding. */
+  readonly case_sensitive?: boolean;
+  /** Defaults to word: adjacent Unicode letters, numbers, or underscore block a match. */
+  readonly boundary?: "word" | "substring";
+}
+
 export interface ScanConfig {
+  /** Explicit literal denials take precedence over transformation allowlists. */
+  readonly deny?: readonly DenyRule[];
   /** Nonempty unique text entity types to run; omission runs all activated detectors.
    * Selection does not activate locale-dependent types or UUID detection. */
   readonly entities?: readonly EntityType[];
@@ -236,6 +247,7 @@ export declare class PrivacyManager {
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonDocument = JsonValue[] | { [key: string]: JsonValue };
 export interface StructuredScanConfig {
+  readonly deny?: readonly DenyRule[];
   /** Source syntax for email boundaries in each string leaf; defaults to text. */
   readonly format?: "text" | "env" | "sql";
   readonly locale?: string;

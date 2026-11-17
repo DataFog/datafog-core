@@ -25,7 +25,7 @@
     "workspaceContractVersion"
    ],
    "declarationOnlyExports": [],
-   "declarationsSha256": "7991b2bd3f917193de6690f7a94e33c7305abb438a9caddcde44ff0cfb46b281"
+   "declarationsSha256": "871c266631a2ddd2c7ab9595b8fe7ef729c68976062cc7ba963455153c7c28ed"
   },
   "wasm": {
    "runtime": "bindings/wasm/index.js",
@@ -47,7 +47,7 @@
     "workspaceContractVersion"
    ],
    "declarationOnlyExports": [],
-   "declarationsSha256": "65e05fb1e51c6ae3242f1c9e2d3030a3fa3dbd2aa604728dde8ee1527637c14d"
+   "declarationsSha256": "585bbc8605d2cc68e50ea88961f5a98767008988cd1d8dc0dca27874fb6c7d35"
   },
   "python": {
    "runtime": "bindings/python/python/datafog_core/__init__.py",
@@ -103,6 +103,8 @@
     "_CapabilityActivation",
     "_CapabilityActivationRequired",
     "_CommonScanConfig",
+    "_DenyRule",
+    "_DenyRuleRequired",
     "_EntityCapability",
     "_Gliner2Config",
     "_Gliner2Label",
@@ -177,7 +179,7 @@
     "_WorkspaceTransformation",
     "panic_probe"
    ],
-   "declarationsSha256": "8e99a50a8afd9c66a3d826618db3779177b3d61f76182b7bebc44e4c207e5976"
+   "declarationsSha256": "c6d6d9dd7eb8ff7060f9a24329dd1cf5bdcbed849a49d3b8980244d3892ad7c8"
   }
  },
  "workspaceErrorCodes": [

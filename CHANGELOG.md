@@ -14,6 +14,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
   before restore. Add application-vault latency/contention benchmarks.
 - Expose Python `Workspace.prepare_forget` with the existing snapshot-v4 expired
   marker semantics; Workspace contract 1 and marker formats stay unchanged.
+- Add request-local literal-phrase `deny` rules to text and structured scans in
+  Rust, Python, Node.js and browser WASM, with explicit case sensitivity and
+  Unicode letter/number/underscore word or substring boundaries. `DENYLIST`
+  findings preserve source offsets and take precedence over allowlists, entity
+  filters and Workspace not-sensitive choices while the rule is supplied.
+  Existing callers without rules retain their behavior. See the
+  [literal-denylist contract](docs/reference/literal-denylists.mdx).
 
 ### Changed
 

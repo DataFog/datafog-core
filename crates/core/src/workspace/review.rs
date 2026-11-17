@@ -57,10 +57,11 @@ pub struct ReviewResult {
 }
 
 fn hides(state: &State, finding: &Finding) -> bool {
-    state.hides(&Identity {
-        entity_type: finding.entity_type.clone(),
-        key: identity_key(&finding.matched_text),
-    })
+    crate::denylist::is_explicit_deny(finding)
+        || state.hides(&Identity {
+            entity_type: finding.entity_type.clone(),
+            key: identity_key(&finding.matched_text),
+        })
 }
 
 fn conflict(
@@ -194,6 +195,13 @@ fn key(head: Head, source_digest: &[u8], finding: &WorkspaceFinding) -> String {
 }
 
 fn prefer_metadata(incoming: &WorkspaceFinding, existing: &WorkspaceFinding) -> bool {
+    let explicit = |finding: &WorkspaceFinding| {
+        finding.entity_type == "DENYLIST"
+            && finding.detector_name.as_deref() == Some("datafog-core/denylist")
+    };
+    if explicit(incoming) != explicit(existing) {
+        return explicit(incoming);
+    }
     (
         incoming.detector_name.is_none(),
         incoming.detector_version.is_none(),

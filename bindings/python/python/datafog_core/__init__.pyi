@@ -100,7 +100,15 @@ class _CommonScanConfig(TypedDict, total=False):
     locale: str
     detect_uuid: bool
 
+class _DenyRuleRequired(TypedDict):
+    phrase: str
+
+class _DenyRule(_DenyRuleRequired, total=False):
+    case_sensitive: bool
+    boundary: Literal["word", "substring"]
+
 class _ScanConfig(_CommonScanConfig, total=False):
+    deny: list[_DenyRule] | tuple[_DenyRule, ...]
     # Select activated text detectors; omission preserves the default scan.
     entities: list[str] | tuple[str, ...]
 
@@ -125,6 +133,7 @@ class _Capabilities(TypedDict):
     entities: dict[str, _EntityCapability]
 
 class _StructuredScanConfig(_CommonScanConfig, total=False):
+    deny: list[_DenyRule] | tuple[_DenyRule, ...]
     discover_person: bool
     mappings: dict[str, Literal["PERSON"]]
     exclude: list[str] | tuple[str, ...]

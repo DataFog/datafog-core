@@ -1,0 +1,88 @@
+---
+title: Literal denylists
+description: Explicit literal phrases that remain protected despite allowlists.
+---
+
+Add `deny` to a text or structured scan configuration to find caller-defined
+sensitive phrases. Rules run in shared Rust code in Python, Node.js and browser
+WASM. Configuration is request-local; Core does not persist or synchronize rules.
+Omitting `deny`, or using an empty array, preserves existing detection behavior.
+
+```python
+from datafog_core import scan, scan_and_transform
+
+config = {"deny": [
+    {"phrase": "Project Atlas"},
+    {"phrase": "internal-token", "case_sensitive": False, "boundary": "substring"},
+]}
+findings = scan("Discuss Project Atlas", config)
+result = scan_and_transform("Discuss Project Atlas", {
+    "scan": config,
+    "transform": {"default": {"strategy": "redact"}},
+})
+# result.text == "Discuss [DENYLIST]"
+```
+
+Node.js and WASM use the same configuration with `scan` and `scanAndTransform`.
+Structured APIs accept the same `deny` rules and report ranges relative to each
+string leaf. Rust callers use `ScanConfig::with_deny` and validated
+`LiteralDenyRule::new(phrase, case_sensitive, DenyBoundary::Word)` rules; choose
+`DenyBoundary::Substring` for the other boundary mode.
+
+## Matching contract
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `phrase` | Required | Nonempty, non-whitespace-only literal string. Regex punctuation has no special meaning. |
+| `case_sensitive` | `true` | Exact source case. `false` uses Unicode simple case folding. |
+| `boundary` | `"word"` | Both characters immediately outside the entire phrase must be absent or neither a Unicode letter, a Unicode number, nor underscore. `"substring"` removes this restriction. |
+
+Boundaries apply even when the phrase starts or ends with punctuation: `(A)`
+matches in ` (A) `, but not `x(A)` or `(A)y`. Unicode letters and numbers include
+non-Latin scripts; combining marks are not letters/numbers for this boundary
+rule. Whitespace inside the phrase is literal. Core does not trim phrases,
+normalize Unicode, collapse whitespace or expand multi-character case folds.
+For example, case-insensitive `key` matches `Key` and `secret` matches `ſecret`,
+but `straße` does not match `STRASSE`; composed `é` does not match `e` plus a
+combining accent. Findings always contain the original source spelling and
+original UTF-8, code-point and JavaScript UTF-16 offsets.
+
+Malformed options, unknown rule properties, missing/non-string phrases, empty
+phrases and unsupported boundary values fail with indexed configuration paths
+such as `/deny/0/phrase`. Matcher compilation limits also fail explicitly without
+returning partial findings. Error messages do not include phrase contents.
+
+## Findings and policy precedence
+
+Matches use entity `DENYLIST`, detector `datafog-core/denylist`, the Core version,
+and no confidence. Enabling a rule does not require adding `DENYLIST` to the
+built-in `entities` selection: configured rules always run, independently of
+that selection. `DENYLIST` is a configured label rather than a built-in detector
+in `capabilities()` or an accepted built-in scan entity selector.
+
+Explicit deny findings remain selected by transformations even if transformation
+`entities` omits `DENYLIST`, and exact or regex allowlists cannot waive them.
+The configured default strategy and any `DENYLIST` strategy override still
+control how selected text is transformed. Ordinary findings retain existing
+allowlist behavior. A caller-defined finding labeled `DENYLIST` with other
+detector provenance retains ordinary filtering semantics. Hosts forwarding Core
+findings must retain their detector metadata to retain explicit deny precedence.
+
+Duplicate rules producing the same source span produce one deny finding. Raw
+scan results retain overlapping matches, including overlapping occurrences of
+one phrase. `scanAndTransform` / `scan_and_transform` coalesce overlapping
+eligible spans and retain deny provenance when any contributing match is an
+explicit deny. Explicit `transform` retains its existing conflict/coverage
+validation for crossing spans; use review to resolve conflicts.
+
+Workspace review keeps current explicit deny findings eligible despite a saved
+`not_sensitive` value choice or `keep` type rule. Existing coverage and type
+conflicts still require review; a correction cannot silently remove required
+coverage. This changes neither the fixed `protected_v1` catalog nor saved policy
+formats. Removing the rule removes its current scanner obligation; an ordinary
+recalled/custom finding then follows the existing saved policy. Core does not
+scan automatically during Workspace review: the host must supply current scanner
+findings with their provenance on each request.
+
+Extension settings, rule persistence and MCP policy configuration are follow-up
+integration work. Regex, fuzzy matching and phrase normalization are out of scope.

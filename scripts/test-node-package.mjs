@@ -66,8 +66,10 @@ import {verifyNodeToolEnvelope} from "./node-tool-envelope-conformance.mjs";
 import {verifyWorkspaceStreaming} from "./workspace-streaming-conformance.mjs";
 import {verifyWorkspaceForget} from "./workspace-forget-conformance.mjs";
 import {verifyAdjacentEntities} from "./adjacent-entities-conformance.mjs";
+import {verifyDenylist} from "./denylist-conformance.mjs";
 import * as germanApi from "@datafog/node";
 const workspaceCounters = JSON.parse(readFileSync(path.join(process.argv[2],"workspace/counters.json"),"utf8"));
+verifyDenylist(germanApi);
 await verifyNativeWorkspace(germanApi,workspaceCounters);
 verifyWorkspaceForget(germanApi);
 verifyAdjacentEntities(germanApi, JSON.parse(readFileSync(path.join(process.argv[2],"adjacent-entities.json"),"utf8")));
@@ -618,6 +620,13 @@ import {
   type TransformResult,
 } from "@datafog/node";
 
+scan("Project Atlas", {deny: [{phrase: "Project Atlas", case_sensitive: false, boundary: "word"}]});
+// @ts-expect-error A literal phrase is required.
+scan("", {deny: [{boundary: "word"}]});
+// @ts-expect-error Boundary modes are closed.
+scan("", {deny: [{phrase: "Atlas", boundary: "regex"}]});
+// @ts-expect-error Case sensitivity is boolean.
+scan("", {deny: [{phrase: "Atlas", case_sensitive: "false"}]});
 // @ts-expect-error Unsupported source format.
 scan("", {format: "yaml"});
 // @ts-expect-error Entity selection must be an array.
@@ -862,7 +871,7 @@ try {
   writeFileSync(path.join(temporaryDirectory,"street-address-conformance.mjs"), readFileSync(path.join(root,"scripts/street-address-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"account-number-conformance.mjs"), readFileSync(path.join(root,"scripts/account-number-conformance.mjs")));
   writeFileSync(path.join(temporaryDirectory,"npi-conformance.mjs"), readFileSync(path.join(root,"scripts/npi-conformance.mjs")));
-  for (const file of ["node-tool-envelope-conformance.mjs","native-node-conversation-conformance.mjs","workspace-conversation-conformance.mjs","workspace-backup-field-bytes.mjs","workspace-backup-operation-fields-conformance.mjs","native-node-operations-conformance.mjs","workspace-streaming-conformance.mjs","workspace-forget-conformance.mjs","adjacent-entities-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
+  for (const file of ["node-tool-envelope-conformance.mjs","native-node-conversation-conformance.mjs","workspace-conversation-conformance.mjs","workspace-backup-field-bytes.mjs","workspace-backup-operation-fields-conformance.mjs","native-node-operations-conformance.mjs","workspace-streaming-conformance.mjs","workspace-forget-conformance.mjs","adjacent-entities-conformance.mjs","denylist-conformance.mjs","workspace-conformance.mjs","workspace-review-conformance.mjs","native-node-workspace-conformance.mjs","native-node-workspace-worker.mjs","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"]) {
     writeFileSync(path.join(temporaryDirectory,file),readFileSync(path.join(root,"scripts",file)));
   }
   writeConsumerTest();

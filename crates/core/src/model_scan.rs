@@ -310,7 +310,7 @@ impl ModelScanContract {
     }
 
     /// Validate a routed scan configuration. It accepts the rule scan fields
-    /// (`entities`, `locale`, `detect_uuid`, `format`); `entities` may also
+    /// (`entities`, `locale`, `detect_uuid`, `format`, `deny`); `entities` may also
     /// name this session's model labels. Without `entities`, every enabled
     /// rule detector runs and models retain types without replacement rules.
     pub fn routed_config(&self, value: &serde_json::Value) -> Result<RoutedScanConfig, ModelError> {
@@ -394,9 +394,14 @@ impl ModelScanContract {
                 true
             }
         };
-        let rules = crate::parse_scan_config(&serde_json::Value::Object(rule_object))?;
+        let mut rules = crate::parse_scan_config(&serde_json::Value::Object(rule_object))?;
+        let has_deny = !rules.deny().is_empty();
+        if !run_rules && has_deny {
+            // Model-only selection disables built-in rules, never explicit denies.
+            rules.entities = Some(BTreeSet::new());
+        }
         Ok(RoutedScanConfig {
-            rules: run_rules.then_some(rules),
+            rules: (run_rules || has_deny).then_some(rules),
             model_entities,
         })
     }
@@ -861,6 +866,27 @@ mod browser_tests {
             .unwrap();
         assert!(only_address.needs_model());
         assert!(only_address.rules.is_none());
+    }
+
+    #[test]
+    fn model_only_selection_retains_deny_without_enabling_builtin_rules() {
+        let contract = contract();
+        let text = "Project Atlas jane@example.com";
+        let routing = contract
+            .routed_config(&json!({
+                "entities": ["PERSON"], "deny": [{"phrase":"Project Atlas"}]
+            }))
+            .unwrap();
+        let result = contract
+            .complete(text, BackendResult { spans: vec![] }, Some(&routing))
+            .unwrap();
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].entity_type, "DENYLIST");
+        assert_eq!(result.findings[0].matched_text, "Project Atlas");
+        assert_eq!(
+            result.evidence[0].sources[0].detector_name,
+            "datafog-core/denylist"
+        );
     }
 
     #[test]
