@@ -3430,20 +3430,40 @@ static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
+    detect_email_with_context(text, candidates, false);
+}
+
+fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_context: bool) {
     let mut previous_end = None;
     for matched in EMAIL_RE.find_iter(text) {
-        if matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'.' {
-            // Reject malformed dotted local parts, but a single dot directly
-            // after another email or a double quote separates source content.
-            // The quote is outside the supported unquoted local-part alphabet.
-            let dot = matched.start() - 1;
-            if previous_end != Some(dot) && !text[..dot].ends_with('"') {
+        // Text field syntax must be removed before judging the mailbox's own
+        // boundaries. Explicit ENV/SQL slices retain raw local-part validation.
+        let neighbor_start = email_start_after_neighbor(text, matched.start(), matched.end());
+        let start = if text_context {
+            let Some(start) =
+                email_context::text_candidate_start(text, neighbor_start, matched.end())
+            else {
+                continue;
+            };
+            start
+        } else {
+            neighbor_start
+        };
+        let boundary_start = if text_context { start } else { matched.start() };
+        if boundary_start > 0 && text.as_bytes()[boundary_start - 1] == b'.' {
+            // A dot after another email or a double quote is prose punctuation;
+            // leading/doubled dots inside a local part still invalidate its suffix.
+            let dot = boundary_start - 1;
+            let after_neighbor = neighbor_start > matched.start() && start == neighbor_start;
+            if !text_context
+                || (!after_neighbor && previous_end != Some(dot) && !text[..dot].ends_with('"'))
+            {
                 continue;
             }
         }
         candidates.push(Candidate {
             label: Label::Email,
-            start_byte: email_start_after_neighbor(text, matched.start(), matched.end()),
+            start_byte: start,
             end_byte: matched.end(),
         });
         previous_end = Some(matched.end());

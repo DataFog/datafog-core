@@ -8,10 +8,10 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ### Fixed
 
-- Restore EMAIL findings after a single dot following another email or a double
-  quote, including the four reported adjacent/prose cases missed in 1.5.0 and
-  published 1.6.0. Keep malformed dotted-local rejection, supported mailbox
-  punctuation and original-source offsets intact.
+- Restore EMAIL findings after surrounding source dots and field delimiters,
+  including the four reported adjacent/prose cases missed in 1.5.0 and published
+  1.6.0. Validate refined text values while retaining raw ENV/SQL validation,
+  malformed-local rejection, mailbox punctuation and original-source offsets.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
