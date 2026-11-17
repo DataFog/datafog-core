@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread::{self, ThreadId};
 use zeroize::Zeroizing;
+mod application;
 mod stream;
 mod transport;
 
@@ -943,5 +944,6 @@ fn datafog_fogvault(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PreparedChange>()?;
     m.add_class::<Head>()?;
     m.add_class::<stream::RestoreStream>()?;
+    m.add_class::<application::ApplicationVault>()?;
     Ok(())
 }

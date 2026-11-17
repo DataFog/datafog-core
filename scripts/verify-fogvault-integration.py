@@ -66,8 +66,19 @@ RUST_CASES = {
         "create_rejects_identical_request_replay_into_existing_workspace",
         "native_facade_delegates_preserve_core_reports_history_and_stream_lifetimes",
         "native_payload_admission_failure_preserves_saved_state_without_handoff",
+        "stale_owners_refresh_cas_and_forget_preserve_contract",
+        "ciphertext_metadata_keys_and_errors_fail_closed_without_values",
+        "file_key_is_explicit_encrypted_and_never_replaces_existing_key_mode",
+        "unavailable_default_provider_never_silently_downgrades",
+        "backend_cas_rejects_wrong_head_and_wrong_encrypted_generation",
+        "real_process_crashes_leave_old_or_complete_new_snapshot_and_release_lock",
+        "contended_os_lock_reaches_timeout_then_succeeds_after_release",
     },
 }
+if os.name != "nt":
+    RUST_CASES["native"].add("directory_ancestry_is_durable_before_snapshot_and_observers_repeat_sync")
+else:
+    RUST_CASES["native"].add("canonical_windows_drive_prefix_is_not_queried_as_a_directory_entry")
 
 
 def digest(path):

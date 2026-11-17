@@ -16,6 +16,10 @@ from email.parser import Parser
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parents[1]
 REQUIRED = {
+    "test_application_restart_encryption_and_explicit_protection",
+    "test_application_four_process_writers_refresh_long_lived_reader",
+    "test_application_forget_revokes_after_restart",
+    "test_application_approval_wrong_key_and_owner_permissions",
     "test_installed_native_extension_not_source_wrapper",
     "test_create_review_commit_lock_reopen_read_and_unicode_offsets",
     "test_only_literal_true_approves_and_rejection_preserves_pending_plan",

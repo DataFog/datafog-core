@@ -62,7 +62,7 @@ export function runWorkspaceContract(api,fixture) {
       });
       return input;
     };
-    const supported=new Set(["prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntents","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","streamFeed","streamFeedUtf16","streamFinalize","streamReset","streamClose","createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create","head","prepare","prepareBatch","prepareReview","preparePolicyChanges","prepareRecovery","inspectPlan","activateSaved","discard","recall","review","restore","restoreReport","restorePlanText","restoreReportPlanText","export","openBundle","close"]);
+    const supported=new Set(["prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntents","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","streamFeed","streamFeedUtf16","streamFinalize","streamReset","streamClose","createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create","head","prepare","prepareBatch","prepareReview","preparePolicyChanges","prepareRecovery","prepareForget","inspectPlan","activateSaved","discard","recall","review","restore","restoreReport","restorePlanText","restoreReportPlanText","export","openBundle","close"]);
     if(!Array.isArray(scenario.commands) || scenario.commands.length===0)bad();
     for(const command of scenario.commands) {
       if(!supported.has(command.call))bad();
@@ -120,6 +120,12 @@ export function runWorkspaceContract(api,fixture) {
           else if(command.call==="prepareReview")p=w.prepareReview(command.inputs.map(resolvedInput),id());
           else if(command.call==="preparePolicyChanges")p=w.preparePolicyChanges(command.edits,id());
           else if(command.call==="prepareRecovery")p=w.prepareRecovery(id());
+          else if(command.call==="prepareForget") {
+            const source=get(planTexts,command.codeFrom.plan)[command.codeFrom.inputIndex];
+            const match=typeof source==="string"?source.match(/^\[\[[A-Z][A-Z0-9_]*_([A-Z0-9]{6})\]\]$/):null;
+            if(!match)bad();
+            p=w.prepareForget([match[1]],id());
+          }
           else bad();
           value=inspect(p);plans.set(command.plan,p);planTexts.set(command.plan,value.previews.map(preview=>preview.text));if(conversationProfile)planIntents.set(command.plan,value.sendIntents);
         }

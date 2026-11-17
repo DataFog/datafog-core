@@ -130,6 +130,8 @@ EVAL OPTIONS:
     --update-baseline  Write current metrics as the new baseline
 
 BENCH OPTIONS:
+    --application-vault  Measure encrypted application vault open/restore/commit
+                         at 1k/10k/20k entries and four process writers
     --runs N           Number of benchmark runs (default: 5)
     --iterations N     Iterations per run (default: 100)
     --update-baseline  Write current median as the new baseline

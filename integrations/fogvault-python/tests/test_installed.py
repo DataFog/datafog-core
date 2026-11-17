@@ -9,6 +9,11 @@ import threading
 import unittest
 
 import datafog_fogvault as fv
+import importlib.util
+_application_spec = importlib.util.spec_from_file_location("installed_application_tests", Path(__file__).with_name("test_application.py"))
+_application_tests = importlib.util.module_from_spec(_application_spec)
+_application_spec.loader.exec_module(_application_tests)
+ApplicationVaultTests = _application_tests.ApplicationVaultTests
 
 TENANT = "synthetic-tenant-a"
 PASSWORD = b"synthetic-only Python native integration password"
@@ -334,7 +339,8 @@ if __name__ == "__main__":
         def addSkip(self,test,reason):
             self.record(test,"skip",False); super().addSkip(test,reason)
     result = unittest.TextTestRunner(verbosity=2,resultclass=EvidenceResult).run(
-        unittest.defaultTestLoader.loadTestsFromTestCase(InstalledOwnerTests))
+        unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(case)
+                            for case in (InstalledOwnerTests, ApplicationVaultTests)]))
     passed = result.wasSuccessful() and not result.skipped and len(cases)==result.testsRun
     if args.report:
         args.report.parent.mkdir(parents=True,exist_ok=True)

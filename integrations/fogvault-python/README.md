@@ -1,9 +1,10 @@
 # Optional native Python Core–FogVault owner
 
 `datafog_fogvault` is a separate `1.5.0` ABI3 extension for Python
-3.10+. It delegates persistence, session authority and save/activation to the
-existing Rust `datafog-fogvault-native::Owner`; it does not load browser WASM,
-duplicate encryption, or change the existing `datafog_core` Python package.
+3.10+. The password-based `NativeWorkspace` delegates persistence, session
+authority and save/activation to Rust `datafog-fogvault-native::Owner`. The new
+application helper delegates to the shared Rust application storage layer;
+Python contains no encryption or Workspace implementation and loads no browser WASM.
 
 Install `datafog-fogvault==1.5.0` from PyPI. The Linux x64 wheel requires glibc
 2.34 or later; native macOS ARM64 and Windows x64 wheels are also qualified.
@@ -12,6 +13,83 @@ Install `datafog-fogvault==1.5.0` from PyPI. The Linux x64 wheel requires glibc
 python -m pip install datafog-fogvault==1.5.0
 ```
 Its qualification build uses Rust 1.94.1, while Core keeps its Rust 1.88 floor.
+
+## Application-scoped vaults
+
+**Unreleased:** build the current checkout to use this additive API. The published
+1.5.0 wheel above contains the password owner; it does not contain this helper.
+
+For short-lived hooks and long-lived child processes sharing one installed app,
+use the new `ApplicationVault` instead of repeating password-based opens:
+
+```python
+import secrets
+from datafog_fogvault import ApplicationVault
+
+vault = ApplicationVault.open("my-app")
+print(vault.protection_mode)  # credential_store; never a silent fallback
+text = "alice@example.test"
+findings = [{"entityType": "EMAIL", "matchedText": text,
+             "range": {"unit": "utf8_bytes", "start": 0, "end": len(text)}}]
+# The application approves this exact input and findings before this call.
+marker = vault.prepare_and_commit(text, findings, secrets.token_bytes(16), True)
+# Only now is marker safe to hand off. This call does not send anything.
+assert vault.restore(marker) == text
+vault.close()
+```
+
+Each mutation reloads under an OS process lock, prepares against the latest head,
+compares and saves an encrypted candidate, flushes it, and activates before
+returning text. Four concurrent processes can share the directory. A long-lived
+reader refreshes before each strict restore or restore_report, so it sees other
+writers. This API does not offer unsaved previews or streaming handles. The
+existing lower-level owner retains its reviewed streaming interface.
+
+An explicit absolute `directory=` wins over `DATAFOG_APPLICATION_VAULT_DIR`,
+which wins over the per-user default: `~/Library/Application Support/DataFog/<app>`
+on macOS, `$XDG_DATA_HOME/DataFog/<app>` (or `~/.local/share/...`) on Linux, and
+`%LOCALAPPDATA%\DataFog\<app>` on Windows. Overrides name the exact vault directory,
+without appending the app ID; pass the same absolute directory to each child.
+Use a different app ID and directory for standalone MCP. App IDs are validated
+ASCII identifiers, not authentication credentials; traversal, symlinks/junctions,
+foreign ownership, hardlinks and permissive owned files are rejected. Unix modes
+are 0700/0600; Windows uses a protected owner-only ACL. The current OS user must
+own the final directory. Existing private data is not silently chmod-repaired.
+
+The default uses a random key in macOS Keychain, Windows Credential Manager or
+Linux Secret Service. A headless service without those facilities can explicitly
+select `ApplicationVault.open("my-app", allow_file_key=True)` when creating a new
+vault. This bypasses credential lookup and reports `file_key`. Its owner-only
+`workspace.key` sits beside encrypted `workspace.enc`; copying both defeats the
+encryption boundary. Keep their backups private. Alternatively `key=key_bytes`
+accepts a host-managed 32-byte key and reports `external_key`. No mode performs a
+password KDF on each call. A missing/wrong key, unavailable provider or mismatch
+with an existing mode fails closed; no automatic downgrade or replacement key.
+Keychain prompts and deployment-specific provider policy need host qualification.
+
+The encrypted envelope version is independent of Core snapshots. It authenticates
+the application/vault/namespace IDs, complete Workspace head, contract version
+and protection mode; snapshot bytes stay unchanged. These identifiers and the
+head are visible metadata; protected values are encrypted. Restoring an older
+valid encrypted backup can roll state back; this local helper is not a remote
+rollback oracle or cloud synchronization system.
+
+The process lock waits at most five seconds (`vault_busy`). A known CAS conflict
+reloads/reprepares at most three times with the same operation ID. `outcome_unknown`
+means replacement may have committed but its durability acknowledgment was lost;
+the owner closes and releases its key. Reopen and inspect `operations()` for that
+operation ID; do not resend automatically with a new ID. Preparations record their supplied operation ID
+and current local wall-clock time even when all values were already known.
+`forget(codes, operation_id)`
+persists expired codes through the same transaction. `close()` invalidates the
+owner and wipes its key. Source values are absent from controlled error codes;
+the host still owns plaintext input/output copies and safe logging.
+
+See [design answers and capacity limits](../../docs/design/application-vaults.md).
+Run `cargo dfv bench --application-vault` for measured 4 KiB open/restore and
+open/prepare/save/activate latency at 1k/10k/20k entries and four-writer contention.
+Targets are advisory until deployment-provider/platform measurements qualify
+them; native benchmark timings exclude interpreter startup.
 
 ## Create, save and reopen
 

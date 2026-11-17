@@ -438,6 +438,7 @@ impl Runtime {
             | "prepareReview"
             | "preparePolicyChanges"
             | "prepareRecovery"
+            | "prepareForget"
             | "prepareWithOperation"
             | "prepareBatchWithOperation"
             | "prepareRecoveryWithOperation"
@@ -499,6 +500,22 @@ impl Runtime {
                         workspace.prepare_policy_changes(&field(command, "edits")?, operation)?
                     }
                     "prepareRecovery" => workspace.prepare_recovery(operation)?,
+                    "prepareForget" => {
+                        let selector = command.get("codeFrom").ok_or(Failure::Fixture)?;
+                        let text = self
+                            .plan_texts
+                            .get(name(selector, "plan")?)
+                            .and_then(|texts| {
+                                texts.get(field::<usize>(selector, "inputIndex").ok()?)
+                            })
+                            .ok_or(Failure::Fixture)?;
+                        let code = text
+                            .rsplit_once('_')
+                            .and_then(|(_, tail)| tail.strip_suffix("]]"))
+                            .filter(|code| code.len() == w::MARKER_CODE_LENGTH)
+                            .ok_or(Failure::Fixture)?;
+                        workspace.prepare_forget(&[code.to_owned()], operation)?
+                    }
                     "prepareRecoveryWithOperation" => {
                         workspace.prepare_recovery_with_operation(crate_operation(command)?)?
                     }

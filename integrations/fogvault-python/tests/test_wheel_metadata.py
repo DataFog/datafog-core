@@ -3,7 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
-import tomllib
+import re
 import unittest
 from zipfile import ZipFile
 
@@ -12,7 +12,10 @@ RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
 
 
-VERSION = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())["project"]["version"]
+# This harness also qualifies the declared Python 3.10 floor, where tomllib
+# does not exist. Only the single package version is needed for fixture names.
+VERSION, = re.findall(r'^version\s*=\s*"([^"\n]+)"\s*$',
+                     (Path(__file__).parents[1] / "pyproject.toml").read_text(), re.M)
 
 
 class WheelMetadataTests(unittest.TestCase):

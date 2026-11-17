@@ -15,7 +15,7 @@ class EvidenceTests(unittest.TestCase):
         for names in (gate.NODE_CASES, gate.PYTHON_CASES):
             gate.cases([{"id": n, "status": "pass", "executed": True} for n in names], names)
         self.assertEqual(len(gate.NODE_CASES), 11)
-        self.assertEqual(len(gate.PYTHON_CASES), 18)
+        self.assertEqual(len(gate.PYTHON_CASES), 22)
 
     def test_missing_duplicate_skipped_failed_and_malformed_reject(self):
         for names in (gate.NODE_CASES, gate.PYTHON_CASES):

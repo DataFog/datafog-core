@@ -1,0 +1,74 @@
+{
+  "arch": "aarch64",
+  "four_writer_samples_each": 5,
+  "interpreter_startup_included": false,
+  "key_mode": "external_key",
+  "measurements": [
+    {
+      "entries": 1000,
+      "four_process_writers": {
+        "p50_ms": 9.984792,
+        "p95_ms": 163.098875,
+        "samples": 20
+      },
+      "open_prepare_save_activate": {
+        "p50_ms": 10.225875,
+        "p95_ms": 10.392458,
+        "samples": 20
+      },
+      "open_restore": {
+        "p50_ms": 1.631917,
+        "p95_ms": 1.768125,
+        "samples": 20
+      },
+      "proposed_1k_targets_met": true
+    },
+    {
+      "entries": 10000,
+      "four_process_writers": {
+        "p50_ms": 77.616625,
+        "p95_ms": 316.386542,
+        "samples": 20
+      },
+      "open_prepare_save_activate": {
+        "p50_ms": 38.814084,
+        "p95_ms": 75.096125,
+        "samples": 20
+      },
+      "open_restore": {
+        "p50_ms": 17.520291,
+        "p95_ms": 48.430458,
+        "samples": 20
+      },
+      "proposed_1k_targets_met": null
+    },
+    {
+      "entries": 20000,
+      "four_process_writers": {
+        "p50_ms": 149.544917,
+        "p95_ms": 605.5979580000001,
+        "samples": 20
+      },
+      "open_prepare_save_activate": {
+        "p50_ms": 74.683209,
+        "p95_ms": 102.669292,
+        "samples": 20
+      },
+      "open_restore": {
+        "p50_ms": 36.473833,
+        "p95_ms": 47.3645,
+        "samples": 20
+      },
+      "proposed_1k_targets_met": null
+    }
+  ],
+  "os": "macos",
+  "prompt_bytes": 4096,
+  "proposed_1k_targets": {
+    "enforced": false,
+    "p50_ms": 50,
+    "p95_ms": 100
+  },
+  "schema": "datafog-application-vault-benchmark/v1",
+  "synthetic_only": true
+}
