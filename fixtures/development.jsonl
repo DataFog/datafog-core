@@ -116,4 +116,6 @@
 {"id":"review-phone-plus-last-column-lf","text":"id,phone\n1,+44 20 7946 0958\n2,+44 20 7946 0958\n","entities":[{"label":"PHONE","text":"+44 20 7946 0958","start":11,"end":27},{"label":"PHONE","text":"+44 20 7946 0958","start":30,"end":46}],"category":"review_regression"}
 {"id":"review-phone-line-end-before-digit-line","text":"Call +49 30 901820\n42 seats left; desk 1\n202-555-0143","entities":[{"label":"PHONE","text":"+49 30 901820","start":5,"end":18},{"label":"PHONE","text":"202-555-0143","start":41,"end":53}],"category":"review_regression"}
 {"id":"review-phone-not-joined-across-lines","text":"202-555\n0143 then (202)\n555-0143 then +1 202\n555 then 202 555\r0143","entities":[],"category":"review_regression"}
-{"id":"review-float-csv-after-number","text":"7,306.2723362\n20,+86.528387\n3,1415926536;12,5 kg","entities":[],"category":"review_regression"}
+{"id":"review-float-csv-after-number","text":"7,306.2723362\n8,142.7399518,730.9506397\n3,1415926536;12,5 kg","entities":[],"category":"review_regression"}
+{"id":"review-phone-epp-after-number","text":"id,phone\n7,+1.2025550143\n8,+44.2079460958\n","entities":[{"label":"PHONE","text":"+1.2025550143","start":11,"end":24},{"label":"PHONE","text":"+44.2079460958","start":27,"end":41}],"category":"review_regression"}
+{"id":"review-signed-decimal-after-number","text":"20,+86.528387","entities":[{"label":"PHONE","text":"+86.528387","start":3,"end":13}],"category":"review_regression"}

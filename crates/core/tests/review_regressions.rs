@@ -164,18 +164,30 @@ fn unseparated_phone_is_found_after_a_number_and_comma() {
         ("2,2025550143", vec!["2025550143"]),
         ("row 2,12025550143", vec!["12025550143"]),
         ("818,+65585080", vec!["+65585080"]),
-        // The integer part of a single-dot run is a phone by itself.
+        // A `+` number is never a continuing decimal: EPP/WHOIS `+CC.subscriber`.
+        ("2,+1.2025550143", vec!["+1.2025550143"]),
+        ("2,+44.2079460958", vec!["+44.2079460958"]),
+        ("2,+49.30901820", vec!["+49.30901820"]),
+        (
+            "id,phone\n7,+1.2025550143\n8,+44.2079460958\n",
+            vec!["+1.2025550143", "+44.2079460958"],
+        ),
+        ("$12.50,+1.2025550143", vec!["+1.2025550143"]),
+        ("€9,+1.2025550143", vec!["+1.2025550143"]),
+        ("price 3,+1.2025550143", vec!["+1.2025550143"]),
         ("2,+442079460958.5", vec!["+442079460958.5"]),
+        // Accepted cost: a signed decimal is indistinguishable from the EPP form.
+        ("20,+86.528387", vec!["+86.528387"]),
         // Accepted cost: ten fractional digits that pass phone validation.
         ("2,7182818285", vec!["7182818285"]),
     ] {
         assert_eq!(values(text, "PHONE"), phones, "{text}");
     }
-    // A single-dot decimal after a numeric column is a number, not a phone.
+    // An unsigned single-dot decimal after a numeric column is a number.
     for text in [
         "249.2754083,142.7399518,730.9506397",
         "6,306.2723362",
-        "20,+86.528387",
+        "2,202.5550143",
         "2,1.2025550143",
     ] {
         let phones = values(text, "PHONE");
@@ -205,6 +217,10 @@ fn phone_at_a_line_end_is_not_joined_with_the_next_line() {
         ("+49 30 901820\u{c}42 units", vec!["+49 30 901820"]),
         ("+49 30 901820\u{b}42 units", vec!["+49 30 901820"]),
         ("+49 30 901820\u{2028}42 units", vec!["+49 30 901820"]),
+        ("é+49 30 901820\u{2029}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{85}42 units", vec!["+49 30 901820"]),
+        // A wrapped `+` number is reported up to the break when that part validates.
+        ("+44 20 7946\n0958", vec!["+44 20 7946"]),
         ("row 1\n202-555-0143", vec!["202-555-0143"]),
         ("é +1\r(202) 555-0143", vec!["(202) 555-0143"]),
     ] {
