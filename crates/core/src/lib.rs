@@ -3429,7 +3429,7 @@ fn detect_phone_in_line(
             .rev()
             .collect::<String>()
             .to_ascii_lowercase();
-        if continues_number(text.as_bytes(), start, end)
+        if continues_number(text, start, end)
             || ["steuer-id", "steuerid", "tax-id", "imei"]
                 .iter()
                 .any(|label| {
@@ -3795,23 +3795,30 @@ fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
 /// of a number rather than a phone. After a dot, an unseparated or dotted run
 /// continues that number (`3.14159265358`, `7.202.555.0143`). After a comma
 /// the run is a separate field, as in the CSV row `2,2025550143`, so only a
-/// single-dot decimal (`6,306.2723362`, `20,+86.528387`) is a number and phone
+/// single-dot decimal (`6,306.2723362`, `20,+86.528387`) is a number, unless
+/// its integer part is a phone by itself (`2,+442079460958.5`); phone
 /// validation decides the rest.
-fn continues_number(bytes: &[u8], start: usize, end: usize) -> bool {
+fn continues_number(text: &str, start: usize, end: usize) -> bool {
+    let bytes = text.as_bytes();
     if !follows_decimal_separator(bytes, start) {
         return false;
     }
-    let candidate = &bytes[start..end];
-    let unsigned = candidate.strip_prefix(b"+").unwrap_or(candidate);
-    let dots = unsigned.iter().filter(|byte| **byte == b'.').count();
-    let is_dotted_number = unsigned
-        .iter()
-        .all(|byte| byte.is_ascii_digit() || *byte == b'.');
-    if bytes[start - 1] == b'.' {
-        candidate == unsigned && is_dotted_number
-    } else {
-        is_dotted_number && dots == 1
+    let candidate = &text[start..end];
+    let unsigned = candidate.strip_prefix('+').unwrap_or(candidate);
+    if !unsigned
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || byte == b'.')
+    {
+        return false;
     }
+    if bytes[start - 1] == b'.' {
+        return candidate == unsigned;
+    }
+    let mut parts = candidate.split('.');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(integer), Some(_), None) if !is_valid_phone(integer)
+    )
 }
 
 /// The end of a card that spans the whole separated digit run at `start`.

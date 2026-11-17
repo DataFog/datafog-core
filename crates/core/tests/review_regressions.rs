@@ -164,6 +164,8 @@ fn unseparated_phone_is_found_after_a_number_and_comma() {
         ("2,2025550143", vec!["2025550143"]),
         ("row 2,12025550143", vec!["12025550143"]),
         ("818,+65585080", vec!["+65585080"]),
+        // The integer part of a single-dot run is a phone by itself.
+        ("2,+442079460958.5", vec!["+442079460958.5"]),
         // Accepted cost: ten fractional digits that pass phone validation.
         ("2,7182818285", vec!["7182818285"]),
     ] {
