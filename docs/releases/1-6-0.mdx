@@ -18,6 +18,11 @@ cargo add datafog-core@=1.6.0
 Core-owned FogVault adapters and the SQLite browser adapter use 1.6.0. The
 independent FogVault engine retains its own version; it is not relabeled 1.6.0.
 
+The optional `datafog-fogvault` Linux x64 wheel requires glibc 2.38 or later.
+This differs from the base `datafog-core` Linux GNU wheels, which retain their
+glibc 2.28 minimum. The native companion also ships macOS ARM64 and Windows x64
+wheels.
+
 ## Changes
 
 - Request-local literal `deny` rules run in shared Rust across SDKs, with
