@@ -6,6 +6,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Added
+
+- Add Python `ApplicationVault` for application-scoped encrypted native Workspace
+  persistence: OS credentials or explicit file/external keys, process locking,
+  authenticated compare-and-save, durable activation before handoff, and refresh
+  before restore. Add application-vault latency/contention benchmarks.
+- Expose Python `Workspace.prepare_forget` with the existing snapshot-v4 expired
+  marker semantics; Workspace contract 1 and marker formats stay unchanged.
+
 ### Changed
 
 - Update current SDK and companion installation examples to the coordinated 1.5.0 PyPI, crates.io and npm releases.

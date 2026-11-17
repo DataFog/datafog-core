@@ -42,7 +42,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_beta3_is_explicitly_nonrequired_and_does_not_fetch(self):
         self.assertEqual(run({}, "0.5.0-beta.3")["required"], False)
 
-    def test_exact_completed_stable_and_manual_runs_pass_all_twelve_scopes(self):
+    def test_exact_completed_stable_and_manual_runs_pass_all_seventeen_scopes(self):
         for event in ("push", "workflow_dispatch"):
             for version in ("1.0.0", "1.0.0-beta.1", "2.0.0"):
                 data = fixture()
@@ -51,7 +51,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                         pages[0]["workflow_runs"][0]["event"] = event
                 result = run(data, version)
                 self.assertTrue(result["required"])
-                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 12)
+                self.assertEqual(sum(len(p["required_scopes"]) for p in result["proofs"]), 17)
                 self.assertTrue(all(p["head_sha"] == REVISION for p in result["proofs"]))
 
     def test_browser_sdk_extraction_is_required_at_exact_head(self):

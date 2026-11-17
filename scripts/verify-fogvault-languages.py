@@ -35,6 +35,9 @@ PYTHON_CASES = {
         "reports_counts_and_policy_delegate_to_core", "restart_reconciliation_returns_only_receipt",
         "streams_revoke_on_lock_and_saved_head_change", "tenant_and_thread_boundaries_are_controlled",
         "unsupported_profile_and_malformed_transport_fail_before_creation", "wrong_password_identity_and_full_head_reject")}
+PYTHON_CASES |= {"test_application_" + suffix for suffix in (
+    "restart_encryption_and_explicit_protection", "four_process_writers_refresh_long_lived_reader",
+    "forget_revokes_after_restart", "approval_wrong_key_and_owner_permissions")}
 INTEROP_CASES = {"node_produces_confirmed_encrypted_state", "python_reopens_and_preserves_node_state",
                  "node_reopens_python_state_and_scoped_issuance", "source_stability"}
 

@@ -1,5 +1,6 @@
 """Run deterministic workspace commands against the actual installed native Python API."""
 import json
+import re
 import sys
 import datafog_core as api
 
@@ -52,7 +53,7 @@ def run(fixture):
                 raise ValueError("mandatory native workspace method unavailable")
     conversation_profile = "prepareConversationSend" in fixture["requiredMethods"]
     output = []
-    supported = {"prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntents","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","streamFeed","streamFeedUtf16","streamFinalize","streamReset","streamClose","createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create", "openBundle", "head", "export", "close", "inspectPlan", "discard", "activateSaved", "recall", "review", "restore", "restoreReport", "restorePlanText", "restoreReportPlanText", "prepare", "prepareBatch", "prepareReview", "preparePolicyChanges", "prepareRecovery"}
+    supported = {"prepareConversationSend","prepareObservedSend","prepareDefinitelyNotSent","conversation","conversationForSite","sendIntents","sendIntentStatus","restoreInConversation","restoreReportInConversation","bufferedRestoreInConversation","progressiveRestoreInConversation","streamFeed","streamFeedUtf16","streamFinalize","streamReset","streamClose","createWithOperation","prepareWithOperation","prepareBatchWithOperation","prepareRecoveryWithOperation","prepareOutcome","operations","operationsPage","counts","historyCoverage","create", "openBundle", "head", "export", "close", "inspectPlan", "discard", "activateSaved", "recall", "review", "restore", "restoreReport", "restorePlanText", "restoreReportPlanText", "prepare", "prepareBatch", "prepareReview", "preparePolicyChanges", "prepareRecovery", "prepareForget"}
     for scenario in fixture["cases"]:
         workspaces, plans, plan_texts, bundles, reviews, plan_intents, streams = {}, {}, {}, {}, {}, {}, {}
         steps = []
@@ -185,6 +186,11 @@ def run(fixture):
                         plan = workspace.prepare_policy_changes(command["edits"], operation)
                     elif call == "prepareRecovery":
                         plan = workspace.prepare_recovery(operation)
+                    elif call == "prepareForget":
+                        source = plan_texts[command["codeFrom"]["plan"]][command["codeFrom"]["inputIndex"]]
+                        match = re.fullmatch(r"\[\[[A-Z][A-Z0-9_]*_([A-Z0-9]{6})\]\]", source)
+                        if match is None: raise ValueError("invalid fixture code selector")
+                        plan = workspace.prepare_forget([match.group(1)], operation)
                     else:
                         raise ValueError("unsupported mandatory fixture command")
                     value = inspect(plan)

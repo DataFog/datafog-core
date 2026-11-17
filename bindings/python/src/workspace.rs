@@ -994,6 +994,28 @@ impl Workspace {
         let operation = id(py, operation_id)?;
         self.stage(py, || self.inner.prepare_recovery(operation))
     }
+    fn prepare_forget(
+        &self,
+        py: Python<'_>,
+        codes: &Bound<'_, PyList>,
+        operation_id: &[u8],
+    ) -> PyResult<WorkspacePreparedChange> {
+        if codes.len() > w::MAX_ENTRIES {
+            return Err(failure(py, w::ErrorCode::ResourceLimit));
+        }
+        let mut owned = Vec::with_capacity(codes.len());
+        let mut bytes = 0usize;
+        for code in codes.iter() {
+            let code: String = code.extract()?;
+            bytes = bytes.saturating_add(code.len());
+            if bytes > w::MAX_BUNDLE_BYTES {
+                return Err(failure(py, w::ErrorCode::ResourceLimit));
+            }
+            owned.push(code);
+        }
+        let operation = id(py, operation_id)?;
+        self.stage(py, || self.inner.prepare_forget(&owned, operation))
+    }
     fn policy(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         json_object(
             py,

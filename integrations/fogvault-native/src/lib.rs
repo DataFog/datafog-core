@@ -6,6 +6,7 @@
 
 pub use datafog_core::workspace as core;
 pub use fogvault_native as vault;
+pub mod application;
 
 use core::{Head, PreparedChange, PublicId, Workspace, WorkspaceError};
 use std::{

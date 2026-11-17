@@ -177,7 +177,7 @@
     "_WorkspaceTransformation",
     "panic_probe"
    ],
-   "declarationsSha256": "f21220b15e1940190a4a337a3539c83ae98e5d2362ef0cc7dccc1b2a3923c551"
+   "declarationsSha256": "8e99a50a8afd9c66a3d826618db3779177b3d61f76182b7bebc44e4c207e5976"
   }
  },
  "workspaceErrorCodes": [
@@ -316,7 +316,8 @@
     "shared-review-exact-waiver-removes-only-target-obligation",
     "shared-review-invalid-waived-finding",
     "unicode-normalization-boundaries-no-fuzzy-recall",
-    "committed-recall-retains-all-crossing-protected-spans"
+    "committed-recall-retains-all-crossing-protected-spans",
+    "forget-v4-retired-marker-reopen"
    ]
   },
   {
@@ -474,9 +475,11 @@
    "declarations": "integrations/fogvault-python/datafog_fogvault.pyi",
    "runtimeKind": "pyo3",
    "runtimeSources": [
-    "integrations/fogvault-python/src/stream.rs"
+    "integrations/fogvault-python/src/stream.rs",
+    "integrations/fogvault-python/src/application.rs"
    ],
    "runtimeExports": [
+    "ApplicationVault",
     "FogVaultWorkspaceError",
     "NativeWorkspace",
     "PreparedChange",
@@ -485,7 +488,7 @@
     "__version__"
    ],
    "declarationOnlyExports": [],
-   "declarationsSha256": "0007b8bd0d950ec52f098ed6cedb8f118342b5281acd61c7122703395706274d"
+   "declarationsSha256": "722bec518965ebfb38a986ea023860fef1ff631fb4fcb176f2f53b0b72ba8f99"
   }
  },
  "rustIntegrations": [
@@ -500,7 +503,8 @@
     "Result<T>",
     "Change",
     "Committed",
-    "Owner"
+    "Owner",
+    "application (module)"
    ],
    "review": "Manual source API signature/DTO/generic and lifetime review; not a private implementation hash or stable binary ABI claim. Native unit and installed consumer tests are required.",
    "tests": [

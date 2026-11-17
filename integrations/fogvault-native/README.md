@@ -7,6 +7,16 @@ keys, authenticated records and persistence. Version `1.5.0` implements the
 reviewed Core Workspace contract 1 with FogVault `0.1.0`. Production host and
 key-provider qualification remain separate.
 
+The additive `application::ApplicationVault` helper uses a separately versioned
+raw-key encrypted snapshot envelope for fast application-scoped opens. It offers
+OS credential storage, explicit external/file-key modes, process locking and a
+CAS-only encrypted storage boundary. It does not change `Owner`, Core snapshots
+or the password-based FogVault profile. Python clients can use the native
+[`ApplicationVault` transport](../fogvault-python/README.md#application-scoped-vaults).
+See the [design decisions](../../docs/design/application-vaults.md) for capacity,
+reconciliation and strict-restore constraints. Node helper parity is a follow-up;
+the existing Node password owner continues to work.
+
 ```sh
 cargo add datafog-fogvault-native@=1.5.0
 ```
@@ -23,9 +33,9 @@ cargo +1.94.1 run --manifest-path integrations/fogvault-native/Cargo.toml --prof
 ```
 
 The integration has its own workspace, lockfile and Rust 1.94.1 qualification
-toolchain. Its declared minimum is Rust 1.89. The native gate runs ten external
-consumer tests and one internal lost-acknowledgment test; the registry archive
-consumer runs the ten external tests. Core itself remains at Rust 1.88.
+toolchain. Its declared minimum is Rust 1.89. The native gate runs external owner
+contracts, lost-acknowledgment reconciliation and application storage/crash tests;
+registry archives retain the same source tests. Core itself remains at Rust 1.88.
 Invoking Cargo with `--manifest-path` from Core's root does not select the nested
 toolchain, so the explicit `+1.94.1` matters. Core's Rust 1.88 baseline remains
 unchanged. The current Core dependency is a repository-relative path; FogVault is

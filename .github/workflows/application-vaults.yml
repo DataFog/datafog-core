@@ -1,0 +1,60 @@
+name: Application vaults
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  application-vault:
+    name: Application vault / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025]
+    env:
+      PYTHONUTF8: '1'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/application-vault-ci
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.94.1'
+          components: rustfmt, clippy
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.10'
+      - run: python -m pip install maturin==1.14.1
+      - name: Native application storage and crash contracts
+        run: cargo +1.94.1 test --manifest-path integrations/fogvault-native/Cargo.toml --locked --lib application
+      - name: Installed minimum-Python contracts with real process writers
+        run: python integrations/fogvault-python/tests/run-installed.py --target-dir target/application-vault-ci --output target/application-vault-installed.json
+      - name: Retain exact installed evidence and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: application-vault-${{ matrix.os }}
+          retention-days: 7
+          path: |
+            target/application-vault-installed.json
+            target/python-consumer-*/installed-cases.json
+            target/python-consumer-*/*.log
+          if-no-files-found: error

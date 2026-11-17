@@ -1898,6 +1898,132 @@
           "workspace": "w"
         }
       ]
+    },
+    {
+      "id": "forget-v4-retired-marker-reopen",
+      "commands": [
+        {
+          "call": "create",
+          "workspace": "w",
+          "namespaceByte": 41,
+          "operationByte": 42
+        },
+        {
+          "call": "prepare",
+          "workspace": "w",
+          "plan": "seed",
+          "operationByte": 43,
+          "text": "Jane",
+          "findings": [
+            {
+              "entityType": "PERSON",
+              "matchedText": "Jane",
+              "range": {
+                "unit": "utf8_bytes",
+                "start": 0,
+                "end": 4
+              }
+            }
+          ]
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "seed"
+        },
+        {
+          "call": "prepareForget",
+          "workspace": "w",
+          "plan": "forgotten",
+          "operationByte": 44,
+          "codeFrom": {
+            "plan": "seed",
+            "inputIndex": 0
+          }
+        },
+        {
+          "call": "restorePlanText",
+          "workspace": "w",
+          "plan": "seed",
+          "inputIndex": 0,
+          "expectValue": "Jane"
+        },
+        {
+          "call": "activateSaved",
+          "workspace": "w",
+          "plan": "forgotten"
+        },
+        {
+          "call": "restoreReportPlanText",
+          "workspace": "w",
+          "plan": "seed",
+          "inputIndex": 0,
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 0,
+            "issues": [
+              {
+                "kind": "expired",
+                "byteRange": {
+                  "start": 0,
+                  "end": 17
+                },
+                "codepointRange": {
+                  "start": 0,
+                  "end": 17
+                },
+                "utf16Range": {
+                  "start": 0,
+                  "end": 17
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "w",
+          "bundle": "forgottenSnapshot"
+        },
+        {
+          "call": "openBundle",
+          "workspace": "reopened",
+          "bundle": "forgottenSnapshot"
+        },
+        {
+          "call": "restoreReportPlanText",
+          "workspace": "reopened",
+          "plan": "seed",
+          "inputIndex": 0,
+          "expectValue": {
+            "text": null,
+            "restoredMarkers": 0,
+            "issues": [
+              {
+                "kind": "expired",
+                "byteRange": {
+                  "start": 0,
+                  "end": 17
+                },
+                "codepointRange": {
+                  "start": 0,
+                  "end": 17
+                },
+                "utf16Range": {
+                  "start": 0,
+                  "end": 17
+                }
+              }
+            ]
+          }
+        },
+        {
+          "call": "export",
+          "workspace": "reopened",
+          "bundle": "reopenedSnapshot",
+          "sameBundleAs": "forgottenSnapshot"
+        }
+      ]
     }
   ]
 }

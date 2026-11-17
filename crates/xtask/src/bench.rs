@@ -252,6 +252,9 @@ fn compare_with_baseline(
 }
 
 pub fn run_bench(args: &[String], json_output: bool) -> ExitCode {
+    if args.iter().any(|arg| arg == "--application-vault") {
+        return run_application_bench(args);
+    }
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let update_baseline = args.iter().any(|a| a == "--update-baseline");
 
@@ -484,4 +487,92 @@ pub fn run_bench(args: &[String], json_output: bool) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+fn run_application_bench(args: &[String]) -> ExitCode {
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--application-vault" | "--json" | "--dry-run" => (),
+            "--iterations" if args.get(index + 1).is_some() => index += 1,
+            _ => {
+                eprintln!("application vault bench accepts --iterations N, --json and --dry-run");
+                return ExitCode::FAILURE;
+            }
+        }
+        index += 1;
+    }
+    let samples = args
+        .iter()
+        .position(|a| a == "--iterations")
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
+        .unwrap_or("20");
+    if !samples
+        .parse::<usize>()
+        .is_ok_and(|n| (2..=1000).contains(&n))
+    {
+        eprintln!("application vault --iterations must be between 2 and 1000");
+        return ExitCode::FAILURE;
+    }
+    if args.iter().any(|arg| arg == "--dry-run") {
+        println!(
+            "{}",
+            serde_json::json!({"dry_run":true,"benchmark":"application-vault","samples":samples.parse::<usize>().ok(),"entries":[1000,10000,20000],"writers":4})
+        );
+        return ExitCode::SUCCESS;
+    }
+    let root = workspace_root();
+    let output = Command::new("cargo")
+        .current_dir(&root)
+        .args([
+            "+1.94.1",
+            "run",
+            "--quiet",
+            "--release",
+            "--locked",
+            "--manifest-path",
+            "integrations/fogvault-native/Cargo.toml",
+            "--example",
+            "application-measure",
+            "--",
+            "--samples",
+            samples,
+        ])
+        .output();
+    let output = match output {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!("cannot run application vault benchmark: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !output.status.success() {
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        return ExitCode::FAILURE;
+    }
+    if serde_json::from_slice::<serde_json::Value>(&output.stdout).is_err() {
+        eprintln!("application vault benchmark returned invalid evidence");
+        return ExitCode::FAILURE;
+    }
+    let directory = match create_run_directory() {
+        Ok(directory) => directory,
+        Err(error) => {
+            eprintln!("cannot create benchmark evidence: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = fs::write(
+        directory.join("application-vault-bench.json"),
+        &output.stdout,
+    ) {
+        eprintln!("cannot save benchmark evidence: {error}");
+        return ExitCode::FAILURE;
+    }
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+    eprintln!(
+        "Evidence: {}",
+        directory.join("application-vault-bench.json").display()
+    );
+    ExitCode::SUCCESS
 }

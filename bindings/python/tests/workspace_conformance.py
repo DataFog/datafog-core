@@ -34,6 +34,26 @@ def edits(value="May", disposition="not_sensitive", label="PERSON"):
     return {"rules": [], "choices": [{"entityType": label, "value": value, "disposition": disposition}]}
 
 class WorkspaceTests(unittest.TestCase):
+    def test_prepare_forget_v4_roundtrip_retires_markers(self):
+        workspace = self.workspace
+        value = "Sentinel Forgotten Person"
+        plan = workspace.prepare(value, [finding(value)], public_id(3))
+        marker = plan.preview()["text"]
+        save(workspace, plan)
+        code = marker.rsplit("_", 1)[1][:-2]
+        forgotten = workspace.prepare_forget([code], public_id(4))
+        self.assertEqual(forgotten.snapshot_format()["candidateVersion"], 4)
+        self.assertEqual(workspace.restore(marker), value)
+        raw = save(workspace, forgotten)
+        self.assertNotIn(value.encode(), raw)
+        with Workspace.open_bundle(raw) as reopened:
+            report = reopened.restore_report(marker)
+            self.assertIsNone(report["text"])
+            self.assertEqual(report["issues"][0]["kind"], "expired")
+            error = self.error("invalid_marker", lambda: reopened.restore(marker))
+            self.assertNotIn(value, str(error))
+            self.assertEqual(reopened.operations()[-1]["kind"], "forget")
+
     def setUp(self): self.workspace = Workspace.create(public_id(1), public_id(2))
     def tearDown(self): self.workspace.close()
     def error(self, code, operation):

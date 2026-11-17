@@ -66,6 +66,12 @@ RUST_CASES = {
         "create_rejects_identical_request_replay_into_existing_workspace",
         "native_facade_delegates_preserve_core_reports_history_and_stream_lifetimes",
         "native_payload_admission_failure_preserves_saved_state_without_handoff",
+        "stale_owners_refresh_cas_and_forget_preserve_contract",
+        "ciphertext_metadata_keys_and_errors_fail_closed_without_values",
+        "file_key_is_explicit_encrypted_and_never_replaces_existing_key_mode",
+        "unavailable_default_provider_never_silently_downgrades",
+        "backend_cas_rejects_wrong_head_and_wrong_encrypted_generation",
+        "real_process_crashes_leave_old_or_complete_new_snapshot_and_release_lock",
     },
 }
 
