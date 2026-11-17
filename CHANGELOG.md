@@ -12,6 +12,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
   quote, including the four reported adjacent/prose cases missed in 1.5.0 and
   published 1.6.0. Keep malformed dotted-local rejection, supported mailbox
   punctuation and original-source offsets intact.
+- Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
+  wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
 ### Removed
 
