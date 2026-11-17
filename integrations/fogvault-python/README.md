@@ -7,7 +7,7 @@ application helper delegates to the shared Rust application storage layer;
 Python contains no encryption or Workspace implementation and loads no browser WASM.
 
 Install `datafog-fogvault==1.6.0` from PyPI. The Linux x64 wheel requires glibc
-2.34 or later; native macOS ARM64 and Windows x64 wheels are also qualified.
+2.38 or later; native macOS ARM64 and Windows x64 wheels are also qualified.
 
 ```sh
 python -m pip install datafog-fogvault==1.6.0

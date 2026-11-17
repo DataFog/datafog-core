@@ -6,6 +6,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
+  wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
+
 ## [1.6.0] - 2026-11-16
 
 ### Added
