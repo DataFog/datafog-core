@@ -165,38 +165,121 @@ fn file_key_is_explicit_encrypted_and_never_replaces_existing_key_mode() {
 
 #[test]
 fn unavailable_default_provider_never_silently_downgrades() {
-    struct Unavailable;
-    impl keyring::credential::CredentialBuilderApi for Unavailable {
-        fn build(
-            &self,
-            _: Option<&str>,
-            _: &str,
-            _: &str,
-        ) -> keyring::Result<Box<keyring::credential::Credential>> {
-            Err(keyring::Error::NoEntry)
+    use keyring::credential::{Credential, CredentialApi, CredentialBuilderApi};
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    type Secrets = Arc<Mutex<std::collections::BTreeMap<String, Zeroizing<Vec<u8>>>>>;
+    static PROVIDER_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = PROVIDER_LOCK.lock().unwrap();
+    struct MemoryCredential {
+        name: String,
+        secrets: Secrets,
+        available: Arc<AtomicBool>,
+    }
+    impl CredentialApi for MemoryCredential {
+        fn set_secret(&self, secret: &[u8]) -> keyring::Result<()> {
+            if !self.available.load(Ordering::SeqCst) {
+                return Err(keyring::Error::NoEntry);
+            }
+            self.secrets
+                .lock()
+                .unwrap()
+                .insert(self.name.clone(), Zeroizing::new(secret.to_vec()));
+            Ok(())
+        }
+        fn get_secret(&self) -> keyring::Result<Vec<u8>> {
+            if !self.available.load(Ordering::SeqCst) {
+                return Err(keyring::Error::NoEntry);
+            }
+            self.secrets
+                .lock()
+                .unwrap()
+                .get(&self.name)
+                .map(|s| s.to_vec())
+                .ok_or(keyring::Error::NoEntry)
+        }
+        fn delete_credential(&self) -> keyring::Result<()> {
+            self.secrets
+                .lock()
+                .unwrap()
+                .remove(&self.name)
+                .map(|_| ())
+                .ok_or(keyring::Error::NoEntry)
         }
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
     }
-    // Other application tests use explicit synthetic keys; no physical provider
-    // is read or written. This process-local failing provider needs no OS service.
-    keyring::set_default_credential_builder(Box::new(Unavailable));
+    struct Provider {
+        secrets: Secrets,
+        available: Arc<AtomicBool>,
+    }
+    impl CredentialBuilderApi for Provider {
+        fn build(
+            &self,
+            _: Option<&str>,
+            service: &str,
+            user: &str,
+        ) -> keyring::Result<Box<Credential>> {
+            Ok(Box::new(MemoryCredential {
+                name: format!("{service}/{user}"),
+                secrets: Arc::clone(&self.secrets),
+                available: Arc::clone(&self.available),
+            }))
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+    // This is the sole global-provider test; all other application cases use
+    // explicit keys. No physical credential provider is ever read or written.
+    let secrets: Secrets = Arc::default();
+    let available = Arc::new(AtomicBool::new(true));
+    keyring::set_default_credential_builder(Box::new(Provider {
+        secrets: Arc::clone(&secrets),
+        available: Arc::clone(&available),
+    }));
     let temp = root();
     let path = canonical(&temp);
-    let mut opts = Options::new("provider.app");
-    opts.directory = Some(path.clone());
+    let opts = || {
+        let mut options = Options::new("provider.app");
+        options.directory = Some(path.clone());
+        options
+    };
+    let mut owner = ApplicationVault::open(opts()).unwrap();
+    assert_eq!(owner.protection_mode(), Protection::CredentialStore);
+    let saved = commit(&mut owner, SECRET);
+    owner.close();
+    let mut reopened = ApplicationVault::open(opts()).unwrap();
+    assert_eq!(reopened.restore(&saved.texts[0]).unwrap(), SECRET);
+    assert_eq!(secrets.lock().unwrap().len(), 1);
+    assert!(!path.join("workspace.key").exists());
+    let before = fs::read(path.join("workspace.enc")).unwrap();
+    available.store(false, Ordering::SeqCst);
+    let mut unavailable = opts();
+    unavailable.allow_file_key = true;
     assert!(matches!(
-        ApplicationVault::open(opts),
+        ApplicationVault::open(unavailable),
         Err(Error::CredentialUnavailable)
     ));
-    assert!(!path.join("workspace.enc").exists());
+    assert_eq!(fs::read(path.join("workspace.enc")).unwrap(), before);
     assert!(!path.join("workspace.key").exists());
-    let mut opts = Options::new("provider.app");
-    opts.directory = Some(path);
-    opts.allow_file_key = true;
+    let unavailable_path = path.with_file_name("unavailable");
+    let mut options = Options::new("provider.app");
+    options.directory = Some(unavailable_path.clone());
+    assert!(matches!(
+        ApplicationVault::open(options),
+        Err(Error::CredentialUnavailable)
+    ));
+    assert!(!unavailable_path.join("workspace.enc").exists());
+    assert!(!unavailable_path.join("workspace.key").exists());
+    let mut options = Options::new("provider.app");
+    options.directory = Some(unavailable_path);
+    options.allow_file_key = true;
     assert_eq!(
-        ApplicationVault::open(opts).unwrap().protection_mode(),
+        ApplicationVault::open(options).unwrap().protection_mode(),
         Protection::FileKey
     );
 }
