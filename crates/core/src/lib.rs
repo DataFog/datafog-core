@@ -3384,11 +3384,20 @@ fn follows_nanp_rule(national_number: &[u8]) -> bool {
     is_valid_area_start(national_number[0]) && is_valid_exchange_start(national_number[3])
 }
 
-fn is_line_break(character: char) -> bool {
-    matches!(
-        character,
-        '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
-    )
+/// Byte length of the line break that starts at `index`, or 0 when there is
+/// none: LF, CR, VT, FF, NEL (U+0085), U+2028 or U+2029. In valid UTF-8 these
+/// byte sequences cannot occur inside another character.
+fn line_break_len(bytes: &[u8], index: usize) -> usize {
+    match bytes[index] {
+        b'\n' | b'\r' | 0x0b | 0x0c => 1,
+        0xc2 if bytes.get(index + 1) == Some(&0x85) => 2,
+        0xe2 if bytes.get(index + 1) == Some(&0x80)
+            && matches!(bytes.get(index + 2), Some(0xa8 | 0xa9)) =>
+        {
+            3
+        }
+        _ => 0,
+    }
 }
 
 /// `PHONE_RE` accepts any whitespace between digits, so a number at the end of
@@ -3396,15 +3405,20 @@ fn is_line_break(character: char) -> bool {
 /// matched on its own: no finding contains a line break, and the number on
 /// either side of the break is still reported.
 fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
+    let bytes = text.as_bytes();
     let mut line_start = 0;
-    for (line_end, line_break) in text
-        .char_indices()
-        .filter(|(_, character)| is_line_break(*character))
-        .chain(std::iter::once((text.len(), '\n')))
-    {
-        detect_phone_in_line(text, line_start, line_end, candidates);
-        line_start = line_end + line_break.len_utf8();
+    let mut index = 0;
+    while index < bytes.len() {
+        let line_break = line_break_len(bytes, index);
+        if line_break == 0 {
+            index += 1;
+            continue;
+        }
+        detect_phone_in_line(text, line_start, index, candidates);
+        index += line_break;
+        line_start = index;
     }
+    detect_phone_in_line(text, line_start, bytes.len(), candidates);
 }
 
 fn detect_phone_in_line(
