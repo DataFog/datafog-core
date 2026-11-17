@@ -22,9 +22,11 @@ checkout. On Windows use the environment's `Scripts/python.exe`. On Linux, a
 CPU-only installation can first install `torch==2.12.0` from the official
 PyTorch CPU index. Retain model and dependency licenses in deployments.
 
-The extra installs GLiNER2 2.1.0 and compatible dependencies. Intel macOS retains
-its supported PyTorch 2.2.2/Transformers 4.57.6 stack; other platforms use
-PyTorch 2.12.0/Transformers 5.8.0. Core's base Python range remains unchanged.
+The extra installs GLiNER2 2.1.0 and compatible dependencies. Qualified platforms
+use PyTorch 2.12.0/Transformers 5.8.0. Legacy Intel macOS installs retain their
+PyTorch 2.2.2/Transformers 4.57.6 dependency constraints, but Intel model CI and
+prebuilt SDK publication are retired after 1.6.0. Those constraints do not imply
+current Intel qualification. Core's base Python range remains unchanged.
 
 Use the provisioned bundle and manifest digest in the normal
 [session configuration](model-sessions.md), adding:
