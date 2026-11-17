@@ -21,22 +21,34 @@ Earlier release notes are in [docs/releases](docs/releases/).
   Label, quote, field-delimiter and markup trimming are unchanged.
 - Report a PHONE directly after `<digit>,` whenever it passes phone validation,
   as in 1.4.0, so CSV rows with a numeric column are found again:
-  `2,+1-202-555-0143`, `row 2,202-555-0143,ok`, `1,34,2025550143` and every
-  number in `2025550143,2025550144`. Accepted false positives: a decimal-comma
-  value with exactly ten fractional digits that pass validation
-  (`2,7182818285`), or eleven starting with 1, and a ten-digit integer after
-  another numeric column. A single-dot decimal after a numeric column
-  (`6,306.2723362`, `20,+86.528387`) is not a phone.
+  `2,+1-202-555-0143`, `row 2,202-555-0143,ok`, `1,34,2025550143`, every number
+  in `2025550143,2025550144`, and `+CC.subscriber` numbers such as
+  `7,+1.2025550143`. Accepted false positives: a decimal-comma value with
+  exactly ten fractional digits that pass validation (`2,7182818285`), or eleven
+  starting with 1; a ten-digit integer after another numeric column; and a
+  signed decimal after a numeric column (`20,+86.528387`).
+- After `<digit>,` an unsigned candidate with exactly one dot and no other
+  separator is treated as a decimal and not reported, so float columns such as
+  `6,306.2723362` stay clean. Recall cost: `2,202.5550143` and
+  `2,1.2025550143`, which 1.4.0 reported, are rejected. A candidate starting
+  with `+` is never treated this way; a `+` number followed by a fraction is
+  reported with the fraction inside the span (`2,+442079460958.5` reports
+  `+442079460958.5`). Unsigned decimals not preceded by `<digit>,`, such as
+  `249.2754083` at the start of a line, are reported as before.
 - Report a PHONE directly after `<digit>.` when it has `+`, parentheses or a
   separator other than a dot (`3.202-555-0143`). Unseparated and dotted runs
   after `<digit>.` stay rejected (`3.14159265358`, `7.202.555.0143`), including
   dotted phones such as `2.202.555.0143`, which 1.4.0 reported.
-- Report a PHONE at the end of a line when the next line starts with a digit,
-  and one that follows a line ending in `1`: every row of
-  `1,+44 20 7946 0958\n2,+44 20 7946 0958` is found, where 1.5.0 and 1.6.0
-  dropped the first. PHONE matching is per line, so no PHONE span contains a
-  line break (LF, CR, VT, FF or a Unicode line separator) and digit groups
-  split across lines are not joined.
+- Match PHONE on each line separately; the line breaks are LF, CR, VT, FF, NEL
+  (U+0085), U+2028 and U+2029. A number at the end of a line is reported when
+  the next line starts with a digit, as is a number on a line that follows one
+  ending in `1`: every row of `1,+44 20 7946 0958\n2,+44 20 7946 0958` is
+  found, where 1.5.0 and 1.6.0 dropped the first. No PHONE span contains a line
+  break. A `+` number wrapped across a break is reported up to the break when
+  that part has enough digits (`+44 20 7946\n0958` reports `+44 20 7946`),
+  leaving the trailing digits uncovered. Digit groups separated by VT, FF, NEL,
+  U+2028 or U+2029 are no longer joined into one number, a difference from
+  1.6.0; groups separated by LF or CR were already not joined.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
