@@ -74,6 +74,8 @@ RUST_CASES = {
         "real_process_crashes_leave_old_or_complete_new_snapshot_and_release_lock",
     },
 }
+if os.name != "nt":
+    RUST_CASES["native"].add("directory_ancestry_is_durable_before_snapshot_and_observers_repeat_sync")
 
 
 def digest(path):

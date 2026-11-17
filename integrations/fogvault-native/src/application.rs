@@ -298,7 +298,25 @@ fn ensure_directory(path: &Path) -> Result<()> {
     if !path.is_dir() {
         return Err(Error::UnsafePath);
     }
-    check_private(path)
+    check_private(path)?;
+    #[cfg(unix)]
+    sync_ancestor_chain(path)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_ancestor_chain(path: &Path) -> Result<()> {
+    // A concurrent creator can expose ANY ancestor before syncing its parent.
+    // Every opener flushes the complete chain, including already-visible dirs,
+    // before any key/snapshot write or acknowledgment. No chmod of shared parents.
+    for parent in path.ancestors().skip(1) {
+        #[cfg(test)]
+        tests::parent_sync_checkpoint(parent)?;
+        File::open(parent)
+            .and_then(|file| file.sync_all())
+            .map_err(|_| Error::Io)?;
+    }
+    Ok(())
 }
 
 // Closing the descriptor releases the OS lock, including unwinding/process exit.

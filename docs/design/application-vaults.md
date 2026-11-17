@@ -68,6 +68,11 @@ closed. Plaintext workspaces are never persisted.
 
 Use an OS advisory lock with a bounded timeout, authenticated full-head CAS,
 same-directory temporary file, file sync, atomic replacement and directory sync.
+On Unix, every opener also syncs the entire parent-directory chain before any
+key or snapshot creation, including ancestors it did not create. This links a
+new directory durably even when another opener observes it before its creator
+has flushed its parent. A failed ancestor sync returns no ready owner or saved
+snapshot; reopening an already-visible directory retries the complete chain.
 A crash before replacement leaves the old head; after replacement it leaves the
 new head, which a fresh opener activates by reopening its snapshot. A failed
 save or activation never returns transformed text. Lost acknowledgments require
@@ -114,9 +119,9 @@ than admitting a new identity into a full vault.
 
 | Live entries | Open/restore p50 / p95 ms | Open/commit p50 / p95 ms | Four writers p95 ms |
 | --- | --- | --- | --- |
-| 1,000 | 1.93 / 2.22 | 10.89 / 11.10 | 128.42 |
-| 10,000 | 16.47 / 17.68 | 35.79 / 37.33 | 335.63 |
-| 20,000 | 34.28 / 36.06 | 67.04 / 69.64 | 800.69 |
+| 1,000 | 1.63 / 1.77 | 10.23 / 10.39 | 163.10 |
+| 10,000 | 17.52 / 48.43 | 38.81 / 75.10 | 316.39 |
+| 20,000 | 36.47 / 47.36 | 74.68 / 102.67 | 605.60 |
 
 The proposed 50/100 ms 1k target is met for uncontended external-key observations;
 four-writer contention exceeds its 100 ms p95. Serial whole-snapshot durability
@@ -124,7 +129,7 @@ creates a queue; these numbers do not justify weakening locking, fsync or Core
 validation. Targets remain advisory, with physical-provider measurements and
 broader deployment workloads still required before a production latency promise.
 
-Local executed proof is macOS ARM64, Python 3.14; native Windows ACL tests also
+Local executed proof is macOS ARM64, Python 3.10 and 3.14; native Windows ACL tests also
 cross-compile for Windows x64, which is not execution proof. The application-vault
 CI matrix executes native/crash/installed Python 3.10 tests on Linux x64/ARM64,
 macOS Intel/ARM64 and Windows x64. Existing native language gates retain Python

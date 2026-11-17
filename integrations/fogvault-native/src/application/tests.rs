@@ -1,6 +1,67 @@
 use super::*;
 use std::process::Command;
 
+#[cfg(unix)]
+type ParentSyncTrace = Option<(Vec<PathBuf>, Option<usize>)>;
+#[cfg(unix)]
+thread_local! { static PARENT_SYNC: std::cell::RefCell<ParentSyncTrace> = const { std::cell::RefCell::new(None) }; }
+#[cfg(unix)]
+pub(super) fn parent_sync_checkpoint(path: &Path) -> Result<()> {
+    PARENT_SYNC.with_borrow_mut(|trace| {
+        if let Some((visited, fail_at)) = trace {
+            visited.push(path.to_path_buf());
+            if *fail_at == Some(visited.len() - 1) {
+                return Err(Error::Io);
+            }
+        }
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_ancestry_is_durable_before_snapshot_and_observers_repeat_sync() {
+    let temp = root();
+    let path = canonical(&temp);
+    PARENT_SYNC.with_borrow_mut(|trace| *trace = Some((Vec::new(), Some(1))));
+    assert!(matches!(
+        ApplicationVault::open(options(&path)),
+        Err(Error::Io)
+    ));
+    assert!(path.is_dir());
+    assert!(!path.join("workspace.enc").exists());
+    assert!(!path.join("workspace.key").exists());
+    let failed = PARENT_SYNC.with_borrow_mut(Option::take).unwrap().0;
+    assert_eq!(
+        failed,
+        path.ancestors()
+            .skip(1)
+            .take(2)
+            .map(Path::to_path_buf)
+            .collect::<Vec<_>>()
+    );
+    // This opener sees a directory another creator could have exposed before
+    // flushing its parent. It must repeat the whole chain, not skip existing dirs.
+    PARENT_SYNC.with_borrow_mut(|trace| *trace = Some((Vec::new(), None)));
+    let mut owner = ApplicationVault::open(options(&path)).unwrap();
+    let completed = PARENT_SYNC.with_borrow_mut(Option::take).unwrap().0;
+    assert_eq!(
+        completed,
+        path.ancestors()
+            .skip(1)
+            .map(Path::to_path_buf)
+            .collect::<Vec<_>>()
+    );
+    let saved = commit(&mut owner, SECRET);
+    assert_eq!(
+        ApplicationVault::open(options(&path))
+            .unwrap()
+            .restore(&saved.texts[0])
+            .unwrap(),
+        SECRET
+    );
+}
+
 const SECRET: &str = "private-sentinel@example.test";
 fn options(path: &Path) -> Options {
     let mut options = Options::new("test.app");
