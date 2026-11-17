@@ -8,9 +8,13 @@ release authorization.** The commands below target the future 1.7.0 packages;
 they are not registry installation instructions for an available release.
 No release date has been assigned.
 
-The latest published release is [Core 1.6.0](https://github.com/DataFog/datafog-core/releases/tag/v1.6.0).
-It contains the [EMAIL boundary regression tracked in #266](https://github.com/DataFog/datafog-core/issues/266).
-The prepared 1.7.0 source includes its fix.
+Published Core 1.5.0 and the latest published release,
+[Core 1.6.0](https://github.com/DataFog/datafog-core/releases/tag/v1.6.0), contain
+the [EMAIL boundary regression tracked in #266](https://github.com/DataFog/datafog-core/issues/266).
+The prepared 1.7.0 source includes the [fix in #267](https://github.com/DataFog/datafog-core/pull/267).
+Consumers waiting for this fix need to adopt 1.7.0 after publication. Version
+constraints such as `<1.7`, including those in MCP consumers, exclude it and
+must be updated to admit the fixed release.
 
 ## Changes from 1.6.0
 
