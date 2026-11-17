@@ -68,9 +68,174 @@ fn email_values_do_not_absorb_fields_or_markup() {
         values("bob@example.com|jane@example.com", "EMAIL"),
         ["bob@example.com", "jane@example.com"]
     );
-    assert!(values("bob..x@example.com", "EMAIL").is_empty());
+    assert_eq!(values("bob..x@example.com", "EMAIL"), ["x@example.com"]);
     assert_eq!(values("mail jörg@müller.de", "EMAIL"), ["jörg@müller.de"]);
     assert_eq!(values("a+b@example.com", "EMAIL"), ["a+b@example.com"]);
+}
+
+#[test]
+fn email_after_dots_is_reported_from_its_first_local_part_character() {
+    for text in [
+        "Contact (support).alice@example.com for help",
+        "See note [1].alice@example.com",
+        "Email me...alice@example.com",
+        ".alice@example.com",
+        "reply-to>.alice@example.com",
+        "'.alice@example.com'",
+        "Reach '.alice@example.com's",
+        "..alice@example.com",
+        "x&.alice@example.com",
+        ".email=.alice@example.com",
+    ] {
+        assert_eq!(values(text, "EMAIL"), ["alice@example.com"], "{text}");
+    }
+    // Dots are not an address on their own, and a dot before the `@` is still invalid.
+    for text in [".@example.com", "...@example.com", "alice.@example.com"] {
+        assert!(values(text, "EMAIL").is_empty(), "{text}");
+    }
+    // Label, quote and numeric-neighbor boundaries are unchanged.
+    for (text, email) in [
+        ("email=alice@example.com", "alice@example.com"),
+        ("note=customer=tag@example.com", "customer=tag@example.com"),
+        ("\"alice@example.com\"", "alice@example.com"),
+        ("94105.jane@example.com", "jane@example.com"),
+        ("219-09-9999.jane@example.com", "jane@example.com"),
+        ("first.last@example.com", "first.last@example.com"),
+    ] {
+        assert_eq!(values(text, "EMAIL"), [email], "{text}");
+    }
+}
+
+#[test]
+fn structured_phone_is_found_after_a_number_and_separator() {
+    for (text, phone) in [
+        ("2,+1-202-555-0143", "+1-202-555-0143"),
+        ("id,phone\n2,+1-202-555-0143\n", "+1-202-555-0143"),
+        ("2,(202) 555-0143", "(202) 555-0143"),
+        ("row 2,202-555-0143,ok", "202-555-0143"),
+        ("2,202.555.0143", "202.555.0143"),
+        ("2,202 555 0143", "202 555 0143"),
+        ("12,+44 20 7946 0958", "+44 20 7946 0958"),
+        ("3.202-555-0143", "202-555-0143"),
+        ("3.(202) 555-0143", "(202) 555-0143"),
+        ("3.+1-202-555-0143", "+1-202-555-0143"),
+        ("2024-01-02,202-555-0143", "202-555-0143"),
+        ("$12.50,202-555-0143", "202-555-0143"),
+    ] {
+        assert_eq!(values(text, "PHONE"), [phone], "{text}");
+    }
+    // After `<digit>.` an unseparated or dotted run is still the tail of that
+    // number; after `<digit>,` phone validation decides.
+    for text in [
+        "3,14159",
+        "1,202",
+        "12,5 kg",
+        "1.234,56",
+        "3,1415926536",
+        "3.14159265358",
+        "0.2025550143",
+        "v2.202.555.0143",
+        "2.202.555.0143",
+        "7.202.555.0143",
+        "10.20.202.555.0143",
+    ] {
+        assert!(values(text, "PHONE").is_empty(), "{text}");
+    }
+}
+
+#[test]
+fn unseparated_phone_is_found_after_a_number_and_comma() {
+    for (text, phones) in [
+        (
+            "2025550143,2025550144,2025550145",
+            vec!["2025550143", "2025550144", "2025550145"],
+        ),
+        (
+            "phones: 2025550143,12025550144",
+            vec!["2025550143", "12025550144"],
+        ),
+        (
+            "id,age,phone\n1,34,2025550143\n2,41,6465550199\n",
+            vec!["2025550143", "6465550199"],
+        ),
+        ("94105,2025550143", vec!["2025550143"]),
+        ("2024-01-02,2025550143", vec!["2025550143"]),
+        ("1,2025550143,1", vec!["2025550143"]),
+        ("2,2025550143", vec!["2025550143"]),
+        ("row 2,12025550143", vec!["12025550143"]),
+        ("818,+65585080", vec!["+65585080"]),
+        // A `+` number is never a continuing decimal: EPP/WHOIS `+CC.subscriber`.
+        ("2,+1.2025550143", vec!["+1.2025550143"]),
+        ("2,+44.2079460958", vec!["+44.2079460958"]),
+        ("2,+49.30901820", vec!["+49.30901820"]),
+        (
+            "id,phone\n7,+1.2025550143\n8,+44.2079460958\n",
+            vec!["+1.2025550143", "+44.2079460958"],
+        ),
+        ("$12.50,+1.2025550143", vec!["+1.2025550143"]),
+        ("€9,+1.2025550143", vec!["+1.2025550143"]),
+        ("price 3,+1.2025550143", vec!["+1.2025550143"]),
+        ("2,+442079460958.5", vec!["+442079460958.5"]),
+        // Accepted cost: a signed decimal is indistinguishable from the EPP form.
+        ("20,+86.528387", vec!["+86.528387"]),
+        // Accepted cost: ten fractional digits that pass phone validation.
+        ("2,7182818285", vec!["7182818285"]),
+    ] {
+        assert_eq!(values(text, "PHONE"), phones, "{text}");
+    }
+    // An unsigned single-dot decimal after a numeric column is a number.
+    for text in [
+        "249.2754083,142.7399518,730.9506397",
+        "6,306.2723362",
+        "2,202.5550143",
+        "2,1.2025550143",
+    ] {
+        let phones = values(text, "PHONE");
+        assert!(
+            phones.iter().all(|phone| text.starts_with(phone.as_str())),
+            "{text}: {phones:?}"
+        );
+    }
+    assert!(values("6,306.2723362", "PHONE").is_empty());
+}
+
+#[test]
+fn phone_at_a_line_end_is_not_joined_with_the_next_line() {
+    for (text, phones) in [
+        (
+            "id,phone\n1,+44 20 7946 0958\n2,+44 20 7946 0958\n",
+            vec!["+44 20 7946 0958", "+44 20 7946 0958"],
+        ),
+        (
+            "5,+49 30 901820\n6,+49 30 901821\n",
+            vec!["+49 30 901820", "+49 30 901821"],
+        ),
+        ("+49 30 901820\n42 Main St", vec!["+49 30 901820"]),
+        ("+91 98765 43210\n1,x", vec!["+91 98765 43210"]),
+        ("+49 30 901820\r\n42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\r42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{c}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{b}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{2028}42 units", vec!["+49 30 901820"]),
+        ("é+49 30 901820\u{2029}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{85}42 units", vec!["+49 30 901820"]),
+        // A wrapped `+` number is reported up to the break when that part validates.
+        ("+44 20 7946\n0958", vec!["+44 20 7946"]),
+        ("row 1\n202-555-0143", vec!["202-555-0143"]),
+        ("é +1\r(202) 555-0143", vec!["(202) 555-0143"]),
+    ] {
+        assert_eq!(values(text, "PHONE"), phones, "{text}");
+    }
+    for text in [
+        "202-555\n0143",
+        "(202)\n555-0143",
+        "202 555\r0143",
+        "+1 202\n555",
+        "202\u{c}555\u{c}0143",
+        "+49 30\u{2029}901",
+    ] {
+        assert!(values(text, "PHONE").is_empty(), "{text}");
+    }
 }
 
 #[test]

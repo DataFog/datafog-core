@@ -3384,13 +3384,56 @@ fn follows_nanp_rule(national_number: &[u8]) -> bool {
     is_valid_area_start(national_number[0]) && is_valid_exchange_start(national_number[3])
 }
 
+/// Byte length of the line break that starts at `index`, or 0 when there is
+/// none: LF, CR, VT, FF, NEL (U+0085), U+2028 or U+2029. In valid UTF-8 these
+/// byte sequences cannot occur inside another character.
+fn line_break_len(bytes: &[u8], index: usize) -> usize {
+    match bytes[index] {
+        b'\n' | b'\r' | 0x0b | 0x0c => 1,
+        0xc2 if bytes.get(index + 1) == Some(&0x85) => 2,
+        0xe2 if bytes.get(index + 1) == Some(&0x80)
+            && matches!(bytes.get(index + 2), Some(0xa8 | 0xa9)) =>
+        {
+            3
+        }
+        _ => 0,
+    }
+}
+
+/// `PHONE_RE` accepts any whitespace between digits, so a number at the end of
+/// a line would otherwise absorb digits that start the next line. Each line is
+/// matched on its own: no finding contains a line break, and the number on
+/// either side of the break is still reported.
 fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
-    for matched in PHONE_RE.find_iter(text) {
-        if !has_phone_boundaries(text, matched.start(), matched.end()) {
+    let bytes = text.as_bytes();
+    let mut line_start = 0;
+    let mut index = 0;
+    while index < bytes.len() {
+        let line_break = line_break_len(bytes, index);
+        if line_break == 0 {
+            index += 1;
+            continue;
+        }
+        detect_phone_in_line(text, line_start, index, candidates);
+        index += line_break;
+        line_start = index;
+    }
+    detect_phone_in_line(text, line_start, bytes.len(), candidates);
+}
+
+fn detect_phone_in_line(
+    text: &str,
+    line_start: usize,
+    line_end: usize,
+    candidates: &mut Vec<Candidate>,
+) {
+    for matched in PHONE_RE.find_iter(&text[line_start..line_end]) {
+        let (start, end) = (line_start + matched.start(), line_start + matched.end());
+        if !has_phone_boundaries(text, start, end) {
             continue;
         }
 
-        let before = &text[..matched.start()];
+        let before = &text[..start];
         let context = before
             .chars()
             .rev()
@@ -3400,8 +3443,7 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
             .rev()
             .collect::<String>()
             .to_ascii_lowercase();
-        if follows_decimal_separator(text.as_bytes(), matched.start())
-            || matched.as_str().contains(['\r', '\n'])
+        if continues_number(text.as_bytes(), start, end)
             || ["steuer-id", "steuerid", "tax-id", "imei"]
                 .iter()
                 .any(|label| {
@@ -3416,8 +3458,8 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
 
         candidates.push(Candidate {
             label: Label::Phone,
-            start_byte: matched.start(),
-            end_byte: matched.end(),
+            start_byte: start,
+            end_byte: end,
         });
     }
 }
@@ -3434,12 +3476,14 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
 }
 
 fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_context: bool) {
-    let mut previous_end = None;
     for matched in EMAIL_RE.find_iter(text) {
-        // Text field syntax must be removed before judging the mailbox's own
-        // boundaries. Explicit ENV/SQL slices retain raw local-part validation.
+        // A match never starts on a dot, so an address written after dots
+        // (`see [1].alice@example.com`, `me...alice@example.com`) is reported
+        // from its first local-part character instead of being dropped.
         let neighbor_start = email_start_after_neighbor(text, matched.start(), matched.end());
         let start = if text_context {
+            // Text field syntax is removed from the span; explicit ENV/SQL
+            // slices keep their punctuation.
             let Some(start) =
                 email_context::text_candidate_start(text, neighbor_start, matched.end())
             else {
@@ -3449,24 +3493,11 @@ fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_c
         } else {
             neighbor_start
         };
-        let boundary_start = if text_context { start } else { matched.start() };
-        if boundary_start > 0 && text.as_bytes()[boundary_start - 1] == b'.' {
-            // A dot after another email or a double quote is prose punctuation;
-            // leading/doubled dots inside a local part still invalidate its suffix.
-            let dot = boundary_start - 1;
-            let after_neighbor = neighbor_start > matched.start() && start == neighbor_start;
-            if !text_context
-                || (!after_neighbor && previous_end != Some(dot) && !text[..dot].ends_with('"'))
-            {
-                continue;
-            }
-        }
         candidates.push(Candidate {
             label: Label::Email,
             start_byte: start,
             end_byte: matched.end(),
         });
-        previous_end = Some(matched.end());
     }
 }
 
@@ -3772,6 +3803,26 @@ fn numeric_neighbor_at(bytes: &[u8], start: usize) -> bool {
 /// Comma-separated fields are ambiguous without structured input context.
 fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
+}
+
+/// Whether a phone-shaped run directly after `<digit>.` or `<digit>,` is part
+/// of a number rather than a phone. Only an unsigned run of digits and dots
+/// can be: a candidate starting with `+` is a phone candidate of its own,
+/// including the EPP form `2,+1.2025550143`. After a dot, an unseparated or
+/// dotted run continues that number (`3.14159265358`, `7.202.555.0143`).
+/// After a comma the run is a separate field, as in the CSV row
+/// `2,2025550143`, so only a single-dot decimal (`6,306.2723362`) is a number
+/// and phone validation decides the rest.
+fn continues_number(bytes: &[u8], start: usize, end: usize) -> bool {
+    if !follows_decimal_separator(bytes, start) {
+        return false;
+    }
+    let candidate = &bytes[start..end];
+    let is_unsigned_number = candidate
+        .iter()
+        .all(|byte| byte.is_ascii_digit() || *byte == b'.');
+    let dots = candidate.iter().filter(|byte| **byte == b'.').count();
+    is_unsigned_number && (bytes[start - 1] == b'.' || dots == 1)
 }
 
 /// The end of a card that spans the whole separated digit run at `start`.
