@@ -9,6 +9,14 @@ fn error(py: Python<'_>, e: app::Error) -> PyErr {
         e => fail(py, e.code()),
     }
 }
+fn operation_error(py: Python<'_>, e: app::Error, operation: core::PublicId) -> PyErr {
+    match e {
+        app::Error::OutcomeUnknown | app::Error::SavedNotActivated => {
+            unknown_outcome(py, operation)
+        }
+        e => error(py, e),
+    }
+}
 
 #[pyclass(name = "ApplicationVault")]
 pub struct ApplicationVault {
@@ -85,12 +93,7 @@ impl ApplicationVault {
                 .map_err(|_| app::Error::LockTimeout)?
                 .prepare_and_commit(&text, &findings, operation)
         });
-        let committed = result.map_err(|e| match e {
-            app::Error::OutcomeUnknown | app::Error::SavedNotActivated => {
-                unknown_outcome(py, operation)
-            }
-            e => error(py, e),
-        })?;
+        let committed = result.map_err(|e| operation_error(py, e, operation))?;
         committed
             .texts
             .into_iter()
@@ -111,7 +114,7 @@ impl ApplicationVault {
                 .forget(&codes, operation)
         })
         .map(|inner| Head { inner })
-        .map_err(|e| error(py, e))
+        .map_err(|e| operation_error(py, e, operation))
     }
     fn restore(&self, py: Python<'_>, text: &Bound<'_, PyAny>) -> PyResult<String> {
         let text = Zeroizing::new(transport::text(py, text)?);
