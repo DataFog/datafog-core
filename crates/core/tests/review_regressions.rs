@@ -186,6 +186,41 @@ fn unseparated_phone_is_found_after_a_number_and_comma() {
 }
 
 #[test]
+fn phone_at_a_line_end_is_not_joined_with_the_next_line() {
+    for (text, phones) in [
+        (
+            "id,phone\n1,+44 20 7946 0958\n2,+44 20 7946 0958\n",
+            vec!["+44 20 7946 0958", "+44 20 7946 0958"],
+        ),
+        (
+            "5,+49 30 901820\n6,+49 30 901821\n",
+            vec!["+49 30 901820", "+49 30 901821"],
+        ),
+        ("+49 30 901820\n42 Main St", vec!["+49 30 901820"]),
+        ("+91 98765 43210\n1,x", vec!["+91 98765 43210"]),
+        ("+49 30 901820\r\n42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\r42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{c}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{b}42 units", vec!["+49 30 901820"]),
+        ("+49 30 901820\u{2028}42 units", vec!["+49 30 901820"]),
+        ("row 1\n202-555-0143", vec!["202-555-0143"]),
+        ("é +1\r(202) 555-0143", vec!["(202) 555-0143"]),
+    ] {
+        assert_eq!(values(text, "PHONE"), phones, "{text}");
+    }
+    for text in [
+        "202-555\n0143",
+        "(202)\n555-0143",
+        "202 555\r0143",
+        "+1 202\n555",
+        "202\u{c}555\u{c}0143",
+        "+49 30\u{2029}901",
+    ] {
+        assert!(values(text, "PHONE").is_empty(), "{text}");
+    }
+}
+
+#[test]
 fn scanner_overlap_redaction_preserves_all_coverage() {
     let config =
         parse_scan_and_transform_config(&json!({"transform":{"default":{"strategy":"redact"}}}))

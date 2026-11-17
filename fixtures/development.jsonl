@@ -113,4 +113,7 @@
 {"id":"review-decimal-tails","text":"pi 3,1415926536; ratio 0.2025550143; 12,5 kg; total 1.234,56; build 7.202.555.0143","entities":[],"category":"review_regression"}
 {"id":"review-phone-csv-bare-digits","text":"id,age,phone\n1,34,2025550143\n2,41,6465550199\n","entities":[{"label":"PHONE","text":"2025550143","start":18,"end":28},{"label":"PHONE","text":"6465550199","start":34,"end":44}],"category":"review_regression"}
 {"id":"review-phone-bare-digit-list","text":"phones: 2025550143,12025550144","entities":[{"label":"PHONE","text":"2025550143","start":8,"end":18},{"label":"PHONE","text":"12025550144","start":19,"end":30}],"category":"review_regression"}
+{"id":"review-phone-plus-last-column-lf","text":"id,phone\n1,+44 20 7946 0958\n2,+44 20 7946 0958\n","entities":[{"label":"PHONE","text":"+44 20 7946 0958","start":11,"end":27},{"label":"PHONE","text":"+44 20 7946 0958","start":30,"end":46}],"category":"review_regression"}
+{"id":"review-phone-line-end-before-digit-line","text":"Call +49 30 901820\n42 seats left; desk 1\n202-555-0143","entities":[{"label":"PHONE","text":"+49 30 901820","start":5,"end":18},{"label":"PHONE","text":"202-555-0143","start":41,"end":53}],"category":"review_regression"}
+{"id":"review-phone-not-joined-across-lines","text":"202-555\n0143 then (202)\n555-0143 then +1 202\n555 then 202 555\r0143","entities":[],"category":"review_regression"}
 {"id":"review-float-csv-after-number","text":"7,306.2723362\n20,+86.528387\n3,1415926536;12,5 kg","entities":[],"category":"review_regression"}

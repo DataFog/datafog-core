@@ -3384,13 +3384,42 @@ fn follows_nanp_rule(national_number: &[u8]) -> bool {
     is_valid_area_start(national_number[0]) && is_valid_exchange_start(national_number[3])
 }
 
+fn is_line_break(character: char) -> bool {
+    matches!(
+        character,
+        '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+    )
+}
+
+/// `PHONE_RE` accepts any whitespace between digits, so a number at the end of
+/// a line would otherwise absorb digits that start the next line. Each line is
+/// matched on its own: no finding contains a line break, and the number on
+/// either side of the break is still reported.
 fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
-    for matched in PHONE_RE.find_iter(text) {
-        if !has_phone_boundaries(text, matched.start(), matched.end()) {
+    let mut line_start = 0;
+    for (line_end, line_break) in text
+        .char_indices()
+        .filter(|(_, character)| is_line_break(*character))
+        .chain(std::iter::once((text.len(), '\n')))
+    {
+        detect_phone_in_line(text, line_start, line_end, candidates);
+        line_start = line_end + line_break.len_utf8();
+    }
+}
+
+fn detect_phone_in_line(
+    text: &str,
+    line_start: usize,
+    line_end: usize,
+    candidates: &mut Vec<Candidate>,
+) {
+    for matched in PHONE_RE.find_iter(&text[line_start..line_end]) {
+        let (start, end) = (line_start + matched.start(), line_start + matched.end());
+        if !has_phone_boundaries(text, start, end) {
             continue;
         }
 
-        let before = &text[..matched.start()];
+        let before = &text[..start];
         let context = before
             .chars()
             .rev()
@@ -3400,8 +3429,7 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
             .rev()
             .collect::<String>()
             .to_ascii_lowercase();
-        if continues_number(text.as_bytes(), matched.start(), matched.end())
-            || matched.as_str().contains(['\r', '\n'])
+        if continues_number(text.as_bytes(), start, end)
             || ["steuer-id", "steuerid", "tax-id", "imei"]
                 .iter()
                 .any(|label| {
@@ -3416,8 +3444,8 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
 
         candidates.push(Candidate {
             label: Label::Phone,
-            start_byte: matched.start(),
-            end_byte: matched.end(),
+            start_byte: start,
+            end_byte: end,
         });
     }
 }
