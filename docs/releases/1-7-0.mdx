@@ -1,0 +1,71 @@
+---
+title: "1.7.0 (prepared)"
+description: "Prepared EMAIL boundary fix and Intel macOS retirement; publication is on hold."
+---
+
+**Status: prepared and unpublished. Publication is on hold pending explicit
+release authorization.** The commands below target the future 1.7.0 packages;
+they are not registry installation instructions for an available release.
+No release date has been assigned.
+
+The latest published release is [Core 1.6.0](https://github.com/DataFog/datafog-core/releases/tag/v1.6.0).
+It contains the [EMAIL boundary regression tracked in #266](https://github.com/DataFog/datafog-core/issues/266).
+The prepared 1.7.0 source includes its fix.
+
+## Changes from 1.6.0
+
+- Recover EMAIL findings after surrounding source dots and field delimiters,
+  including `carol@example.com.|alice@example.com` and `said "ok".alice@example.com`.
+  Text-mode refinement precedes malformed-local validation; raw ENV/SQL
+  validation, mailbox punctuation and original-source offsets are preserved.
+  Leading or doubled dots within the mailbox local part remain invalid.
+- Retire Intel macOS qualification and prebuilt SDK publication. Python omits
+  its Intel macOS wheel; Node omits `@datafog/node-darwin-x64`. Existing 1.6.0
+  Intel archives remain available. Intel source builds are outside maintained CI.
+  Dropping a platform is a minor release under the [versioning policy](https://github.com/DataFog/datafog-core/blob/main/VERSIONING.md).
+- Correct the documented Linux glibc requirement for the native Python companion:
+  the qualified 1.6.0 `datafog-fogvault` wheel requires glibc 2.38, while base
+  `datafog-core` GNU wheels use a glibc 2.28 baseline. Check the final 1.7.0
+  candidate wheel tags before publication.
+
+Workspace contract 1, marker syntax and existing snapshot formats are unchanged
+from 1.6.0. Application vaults, literal denylists and Python mapping retirement
+were introduced in [1.6.0](/releases/1-6-0).
+
+## Prepared coordinated package set
+
+All 15 Core-owned distributions are prepared at **1.7.0**:
+
+| Registry | Packages | Planned archives |
+| --- | --- | --- |
+| crates.io | `datafog-core`, `datafog-fogvault-migration`, `datafog-fogvault-native` | 3 crates |
+| PyPI | `datafog-core` | 9 wheels plus source distribution |
+| PyPI | `datafog-fogvault` | 3 native wheels |
+| npm | `@datafog/node`, four native platform packages, `@datafog/wasm`, `@datafog/core-fogvault-browser`, `@datafog/core-fogvault-legacy-browser`, `@datafog/core-sqlite-browser`, `@datafog/core-fogvault-node` | 10 tarballs |
+
+The planned set has **26 archives**. Base Node targets macOS ARM64, Linux
+x64/ARM64 GNU and Windows x64. Base Python targets Linux x64/ARM64 GNU and
+musl, Linux s390x/ppc64le, macOS ARM64 and Windows x64/ARM64. The optional native
+Node/Python companions retain macOS ARM64, Linux x64 GNU and Windows x64.
+Independent FogVault engine packages remain 0.1.0. The `datafog` Python
+application, MCP and browser extension keep their own release tracks.
+
+After publication, the prepared installation commands will be:
+
+```sh
+python -m pip install datafog-core==1.7.0 datafog-fogvault==1.7.0
+npm install --save-exact @datafog/node@1.7.0 @datafog/wasm@1.7.0
+cargo add datafog-core@=1.7.0
+```
+
+## Qualification still required
+
+The final versioned main commit must pass ordinary CI, the exact-commit
+Core/FogVault gate's 19 required scopes, and all 12 required native model checks
+(three backends on Linux x64/ARM64, macOS ARM64 and Windows x64). Preparing this
+page or updating versions does not establish that evidence.
+
+Publication remains on hold. Do not create runtime publication tags, run actual
+publish workflows or create the consolidated GitHub release before authorization
+and final candidate qualification. Verify the complete public archive set
+against retained publication inputs before announcing a coordinated release.

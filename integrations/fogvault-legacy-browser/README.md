@@ -1,12 +1,16 @@
 # Import supported Core reference backups
 
-This optional `1.6.0` package reads only the non-shipping Core
+**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
+install commands below are for use after publication. Test this checkout locally
+while preparing the release.
+
+This optional `1.7.0` package reads only the non-shipping Core
 workspace example's `datafog-workspace-backup` envelope versions 1 and 2. It
 **does not establish compatibility with an unidentified shipping extension**.
 Backup envelope versions are separate from the Core snapshot decoder versions.
 
 ```sh
-npm install --save-exact @datafog/core-fogvault-legacy-browser@1.6.0
+npm install --save-exact @datafog/core-fogvault-legacy-browser@1.7.0
 ```
 
 `LegacyBackupImport.open` authenticates the complete canonical archive, decrypts

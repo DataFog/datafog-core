@@ -6,6 +6,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare coordinated Core SDK and companion packages at 1.7.0, including the
+  EMAIL boundary fix and Intel macOS retirement. Publication remains on hold;
+  1.6.0 is the latest published release.
+
 ### Fixed
 
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0

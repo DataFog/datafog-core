@@ -1,11 +1,15 @@
 # Core bundle recovery staging
 
-This optional version `1.6.0`, Rust 1.88 crate validates an **already authenticated
+**Prepared release:** 1.7.0 is not published. Publication is on hold; version-pinned
+install commands below are for use after publication. Test this checkout locally
+while preparing the release.
+
+This optional version `1.7.0`, Rust 1.88 crate validates an **already authenticated
 and decrypted** Core bundle and prepares its existing Core recovery operation.
 It does not decrypt legacy backups or publish records into FogVault.
 
 ```sh
-cargo add datafog-fogvault-migration@=1.6.0
+cargo add datafog-fogvault-migration@=1.7.0
 ```
 
 ```rust
