@@ -12,17 +12,31 @@ Earlier release notes are in [docs/releases](docs/releases/).
   including the four reported adjacent/prose cases missed in 1.5.0 and published
   1.6.0. Refine text values while retaining ENV/SQL mailbox punctuation and
   original-source offsets.
-- Report an EMAIL that directly follows one or more dots from its first
-  local-part character in text, ENV and SQL formats instead of dropping it,
-  restoring 1.4.0 coverage: `see [1].alice@example.com`, `me...alice@example.com` and
-  `KEY=".alice@example.com"` find `alice@example.com`, and `bob..x@example.com`
-  finds `x@example.com`. This replaces the 1.5.0 malformed-local rejection;
-  label, quote, field-delimiter and markup trimming are unchanged.
-- Report a PHONE directly after `<digit>,` or `<digit>.` when the number has
-  structure of its own (`+`, parentheses, or separators other than the preceding
-  one), so CSV rows such as `2,+1-202-555-0143` and `row 2,202-555-0143,ok` are
-  found again. Unseparated digit runs (`3.14159265358`, `0,2025550143`) and
-  dotted runs continuing a dotted number (`7.202.555.0143`) remain excluded.
+- Report an EMAIL that directly follows one or more dots instead of dropping
+  it, in text, ENV and SQL formats, restoring 1.4.0 coverage:
+  `see [1].alice@example.com`, `me...alice@example.com` and
+  `KEY=".alice@example.com"` find `alice@example.com`. This replaces the 1.5.0
+  malformed-local rejection: `bob..x@example.com` is reported from `x`
+  (`x@example.com`), and the text before the dots is not covered by the span.
+  Label, quote, field-delimiter and markup trimming are unchanged.
+- Report a PHONE directly after `<digit>,` whenever it passes phone validation,
+  as in 1.4.0, so CSV rows with a numeric column are found again:
+  `2,+1-202-555-0143`, `row 2,202-555-0143,ok`, `1,34,2025550143` and every
+  number in `2025550143,2025550144`. Accepted false positives: a decimal-comma
+  value with exactly ten fractional digits that pass validation
+  (`2,7182818285`), or eleven starting with 1, and a ten-digit integer after
+  another numeric column. A single-dot decimal after a numeric column
+  (`6,306.2723362`, `20,+86.528387`) is not a phone.
+- Report a PHONE directly after `<digit>.` when it has `+`, parentheses or a
+  separator other than a dot (`3.202-555-0143`). Unseparated and dotted runs
+  after `<digit>.` stay rejected (`3.14159265358`, `7.202.555.0143`), including
+  dotted phones such as `2.202.555.0143`, which 1.4.0 reported.
+- Report a PHONE at the end of a line when the next line starts with a digit,
+  and one that follows a line ending in `1`: every row of
+  `1,+44 20 7946 0958\n2,+44 20 7946 0958` is found, where 1.5.0 and 1.6.0
+  dropped the first. PHONE matching is per line, so no PHONE span contains a
+  line break (LF, CR, VT, FF or a Unicode line separator) and digit groups
+  split across lines are not joined.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
