@@ -331,6 +331,12 @@ fn sync_ancestor_chain(path: &Path) -> Result<()> {
 struct Lock {
     _file: File,
 }
+fn lock_contended(error: &std::io::Error) -> bool {
+    // Windows ERROR_LOCK_VIOLATION is not ErrorKind::WouldBlock. Use the
+    // lock backend's platform code rather than treating contention as I/O loss.
+    error.kind() == std::io::ErrorKind::WouldBlock
+        || error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
+}
 fn acquire(directory: &Path) -> Result<Lock> {
     reject_links(directory)?;
     check_private(directory)?;
@@ -355,7 +361,7 @@ fn acquire(directory: &Path) -> Result<Lock> {
     loop {
         match file.try_lock_exclusive() {
             Ok(()) => return Ok(Lock { _file: file }),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(e) if lock_contended(&e) => {
                 if start.elapsed() >= LOCK_TIMEOUT {
                     return Err(Error::LockTimeout);
                 }

@@ -81,16 +81,30 @@ w.close()
                     text=True, bufsize=1) for i in range(4)]
         committed = queue.Queue()
         def collect(index, child):
-            for line in child.stdout:
-                committed.put((index, json.loads(line)))
+            try:
+                for line in child.stdout:
+                    committed.put((index, json.loads(line), None))
+            finally:
+                code = child.wait()
+                committed.put((index, None, (code, child.stderr.read())))
         threads = [threading.Thread(target=collect, args=(i, child), daemon=True)
                    for i, child in enumerate(children)]
         for thread in threads:
             thread.start()
         own_commits = 0
         try:
-            for received in range(48):
-                index, (marker, value) = committed.get(timeout=45)
+            received, finished = 0, set()
+            counts = [0] * len(children)
+            while len(finished) < len(children):
+                index, payload, exited = committed.get(timeout=45)
+                if exited is not None:
+                    code, errors = exited
+                    self.assertEqual(code, 0, errors)
+                    self.assertEqual(counts[index], 12, "writer stopped before all committed markers")
+                    finished.add(index)
+                    continue
+                marker, value = payload
+                counts[index] += 1
                 # Writer remains alive waiting for this acknowledgment while
                 # this long-lived reader refreshes, restores and writes itself.
                 self.assertIsNone(children[index].poll())
@@ -102,9 +116,10 @@ w.close()
                     own_commits += 1
                 children[index].stdin.write("continue\n")
                 children[index].stdin.flush()
+                received += 1
+            self.assertEqual(received, 48)
             for child in children:
                 child.stdin.close()
-                self.assertEqual(child.wait(timeout=45), 0, child.stderr.read())
             self.assertEqual(reader.head().revision, 48 + own_commits)
             self.assertEqual(len(reader.operations()), 49 + own_commits)
         finally:
@@ -112,11 +127,12 @@ w.close()
                 if child.poll() is None:
                     child.kill()
                 child.wait()
+            for thread in threads:
+                thread.join(timeout=5)
+            for child in children:
                 for stream in (child.stdin, child.stdout, child.stderr):
                     if stream and not stream.closed:
                         stream.close()
-            for thread in threads:
-                thread.join(timeout=5)
 
     def test_application_forget_revokes_after_restart(self):
         owner = self.open(allow_file_key=True)

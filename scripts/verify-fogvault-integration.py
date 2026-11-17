@@ -72,6 +72,7 @@ RUST_CASES = {
         "unavailable_default_provider_never_silently_downgrades",
         "backend_cas_rejects_wrong_head_and_wrong_encrypted_generation",
         "real_process_crashes_leave_old_or_complete_new_snapshot_and_release_lock",
+        "contended_os_lock_reaches_timeout_then_succeeds_after_release",
     },
 }
 if os.name != "nt":

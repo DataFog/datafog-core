@@ -390,6 +390,31 @@ fn backend_cas_rejects_wrong_head_and_wrong_encrypted_generation() {
 }
 
 #[test]
+fn contended_os_lock_reaches_timeout_then_succeeds_after_release() {
+    use std::sync::mpsc;
+    let temp = root();
+    let path = canonical(&temp);
+    let _owner = ApplicationVault::open(options(&path)).unwrap();
+    let held = acquire(&path).unwrap();
+    let (result_tx, result_rx) = mpsc::channel();
+    let waiter_path = path.clone();
+    let started = Instant::now();
+    let thread = std::thread::spawn(move || {
+        result_tx.send(acquire(&waiter_path).map(drop)).unwrap();
+    });
+    // Keep the actual OS lock held throughout the complete bounded wait; no
+    // scheduler-dependent release timing can turn an unrecognized error green.
+    let result = result_rx
+        .recv_timeout(LOCK_TIMEOUT + Duration::from_secs(5))
+        .unwrap();
+    assert!(matches!(result, Err(Error::LockTimeout)));
+    assert!(started.elapsed() >= LOCK_TIMEOUT);
+    thread.join().unwrap();
+    drop(held);
+    acquire(&path).unwrap();
+}
+
+#[test]
 fn crashed_transaction_child() {
     let Some(path) = std::env::var_os("DATAFOG_APPLICATION_TEST_CHILD") else {
         return;
