@@ -124,22 +124,65 @@ fn structured_phone_is_found_after_a_number_and_separator() {
     ] {
         assert_eq!(values(text, "PHONE"), [phone], "{text}");
     }
-    // An unseparated digit run after a decimal separator, or a dotted run that
-    // continues a dotted number, is still the tail of that number.
+    // After `<digit>.` an unseparated or dotted run is still the tail of that
+    // number; after `<digit>,` phone validation decides.
     for text in [
         "3,14159",
         "1,202",
         "12,5 kg",
         "1.234,56",
-        "3,14159265358",
+        "3,1415926536",
         "3.14159265358",
-        "0,2025550143",
         "0.2025550143",
+        "v2.202.555.0143",
+        "2.202.555.0143",
         "7.202.555.0143",
         "10.20.202.555.0143",
     ] {
         assert!(values(text, "PHONE").is_empty(), "{text}");
     }
+}
+
+#[test]
+fn unseparated_phone_is_found_after_a_number_and_comma() {
+    for (text, phones) in [
+        (
+            "2025550143,2025550144,2025550145",
+            vec!["2025550143", "2025550144", "2025550145"],
+        ),
+        (
+            "phones: 2025550143,12025550144",
+            vec!["2025550143", "12025550144"],
+        ),
+        (
+            "id,age,phone\n1,34,2025550143\n2,41,6465550199\n",
+            vec!["2025550143", "6465550199"],
+        ),
+        ("94105,2025550143", vec!["2025550143"]),
+        ("2024-01-02,2025550143", vec!["2025550143"]),
+        ("1,2025550143,1", vec!["2025550143"]),
+        ("2,2025550143", vec!["2025550143"]),
+        ("row 2,12025550143", vec!["12025550143"]),
+        ("818,+65585080", vec!["+65585080"]),
+        // Accepted cost: ten fractional digits that pass phone validation.
+        ("2,7182818285", vec!["7182818285"]),
+    ] {
+        assert_eq!(values(text, "PHONE"), phones, "{text}");
+    }
+    // A single-dot decimal after a numeric column is a number, not a phone.
+    for text in [
+        "249.2754083,142.7399518,730.9506397",
+        "6,306.2723362",
+        "20,+86.528387",
+        "2,1.2025550143",
+    ] {
+        let phones = values(text, "PHONE");
+        assert!(
+            phones.iter().all(|phone| text.starts_with(phone.as_str())),
+            "{text}: {phones:?}"
+        );
+    }
+    assert!(values("6,306.2723362", "PHONE").is_empty());
 }
 
 #[test]

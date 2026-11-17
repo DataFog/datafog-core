@@ -3763,17 +3763,27 @@ fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
 }
 
-/// Whether a phone-shaped run directly after `<digit>.` or `<digit>,` is the
-/// tail of that number: an unseparated digit run (`3.14159265358`,
-/// `0,2025550143`) or dotted groups continuing a dotted number
-/// (`7.202.555.0143`). A run with phone structure of its own (`+`,
-/// parentheses, or separators other than the preceding one) is a separate
-/// value, as in the CSV row `2,202-555-0143`.
+/// Whether a phone-shaped run directly after `<digit>.` or `<digit>,` is part
+/// of a number rather than a phone. After a dot, an unseparated or dotted run
+/// continues that number (`3.14159265358`, `7.202.555.0143`). After a comma
+/// the run is a separate field, as in the CSV row `2,2025550143`, so only a
+/// single-dot decimal (`6,306.2723362`, `20,+86.528387`) is a number and phone
+/// validation decides the rest.
 fn continues_number(bytes: &[u8], start: usize, end: usize) -> bool {
-    follows_decimal_separator(bytes, start)
-        && bytes[start..end]
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || *byte == bytes[start - 1])
+    if !follows_decimal_separator(bytes, start) {
+        return false;
+    }
+    let candidate = &bytes[start..end];
+    let unsigned = candidate.strip_prefix(b"+").unwrap_or(candidate);
+    let dots = unsigned.iter().filter(|byte| **byte == b'.').count();
+    let is_dotted_number = unsigned
+        .iter()
+        .all(|byte| byte.is_ascii_digit() || *byte == b'.');
+    if bytes[start - 1] == b'.' {
+        candidate == unsigned && is_dotted_number
+    } else {
+        is_dotted_number && dots == 1
+    }
 }
 
 /// The end of a card that spans the whole separated digit run at `start`.
