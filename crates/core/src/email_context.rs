@@ -1,13 +1,9 @@
 //! Delimit original source slices before applying the shared email matcher.
-use crate::{Candidate, ScanFormat, detect_email};
+use crate::{Candidate, ScanFormat, detect_email, detect_email_with_context};
 
 pub(super) fn detect(text: &str, format: ScanFormat, candidates: &mut Vec<Candidate>) {
     match format {
-        ScanFormat::Text => {
-            let first = candidates.len();
-            detect_email(text, candidates);
-            refine_text_candidates(text, candidates, first);
-        }
+        ScanFormat::Text => detect_email_with_context(text, candidates, true),
         ScanFormat::Env => detect_env(text, candidates),
         ScanFormat::Sql => detect_sql(text, candidates),
     }
@@ -21,31 +17,21 @@ pub(super) fn detect(text: &str, format: ScanFormat, candidates: &mut Vec<Candid
 /// Inner `=` stays part of the local part, matching the reviewed env
 /// fixture semantics. A quote without its closing partner is a real local-part
 /// character and is kept.
-fn refine_text_candidates(text: &str, candidates: &mut [Candidate], first: usize) {
-    for candidate in &mut candidates[first..] {
-        let mut start = candidate.start_byte;
-        let end = candidate.end_byte;
-        let bytes = text.as_bytes();
-        let Some(at) = text[start..end].find('@').map(|offset| start + offset) else {
-            continue;
-        };
-        if matches!(bytes.get(start), Some(b'\'' | b'"')) && bytes.get(end) == Some(&bytes[start]) {
-            start += 1;
-        }
-        // Field delimiters and markup are syntax rather than mailbox identity.
-        if let Some(delimiter) = text[start..at].rfind(['&', '?', ';', '|']) {
-            start += delimiter + 1;
-        }
-        while start < at && matches!(bytes[start], b'*' | b'{' | b'/' | b'|') {
-            start += 1;
-        }
-        if let Some(value_start) = label_value_start(text, start, at) {
-            start = value_start;
-        }
-        if start != candidate.start_byte {
-            candidate.start_byte = start;
-        }
+pub(super) fn text_candidate_start(text: &str, mut start: usize, end: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let at = text[start..end].find('@').map(|offset| start + offset)?;
+    if matches!(bytes.get(start), Some(b'\'' | b'"')) && bytes.get(end) == Some(&bytes[start]) {
+        start += 1;
     }
+    // Field delimiters and markup are syntax rather than mailbox identity.
+    if let Some(delimiter) = text[start..at].rfind(['&', '?', ';', '|']) {
+        start += delimiter + 1;
+    }
+    while start < at && matches!(bytes[start], b'*' | b'{' | b'/' | b'|') {
+        start += 1;
+    }
+    let start = label_value_start(text, start, at).unwrap_or(start);
+    (start < at && bytes[start] != b'.').then_some(start)
 }
 
 /// End of the `identifier=` prefix when the candidate's local part starts with
