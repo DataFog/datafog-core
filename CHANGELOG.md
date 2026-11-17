@@ -10,8 +10,45 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 - Restore EMAIL findings after surrounding source dots and field delimiters,
   including the four reported adjacent/prose cases missed in 1.5.0 and published
-  1.6.0. Validate refined text values while retaining raw ENV/SQL validation,
-  malformed-local rejection, mailbox punctuation and original-source offsets.
+  1.6.0. Refine text values while retaining ENV/SQL mailbox punctuation and
+  original-source offsets.
+- Report an EMAIL that directly follows one or more dots instead of dropping
+  it, in text, ENV and SQL formats, restoring 1.4.0 coverage:
+  `see [1].alice@example.com`, `me...alice@example.com` and
+  `KEY=".alice@example.com"` find `alice@example.com`. This replaces the 1.5.0
+  malformed-local rejection: `bob..x@example.com` is reported from `x`
+  (`x@example.com`), and the text before the dots is not covered by the span.
+  Label, quote, field-delimiter and markup trimming are unchanged.
+- Report a PHONE directly after `<digit>,` whenever it passes phone validation,
+  as in 1.4.0, so CSV rows with a numeric column are found again:
+  `2,+1-202-555-0143`, `row 2,202-555-0143,ok`, `1,34,2025550143`, every number
+  in `2025550143,2025550144`, and `+CC.subscriber` numbers such as
+  `7,+1.2025550143`. Accepted false positives: a decimal-comma value with
+  exactly ten fractional digits that pass validation (`2,7182818285`), or eleven
+  starting with 1; a ten-digit integer after another numeric column; and a
+  signed decimal after a numeric column (`20,+86.528387`).
+- After `<digit>,` an unsigned candidate with exactly one dot and no other
+  separator is treated as a decimal and not reported, so float columns such as
+  `6,306.2723362` stay clean. Recall cost: `2,202.5550143` and
+  `2,1.2025550143`, which 1.4.0 reported, are rejected. A candidate starting
+  with `+` is never treated this way; a `+` number followed by a fraction is
+  reported with the fraction inside the span (`2,+442079460958.5` reports
+  `+442079460958.5`). Unsigned decimals not preceded by `<digit>,`, such as
+  `249.2754083` at the start of a line, are reported as before.
+- Report a PHONE directly after `<digit>.` when it has `+`, parentheses or a
+  separator other than a dot (`3.202-555-0143`). Unseparated and dotted runs
+  after `<digit>.` stay rejected (`3.14159265358`, `7.202.555.0143`), including
+  dotted phones such as `2.202.555.0143`, which 1.4.0 reported.
+- Match PHONE on each line separately; the line breaks are LF, CR, VT, FF, NEL
+  (U+0085), U+2028 and U+2029. A number at the end of a line is reported when
+  the next line starts with a digit, as is a number on a line that follows one
+  ending in `1`: every row of `1,+44 20 7946 0958\n2,+44 20 7946 0958` is
+  found, where 1.5.0 and 1.6.0 dropped the first. No PHONE span contains a line
+  break. A `+` number wrapped across a break is reported up to the break when
+  that part has enough digits (`+44 20 7946\n0958` reports `+44 20 7946`),
+  leaving the trailing digits uncovered. Digit groups separated by VT, FF, NEL,
+  U+2028 or U+2029 are no longer joined into one number, a difference from
+  1.6.0; groups separated by LF or CR were already not joined.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
