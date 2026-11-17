@@ -26,20 +26,20 @@ datafog core is a Rust library with Python, Node.js, and browser WebAssembly bin
 
 Rule-based scanning runs locally without model weights or downloads. Optional local model sessions add datafog and GLiNER2 support in Rust, Python, and Node.js.
 
-**Published:** coordinated [Core 1.5.0](https://github.com/DataFog/datafog-core/releases/tag/v1.5.0) for Python, Rust, Node.js, WASM and the Core-owned companion packages · [Python release history](https://pypi.org/project/datafog-core/#history) · [1.5 migration guide](docs/guides/migrating-to-core-1-5.mdx) · [Earlier cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
+**Release:** coordinated [Core 1.6.0](https://github.com/DataFog/datafog-core/releases/tag/v1.6.0) for Python, Rust, Node.js, WASM and the Core-owned companion packages · [1.6 release notes](docs/releases/1-6-0.mdx) · [Python release history](https://pypi.org/project/datafog-core/#history) · [1.5 migration guide](docs/guides/migrating-to-core-1-5.mdx) · [Earlier cross-SDK 1.1.0 notes](docs/releases/1-1-0.mdx) · [Extension installation and testing](docs/releases/1-1-0-extension-testing.md).
 
 Core 1.0 freezes Workspace contract 1 across Rust, Python, Node and browser WASM, with optional native/browser [FogVault integrations](docs/integrations/fogvault.md). Snapshot v3 writes and v1/v2/v3 reads keep their existing semantics. Exact published [0.5.0-beta.3](docs/releases/0-5-0-beta-3.mdx) interchange remains tested; FogVault is independently versioned 0.1.0.
 
 ## Quickstart
 
-The coordinated Core release is 1.5.0 across PyPI, crates.io and npm. Applications should lock the exact version they have qualified. The `datafog` Python application and FogVault version independently of Core.
+The coordinated Core release is 1.6.0 across PyPI, crates.io and npm. Applications should lock the exact version they have qualified. The `datafog` Python application and FogVault version independently of Core.
 
 | SDK | Published install | Requirements |
 | --- | --- | --- |
-| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.5.0` | Python 3.10+ |
-| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.5.0` | Node.js 24+ |
-| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.5.0` | Rust 1.88+ |
-| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.5.0` | Browser with WebAssembly support |
+| [Python](https://pypi.org/project/datafog-core/) | `python -m pip install datafog-core==1.6.0` | Python 3.10+ |
+| [Node.js](https://www.npmjs.com/package/@datafog/node) | `npm install --save-exact @datafog/node@1.6.0` | Node.js 24+ |
+| [Rust](https://crates.io/crates/datafog-core) | `cargo add datafog-core@=1.6.0` | Rust 1.88+ |
+| [Browser / WASM](https://www.npmjs.com/package/@datafog/wasm) | `npm install --save-exact @datafog/wasm@1.6.0` | Browser with WebAssembly support |
 
 ### Python
 
@@ -122,7 +122,7 @@ console.log(result.text); // Email [EMAIL]
 The Python package ships CPython 3.10+ ABI3 wheels for Linux x64 and ARM64
 (`manylinux_2_28` and `musllinux_1_2`), Linux s390x and ppc64le
 (`manylinux_2_28`), macOS Intel 10.12+ and Apple Silicon 11+, and Windows
-x64/ARM64. The Node.js 1.5.0 package ships Linux x64/ARM64 GNU, macOS Intel/Apple
+x64/ARM64. The Node.js 1.6.0 package ships Linux x64/ARM64 GNU, macOS Intel/Apple
 Silicon, and Windows x64 binaries.
 
 PyPy, free-threaded CPython, older glibc/musl and other architectures fall back
@@ -195,7 +195,7 @@ vault core through the registered native adapter.
 Install the browser integration:
 
 ```bash
-npm install --save-exact @datafog/wasm@1.5.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.5.0
+npm install --save-exact @datafog/wasm@1.6.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.6.0
 ```
 
 [Integration guide and supported profiles →](docs/integrations/fogvault.md)
@@ -210,15 +210,15 @@ Core 1.0 includes optional local sessions for the datafog PII model and GLiNER2 
 Install the published SDK version for your registry:
 
 ```bash
-python -m pip install 'datafog-core==1.5.0'
-npm install --save-exact @datafog/node@1.5.0
-cargo add datafog-core@=1.5.0 --features models
+python -m pip install 'datafog-core==1.6.0'
+npm install --save-exact @datafog/node@1.6.0
+cargo add datafog-core@=1.6.0 --features models
 ```
 
 For GLiNER2, install its optional dependencies in the Python environment used by the runner:
 
 ```bash
-python -m pip install 'datafog-core[gliner2]==1.5.0'
+python -m pip install 'datafog-core[gliner2]==1.6.0'
 ```
 
 ### Embedded name and address detection
