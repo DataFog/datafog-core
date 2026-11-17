@@ -44,6 +44,12 @@ persistence is not machine-reboot or new-login persistence. Sid explicitly
 deferred those checks until dedicated restartable hosts are available; they must
 not be inferred from a credential persistence flag or service restart.
 
+The real-provider probe is a Rust executable using the shared public
+`ApplicationVault` implementation. Installed Python binding contracts are tested
+separately. A deployed host's executable identity, code signature, logon session
+and Keychain access policy require host-specific validation; same-binary child
+processes do not qualify every consuming application or an executable upgrade.
+
 Locked-store outcomes depend on OS session and prompt policy. Linux's upstream
 provider can request an interactive unlock and wait for a prompt. A hard timeout
 is a failed required probe, not a controlled application error. A prompt dismissed

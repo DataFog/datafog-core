@@ -1,8 +1,9 @@
 """Build and qualify the real native credential provider; never publish packages.
 
 Linux creates its own D-Bus session and GNOME keyring. macOS and Windows use
-unique probe-owned accounts in their actual user credential stores. No global
-keychain defaults, passwords, service policies or existing credentials change.
+unique probe-owned accounts in their actual user credential stores. Desktop
+settings and unrelated credentials remain unchanged. Disposable hosted macOS
+fixtures temporarily select an owned keychain and restore the runner's settings.
 """
 import argparse
 from datetime import datetime, timezone
@@ -172,6 +173,40 @@ def bus(runner, phase, method, *arguments):
     ], timeout=15)
 
 
+def wait_for_owned_linux_service(runner, phase, control):
+    # --daemonize returns before GNOME registers org.freedesktop.secrets.
+    # Wait for actual bus ownership, then validate the exact private daemon.
+    command = ["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path",
+               "/org/freedesktop/DBus", "--method", "org.freedesktop.DBus.GetConnectionUnixProcessID",
+               "org.freedesktop.secrets"]
+    step = {"id": phase + "-owner", "command": command, "status": "FAIL", "attempts": 0}
+    runner.steps.append(step)
+    started = time.monotonic()
+    deadline = started + 15
+    try:
+        while time.monotonic() < deadline:
+            step["attempts"] += 1
+            response = subprocess.run(command, capture_output=True, env=runner.environment, timeout=3)
+            if response.returncode == 0:
+                match = re.fullmatch(rb"\(uint32 (\d+),\)\s*", response.stdout)
+                if not match:
+                    raise QualificationError("isolated_service_pid_unverified")
+                pid = int(match.group(1))
+                process = Path("/proc", str(pid))
+                executable = process.joinpath("cmdline").read_bytes()
+                if (process.stat().st_uid != os.getuid() or str(control).encode() not in executable
+                        or b"gnome-keyring-daemon" not in executable):
+                    raise QualificationError("isolated_service_identity_unverified")
+                step.update(status="PASS", pid=pid)
+                return pid
+            time.sleep(0.05)
+        raise QualificationError("isolated_secret_service_startup_timeout")
+    except (OSError, subprocess.TimeoutExpired):
+        raise QualificationError("isolated_secret_service_readiness_failed") from None
+    finally:
+        step["duration_ms"] = (time.monotonic() - started) * 1000
+
+
 def stop_owned_linux_daemon(manifest):
     """Terminate only the daemon whose private control path we recorded."""
     if not manifest.exists():
@@ -206,6 +241,11 @@ def stop_owned_linux_daemon(manifest):
             if control.encode() not in command or b"gnome-keyring-daemon" not in command:
                 raise QualificationError("isolated_daemon_identity_changed")
             os.kill(pid, signal.SIGKILL)
+            deadline = time.monotonic() + 5
+            while not exited() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if not exited():
+                raise QualificationError("isolated_daemon_did_not_exit")
     value["terminated"] = True
     write_json(manifest, value)
 
@@ -215,6 +255,8 @@ def linux_session(binary, directory):
     # locations belong to this process's private temporary tree.
     runner = Runner(binary, directory)
     failure = None
+    daemon_generations = []
+    service_restarted = False
     daemon_manifest = directory / "isolated-daemon.json"
     with tempfile.TemporaryDirectory(prefix="datafog-real-secret-service-") as temporary:
         private = Path(temporary)
@@ -230,18 +272,15 @@ def linux_session(binary, directory):
         daemon_command = ["gnome-keyring-daemon", "--daemonize", "--unlock", "--components=secrets",
                           "--control-directory", runner.environment["GNOME_KEYRING_CONTROL"]]
         fixture = private / "vault"
-        try:
-            runner.command("start-isolated-secret-service", daemon_command, input_bytes=password, timeout=30)
-            owner = runner.command("isolated-service-owner", [
-                "gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path",
-                "/org/freedesktop/DBus", "--method", "org.freedesktop.DBus.GetConnectionUnixProcessID",
-                "org.freedesktop.secrets",
-            ], timeout=15)
-            match = re.fullmatch(r"\(uint32 (\d+),\)", owner)
-            if not match:
-                raise QualificationError("isolated_service_pid_unverified")
+        def start_owned_daemon(phase):
+            runner.command(phase, daemon_command, input_bytes=password, timeout=30)
+            pid = wait_for_owned_linux_service(runner, phase, private / "control")
             write_json(daemon_manifest, {"schema": "datafog-isolated-secret-service-daemon/v1",
-                       "pid": int(match.group(1)), "control_directory": str(private / "control"), "terminated": False})
+                       "pid": pid, "control_directory": str(private / "control"), "terminated": False})
+            daemon_generations.append(pid)
+            return pid
+        try:
+            original_pid = start_owned_daemon("start-isolated-secret-service")
             runner.probe("default-provider")
             runner.probe("prepare-locked-store", "prepare", fixture)
             alias = bus(runner, "read-test-collection", "org.freedesktop.Secret.Service.ReadAlias", "default")
@@ -262,8 +301,21 @@ def linux_session(binary, directory):
             unavailable = dict(runner.environment, DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(private / "absent-bus"))
             runner.probe("unavailable-session-bus-fails-closed", "expect-unavailable", fixture, unavailable)
             runner.probe("restored-session-bus-restores", "verify", fixture)
+            stopped = {"id": "stop-owned-secret-service-for-restart", "pid": original_pid, "status": "FAIL"}
+            runner.steps.append(stopped)
+            stop_owned_linux_daemon(daemon_manifest)
+            if json.loads(daemon_manifest.read_text()).get("terminated") is not True:
+                raise QualificationError("isolated_service_stop_unconfirmed")
+            stopped["status"] = "PASS"
+            restarted_pid = start_owned_daemon("restart-owned-secret-service")
+            if restarted_pid == original_pid:
+                raise QualificationError("isolated_service_did_not_restart")
+            runner.probe("restarted-secret-service-restores", "verify", fixture)
+            service_restarted = True
         except QualificationError as error:
             failure = str(error)
+        except (OSError, ValueError):
+            failure = "isolated_service_lifecycle_failed"
         finally:
             try:
                 # Unlock only this isolated daemon so exact owned entries can be
@@ -280,6 +332,7 @@ def linux_session(binary, directory):
               "isolation": "fresh-dbus-session-and-private-xdg", "physical_reboot_tested": False,
               "locked_collection_tested": any(s["id"] == "locked-store-fails-closed" and s["status"] == "PASS" for s in runner.steps),
               "unavailable_bus_tested": any(s["id"] == "unavailable-session-bus-fails-closed" and s["status"] == "PASS" for s in runner.steps),
+              "secret_service_restart_tested": service_restarted, "daemon_generations": daemon_generations,
               "error": failure, "steps": runner.steps}
     write_json(directory / "linux-session.json", report)
     return not failure
@@ -375,10 +428,17 @@ def main():
     failure = None
     tools = {}
     try:
-        tools["rustc"] = runner.command("rust-version", ["rustc", "+1.94.1", "--version"])
+        tools["rustc"] = runner.command("rust-version", ["rustc", "+1.94.1", "--version", "--verbose"])
         tools["cargo"] = runner.command("cargo-version", ["cargo", "+1.94.1", "--version"])
+        hosts = re.findall(r"^host: ([A-Za-z0-9_.-]+)$", tools["rustc"], re.M)
+        if len(hosts) != 1:
+            raise QualificationError("native_rust_host_unverified")
+        tools["native_target"] = hosts[0]
+        binary = target / hosts[0] / "release" / "examples" / binary.name
+        runner.binary = binary
         runner.command("build-fresh-probe", ["cargo", "+1.94.1", "build", "--release", "--locked", "--manifest-path",
-                       "integrations/fogvault-native/Cargo.toml", "--example", "credential-qualification"], timeout=1800, log=True)
+                       "integrations/fogvault-native/Cargo.toml", "--target", hosts[0],
+                       "--example", "credential-qualification"], timeout=1800, log=True)
         binary_hash = digest(binary)
         if platform.system() == "Linux":
             try:
@@ -387,7 +447,8 @@ def main():
             finally:
                 stop_owned_linux_daemon(output.parent / "isolated-daemon.json")
             session = json.loads((output.parent / "linux-session.json").read_text())
-            if session["status"] != "PASS" or not session["locked_collection_tested"] or not session["unavailable_bus_tested"]:
+            if (session["status"] != "PASS" or not session["locked_collection_tested"]
+                    or not session["unavailable_bus_tested"] or session.get("secret_service_restart_tested") is not True):
                 raise QualificationError("incomplete_linux_provider_proof")
         elif arguments.disposable_macos_keychain:
             disposable_macos_keychain(runner)
