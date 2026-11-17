@@ -257,6 +257,7 @@ def linux_session(binary, directory):
     failure = None
     daemon_generations = []
     service_restarted = False
+    cleanup_needs_recovery = False
     daemon_manifest = directory / "isolated-daemon.json"
     with tempfile.TemporaryDirectory(prefix="datafog-real-secret-service-") as temporary:
         private = Path(temporary)
@@ -279,28 +280,32 @@ def linux_session(binary, directory):
                        "pid": pid, "control_directory": str(private / "control"), "terminated": False})
             daemon_generations.append(pid)
             return pid
+        def default_collection(phase):
+            alias = bus(runner, phase, "org.freedesktop.Secret.Service.ReadAlias", "default")
+            match = re.fullmatch(r"\(objectpath '(/org/freedesktop/secrets/collection/[A-Za-z0-9_]+)',\)", alias)
+            if not match:
+                raise QualificationError("default_test_collection_missing")
+            return match.group(1)
+        def assert_collection_state(phase, collection, locked):
+            value = runner.command(phase, [
+                "gdbus", "call", "--session", "--dest", "org.freedesktop.secrets", "--object-path", collection,
+                "--method", "org.freedesktop.DBus.Properties.Get", "org.freedesktop.Secret.Collection", "Locked",
+            ], timeout=15)
+            if value != ("(<true>,)" if locked else "(<false>,)"):
+                runner.steps[-1]["status"] = "FAIL"
+                raise QualificationError("isolated_collection_state_unconfirmed")
         try:
             original_pid = start_owned_daemon("start-isolated-secret-service")
             runner.probe("default-provider")
             runner.probe("prepare-locked-store", "prepare", fixture)
-            alias = bus(runner, "read-test-collection", "org.freedesktop.Secret.Service.ReadAlias", "default")
-            match = re.fullmatch(r"\(objectpath '(/org/freedesktop/secrets/collection/[A-Za-z0-9_]+)',\)", alias)
-            if not match:
-                raise QualificationError("default_test_collection_missing")
-            collection = match.group(1)
+            collection = default_collection("read-test-collection")
+            cleanup_needs_recovery = True
             bus(runner, "lock-isolated-collection", "org.freedesktop.Secret.Service.Lock", json.dumps([collection]))
-            locked = runner.command("verify-collection-locked", [
-                "gdbus", "call", "--session", "--dest", "org.freedesktop.secrets", "--object-path", collection,
-                "--method", "org.freedesktop.DBus.Properties.Get", "org.freedesktop.Secret.Collection", "Locked",
-            ], timeout=15)
-            if locked != "(<true>,)":
-                raise QualificationError("isolated_collection_did_not_lock")
+            assert_collection_state("verify-collection-locked", collection, True)
             runner.probe("locked-store-fails-closed", "expect-unavailable", fixture)
-            runner.command("unlock-isolated-collection", daemon_command, input_bytes=password, timeout=30)
-            runner.probe("unlocked-store-restores", "verify", fixture)
-            unavailable = dict(runner.environment, DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(private / "absent-bus"))
-            runner.probe("unavailable-session-bus-fails-closed", "expect-unavailable", fixture, unavailable)
-            runner.probe("restored-session-bus-restores", "verify", fixture)
+            # --unlock starts a new GNOME daemon; it does not unlock the
+            # process already serving this bus. Recover only our owned daemon
+            # using the same encrypted keyring and its original password.
             stopped = {"id": "stop-owned-secret-service-for-restart", "pid": original_pid, "status": "FAIL"}
             runner.steps.append(stopped)
             stop_owned_linux_daemon(daemon_manifest)
@@ -310,17 +315,25 @@ def linux_session(binary, directory):
             restarted_pid = start_owned_daemon("restart-owned-secret-service")
             if restarted_pid == original_pid:
                 raise QualificationError("isolated_service_did_not_restart")
+            assert_collection_state("verify-restarted-collection-unlocked", default_collection("read-restarted-collection"), False)
+            cleanup_needs_recovery = False
             runner.probe("restarted-secret-service-restores", "verify", fixture)
             service_restarted = True
+            unavailable = dict(runner.environment, DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(private / "absent-bus"))
+            runner.probe("unavailable-session-bus-fails-closed", "expect-unavailable", fixture, unavailable)
+            runner.probe("restored-session-bus-restores", "verify", fixture)
         except QualificationError as error:
             failure = str(error)
         except (OSError, ValueError):
             failure = "isolated_service_lifecycle_failed"
         finally:
             try:
-                # Unlock only this isolated daemon so exact owned entries can be
-                # removed even after the locked-provider deadline fails.
-                runner.command("cleanup-unlock-isolated-service", daemon_command, input_bytes=password, timeout=30)
+                # A locked-provider failure can occur before normal recovery.
+                # Restart only the recorded owned daemon before exact cleanup.
+                if cleanup_needs_recovery:
+                    stop_owned_linux_daemon(daemon_manifest)
+                    start_owned_daemon("cleanup-restart-owned-secret-service")
+                    assert_collection_state("cleanup-verify-collection-unlocked", default_collection("cleanup-read-test-collection"), False)
                 runner.cleanup_journals()
             except QualificationError:
                 failure = failure or "owned_credential_cleanup_failed"
