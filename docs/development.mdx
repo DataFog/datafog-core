@@ -117,14 +117,20 @@ repository **datafog-core**, environment **npm**, and allow direct
 
 | Packages | Workflow filename |
 | --- | --- |
-| `@datafog/node`, `@datafog/node-darwin-arm64`, `@datafog/node-darwin-x64`, `@datafog/node-linux-x64-gnu`, `@datafog/node-linux-arm64-gnu`, `@datafog/node-win32-x64-msvc` | `publish-node.yml` |
+| `@datafog/node`, `@datafog/node-darwin-arm64`, `@datafog/node-linux-x64-gnu`, `@datafog/node-linux-arm64-gnu`, `@datafog/node-win32-x64-msvc` | `publish-node.yml` |
 | `@datafog/wasm` | `publish-wasm.yml` |
 
 The publish jobs request GitHub's OIDC identity with `id-token: write` and use
 npm 11.17.0 on Node 24. They do not use `NPM_TOKEN` or a local machine's npm
 session. npm generates provenance for these public packages automatically.
 
-The Node workflow builds all five native binaries, transfers the generated
+The Node workflow builds four native binaries (macOS ARM64, Linux x64/ARM64
+and Windows x64), transfers the generated
 JavaScript loader and types to the publish job, and runs the installed-package
 suite against the assembled package and its Linux native dependency before
 publishing. The WASM workflow runs the browser package suite before publishing.
+
+Intel macOS publication and qualification jobs are removed after 1.6.0. Future
+Python releases have nine wheels plus a source distribution; Node has four
+native platform packages plus its root package. Existing Intel artifacts and
+historical release tags remain available.

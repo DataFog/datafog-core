@@ -60,9 +60,12 @@ await manager.restore(text, context)
 
 The package build is configured for:
 
-- macOS x64 and Apple Silicon;
+- macOS Apple Silicon;
 - Linux x64 and ARM64;
 - Windows x64.
+
+Intel macOS binaries remain available through 1.6.0. Subsequent releases omit
+`@datafog/node-darwin-x64` and no longer qualify Intel source builds.
 
 ## Errors
 

@@ -11,6 +11,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
+### Removed
+
+- Remove Intel macOS from Core model, application-vault and publication CI. Future
+  releases no longer ship Intel macOS Python wheels or the Node `darwin-x64`
+  native package; existing published versions remain available. Source builds
+  remain possible but are no longer qualified by this CI matrix.
+
 ## [1.6.0] - 2026-11-16
 
 ### Added

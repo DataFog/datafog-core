@@ -72,7 +72,7 @@ class PublicationInputs(unittest.TestCase):
         (directory / 'package.json').write_text(json.dumps(metadata))
         return metadata
 
-    def test_node_packs_five_platforms_then_root_without_running_hooks(self):
+    def test_node_packs_four_platforms_then_root_without_running_hooks(self):
         directory = self.root / 'bindings/node'
         dependencies = {'@datafog/node-' + target: '1.0.0' for target in staging.PLATFORMS}
         self.npm_source('@datafog/node', directory, dependencies)
@@ -80,7 +80,7 @@ class PublicationInputs(unittest.TestCase):
             self.npm_source('@datafog/node-' + target, directory / 'npm' / target)
         rows = staging.stage_npm('node', self.output)
         self.assertEqual([row['name'] for row in rows], list(dependencies) + ['@datafog/node'])
-        self.assertEqual(len(list(self.output.glob('*.tgz'))), 6)
+        self.assertEqual(len(list(self.output.glob('*.tgz'))), 5)
         self.assertFalse(list(directory.rglob('hook-ran')))
         self.assertEqual((self.output / 'npm-tag.txt').read_text(), 'latest\n')
         with tarfile.open(self.output / rows[-1]['file'], 'r:gz') as archive:
@@ -92,6 +92,24 @@ class PublicationInputs(unittest.TestCase):
         self.npm_source('@datafog/node', directory)
         (directory / 'npm').mkdir()
         with self.assertRaises(ValueError):
+            staging.stage_npm('node', self.output)
+        self.assertFalse(list(self.output.glob('*.tgz')))
+
+    def test_node_unbuilt_intel_platform_or_dependency_stops_before_packing(self):
+        directory = self.root / 'bindings/node'
+        dependencies = {'@datafog/node-' + target: '1.0.0' for target in staging.PLATFORMS}
+        self.npm_source('@datafog/node', directory, dependencies)
+        for target in staging.PLATFORMS:
+            self.npm_source('@datafog/node-' + target, directory / 'npm' / target)
+        intel = directory / 'npm/darwin-x64'
+        self.npm_source('@datafog/node-darwin-x64', intel)
+        with self.assertRaisesRegex(ValueError, 'extra native npm platform'):
+            staging.stage_npm('node', self.output)
+        shutil.rmtree(intel)
+        dependencies['@datafog/node-darwin-x64'] = '1.0.0'
+        (directory / 'package.json').write_text(json.dumps({'name': '@datafog/node', 'version': '1.0.0',
+                                                         'optionalDependencies': dependencies}))
+        with self.assertRaisesRegex(ValueError, 'exact four native packages'):
             staging.stage_npm('node', self.output)
         self.assertFalse(list(self.output.glob('*.tgz')))
 

@@ -71,8 +71,13 @@ A platform is supported when the release publishes wheels for it. Targets are:
 - `manylinux_2_28` x86_64 and aarch64
 - `musllinux_1_2` x86_64 and aarch64
 - `manylinux_2_28` s390x and powerpc64le
-- macOS 10.12+ x86_64, macOS 11+ arm64
+- macOS 11+ arm64
 - Windows amd64 and arm64
+
+Core 1.6.0 also publishes macOS 10.12+ x86_64 wheels. Starting with the next
+MINOR, Intel macOS wheels, native Node packages and CI qualification are retired;
+existing versions remain installable. Intel source builds are outside the
+maintained CI matrix.
 
 The ABI3 wheels support GIL-enabled CPython 3.10 and newer. PyPy and
 free-threaded CPython require a source build, as do glibc older than 2.28,
