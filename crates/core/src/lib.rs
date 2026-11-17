@@ -7,6 +7,8 @@ mod capabilities;
 pub mod cnn;
 mod coverage;
 mod credential_uri;
+mod denylist;
+pub use denylist::{DenyBoundary, LiteralDenyRule};
 mod email_context;
 pub use capabilities::{
     ActivationScanConfig, Capabilities, EntityActivation, EntityCapabilities, LocaleCapabilities,
@@ -416,12 +418,17 @@ impl TransformationConfig {
     }
 
     fn includes(&self, finding: &Finding) -> bool {
-        self.entities
-            .as_ref()
-            .is_none_or(|entities| entities.contains(&finding.entity_type))
+        denylist::is_explicit_deny(finding)
+            || self
+                .entities
+                .as_ref()
+                .is_none_or(|entities| entities.contains(&finding.entity_type))
     }
 
     fn allows(&self, finding: &Finding) -> bool {
+        if denylist::is_explicit_deny(finding) {
+            return false;
+        }
         self.exact_allowlists
             .get(&finding.entity_type)
             .is_some_and(|values| values.contains(&finding.matched_text))
@@ -582,9 +589,21 @@ pub struct ScanConfig {
     detect_uuid: bool,
     format: ScanFormat,
     entities: Option<BTreeSet<String>>,
+    deny: Vec<LiteralDenyRule>,
 }
 
 impl ScanConfig {
+    /// Configure explicit literal deny rules, independent of built-in entity selection.
+    pub fn with_deny(mut self, rules: Vec<LiteralDenyRule>) -> Self {
+        self.deny = rules;
+        self
+    }
+
+    /// Configured literal deny rules; empty by default.
+    pub fn deny(&self) -> &[LiteralDenyRule] {
+        &self.deny
+    }
+
     /// Restrict text scanning to exact canonical entity types. Selection only
     /// narrows enabled detectors; locale and UUID activation remain independent.
     pub fn with_entities(mut self, entities: Vec<String>) -> Result<Self, PrivacyError> {
@@ -851,8 +870,15 @@ pub fn parse_scan_and_transform_config(
 /// Parse canonical scanner configuration.
 pub fn parse_scan_config(value: &serde_json::Value) -> Result<ScanConfig, PrivacyError> {
     let object = require_object(value, "", "scan configuration must be an object")?;
-    reject_unknown_fields(object, &["locale", "detect_uuid", "format", "entities"], "")?;
+    reject_unknown_fields(
+        object,
+        &["locale", "detect_uuid", "format", "entities", "deny"],
+        "",
+    )?;
     let mut config = ScanConfig::new();
+    if let Some(deny) = object.get("deny") {
+        config = config.with_deny(denylist::parse_rules(deny)?);
+    }
     if let Some(entities) = object.get("entities") {
         let entities = require_array(entities, "/entities", "entities must be an array")?;
         let mut parsed = Vec::with_capacity(entities.len());
@@ -2165,7 +2191,9 @@ pub fn scan(text: &str) -> Vec<Finding> {
 pub fn scan_with_config(text: &str, config: &ScanConfig) -> Vec<Finding> {
     let mut candidates: Vec<Candidate> = Vec::new();
     capabilities::detect(text, config, &mut candidates);
-    finalize(text, candidates)
+    let mut findings = finalize(text, candidates);
+    denylist::append_findings(text, &config.deny, &mut findings);
+    findings
 }
 
 /// Transform caller-supplied findings without scanning implicitly.
@@ -3033,7 +3061,10 @@ fn scanner_transform_findings(
                 .codepoint_range
                 .end
                 .max(finding.codepoint_range.end);
-            if overlap_preference(&finding, previous).is_lt() {
+            if (denylist::is_explicit_deny(&finding) && !denylist::is_explicit_deny(previous))
+                || (!denylist::is_explicit_deny(previous)
+                    && overlap_preference(&finding, previous).is_lt())
+            {
                 *previous = finding;
             }
             previous.byte_range = TextRange { start, end };
@@ -3050,6 +3081,11 @@ fn scanner_transform_findings(
 }
 
 fn duplicate_preference(candidate: &Finding, existing: &Finding) -> std::cmp::Ordering {
+    let deny_order =
+        denylist::is_explicit_deny(existing).cmp(&denylist::is_explicit_deny(candidate));
+    if !deny_order.is_eq() {
+        return deny_order;
+    }
     if let (Some(candidate_confidence), Some(existing_confidence)) =
         (candidate.confidence, existing.confidence)
     {

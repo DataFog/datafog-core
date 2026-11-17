@@ -134,6 +134,7 @@
                   "reference/private-keys",
                   "reference/api-keys",
                   "reference/uuid",
+                  "reference/literal-denylists",
                   "reference/us-routing-number",
                   "reference/account-number",
                   "reference/street-address",
