@@ -1,6 +1,7 @@
 # ADR 003: Optional local model inference
 
-Status: Accepted; implementation tracked in #56, #45 and #55.
+Status: Accepted; implementation tracked in #56, #45 and #55. Intel macOS
+qualification and prebuilt SDK publication retired after 1.6.0 in #263.
 
 ## Scope
 
@@ -12,9 +13,9 @@ explicit English GLiNER2.5 Small ONNX path without a Python worker. Browser and
 native adapters share Core routing, output validation and evidence composition.
 The native process lifecycle below does not apply to browser sessions.
 
-Supported native platforms are Linux x86_64 GNU, Linux ARM64 GNU, macOS ARM64,
-macOS Intel and Windows x86_64 MSVC. Platform-specific runtime dependencies must
-remain supported, including the older PyTorch stack required on Intel macOS.
+Qualified native platforms are Linux x86_64 GNU, Linux ARM64 GNU, macOS ARM64
+and Windows x86_64 MSVC. Intel macOS archives from earlier releases remain
+available, but subsequent releases do not build or qualify Intel SDK artifacts.
 
 ## Implementation
 
@@ -65,17 +66,15 @@ Routine CI checks Core and installed bindings. The scoped browser-model workflow
 downloads pinned Small assets for real browser scans; native qualification remains
 manually dispatched.
 The manually dispatched model integration workflow checks both models through
-Rust and installed Python/Node packages on all five native platforms. Test
+Rust and installed Python/Node packages on all four native platforms. Test
 loading, returned spans and scores, Unicode offsets, reuse, errors, cancellation
 and process cleanup. Do not grade model accuracy or impose speed/memory targets.
 
 Publication must require the latest model integration run for the exact release
-commit to pass every backend/platform job except macOS Intel. Missing, failed
-or unfinished required tests block publication. The macOS Intel jobs are
-advisory: GitHub retires its last Intel macOS runner image in fall 2027, and
-the Intel stack is pinned to an older PyTorch. Intel packages are still built
-and published. Build release packages from source; no cross-run package
-handoff or saved-file publication system is required.
+commit to pass every backend/platform job. Missing, failed or unfinished
+required tests block publication. Intel macOS jobs are removed, including
+candidate builds and SDK publication jobs. Build release packages from source;
+no cross-run package handoff or saved-file publication system is required.
 
 Target `0.4.5-beta.1` for Cargo/npm and `0.4.5b1` for Python. Use npm's `beta`
 tag and mark the GitHub release as a prerelease. Review the final diff and test

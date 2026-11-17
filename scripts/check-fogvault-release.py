@@ -20,7 +20,7 @@ REQUIRED = {
     },
     "application-vaults.yml": {
         f"Application vault / {platform}" for platform in (
-            "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-2025")
+            "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "windows-2025")
     },
     "fogvault-integration.yml": {
         *(f"Core–FogVault native / {platform}" for platform in PLATFORMS),

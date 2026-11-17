@@ -1,8 +1,10 @@
 # Local model sessions
 
 DataFog Core supports DataFog and GLiNER2 on Linux x86_64 GNU, Linux ARM64 GNU,
-macOS ARM64, macOS Intel and Windows x86_64 MSVC. Existing rule-based APIs are
-unchanged. No model downloads or model-runtime imports happen on ordinary import.
+macOS ARM64 and Windows x86_64 MSVC. Intel macOS qualification was removed
+after 1.6.0; existing Intel runtime archives remain available without current
+CI coverage. Existing rule-based APIs are unchanged. No model downloads or
+model-runtime imports happen on ordinary import.
 Rust callers enable the optional `models` feature. Browsers can explicitly open
 [GLiNER2.5 Small ONNX sessions](browser-model.md); the synchronous WASM scan API
 remains rule-based. The native setup and lifecycle below apply to Python, Node
@@ -10,8 +12,8 @@ and Rust sessions.
 
 ## DataFog setup
 
-Download the archive for the host (`linux-x86_64`, `linux-aarch64`, `macos-arm64`,
-`macos-x86_64` or `windows-x86_64`) and verify/install it with the provisioner.
+Download the archive for the host (`linux-x86_64`, `linux-aarch64`,
+`macos-arm64` or `windows-x86_64`) and verify/install it with the provisioner.
 The following selects macOS ARM64; replace that platform for other hosts.
 Provisioning scripts require Python 3.11 or newer; the binding supports 3.10+.
 
@@ -25,7 +27,7 @@ python scripts/provision-datafog-model.py \
 ```
 
 Keep the supplied licenses/notices and host runtime prerequisites: macOS ARM64
-14+, macOS Intel 15+, or the appropriate Windows MSVC runtime. Opening verifies
+14+ or the appropriate Windows MSVC runtime. Opening verifies
 files and starts the runtime. Downloads remain a separate setup step.
 
 Create `session.json` with the absolute bundle path and emitted manifest digest.
@@ -162,14 +164,12 @@ options object with a `TypeError`.
 
 The scoped browser-model CI downloads the pinned Small assets for browser tests.
 Native model qualification remains manual. Run the `Model integration`
-workflow for DataFog, PII GLiNER2 and general-purpose GLiNER2 on all five native
+workflow for DataFog, PII GLiNER2 and general-purpose GLiNER2 on all four native
 platforms before releasing.
 It checks Rust and installed Python/Node packages, including failures and cleanup.
 Publishing requires the latest run for the release commit to pass all three models'
-jobs on Linux x86_64, Linux ARM64, macOS ARM64 and Windows. The macOS Intel jobs
-still run but are advisory: a failure is reported on the job without failing
-the run, and publishing does not wait for them. Later commits may reuse a
-passing ancestor only if every intervening commit has one parent and modifies
+jobs on Linux x86_64, Linux ARM64, macOS ARM64 and Windows. Intel macOS jobs
+are no longer run. Later commits may reuse a passing ancestor only if every intervening commit has one parent and modifies
 only `README.md`. Other file changes, merges, failed or cancelled runs, and
 required jobs that have not passed still block publication.
 Release packages build from source.

@@ -6,6 +6,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Removed
+
+- Remove Intel macOS from Core model, application-vault and publication CI. Future
+  releases no longer ship Intel macOS Python wheels or the Node `darwin-x64`
+  native package; existing published versions remain available. Source builds
+  remain possible but are no longer qualified by this CI matrix.
+
 ## [1.6.0] - 2026-11-16
 
 ### Added

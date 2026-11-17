@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 module = runpy.run_path(str(Path(__file__).with_name("check-model-integration.py")))
 check = module["check"]
-platforms = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-latest")
+platforms = ("ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "windows-latest")
 
 
 class PublicationCheck(unittest.TestCase):
@@ -52,7 +52,7 @@ class PublicationCheck(unittest.TestCase):
         return [{"id": 1, "head_sha": revision, "status": "completed", "conclusion": "success",
                  "html_url": "https://example.test/run"}]
 
-    def test_all_three_models_all_five_platforms_pass(self):
+    def test_all_three_models_all_four_platforms_pass(self):
         self.run_check()
 
     def test_missing_failed_cancelled_and_wrong_commit_block(self):
@@ -66,31 +66,17 @@ class PublicationCheck(unittest.TestCase):
     def test_unfinished_run_counts_only_once_every_required_job_passed(self):
         running = [{"id": 1, "head_sha": "release", "status": "in_progress", "conclusion": None,
                     "html_url": "https://example.test/run"}]
-        advisory_pending = [{"name": f"installed-model ({backend}, {platform})",
-                             "conclusion": None if platform == "macos-15-intel" else "success"}
+        self.run_check(runs=running)
+        required_pending = [{"name": f"installed-model ({backend}, {platform})", "conclusion": "success"}
                             for backend in ("datafog", "gliner2", "gliner2-general") for platform in platforms]
-        self.run_check(runs=running, jobs=advisory_pending)
-        required_pending = [dict(job) for job in advisory_pending]
         required_pending[0]["conclusion"] = None
         with self.assertRaises(SystemExit):
             self.run_check(runs=running, jobs=required_pending)
-
-    def test_intel_macos_jobs_are_advisory(self):
-        for conclusion in (None, "failure", "cancelled", "skipped", "missing"):
-            jobs = [{"name": f"installed-model ({backend}, {platform})",
-                     "conclusion": conclusion if platform == "macos-15-intel" else "success"}
-                    for backend in ("datafog", "gliner2", "gliner2-general") for platform in platforms]
-            if conclusion == "missing":
-                jobs = [job for job in jobs if "macos-15-intel" not in job["name"]]
-            with self.subTest(conclusion=conclusion):
-                self.run_check(jobs=jobs)
 
     def test_each_missing_failed_or_skipped_required_platform_blocks(self):
         jobs = [{"name": f"installed-model ({backend}, {platform})", "conclusion": "success"}
                 for backend in ("datafog", "gliner2", "gliner2-general") for platform in platforms]
         for index in range(len(jobs)):
-            if "macos-15-intel" in jobs[index]["name"]:
-                continue
             for conclusion in (None, "failure", "skipped", "cancelled"):
                 bad = [dict(job) for job in jobs]
                 bad[index]["conclusion"] = conclusion

@@ -125,6 +125,11 @@ The Python package ships CPython 3.10+ ABI3 wheels for Linux x64 and ARM64
 x64/ARM64. The Node.js 1.6.0 package ships Linux x64/ARM64 GNU, macOS Intel/Apple
 Silicon, and Windows x64 binaries.
 
+After 1.6.0, release CI no longer builds or qualifies Intel macOS: future
+Python releases omit its wheel and future Node releases omit `darwin-x64`.
+Existing 1.6.0 archives remain available. Intel source builds are outside the
+maintained CI matrix.
+
 PyPy, free-threaded CPython, older glibc/musl and other architectures fall back
 to a source build. That route requires Rust 1.88+, Cargo, a native linker and
 access to the Rust build dependencies; installation can take several minutes.

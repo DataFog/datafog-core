@@ -1,8 +1,4 @@
-"""Require the native model checks, allowing later README-only commits.
-
-Intel macOS jobs are advisory: they run with continue-on-error, are not
-required here, and publication does not wait for them to finish.
-"""
+"""Require all native model checks, allowing later README-only commits."""
 
 import json
 import os
@@ -41,8 +37,8 @@ def check(repository, revision):
             raise SystemExit("Publication blocked: no model integration run; untested changes must modify only README.md.")
         tested_revision = commit["parents"][0]["sha"]
     run = runs[0]
-    # A completed run must have succeeded; advisory jobs cannot fail it. A run
-    # still in progress counts only once every required job below has passed.
+    # A completed run must have succeeded. A run still in progress counts only
+    # once every required job below has passed.
     if run["head_sha"] != tested_revision or (
             run.get("status") == "completed" and run["conclusion"] != "success"):
         raise SystemExit("Publication blocked: the latest model integration run for the tested commit failed or was cancelled.")
