@@ -6,6 +6,8 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-16
+
 ### Added
 
 - Add Python `ApplicationVault` for application-scoped encrypted native Workspace
@@ -21,6 +23,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
   filters and Workspace not-sensitive choices while the rule is supplied.
   Existing callers without rules retain their behavior. See the
   [literal-denylist contract](docs/reference/literal-denylists.mdx).
+
+### Changed
+
+- Require real macOS Keychain, Windows Credential Manager and Linux Secret Service
+  qualification at the exact release commit before package publication.
+
+## [1.5.0] - 2026-11-15
 
 ### Changed
 

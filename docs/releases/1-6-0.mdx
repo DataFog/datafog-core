@@ -1,0 +1,51 @@
+---
+title: "1.6.0"
+description: "Literal denylists, encrypted application vaults and Python mapping retirement."
+---
+
+Core 1.6.0 is an additive release across Rust, Python, Node.js, WASM and
+Core-owned native/browser companion packages. Workspace contract 1, marker
+syntax and existing snapshot formats remain unchanged.
+
+## Install
+
+```sh
+python -m pip install datafog-core==1.6.0 datafog-fogvault==1.6.0
+npm install --save-exact @datafog/node@1.6.0 @datafog/wasm@1.6.0
+cargo add datafog-core@=1.6.0
+```
+
+Core-owned FogVault adapters and the SQLite browser adapter use 1.6.0. The
+independent FogVault engine retains its own version; it is not relabeled 1.6.0.
+
+## Changes
+
+- Request-local literal `deny` rules run in shared Rust across SDKs, with
+  explicit case sensitivity and word/substring boundaries. They preserve source
+  offsets and take precedence over allowlists and saved not-sensitive choices.
+  See [literal denylists](/reference/literal-denylists).
+- Python's `datafog_fogvault.ApplicationVault` opens an application-scoped,
+  encrypted native Workspace with OS credential storage or explicit external/file
+  keys. Cross-process locking, refreshed reads and durable compare-and-save
+  enforce persistence before transformed text is returned. See the
+  [native Python helper](https://github.com/DataFog/datafog-core/tree/main/integrations/fogvault-python).
+- Python `Workspace.prepare_forget` now matches Rust, Node and WASM. Committing
+  retirement makes old markers expire and uses the existing snapshot v4; Core
+  1.0 cannot read v4. Existing snapshots are not automatically rewritten.
+- Publication requires real macOS Keychain, Windows Credential Manager and
+  Linux Secret Service qualification at the exact release commit, in addition
+  to existing SDK, model and integration gates.
+
+## Qualification boundaries
+
+Real-provider checks cover fresh processes, synchronized writers, wrong/missing
+keys and confirmed cleanup. Isolated macOS/Linux fixtures cover locked-store
+failure; Linux also verifies service restart against the same persisted keyring.
+Machine reboot/new-login persistence remains deferred pending dedicated hosts.
+Desktop prompt policy, deployed executable identity and code-signing/Keychain
+access policy still require validation by consuming applications.
+
+The application helper is Python-first; Node application-helper support and
+extension/MCP denylist settings remain follow-ups. No cloud sync, vault merging
+or marker repair is introduced. File-key mode is explicit: obtaining both the
+key file and encrypted vault defeats that at-rest boundary.
