@@ -106,3 +106,8 @@
 {"id":"review-phone-zip","text":"555-123-4567 94105","entities":[{"label":"PHONE","text":"555-123-4567","start":0,"end":12},{"label":"ZIP_CODE","text":"94105","start":13,"end":18}],"category":"review_regression"}
 {"id":"review-ambiguous-ipv6","text":"x :: y; a::b; 12::34; cafe::","entities":[],"category":"review_regression"}
 {"id":"review-zip-price","text":"amount $12345.67","entities":[],"category":"review_regression"}
+{"id":"review-phone-csv-numeric-id","text":"id,phone\n2,+1-202-555-0143\n","entities":[{"label":"PHONE","text":"+1-202-555-0143","start":11,"end":26}],"category":"review_regression"}
+{"id":"review-phone-csv-parentheses","text":"2,(202) 555-0143","entities":[{"label":"PHONE","text":"(202) 555-0143","start":2,"end":16}],"category":"review_regression"}
+{"id":"review-phone-csv-row","text":"row 2,202-555-0143,ok","entities":[{"label":"PHONE","text":"202-555-0143","start":6,"end":18}],"category":"review_regression"}
+{"id":"review-phone-after-item-number","text":"Desk 3.202-555-0143 and 4.(202) 555-0144","entities":[{"label":"PHONE","text":"202-555-0143","start":7,"end":19},{"label":"PHONE","text":"(202) 555-0144","start":26,"end":40}],"category":"review_regression"}
+{"id":"review-decimal-tails","text":"pi 3,14159265358; ratio 0.2025550143; 12,5 kg; total 1.234,56; build 7.202.555.0143","entities":[],"category":"review_regression"}

@@ -3400,7 +3400,7 @@ fn detect_phone(text: &str, candidates: &mut Vec<Candidate>) {
             .rev()
             .collect::<String>()
             .to_ascii_lowercase();
-        if follows_decimal_separator(text.as_bytes(), matched.start())
+        if continues_number(text.as_bytes(), matched.start(), matched.end())
             || matched.as_str().contains(['\r', '\n'])
             || ["steuer-id", "steuerid", "tax-id", "imei"]
                 .iter()
@@ -3761,6 +3761,19 @@ fn numeric_neighbor_at(bytes: &[u8], start: usize) -> bool {
 /// Comma-separated fields are ambiguous without structured input context.
 fn follows_decimal_separator(bytes: &[u8], start: usize) -> bool {
     start >= 2 && matches!(bytes[start - 1], b'.' | b',') && bytes[start - 2].is_ascii_digit()
+}
+
+/// Whether a phone-shaped run directly after `<digit>.` or `<digit>,` is the
+/// tail of that number: an unseparated digit run (`3.14159265358`,
+/// `0,2025550143`) or dotted groups continuing a dotted number
+/// (`7.202.555.0143`). A run with phone structure of its own (`+`,
+/// parentheses, or separators other than the preceding one) is a separate
+/// value, as in the CSV row `2,202-555-0143`.
+fn continues_number(bytes: &[u8], start: usize, end: usize) -> bool {
+    follows_decimal_separator(bytes, start)
+        && bytes[start..end]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == bytes[start - 1])
 }
 
 /// The end of a card that spans the whole separated digit run at `start`.

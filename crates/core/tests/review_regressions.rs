@@ -107,6 +107,42 @@ fn email_after_dots_is_reported_from_its_first_local_part_character() {
 }
 
 #[test]
+fn structured_phone_is_found_after_a_number_and_separator() {
+    for (text, phone) in [
+        ("2,+1-202-555-0143", "+1-202-555-0143"),
+        ("id,phone\n2,+1-202-555-0143\n", "+1-202-555-0143"),
+        ("2,(202) 555-0143", "(202) 555-0143"),
+        ("row 2,202-555-0143,ok", "202-555-0143"),
+        ("2,202.555.0143", "202.555.0143"),
+        ("2,202 555 0143", "202 555 0143"),
+        ("12,+44 20 7946 0958", "+44 20 7946 0958"),
+        ("3.202-555-0143", "202-555-0143"),
+        ("3.(202) 555-0143", "(202) 555-0143"),
+        ("3.+1-202-555-0143", "+1-202-555-0143"),
+        ("2024-01-02,202-555-0143", "202-555-0143"),
+        ("$12.50,202-555-0143", "202-555-0143"),
+    ] {
+        assert_eq!(values(text, "PHONE"), [phone], "{text}");
+    }
+    // An unseparated digit run after a decimal separator, or a dotted run that
+    // continues a dotted number, is still the tail of that number.
+    for text in [
+        "3,14159",
+        "1,202",
+        "12,5 kg",
+        "1.234,56",
+        "3,14159265358",
+        "3.14159265358",
+        "0,2025550143",
+        "0.2025550143",
+        "7.202.555.0143",
+        "10.20.202.555.0143",
+    ] {
+        assert!(values(text, "PHONE").is_empty(), "{text}");
+    }
+}
+
+#[test]
 fn scanner_overlap_redaction_preserves_all_coverage() {
     let config =
         parse_scan_and_transform_config(&json!({"transform":{"default":{"strategy":"redact"}}}))

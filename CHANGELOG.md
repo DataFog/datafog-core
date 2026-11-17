@@ -18,6 +18,11 @@ Earlier release notes are in [docs/releases](docs/releases/).
   `KEY=".alice@example.com"` find `alice@example.com`, and `bob..x@example.com`
   finds `x@example.com`. This replaces the 1.5.0 malformed-local rejection;
   label, quote, field-delimiter and markup trimming are unchanged.
+- Report a PHONE directly after `<digit>,` or `<digit>.` when the number has
+  structure of its own (`+`, parentheses, or separators other than the preceding
+  one), so CSV rows such as `2,+1-202-555-0143` and `row 2,202-555-0143,ok` are
+  found again. Unseparated digit runs (`3.14159265358`, `0,2025550143`) and
+  dotted runs continuing a dotted number (`7.202.555.0143`) remain excluded.
 - Correct the documented Linux glibc minimum for the `datafog-fogvault` 1.6.0
   wheel to 2.38; base `datafog-core` GNU wheels retain their 2.28 minimum.
 
