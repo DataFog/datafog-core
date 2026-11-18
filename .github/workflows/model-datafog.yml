@@ -24,12 +24,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Locate and verify native crash capture tools
+        shell: pwsh
+        run: |
+          Get-Command cdb,procdump64 -ErrorAction SilentlyContinue | Select-Object Name,Source
+          Test-Path 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+          Invoke-WebRequest https://download.sysinternals.com/files/Procdump.zip -OutFile procdump.zip
+          Expand-Archive procdump.zip procdump
+          $exe = (Resolve-Path procdump/procdump64.exe).Path
+          $signature = Get-AuthenticodeSignature $exe
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'Untrusted ProcDump binary' }
+          Get-FileHash $exe -Algorithm SHA256
+          "DIAGNOSE_PROCDUMP=$exe" >> $env:GITHUB_ENV
       - name: Diagnose exact candidate and public baseline
         env:
           GH_TOKEN: ${{ github.token }}
-          DIAGNOSE_MODES: node-only,node-worker-terminate,worker-natural,worker-terminate
+          DIAGNOSE_MODES: ""
           DIAGNOSE_SKIP_FULL: "1"
-          DIAGNOSE_ASYNC_HOOKS: "1"
+          DIAGNOSE_FULL_CONSUMER_REPEATS: "50"
+          DIAGNOSE_CAPTURE_REPEATS: "50"
         run: python scripts/diagnose-windows-node-shutdown.py
       - uses: actions/upload-artifact@v4
         if: always()

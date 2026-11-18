@@ -134,11 +134,35 @@ for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baselin
     installed = run(version + "-install", [*NPM, "install", "--ignore-scripts", "--omit=optional", str(root_tarball), str(platform_tarball)], consumer)
     assert installed.returncode == 0
     (consumer / "probe.mjs").write_text(probe, encoding="utf-8")
-    for mode in os.environ.get("DIAGNOSE_MODES", "import-only,sync,rejected-model-open,worker-natural,worker-terminate").split(","):
+    for mode in filter(None, os.environ.get("DIAGNOSE_MODES", "import-only,sync,rejected-model-open,worker-natural,worker-terminate").split(",")):
         for index in range(50):
             run(f"{version}-{mode}-{index:03}", [NODE, "probe.mjs", mode], consumer)
     for index in range(0 if os.environ.get("DIAGNOSE_SKIP_FULL") == "1" else 3):
         run(f"{version}-full-suite-{index:03}", [NODE, str(source / "scripts/test-node-package.mjs"), "--prebuilt", "--tarball", str(root_tarball), "--platform-tarball", str(platform_tarball)], source)
+    repetitions = int(os.environ.get("DIAGNOSE_FULL_CONSUMER_REPEATS", "0"))
+    if repetitions:
+        original = source / "scripts/test-node-package.mjs"
+        text = original.read_text(encoding="utf-8")
+        cleanup = "  rmSync(temporaryDirectory, { recursive: true, force: true });"
+        assert text.count(cleanup) == 1
+        marker = OUT / (version + "-retained-consumer-path.txt")
+        retained = source / "scripts/diagnostic-test-node-package.mjs"
+        retained.write_text(text.replace(cleanup, "  writeFileSync(" + json.dumps(str(marker.resolve())) + ", temporaryDirectory);"), encoding="utf-8")
+        run(f"{version}-retain-full-consumer", [NODE, str(retained), "--prebuilt", "--tarball", str(root_tarball), "--platform-tarball", str(platform_tarball)], source)
+        full_consumer = Path(marker.read_text(encoding="utf-8"))
+        full_test = full_consumer / "test-installed.mjs"
+        shutil.copyfile(full_test, OUT / (version + "-full-consumer.mjs"))
+        for index in range(repetitions):
+            run(f"{version}-full-consumer-{index:03}", [NODE, "test-installed.mjs", str(source / "fixtures")], full_consumer)
+        capture = os.environ.get("DIAGNOSE_PROCDUMP")
+        if capture:
+            for index in range(int(os.environ.get("DIAGNOSE_CAPTURE_REPEATS", "0"))):
+                dump_directory = OUT / (f"{version}-capture-{index:03}")
+                dump_directory.mkdir(exist_ok=True)
+                result = run(f"{version}-captured-full-consumer-{index:03}", [capture, "-accepteula", "-e", "-mm", "-x", str(dump_directory), NODE, "test-installed.mjs", str(source / "fixtures")], full_consumer)
+                report = {"label": f"{version}-captured-full-consumer-{index:03}", "debugger_returncode": result.returncode, "dumps": [str(p) for p in dump_directory.glob("*.dmp")]}
+                (dump_directory / "capture.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+                print(json.dumps(report), flush=True)
 
 counts = {}
 for result in RESULTS:
