@@ -1,0 +1,62 @@
+{
+  "cases": 1382400,
+  "elapsed_seconds": 34.327893333,
+  "first_example_per_category": {
+    "1.7.0/PHONE/incidental": {
+      "baseline_findings": [
+        [
+          "EMAIL",
+          15,
+          76
+        ]
+      ],
+      "candidate_findings": [
+        [
+          "EMAIL",
+          43,
+          100
+        ]
+      ],
+      "planted": {
+        "end_byte": 31,
+        "entity": "PHONE",
+        "start_byte": 19
+      },
+      "text": "4111 1111 1111 1111212-555-0100メールは123-45-6789alice@example.comalice@example.comメールは"
+    },
+    "1.7.0/SSN/incidental": {
+      "baseline_findings": [
+        [
+          "EMAIL",
+          27,
+          88
+        ]
+      ],
+      "candidate_findings": [
+        [
+          "EMAIL",
+          66,
+          100
+        ]
+      ],
+      "planted": {
+        "end_byte": 54,
+        "entity": "SSN",
+        "start_byte": 43
+      },
+      "text": "メールは4111 1111 1111 1111212-555-0100123-45-6789メールはalice@example.comalice@example.com"
+    }
+  },
+  "incidental_cross_entity_coverage_losses": {
+    "1.7.0/PHONE/incidental": 505680,
+    "1.7.0/SSN/incidental": 118440
+  },
+  "matrix": {
+    "contexts": 20,
+    "email_shapes": 12,
+    "separators": 8,
+    "source_wrappers": 3
+  },
+  "planted_values": 6912000,
+  "same_entity_coverage_losses": {}
+}

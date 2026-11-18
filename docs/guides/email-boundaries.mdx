@@ -16,6 +16,45 @@ text mode leaves alone. This setting changes email boundaries only; other
 detectors keep their existing behavior. It does not validate the file or
 guarantee syntax preservation for every entity type or SQL dialect.
 
+## Addresses next to other scripts
+
+Unicode letters are valid in addresses, and text in many languages is written
+without spaces, so the letters around an address cannot all belong to it. In
+text that contains non-ASCII letters, a match is narrowed as follows:
+
+- A domain made of ASCII or accented-Latin labels ends at the first letter of
+  another script in its last label: `alice@example.comです` reports
+  `alice@example.com`.
+- A domain ends at its first non-ASCII letter when another address begins
+  there: `alice@example.comとbob@example.net` and
+  `alice@example.comébob@example.net` each report two addresses. With an
+  accented Latin letter the letter is reported with the second address
+  (`ébob@example.net`), because it could belong to it.
+- When a non-Latin domain runs into the next address with no such point
+  (`用户@例子.中文网bob@example.net`), the trailing ASCII letters go to the
+  second address. If there are none, the two addresses are reported as one
+  span, so the second domain is always covered.
+- In front of an ASCII or accented-Latin domain, the local part starts after
+  the last letter of another script: `メールはalice@example.com` reports
+  `alice@example.com`, so a sentence and the SSN, card or phone number in it
+  are not covered by the EMAIL finding. `用户alice@example.com` is therefore
+  reported as `alice@example.com`.
+
+Addresses such as `用户@例子.广告`,
+`jörg@müller.de`, `josé@example.com`, and `joséalice@example.com` each report
+their full span. A local part that ends in a non-Latin script
+(`用户@example.com`) or belongs to a non-Latin domain is not narrowed, since
+nothing marks where it starts; in unspaced text such a finding can still
+include the words before it. The full-width at sign `＠` and full-width dot
+`．` are not treated as address syntax. ASCII-only text is unaffected.
+
+These rules deliberately narrow some mixed-script addresses as well as prose.
+`δοκιμήtest@example.com` reports `test@example.com`, leaving `δοκιμή` visible.
+`alice@example.coм` (a Cyrillic final `м`) reports `alice@example.co`, leaving
+that final letter visible. The scanner cannot distinguish those valid address
+shapes from surrounding unspaced text. Complete coverage of every mixed-script
+mailbox is therefore not guaranteed.
+
 ## Usage
 
 ```python
