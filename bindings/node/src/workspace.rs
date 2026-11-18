@@ -1,16 +1,18 @@
 mod conversation;
 mod stream;
+use crate::copied_output_buffer;
 use datafog_core::workspace::{
     self, ErrorCode, Head, PreparedChange, Workspace, WorkspaceError, WorkspaceFinding,
     WorkspaceInput,
 };
 use napi::bindgen_prelude::Buffer;
-use napi::{Error, Status};
+use napi::{Env, Error, Status};
 use napi_derive::napi;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeMap;
 pub use stream::NativeRestoreStream;
+use zeroize::Zeroizing;
 
 fn range_value(range: datafog_core::TextRange) -> serde_json::Value {
     json!({"start": range.start, "end": range.end})
@@ -396,15 +398,13 @@ impl NativeWorkspace {
         Ok(head_value(self.inner.head().map_err(from_error)?).to_string())
     }
     #[napi(js_name = "namespace")]
-    pub fn namespace(&self) -> Result<Buffer, Error> {
-        Ok(self.inner.namespace().map_err(from_error)?.to_vec().into())
+    pub fn namespace(&self, env: Env) -> Result<Buffer, Error> {
+        copied_output_buffer(&env, &self.inner.namespace().map_err(from_error)?)
     }
     #[napi(js_name = "export_bundle")]
-    pub fn export_bundle(&self) -> Result<Buffer, Error> {
-        self.inner
-            .export_bundle()
-            .map(Buffer::from)
-            .map_err(from_error)
+    pub fn export_bundle(&self, env: Env) -> Result<Buffer, Error> {
+        let bytes = Zeroizing::new(self.inner.export_bundle().map_err(from_error)?);
+        copied_output_buffer(&env, &bytes)
     }
     #[napi(js_name = "policy")]
     pub fn policy(&self) -> Result<String, Error> {
@@ -672,13 +672,13 @@ impl NativeWorkspace {
         Ok(json!({"expectedHead": head_value(plan.expected_head().map_err(from_error)?), "candidateHead": head_value(plan.candidate_head().map_err(from_error)?)}).to_string())
     }
     #[napi(js_name = "export_candidate_bundle")]
-    pub fn export_candidate_bundle(&self, handle: u32) -> Result<Buffer, Error> {
-        Ok(self
-            .plan(handle)?
-            .export_candidate_bundle()
-            .map_err(from_error)?
-            .to_vec()
-            .into())
+    pub fn export_candidate_bundle(&self, env: Env, handle: u32) -> Result<Buffer, Error> {
+        copied_output_buffer(
+            &env,
+            self.plan(handle)?
+                .export_candidate_bundle()
+                .map_err(from_error)?,
+        )
     }
     // Finalization is idempotent and cannot introduce a fallible cleanup result.
     #[napi(js_name = "release")]

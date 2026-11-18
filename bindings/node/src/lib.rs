@@ -1,5 +1,6 @@
 //! Node binding for datafog-core.
 mod models;
+mod output_buffer;
 mod workspace;
 pub use models::open_model_session;
 pub use workspace::{NativeRestoreStream, NativeWorkspace};
@@ -7,6 +8,7 @@ pub use workspace::{NativeRestoreStream, NativeWorkspace};
 use napi::bindgen_prelude::Buffer;
 use napi::{Env, Error, Status, Unknown};
 use napi_derive::napi;
+use output_buffer::copied_output_buffer;
 use std::collections::BTreeMap;
 
 /// Workspace API contract implemented by this compiled Core.
@@ -612,14 +614,16 @@ pub fn required_restore_items(
     let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
     datafog_core::required_restore_items(&text, &context)
         .map_err(js_privacy_error)
-        .map(|items| {
+        .and_then(|items| {
             items
                 .into_iter()
-                .map(|item| RestoreItem {
-                    id: item.id().to_owned(),
-                    token_ref: item.token_ref().to_owned(),
-                    resolved_version: item.resolved_version().to_owned(),
-                    payload: Buffer::from(item.payload()),
+                .map(|item| {
+                    Ok(RestoreItem {
+                        id: item.id().to_owned(),
+                        token_ref: item.token_ref().to_owned(),
+                        resolved_version: item.resolved_version().to_owned(),
+                        payload: copied_output_buffer(&env, item.payload())?,
+                    })
                 })
                 .collect()
         })
@@ -965,14 +969,16 @@ pub fn structured_required_restore_items(
     let context = datafog_core::parse_privacy_context(&value).map_err(js_privacy_error)?;
     datafog_core::structured::required_restore_items(&text, &context)
         .map_err(js_privacy_error)
-        .map(|items| {
+        .and_then(|items| {
             items
                 .into_iter()
-                .map(|item| RestoreItem {
-                    id: item.id().to_owned(),
-                    token_ref: item.token_ref().to_owned(),
-                    resolved_version: item.resolved_version().to_owned(),
-                    payload: Buffer::from(item.payload()),
+                .map(|item| {
+                    Ok(RestoreItem {
+                        id: item.id().to_owned(),
+                        token_ref: item.token_ref().to_owned(),
+                        resolved_version: item.resolved_version().to_owned(),
+                        payload: copied_output_buffer(&env, item.payload())?,
+                    })
                 })
                 .collect()
         })

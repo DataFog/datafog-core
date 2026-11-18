@@ -45,10 +45,10 @@ export async function verifyNodeWorkspaceHost() {
     for(const item of workers) assert.deepEqual((await item.ready).head,initial);
     const results=workers.map(({worker})=>new Promise((resolve,reject)=>{worker.once("message",resolve);worker.once("error",reject);worker.postMessage("save");}));
     const outcomes=await Promise.all(results),winners=outcomes.filter(result=>result.saved),losers=outcomes.filter(result=>!result.saved);
-    assert.equal(winners.length,1);assert.equal(losers.length,1);
+    assert.equal(winners.length,1,JSON.stringify(outcomes));assert.equal(losers.length,1,JSON.stringify(outcomes));
     assert(winners[0].activated && winners[0].released);
     assert(!losers[0].activated && !losers[0].released);
-    assert(["workspace_conflict","storage_busy"].includes(losers[0].code));
+    assert(["workspace_conflict","storage_busy"].includes(losers[0].code),JSON.stringify(outcomes));
     assert.deepEqual(losers[0].head,initial);
     const winner=open(scope);
     try {assert.equal(winner.restore(winners[0].text),value);}finally{winner.close();}
@@ -56,17 +56,29 @@ export async function verifyNodeWorkspaceHost() {
     // No-op candidates intentionally keep their head; CAS is not a delivery lock.
     const noOpScope={...scope,workspaceId:"noop_race"},noOpHead=initialize(noOpScope,23);
     const noOpWorkers=[];
-    for(const operation of [25,26]) {
+    for(const operation of [25,26,27]) {
       const worker=new Worker(new URL("./node-workspace-host-worker.mjs",import.meta.url),{workerData:{database,key:new Uint8Array(key),scope:noOpScope,input:{text:"ordinary",scannerFindings:[],userSelections:[]},operationId:id(operation)}});
       const ready=new Promise((resolve,reject)=>{worker.once("message",resolve);worker.once("error",reject);});
       const item={worker,ready};workers.push(item);noOpWorkers.push(item);
     }
     for(const item of noOpWorkers)assert.deepEqual((await item.ready).head,noOpHead);
-    const noOpOutcomes=await Promise.all(noOpWorkers.map(({worker})=>new Promise((resolve,reject)=>{
+    const saveNoOp=({worker})=>new Promise((resolve,reject)=>{
       worker.once("message",resolve);worker.once("error",reject);worker.postMessage("save");
-    })));
-    assert(noOpOutcomes.every(result=>result.saved && result.activated && result.released));
-    assert(noOpOutcomes.every(result=>JSON.stringify(result.head)===JSON.stringify(noOpHead)));
+    });
+    // Even an unchanged head needs SQLite's writer lock; contention must fail closed.
+    const noOpBusy=new DatabaseSync(database,{timeout:250});noOpBusy.exec("BEGIN IMMEDIATE");
+    try {
+      const blocked=await saveNoOp(noOpWorkers[2]);
+      assert.equal(blocked.code,"storage_busy",JSON.stringify(blocked));
+      assert(!blocked.saved && !blocked.activated && !blocked.released,JSON.stringify(blocked));
+      assert.deepEqual(blocked.head,noOpHead);
+    } finally {noOpBusy.exec("ROLLBACK");noOpBusy.close();}
+    // Both candidates were prepared from the same head. Serialize only writes so
+    // this CAS proof does not assume either writer finishes within the busy timeout.
+    const noOpOutcomes=[];
+    for(const item of noOpWorkers.slice(0,2))noOpOutcomes.push(await saveNoOp(item));
+    assert(noOpOutcomes.every(result=>result.saved && result.activated && result.released),JSON.stringify(noOpOutcomes));
+    assert(noOpOutcomes.every(result=>JSON.stringify(result.head)===JSON.stringify(noOpHead)),JSON.stringify(noOpOutcomes));
 
     // Equal revisions with different commit IDs must not pass a revision-only CAS.
     const sameRevisionScope={...scope,workspaceId:"same_revision"};initialize(sameRevisionScope,31);

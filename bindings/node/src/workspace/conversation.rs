@@ -123,16 +123,22 @@ impl NativeWorkspace {
         )
     }
     #[napi(js_name = "conversation_for_site")]
-    pub fn conversation_for_site(&self, surface: String, site_id: String) -> Result<Buffer, Error> {
+    pub fn conversation_for_site(
+        &self,
+        env: Env,
+        surface: String,
+        site_id: String,
+    ) -> Result<Buffer, Error> {
         if surface.len().saturating_add(site_id.len()) > workspace::MAX_BUNDLE_BYTES {
             return Err(failure(ErrorCode::ResourceLimit));
         }
-        Ok(self
-            .inner
-            .conversation_for_site(&surface, &site_id)
-            .map_err(from_error)?
-            .to_vec()
-            .into())
+        copied_output_buffer(
+            &env,
+            &self
+                .inner
+                .conversation_for_site(&surface, &site_id)
+                .map_err(from_error)?,
+        )
     }
     #[napi(js_name = "send_intent_status")]
     pub fn send_intent_status(&self, intent_json: String) -> Result<String, Error> {
