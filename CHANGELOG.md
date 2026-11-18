@@ -19,6 +19,12 @@ Earlier release notes are in [docs/releases](docs/releases/).
   full span. A local part that mixes another script with a trailing ASCII name
   in front of a Latin domain (`用户alice@example.com`) is now reported from the
   ASCII name. See the [email boundaries guide](docs/guides/email-boundaries.mdx).
+- The same policy narrows mixed-script local parts and final domain labels:
+  `δοκιμήtest@example.com` reports `test@example.com`, and
+  `alice@example.coм` (Cyrillic `м`) reports `alice@example.co`. The excluded
+  letters stay visible. These shapes cannot be distinguished from surrounding
+  unspaced prose; complete coverage of every mixed-script address is not
+  guaranteed. Both examples have shared Rust/Python/Node/WASM fixtures.
 
 ## [1.7.0] - 2026-11-17
 
