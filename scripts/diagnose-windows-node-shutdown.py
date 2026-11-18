@@ -167,6 +167,13 @@ for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baselin
 counts = {}
 for result in RESULTS:
     key = result["label"].rsplit("-", 1)[0]
+    if "-captured-full-consumer-" in result["label"]:
+        value = counts.setdefault(key, {"capture_attempts": 0, "debugger_returncodes": {}})
+        value["capture_attempts"] += 1
+        codes = value["debugger_returncodes"]
+        code = str(result["returncode"])
+        codes[code] = codes.get(code, 0) + 1
+        continue
     value = counts.setdefault(key, {"passed": 0, "failed": 0})
     value["passed" if result["returncode"] == 0 else "failed"] += 1
 (OUT / "counts.json").write_text(json.dumps(counts, indent=2), encoding="utf-8")
