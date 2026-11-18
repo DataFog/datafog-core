@@ -30,6 +30,10 @@ text that contains non-ASCII letters, a match is narrowed as follows:
   `alice@example.comébob@example.net` each report two addresses. With an
   accented Latin letter the letter is reported with the second address
   (`ébob@example.net`), because it could belong to it.
+- When a non-Latin domain runs into the next address with no such point
+  (`用户@例子.中文网bob@example.net`), the trailing ASCII letters go to the
+  second address. If there are none, the two addresses are reported as one
+  span, so the second domain is always covered.
 - In front of an ASCII or accented-Latin domain, the local part starts after
   the last letter of another script: `メールはalice@example.com` reports
   `alice@example.com`, so a sentence and the SSN, card or phone number in it

@@ -92,51 +92,49 @@ fn is_mark(character: char) -> bool {
 /// local part. Internationalized addresses stay whole: a part is only split
 /// where an ASCII or accented-Latin address meets another script, or where the
 /// end of a domain is the beginning of another address.
+///
+/// The returned end can lie past `end` when two addresses share letters that
+/// cannot be assigned to either; see [`domain_end`].
 pub(super) fn script_bounds(text: &str, start: usize, end: usize) -> (usize, usize) {
     let Some(at) = text[start..end].find('@').map(|offset| start + offset) else {
         return (start, end);
     };
-    let end = domain_end(text, at + 1, end);
-    (local_start(text, start, at, end), end)
+    let domain_end = domain_end(text, at + 1, end);
+    (
+        local_start(text, start, at, domain_end.min(end)),
+        domain_end,
+    )
 }
 
-/// End of the domain that starts at `domain_start`, at or before `end`.
+/// End of the domain that starts at `domain_start`; `end` is the matcher's.
 ///
 /// The domain stops at its first non-ASCII character when the labels before it
 /// are a complete ASCII or accented-Latin domain and either another address
 /// begins there (`alice@example.comébob@example.net`) or the character starts
 /// a different script in the last label (`alice@example.comです`): no
-/// top-level domain continues from Latin letters into another script. A
-/// combining mark stays with its base letter, so composed and decomposed
-/// spellings split at the same place. When no such point exists and another
-/// address still begins inside the domain, the domain ends where that
-/// address's ASCII local part begins, so both remain covered.
+/// top-level domain continues from Latin letters into another script.
+///
+/// A domain that runs straight into the `@` of another address without such a
+/// point gives up its trailing ASCII or Latin letters to that address. When it
+/// has none, the two addresses cannot be told apart and are reported as one
+/// span, so the second domain is never left out.
 fn domain_end(text: &str, domain_start: usize, end: usize) -> usize {
     let domain = &text[domain_start..end];
-    if domain.is_ascii() {
-        return end;
-    }
     let mut address_follows = None;
     let mut address_follows =
         || *address_follows.get_or_insert_with(|| EMAIL_CONTINUATION_RE.is_match(&text[end..]));
     let mut has_dot = false;
     let mut label_characters = 0;
     let mut label_is_alphabetic = true;
-    // Offset of the latest non-mark character, and whether the domain was
-    // complete before it.
-    let mut base = (0, false);
     for (offset, character) in domain.char_indices() {
-        let complete = has_dot && label_characters >= 2 && label_is_alphabetic;
-        let mark = !character.is_ascii() && is_mark(character);
-        if !mark {
-            base = (offset, complete);
-        }
         if !character.is_ascii() {
-            let other_script = !mark && is_other_script(character);
-            let (cut, complete) = if mark { base } else { (offset, complete) };
-            if complete && ((other_script && !domain[offset..].contains('.')) || address_follows())
+            let other_script = is_other_script(character);
+            if has_dot
+                && label_characters >= 2
+                && label_is_alphabetic
+                && ((other_script && !domain[offset..].contains('.')) || address_follows())
             {
-                return domain_start + cut;
+                return domain_start + offset;
             }
             if other_script {
                 // Past this point the domain itself is internationalized and
@@ -153,18 +151,38 @@ fn domain_end(text: &str, domain_start: usize, end: usize) -> usize {
             label_is_alphabetic &= character != '-' && !character.is_numeric();
         }
     }
-    if !address_follows() {
+    if !text[end..].starts_with('@') {
         return end;
     }
-    // A domain that ends on a non-ASCII letter has no boundary to give the
-    // next address.
-    domain
-        .char_indices()
-        .rev()
-        .find(|(_, character)| !character.is_ascii())
-        .map_or(end, |(offset, character)| {
-            domain_start + offset + character.len_utf8()
+    let next_local = OTHER_SCRIPT_RE
+        .find_iter(domain)
+        .last()
+        .map(|other_script| other_script.end())
+        .or_else(|| {
+            domain
+                .char_indices()
+                .rev()
+                .find(|(_, character)| !character.is_ascii())
+                .map(|(offset, character)| offset + character.len_utf8())
         })
+        .map(|tail| {
+            tail + domain[tail..]
+                .chars()
+                .take_while(|character| !character.is_ascii() && is_mark(*character))
+                .map(char::len_utf8)
+                .sum::<usize>()
+        });
+    if let Some(next_local) = next_local.filter(|next_local| *next_local < domain.len()) {
+        return domain_start + next_local;
+    }
+    let mut end = end;
+    while text[end..].starts_with('@') {
+        match EMAIL_CONTINUATION_RE.find(&text[end..]) {
+            Some(continuation) => end += continuation.end(),
+            None => break,
+        }
+    }
+    end
 }
 
 /// Start of the local part that ends at `at`, at or after `start`.
@@ -185,7 +203,7 @@ fn local_start(text: &str, start: usize, at: usize, end: usize) -> usize {
     };
     let mut local = start + other_script.end();
     for character in text[local..at].chars() {
-        if character != '.' && !(!character.is_ascii() && is_mark(character)) {
+        if character != '.' && (character.is_ascii() || !is_mark(character)) {
             break;
         }
         local += character.len_utf8();
