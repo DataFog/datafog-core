@@ -5,12 +5,12 @@ to `@datafog/fogvault-browser`. It stores the exact Workspace bundle as an opaqu
 FogVault record, then activates only after a confirmed durable save. It contains
 no encryption, key derivation, marker allocation or detection implementation.
 
-Version `1.7.0` implements the reviewed Core Workspace contract 1 with FogVault
+Version `1.8.0` implements the reviewed Core Workspace contract 1 with FogVault
 `0.1.0`. Production host and key-provider qualification remain separate. Core
 beta.3 stays the exact tested regression floor.
 
 ```sh
-npm install --save-exact @datafog/wasm@1.7.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.7.0
+npm install --save-exact @datafog/wasm@1.8.0 @datafog/fogvault-browser@0.1.0 @datafog/core-fogvault-browser@1.8.0
 ```
 
 ## Ownership and local review
@@ -137,7 +137,7 @@ pinned Core WASM/Playwright tools and both candidate tarballs:
 
 ```sh
 node integrations/fogvault-browser/test/run-installed.mjs \
-  --core-tarball target/fogvault-integration/artifacts/datafog-wasm-1.7.0.tgz \
+  --core-tarball target/fogvault-integration/artifacts/datafog-wasm-1.8.0.tgz \
   --vault-tarball target/fogvault-integration/artifacts/datafog-fogvault-browser-0.1.0.tgz \
   --output target/fogvault-integration/browser-proof.json
 ```
@@ -179,4 +179,4 @@ change before approving the save. After reopen, old markers report `expired`
 and cannot restore. A forgotten value seen again receives a new code. Retirement
 affects the current saved workspace, not older backups or text already returned
 to callers. `prepareForget` is available in Core WASM 1.1.0 and later, including
-the coordinated 1.7.0 packages.
+the coordinated 1.8.0 packages.
