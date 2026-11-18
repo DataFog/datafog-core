@@ -139,15 +139,15 @@ versions = subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions
 (OUT / "node-versions.json").write_text(versions, encoding="utf-8")
 if ENABLE_WER:
     shim = os.environ["DIAGNOSE_ERROR_MODE_SHIM"]
-    calibration = run("wer-calibration-abort", [NODE, "-e", "const s=require(process.env.DIAGNOSE_ERROR_MODE_SHIM); console.log('[DEBUG-df-node-shutdown] WER calibration '+JSON.stringify(s.enableWer())); process.abort();"], ROOT)
-    assert calibration.returncode != 0
+    calibration = run("wer-calibration-fastfail", [NODE, "-e", "const s=require(process.env.DIAGNOSE_ERROR_MODE_SHIM); console.log('[DEBUG-df-node-shutdown] WER calibration '+JSON.stringify(s.enableWer())); s.fatalForCalibration();"], ROOT)
+    assert calibration.returncode == 0xC0000409
     calibration_pid = RESULTS[-1]["pid"]
     for _ in range(150):
         dumps = list((OUT / "wer-dumps").glob(f"*.{calibration_pid}.dmp"))
         if dumps:
             break
         time.sleep(0.2)
-    (OUT / "wer-calibration.json").write_text(json.dumps({"intentional_abort": True, "pid": calibration_pid, "returncode": calibration.returncode, "dumps": [str(p) for p in dumps], "capture_verified": bool(dumps)}, indent=2))
+    (OUT / "wer-calibration.json").write_text(json.dumps({"intentional_native_fastfail": True, "expected_os_exception": "0xC0000409", "pid": calibration_pid, "returncode": calibration.returncode, "dumps": [str(p) for p in dumps], "capture_verified": bool(dumps)}, indent=2))
     assert dumps, "WER calibration failed; no ordinary-consumer capture claim"
 for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baseline, ROOT / "baseline-source")]:
     if version not in os.environ.get("DIAGNOSE_RELEASES", "1.8.0,1.7.0").split(","):
@@ -238,8 +238,8 @@ console.log('[DEBUG-df-node-shutdown] pure Node SQLite control completed');
 counts = {}
 for result in RESULTS:
     key = result["label"].rsplit("-", 1)[0]
-    if result["label"] == "wer-calibration-abort":
-        counts[key] = {"intentional_abort_observations": 1, "expected_nonzero_exit": result["returncode"]}
+    if result["label"] == "wer-calibration-fastfail":
+        counts[key] = {"intentional_native_fault_observations": 1, "expected_nonzero_exit": result["returncode"]}
         continue
     if "-captured-full-consumer-" in result["label"]:
         value = counts.setdefault(key, {"capture_attempts": 0, "debugger_returncodes": {}})

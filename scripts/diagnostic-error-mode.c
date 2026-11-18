@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <node_api.h>
+#include <intrin.h>
 
 #define CHECK_NAPI(call) do { if ((call) != napi_ok) { napi_throw_error(env, NULL, "diagnostic Win32 export failed"); return NULL; } } while (0)
 
@@ -18,9 +19,19 @@ static napi_value enable_wer(napi_env env, napi_callback_info info) {
   return result;
 }
 
+static napi_value fatal_for_calibration(napi_env env, napi_callback_info info) {
+  (void)env;
+  (void)info;
+  __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+  return NULL;
+}
+
 NAPI_MODULE_INIT() {
   napi_value enable;
   CHECK_NAPI(napi_create_function(env, "enableWer", NAPI_AUTO_LENGTH, enable_wer, NULL, &enable));
   CHECK_NAPI(napi_set_named_property(env, exports, "enableWer", enable));
+  napi_value fatal;
+  CHECK_NAPI(napi_create_function(env, "fatalForCalibration", NAPI_AUTO_LENGTH, fatal_for_calibration, NULL, &fatal));
+  CHECK_NAPI(napi_set_named_property(env, exports, "fatalForCalibration", fatal));
   return exports;
 }
