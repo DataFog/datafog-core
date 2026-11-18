@@ -27,13 +27,13 @@ def sha(path):
 
 
 def save():
-    (OUT / "comparison.json").write_text(json.dumps(summary, indent=2) + "\n")
+    (OUT / "comparison.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
 
 def run(label, command, cwd, timeout=600):
     result = subprocess.run(command, cwd=cwd, env=ENV, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-    (OUT / (label + ".stdout")).write_text(result.stdout)
-    (OUT / (label + ".stderr")).write_text(result.stderr)
+    (OUT / (label + ".stdout")).write_text(result.stdout, encoding="utf-8")
+    (OUT / (label + ".stderr")).write_text(result.stderr, encoding="utf-8")
     row = {"label": label, "command": [str(x) for x in command], "cwd": str(cwd), "returncode": result.returncode}
     records.append(row); save(); print(json.dumps(row), flush=True)
     return result
@@ -55,19 +55,19 @@ def package(directory, name):
 
 def javascript_hashes(archive):
     with tarfile.open(archive) as packed:
-        return {name: hashlib.sha256(packed.extractfile("package/" + name).read().decode().replace("\r\n", "\n").encode()).hexdigest()
+        return {name: hashlib.sha256(packed.extractfile("package/" + name).read().decode("utf-8").replace("\r\n", "\n").encode("utf-8")).hexdigest()
                 for name in ["index.js", "index.d.ts", "native.js"]}
 
 
 try:
-    assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=SOURCE, text=True).strip() == HEAD
+    assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=SOURCE, text=True, encoding="utf-8").strip() == HEAD
     artifact = api("repos/DataFog/datafog-core/actions/artifacts/14426252339")
     assert artifact["workflow_run"]["head_sha"] == BASELINE_HEAD and artifact["workflow_run"]["id"] == 44297537516
     archive = OUT / "baseline.zip"
     with archive.open("wb") as stream:
         subprocess.run(["gh", "api", "repos/DataFog/datafog-core/actions/artifacts/14426252339/zip"], stdout=stream, check=True)
     assert "sha256:" + sha(archive) == artifact["digest"]
-    (OUT / "baseline-artifact.json").write_text(json.dumps(artifact, indent=2))
+    (OUT / "baseline-artifact.json").write_text(json.dumps(artifact, indent=2), encoding="utf-8")
     baseline = OUT / "baseline"
     with zipfile.ZipFile(archive) as packed:
         for name in packed.namelist(): assert not Path(name).is_absolute() and ".." not in Path(name).parts
@@ -82,28 +82,28 @@ try:
     assert old_js == new_js, (old_js, new_js)
     summary["javascript_hashes_normalized_newlines"] = old_js
     summary["archives"] = {str(path): sha(path) for path in [old, old_platform, new]}
-    summary["node_versions"] = json.loads(subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions)"], text=True))
+    summary["node_versions"] = json.loads(subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions)"], text=True, encoding="utf-8"))
     results = {}
     full_hash = None
     for label, source, archive, platform_archive in [("baseline", ROOT, old, old_platform), ("fixed", SOURCE, new, None)]:
         consumer = OUT / (label + "-consumer"); consumer.mkdir()
-        (consumer / "package.json").write_text('{"private":true,"type":"module"}')
+        (consumer / "package.json").write_text('{"private":true,"type":"module"}', encoding="utf-8")
         result = run(label + "-install", [*NPM, "install", "--ignore-scripts", "--omit=optional", str(archive), *([str(platform_archive)] if platform_archive else [])], consumer)
         assert result.returncode == 0
         burst_file = OUT / (label + "-burst.json")
         burst = run(label + "-burst", [NODE, str(SOURCE / "scripts/test-node-output-shutdown.mjs"), "--module", str(consumer / "node_modules/@datafog/node/index.js"), "--runs", "100", "--iterations", "20000", "--output", str(burst_file)], consumer)
-        burst_report = json.loads(burst_file.read_text())
+        burst_report = json.loads(burst_file.read_text(encoding="utf-8"))
         marker = OUT / (label + "-full-consumer-path.txt")
         original = source / "scripts/test-node-package.mjs"
-        code = original.read_text()
+        code = original.read_text(encoding="utf-8")
         cleanup = "  rmSync(temporaryDirectory, { recursive: true, force: true });"
         assert code.count(cleanup) == 1
         retained = source / "scripts/diagnostic-retain-node-package.mjs"
-        retained.write_text(code.replace(cleanup, "  writeFileSync(" + json.dumps(str(marker.resolve())) + ", temporaryDirectory);"))
+        retained.write_text(code.replace(cleanup, "  writeFileSync(" + json.dumps(str(marker.resolve())) + ", temporaryDirectory);"), encoding="utf-8")
         installed = run(label + "-full-installed", [NODE, str(retained), "--prebuilt", "--tarball", str(archive), *(["--platform-tarball", str(platform_archive)] if platform_archive else [])], source)
-        full_consumer = Path(marker.read_text())
+        full_consumer = Path(marker.read_text(encoding="utf-8"))
         full_test = full_consumer / "test-installed.mjs"
-        current = hashlib.sha256(full_test.read_text().replace("\r\n", "\n").encode()).hexdigest()
+        current = hashlib.sha256(full_test.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")).hexdigest()
         if full_hash is None: full_hash = current
         assert current == full_hash, "Before/after fixture child source differs"
         full_results = []
