@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "blocking"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a70e4329df6cb94385eed412ec92375c3cdd8a6e502493d1229b6414e4036dfa"
 dependencies = [
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-core"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "base64",
  "hmac 0.12.1",
@@ -458,19 +458,19 @@ dependencies = [
 
 [[package]]
 name = "datafog-fogvault-migration"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
- "datafog-core 1.7.0",
+ "datafog-core 1.8.0",
  "zeroize",
 ]
 
 [[package]]
 name = "datafog-fogvault-native"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "chacha20poly1305",
  "datafog-core 0.5.0-beta.3",
- "datafog-core 1.7.0",
+ "datafog-core 1.8.0",
  "datafog-fogvault-migration",
  "fogvault-native",
  "fs2",

@@ -69,6 +69,8 @@ dependencies = [
 [[package]]
 name = "datafog-core"
 version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a88087d5c81a082cf0e9b6d67abaa813474c6e08fb9f5f99e3e018c97b0e9c5e"
 dependencies = [
  "base64",
  "hmac",
@@ -82,9 +84,7 @@ dependencies = [
 
 [[package]]
 name = "datafog-core"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88087d5c81a082cf0e9b6d67abaa813474c6e08fb9f5f99e3e018c97b0e9c5e"
+version = "1.8.0"
 dependencies = [
  "base64",
  "hmac",
@@ -113,7 +113,7 @@ version = "0.0.0"
 dependencies = [
  "datafog-core 0.4.4",
  "datafog-core 1.7.0",
- "datafog-core 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "datafog-core 1.8.0",
  "serde_json",
 ]
 

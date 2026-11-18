@@ -56,11 +56,11 @@ npm install @datafog/wasm
 
 ## Python wheel and source-build requirements
 
-Python 1.4.0 has CPython 3.10+ ABI3 wheels for:
+Python 1.8.0 has CPython 3.10+ ABI3 wheels for:
 
 - Linux x64/ARM64 with glibc 2.28+ or musl 1.2+
 - Linux s390x/ppc64le with glibc 2.28+
-- macOS Intel 10.12+ or Apple Silicon 11+
+- macOS Apple Silicon 11+
 - Windows x64/ARM64
 
 PyPy, free-threaded CPython, older libc versions and other architectures use
@@ -72,12 +72,11 @@ Offline installs need these prerequisites provisioned in advance.
 To require a prebuilt wheel and avoid source-build prerequisites:
 
 ```bash
-python -m pip install --only-binary=:all: datafog-core==1.4.0
+python -m pip install --only-binary=:all: datafog-core==1.8.0
 ```
 
-The Python registry currently publishes 1.4.0; Rust and npm publish 1.1.0. Use
-the versions from the [README](https://github.com/DataFog/datafog-core#quickstart)
-when matching findings across runtimes.
+The coordinated Core release is 1.8.0 across PyPI, crates.io and npm. Use the
+same exact version across runtimes when matching findings.
 
 ## Intel macOS release policy
 
