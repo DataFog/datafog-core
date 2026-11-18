@@ -32,14 +32,19 @@ def digest(path):
 
 def run(label, command, cwd):
     child_environment = {key: value for key, value in os.environ.items()
-                         if key not in {"GH_TOKEN", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "CARGO_REGISTRY_TOKEN"}}
-    try:
-        result = subprocess.run(command, cwd=cwd, env=child_environment, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
-    except subprocess.TimeoutExpired as error:
-        result = subprocess.CompletedProcess(command, 124, (error.stdout or b"").decode("utf-8", errors="replace"), (error.stderr or b"").decode("utf-8", errors="replace") + "\n[DEBUG-df-node-shutdown] timeout")
+                         if not any(marker in key.upper() for marker in ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY"))}
+    with subprocess.Popen(command, cwd=cwd, env=child_environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as process:
+        try:
+            stdout, stderr = process.communicate(timeout=300)
+            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            result = subprocess.CompletedProcess(command, 124, stdout, stderr + "\n[DEBUG-df-node-shutdown] timeout")
+        child_pid = process.pid
     (OUT / (label + ".stdout")).write_text(result.stdout, encoding="utf-8")
     (OUT / (label + ".stderr")).write_text(result.stderr, encoding="utf-8")
-    record = {"label": label, "returncode": result.returncode, "command": command}
+    record = {"label": label, "pid": child_pid, "returncode": result.returncode, "command": command}
     RESULTS.append(record)
     (OUT / "results.json").write_text(json.dumps(RESULTS, indent=2), encoding="utf-8")
     print(json.dumps(record), flush=True)
@@ -127,6 +132,8 @@ console.log(`[DEBUG-df-node-shutdown] completed ${mode}`);
 versions = subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions)"], text=True)
 (OUT / "node-versions.json").write_text(versions, encoding="utf-8")
 for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baseline, ROOT / "baseline-source")]:
+    if version not in os.environ.get("DIAGNOSE_RELEASES", "1.8.0,1.7.0").split(","):
+        continue
     root_tarball = package(directory, "@datafog/node", version)
     platform_tarball = package(directory, "@datafog/node-win32-x64-msvc", version)
     (OUT / (version + "-inputs.json")).write_text(json.dumps({str(p): digest(p) for p in [root_tarball, platform_tarball]}, indent=2), encoding="utf-8")
@@ -154,8 +161,48 @@ for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baselin
         full_consumer = Path(marker.read_text(encoding="utf-8"))
         full_test = full_consumer / "test-installed.mjs"
         shutil.copyfile(full_test, OUT / (version + "-full-consumer.mjs"))
+        partition = os.environ.get("DIAGNOSE_PARTITION", "full")
+        original_text = full_test.read_text(encoding="utf-8")
+        start = original_text.index("const engineConfig =")
+        end = original_text.index("const overlapText =")
+        host_block = '''const hostProof=await verifyNodeWorkspaceHost();
+console.log("Native Node host proof passed: "+JSON.stringify(hostProof));
+console.log("Native Node tool envelope proof passed: "+JSON.stringify(await verifyNodeToolEnvelope()));'''
+        assert original_text.count(host_block) == 1
+        prefix = original_text[:original_text.index("verifyDenylist(germanApi);")]
+        if partition == "full-no-models":
+            selected = original_text[:start] + original_text[end:]
+        elif partition == "full-no-hosts":
+            selected = original_text.replace(host_block, "")
+        elif partition == "prefix-all-models":
+            selected = original_text[:end]
+        elif partition == "prefix-workspace":
+            selected = original_text[:start].replace(host_block, "")
+        elif partition == "prefix-hosts":
+            selected = prefix + "await verifyNodeWorkspaceHost(); await verifyNodeToolEnvelope();\n"
+        elif partition == "node-sqlite":
+            selected = r'''
+import {Worker} from "node:worker_threads";
+for(let index=0;index<4;index++) {
+ const worker=new Worker(`const{parentPort}=require('node:worker_threads'); const{DatabaseSync}=require('node:sqlite'); parentPort.once('message',bytes=>{const db=new DatabaseSync(':memory:');try{const n=db.prepare('SELECT length(?) AS n').get(Buffer.from(bytes)).n;parentPort.postMessage(n)}finally{db.close();parentPort.close()}});`,{eval:true});
+ await new Promise((resolve,reject)=>{worker.once('online',resolve);worker.once('error',reject)});
+ const reply=new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject)});
+ const bytes=new Uint8Array(1024*1024);worker.postMessage(bytes,[bytes.buffer]);
+ if(await reply!==1024*1024)throw Error('SQLite control corrupted buffer');
+ await worker.terminate();
+}
+console.log('[DEBUG-df-node-shutdown] pure Node SQLite control completed');
+'''
+        elif partition == "full":
+            selected = original_text
+        else:
+            raise ValueError("Unknown partition: " + partition)
+        selected += "\nconsole.log('[DEBUG-df-node-shutdown] selected partition completed');\n"
+        selected_test = full_consumer / "selected-partition.mjs"
+        selected_test.write_text(selected, encoding="utf-8")
+        (OUT / (version + "-selected-partition.mjs")).write_text(selected, encoding="utf-8")
         for index in range(repetitions):
-            run(f"{version}-full-consumer-{index:03}", [NODE, "test-installed.mjs", str(source / "fixtures")], full_consumer)
+            run(f"{version}-{partition}-{index:03}", [NODE, str(selected_test), str(source / "fixtures")], full_consumer)
         capture = os.environ.get("DIAGNOSE_PROCDUMP")
         if capture:
             for index in range(int(os.environ.get("DIAGNOSE_CAPTURE_REPEATS", "0"))):
