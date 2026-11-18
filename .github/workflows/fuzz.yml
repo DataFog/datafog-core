@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [workspace_snapshot, utf16_range]
+        target: [workspace_snapshot, utf16_range, email_context]
     steps:
       - uses: actions/checkout@v4
         with:

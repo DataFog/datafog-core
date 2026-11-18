@@ -1,0 +1,13 @@
+[package]
+name = "email-boundary-comparison"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+candidate = { package = "datafog-core", path = "../../crates/core" }
+before_unicode = { package = "datafog-core", version = "=0.4.4" }
+before_fix = { package = "datafog-core", version = "=1.7.0" }
+serde_json = "1"
+
+[workspace]

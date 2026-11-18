@@ -13,3 +13,7 @@
 !/corpus/workspace_snapshot/legacy_v1.cbor
 !/corpus/workspace_snapshot/legacy_v2.cbor
 !/corpus/workspace_snapshot/retired.cbor
+/corpus/email_context/*
+!/corpus/email_context/japanese_ascii.bin
+!/corpus/email_context/combining_mark.bin
+!/corpus/email_context/international_domain.bin

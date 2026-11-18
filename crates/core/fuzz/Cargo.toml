@@ -28,3 +28,10 @@ path = "fuzz_targets/utf16_range.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "email_context"
+path = "fuzz_targets/email_context.rs"
+test = false
+doc = false
+bench = false
