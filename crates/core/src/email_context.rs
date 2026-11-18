@@ -1,5 +1,11 @@
 //! Delimit original source slices before applying the shared email matcher.
-use crate::{Candidate, ScanFormat, detect_email, detect_email_with_context};
+use std::sync::LazyLock;
+
+use regex::Regex;
+
+use crate::{
+    Candidate, EMAIL_CONTINUATION_RE, ScanFormat, detect_email, detect_email_with_context,
+};
 
 pub(super) fn detect(text: &str, format: ScanFormat, candidates: &mut Vec<Candidate>) {
     match format {
@@ -59,6 +65,132 @@ fn label_value_start(text: &str, start: usize, at: usize) -> Option<usize> {
     } else {
         None
     }
+}
+
+/// A letter or digit outside ASCII and the Latin script. Combining marks take
+/// the script of their base and are classified separately.
+static OTHER_SCRIPT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^\x00-\x7F\p{Latin}\p{M}]").expect("script regex is valid"));
+
+static MARK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\p{M}").expect("mark regex is valid"));
+
+fn is_other_script(character: char) -> bool {
+    OTHER_SCRIPT_RE.is_match(character.encode_utf8(&mut [0; 4]))
+}
+
+fn is_mark(character: char) -> bool {
+    MARK_RE.is_match(character.encode_utf8(&mut [0; 4]))
+}
+
+/// Narrow a match from text containing non-ASCII letters to the address.
+///
+/// The matcher accepts every letter, so in text written without spaces it runs
+/// an address into the prose and the values around it: `alice@example.comとbob`
+/// takes the local part of the next address as a top-level domain, and
+/// `SSNは123-45-6789でメールはalice@example.com` takes the sentence as a
+/// local part. Internationalized addresses stay whole: a part is only split
+/// where an ASCII or accented-Latin address meets another script, or where the
+/// end of a domain is the beginning of another address.
+pub(super) fn script_bounds(text: &str, start: usize, end: usize) -> (usize, usize) {
+    let Some(at) = text[start..end].find('@').map(|offset| start + offset) else {
+        return (start, end);
+    };
+    let end = domain_end(text, at + 1, end);
+    (local_start(text, start, at, end), end)
+}
+
+/// End of the domain that starts at `domain_start`, at or before `end`.
+///
+/// The domain stops at its first non-ASCII character when the labels before it
+/// are a complete ASCII or accented-Latin domain and either another address
+/// begins there (`alice@example.comébob@example.net`) or the character starts
+/// a different script in the last label (`alice@example.comです`): no
+/// top-level domain continues from Latin letters into another script. A
+/// combining mark stays with its base letter, so composed and decomposed
+/// spellings split at the same place. When no such point exists and another
+/// address still begins inside the domain, the domain ends where that
+/// address's ASCII local part begins, so both remain covered.
+fn domain_end(text: &str, domain_start: usize, end: usize) -> usize {
+    let domain = &text[domain_start..end];
+    if domain.is_ascii() {
+        return end;
+    }
+    let mut address_follows = None;
+    let mut address_follows =
+        || *address_follows.get_or_insert_with(|| EMAIL_CONTINUATION_RE.is_match(&text[end..]));
+    let mut has_dot = false;
+    let mut label_characters = 0;
+    let mut label_is_alphabetic = true;
+    // Offset of the latest non-mark character, and whether the domain was
+    // complete before it.
+    let mut base = (0, false);
+    for (offset, character) in domain.char_indices() {
+        let complete = has_dot && label_characters >= 2 && label_is_alphabetic;
+        let mark = !character.is_ascii() && is_mark(character);
+        if !mark {
+            base = (offset, complete);
+        }
+        if !character.is_ascii() {
+            let other_script = !mark && is_other_script(character);
+            let (cut, complete) = if mark { base } else { (offset, complete) };
+            if complete && ((other_script && !domain[offset..].contains('.')) || address_follows())
+            {
+                return domain_start + cut;
+            }
+            if other_script {
+                // Past this point the domain itself is internationalized and
+                // has no script boundary to split at.
+                break;
+            }
+        }
+        if character == '.' {
+            has_dot = true;
+            label_characters = 0;
+            label_is_alphabetic = true;
+        } else {
+            label_characters += 1;
+            label_is_alphabetic &= character != '-' && !character.is_numeric();
+        }
+    }
+    if !address_follows() {
+        return end;
+    }
+    // A domain that ends on a non-ASCII letter has no boundary to give the
+    // next address.
+    domain
+        .char_indices()
+        .rev()
+        .find(|(_, character)| !character.is_ascii())
+        .map_or(end, |(offset, character)| {
+            domain_start + offset + character.len_utf8()
+        })
+}
+
+/// Start of the local part that ends at `at`, at or after `start`.
+///
+/// In front of an ASCII or accented-Latin domain, letters of another script
+/// are surrounding text when ASCII or Latin characters follow them, so the
+/// local part starts after the last such letter: `メールはalice@example.com`
+/// reports `alice@example.com`. A local part that ends in another script
+/// (`用户@example.com`) and any local part of an internationalized domain
+/// (`用户@例子.广告`) are kept whole, because nothing separates such a mailbox
+/// name from text written before it.
+fn local_start(text: &str, start: usize, at: usize, end: usize) -> usize {
+    if OTHER_SCRIPT_RE.is_match(&text[at + 1..end]) {
+        return start;
+    }
+    let Some(other_script) = OTHER_SCRIPT_RE.find_iter(&text[start..at]).last() else {
+        return start;
+    };
+    let mut local = start + other_script.end();
+    for character in text[local..at].chars() {
+        if character != '.' && !(!character.is_ascii() && is_mark(character)) {
+            break;
+        }
+        local += character.len_utf8();
+    }
+    if local < at { local } else { start }
 }
 
 fn detect_slice(text: &str, start: usize, end: usize, candidates: &mut Vec<Candidate>) {

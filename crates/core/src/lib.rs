@@ -3464,11 +3464,25 @@ fn detect_phone_in_line(
     }
 }
 
+/// Characters of one dot-separated run of a local part, and of a domain label.
+const EMAIL_LOCAL_CLASS: &str = r"[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]";
+const EMAIL_DOMAIN: &str =
+    r"(?:[\p{L}\p{M}\p{N}](?:[\p{L}\p{M}\p{N}-]{0,61}[\p{L}\p{M}\p{N}])?\.)+[\p{L}\p{M}]{2,}";
+
 static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+(?:\.[\p{L}\p{M}\p{N}!#$%&'*+/=?^_`{|}~-]+)*@(?:[\p{L}\p{M}\p{N}](?:[\p{L}\p{M}\p{N}-]{0,61}[\p{L}\p{M}\p{N}])?\.)+[\p{L}\p{M}]{2,}",
-    )
+    Regex::new(&format!(
+        r"(?i){EMAIL_LOCAL_CLASS}+(?:\.{EMAIL_LOCAL_CLASS}+)*@{EMAIL_DOMAIN}"
+    ))
     .expect("email regex is valid")
+});
+
+/// The rest of an address whose local part is already under way: the remaining
+/// local-part characters, then `@` and a domain.
+static EMAIL_CONTINUATION_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"^{EMAIL_LOCAL_CLASS}*(?:\.{EMAIL_LOCAL_CLASS}+)*@{EMAIL_DOMAIN}"
+    ))
+    .expect("email continuation regex is valid")
 });
 
 fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
@@ -3476,11 +3490,24 @@ fn detect_email(text: &str, candidates: &mut Vec<Candidate>) {
 }
 
 fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_context: bool) {
-    for matched in EMAIL_RE.find_iter(text) {
+    // Only non-ASCII letters can join an address to its surroundings, so ASCII
+    // text keeps the matcher's own boundaries.
+    let is_ascii = text.is_ascii();
+    let mut search_start = 0;
+    while let Some(matched) = EMAIL_RE.find_at(text, search_start) {
+        let (matched_start, end) = if is_ascii {
+            (matched.start(), matched.end())
+        } else {
+            email_context::script_bounds(text, matched.start(), matched.end())
+        };
+        // The next search resumes at the reported end, so letters removed from
+        // this domain can begin the following address.
+        search_start = end;
         // A match never starts on a dot, so an address written after dots
         // (`see [1].alice@example.com`, `me...alice@example.com`) is reported
         // from its first local-part character instead of being dropped.
-        let neighbor_start = email_start_after_neighbor(text, matched.start(), matched.end());
+        // Neighbor and wrapping-quote checks look at the matcher's own end.
+        let neighbor_start = email_start_after_neighbor(text, matched_start, matched.end());
         let start = if text_context {
             // Text field syntax is removed from the span; explicit ENV/SQL
             // slices keep their punctuation.
@@ -3496,7 +3523,7 @@ fn detect_email_with_context(text: &str, candidates: &mut Vec<Candidate>, text_c
         candidates.push(Candidate {
             label: Label::Email,
             start_byte: start,
-            end_byte: matched.end(),
+            end_byte: end,
         });
     }
 }
