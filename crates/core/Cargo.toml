@@ -18,7 +18,7 @@ embedded-cnn = []
 
 [dependencies]
 base64 = "0.22"
-hmac = "0.12"
+hmac = "0.13"
 minicbor = { version = "=2.3.0", features = ["std"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
