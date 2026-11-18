@@ -40,13 +40,20 @@ text that contains non-ASCII letters, a match is narrowed as follows:
   are not covered by the EMAIL finding. `用户alice@example.com` is therefore
   reported as `alice@example.com`.
 
-Internationalized addresses are kept whole: `用户@例子.广告`,
+Addresses such as `用户@例子.广告`,
 `jörg@müller.de`, `josé@example.com`, and `joséalice@example.com` each report
 their full span. A local part that ends in a non-Latin script
 (`用户@example.com`) or belongs to a non-Latin domain is not narrowed, since
 nothing marks where it starts; in unspaced text such a finding can still
 include the words before it. The full-width at sign `＠` and full-width dot
 `．` are not treated as address syntax. ASCII-only text is unaffected.
+
+These rules deliberately narrow some mixed-script addresses as well as prose.
+`δοκιμήtest@example.com` reports `test@example.com`, leaving `δοκιμή` visible.
+`alice@example.coм` (a Cyrillic final `м`) reports `alice@example.co`, leaving
+that final letter visible. The scanner cannot distinguish those valid address
+shapes from surrounding unspaced text. Complete coverage of every mixed-script
+mailbox is therefore not guaranteed.
 
 ## Usage
 
