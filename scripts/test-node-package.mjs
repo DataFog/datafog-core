@@ -896,6 +896,12 @@ try {
 
   run(process.execPath,["--expose-gc","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"],temporaryDirectory);
 
+  run(process.execPath, [
+    path.join(root, "scripts", "test-node-output-shutdown.mjs"),
+    "--module", path.join(temporaryDirectory, "node_modules", "@datafog", "node", "index.js"),
+    "--output", path.join(temporaryDirectory, "output-shutdown.json"),
+  ], temporaryDirectory);
+
   run(
     process.execPath,
     [path.join(temporaryDirectory, "node_modules", "typescript", "bin", "tsc"), "--project", "tsconfig.json"],

@@ -6,6 +6,13 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Return JavaScript-owned Node byte buffers so native workspace and restore
+  operations remain safe when workers close during background garbage collection.
+  This avoids the external-buffer shutdown race in Node 24.22.2 and 25.8.2
+  without changing the public byte-array APIs.
+
 ## [1.8.0] - 2026-11-18
 
 ### Changed
