@@ -6,13 +6,6 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
-### Fixed
-
-- Return JavaScript-owned Node byte buffers so native workspace and restore
-  operations remain safe when workers close during background garbage collection.
-  This avoids the external-buffer shutdown race in Node 24.22.2 and 25.8.2
-  without changing the public byte-array APIs.
-
 ## [1.8.0] - 2026-11-18
 
 ### Changed
@@ -21,11 +14,15 @@ Earlier release notes are in [docs/releases](docs/releases/).
   boundaries change for EMAIL; consumers pinned to `<1.8` must admit the new
   minor line to receive the mixed-script boundary fix.
 - Replace the verification CLI's unmaintained Chrono timestamp dependency with
-  Jiff, preserving UTC report and directory formats. Runtime SDK dependencies
-  are unchanged.
+  Jiff, preserving UTC report and directory formats. Jiff is used by the
+  verification CLI.
 
 ### Fixed
 
+- Return JavaScript-owned Node byte buffers to prevent workspace and restore
+  shutdown aborts during background garbage collection.
+  This avoids the external-buffer shutdown race in Node 24.22.2 and 25.8.2
+  without changing the public byte-array APIs.
 - Report every ASCII-form EMAIL in text written without spaces (#272). Since
   1.5.0 a non-ASCII letter between two addresses was read as part of the first
   address's top-level domain, so `alice@example.comとbob@example.net` produced

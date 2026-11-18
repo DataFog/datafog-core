@@ -60,6 +60,14 @@ CREDIT_CARD or PHONE detector in either baseline loses that coverage. The
 report separately records lost incidental coverage from another detector.
 This finite matrix is regression evidence, not exhaustive Unicode coverage.
 
+## Node byte arrays
+
+Byte-heavy workspace and restore calls could abort Windows Node during shutdown
+because an external Buffer finalizer ran after its environment closed
+([upstream report](https://github.com/nodejs/node/pull/67417)). These outputs now
+use JavaScript-owned storage. Public callers receive the same `Uint8Array` and
+`Buffer` types, with independent copies of workspace bytes.
+
 ## Coordinated package set
 
 The 15 Core-owned distributions use 1.8.0: three Rust crates, two Python
