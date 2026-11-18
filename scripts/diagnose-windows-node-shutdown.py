@@ -31,8 +31,10 @@ def digest(path):
 
 
 def run(label, command, cwd):
+    child_environment = {key: value for key, value in os.environ.items()
+                         if key not in {"GH_TOKEN", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "CARGO_REGISTRY_TOKEN"}}
     try:
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+        result = subprocess.run(command, cwd=cwd, env=child_environment, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
     except subprocess.TimeoutExpired as error:
         result = subprocess.CompletedProcess(command, 124, (error.stdout or b"").decode("utf-8", errors="replace"), (error.stderr or b"").decode("utf-8", errors="replace") + "\n[DEBUG-df-node-shutdown] timeout")
     (OUT / (label + ".stdout")).write_text(result.stdout, encoding="utf-8")
