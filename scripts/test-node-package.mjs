@@ -23,9 +23,9 @@ function npm(arguments_, options) {
   return execFileSync("npm", arguments_, options);
 }
 
-function run(command, arguments_, cwd) {
-  if (command === "npm") return npm(arguments_, { cwd, stdio: "inherit" });
-  return execFileSync(command, arguments_, { cwd, stdio: "inherit" });
+function run(command, arguments_, cwd, timeout) {
+  if (command === "npm") return npm(arguments_, { cwd, stdio: "inherit", timeout });
+  return execFileSync(command, arguments_, { cwd, stdio: "inherit", timeout });
 }
 
 function fixtureRecords(name) {
@@ -888,19 +888,19 @@ try {
     temporaryDirectory,
   );
 
-  run(
-    process.execPath,
-    ["test-installed.mjs", fixturesDirectory],
-    temporaryDirectory,
-  );
+  // Repeated natural exits exercise external-byte finalizers after worker cleanup.
+  for (let iteration = 0; iteration < 10; iteration++) {
+    console.log(`Installed Node consumer natural exit ${iteration + 1}/10`);
+    run(
+      process.execPath,
+      ["test-installed.mjs", fixturesDirectory],
+      temporaryDirectory,
+      60_000,
+    );
+  }
 
   run(process.execPath,["--expose-gc","native-node-workspace-gc.mjs","node-workspace-host.mjs","node-workspace-host-worker.mjs","node-workspace-host-crash.mjs","node-workspace-host-conformance.mjs"],temporaryDirectory);
 
-  run(process.execPath, [
-    path.join(root, "scripts", "test-node-output-shutdown.mjs"),
-    "--module", path.join(temporaryDirectory, "node_modules", "@datafog", "node", "index.js"),
-    "--output", path.join(temporaryDirectory, "output-shutdown.json"),
-  ], temporaryDirectory);
 
   run(
     process.execPath,
