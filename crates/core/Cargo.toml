@@ -17,7 +17,7 @@ models = []
 embedded-cnn = []
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 hmac = "0.12"
 minicbor = { version = "=2.3.0", features = ["std"] }
 regex = "1"
