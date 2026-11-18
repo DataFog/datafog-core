@@ -379,3 +379,38 @@ fn context_suppression_and_encoded_wrappers_cover_review_edges() {
         assert_eq!(values(&wrapped, "PRIVATE_KEY"), [key]);
     }
 }
+
+#[test]
+fn email_in_unspaced_text_leaves_neighboring_values_and_addresses_reported() {
+    for (text, entity_type, value) in [
+        (
+            "SSNは123-45-6789でメールはalice@example.comです",
+            "SSN",
+            "123-45-6789",
+        ),
+        (
+            "カード番号は4111 1111 1111 1111でメールはalice@example.comです",
+            "CREDIT_CARD",
+            "4111 1111 1111 1111",
+        ),
+        (
+            "電話は(212) 555-0100でメールはalice@example.comです",
+            "PHONE",
+            "(212) 555-0100",
+        ),
+    ] {
+        assert_eq!(values(text, entity_type), [value], "{text}");
+        assert_eq!(values(text, "EMAIL"), ["alice@example.com"], "{text}");
+    }
+    for separator in ["と", "é", "à", "и", "和", "와", "或", "و", "\u{301}", "é."] {
+        let text = format!("alice@example.com{separator}bob@example.net");
+        let emails = values(&text, "EMAIL");
+        assert_eq!(emails.len(), 2, "{text}");
+        assert!(emails[0].starts_with("alice@example.co"), "{text}");
+        assert!(emails[1].ends_with("bob@example.net"), "{text}");
+    }
+    // Internationalized and accented addresses keep their full span.
+    for address in ["用户@例子.广告", "josé@example.com", "jörg@müller.de"] {
+        assert_eq!(values(address, "EMAIL"), [address]);
+    }
+}

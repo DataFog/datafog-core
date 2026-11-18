@@ -16,6 +16,34 @@ text mode leaves alone. This setting changes email boundaries only; other
 detectors keep their existing behavior. It does not validate the file or
 guarantee syntax preservation for every entity type or SQL dialect.
 
+## Addresses next to other scripts
+
+Unicode letters are valid in addresses, and text in many languages is written
+without spaces, so the letters around an address cannot all belong to it. In
+text that contains non-ASCII letters, a match is narrowed as follows:
+
+- A domain made of ASCII or accented-Latin labels ends at the first letter of
+  another script in its last label: `alice@example.comです` reports
+  `alice@example.com`.
+- A domain ends at its first non-ASCII letter when another address begins
+  there: `alice@example.comとbob@example.net` and
+  `alice@example.comébob@example.net` each report two addresses. With an
+  accented Latin letter the letter is reported with the second address
+  (`ébob@example.net`), because it could belong to it.
+- In front of an ASCII or accented-Latin domain, the local part starts after
+  the last letter of another script: `メールはalice@example.com` reports
+  `alice@example.com`, so a sentence and the SSN, card or phone number in it
+  are not covered by the EMAIL finding. `用户alice@example.com` is therefore
+  reported as `alice@example.com`.
+
+Internationalized addresses are kept whole: `用户@例子.广告`,
+`jörg@müller.de`, `josé@example.com`, and `joséalice@example.com` each report
+their full span. A local part that ends in a non-Latin script
+(`用户@example.com`) or belongs to a non-Latin domain is not narrowed, since
+nothing marks where it starts; in unspaced text such a finding can still
+include the words before it. The full-width at sign `＠` and full-width dot
+`．` are not treated as address syntax. ASCII-only text is unaffected.
+
 ## Usage
 
 ```python

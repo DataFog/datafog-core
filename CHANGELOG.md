@@ -6,6 +6,20 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Report every ASCII-form EMAIL in text written without spaces (#272). Since
+  1.5.0 a non-ASCII letter between two addresses was read as part of the first
+  address's top-level domain, so `alice@example.comとbob@example.net` produced
+  one finding and redacted to `[EMAIL]@example.net`; both addresses are now
+  found. A sentence in another script in front of an address is no longer read
+  as its local part, so `SSNは123-45-6789でメールはalice@example.comです`
+  reports `alice@example.com` and the SSN separately. Internationalized and
+  accented addresses such as `用户@例子.广告` and `jörg@müller.de` keep their
+  full span. A local part that mixes another script with a trailing ASCII name
+  in front of a Latin domain (`用户alice@example.com`) is now reported from the
+  ASCII name. See the [email boundaries guide](docs/guides/email-boundaries.mdx).
+
 ## [1.7.0] - 2026-11-17
 
 ### Changed
