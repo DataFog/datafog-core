@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,7 +31,10 @@ def digest(path):
 
 
 def run(label, command, cwd):
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+    try:
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+    except subprocess.TimeoutExpired as error:
+        result = subprocess.CompletedProcess(command, 124, (error.stdout or b"").decode("utf-8", errors="replace"), (error.stderr or b"").decode("utf-8", errors="replace") + "\n[DEBUG-df-node-shutdown] timeout")
     (OUT / (label + ".stdout")).write_text(result.stdout, encoding="utf-8")
     (OUT / (label + ".stderr")).write_text(result.stderr, encoding="utf-8")
     record = {"label": label, "returncode": result.returncode, "command": command}
@@ -85,7 +89,6 @@ probe = r'''
 import assert from "node:assert/strict";
 import {Worker} from "node:worker_threads";
 import {writeSync} from "node:fs";
-import * as api from "@datafog/node";
 const mode = process.argv[2];
 if (process.env.DIAGNOSE_ASYNC_HOOKS === "1") {
   const {createHook} = await import("node:async_hooks");
@@ -93,6 +96,7 @@ if (process.env.DIAGNOSE_ASYNC_HOOKS === "1") {
   createHook({init(id,type){if(type.includes("CustomGC")||type.includes("deferred"))live.set(id,type)},destroy(id){live.delete(id)}}).enable();
   for(const event of ["beforeExit","exit"]) process.on(event,()=>writeSync(2,`[DEBUG-df-node-shutdown] ${event} ${JSON.stringify([...live])}\n`));
 }
+const api = mode.startsWith("node-") ? null : await import("@datafog/node");
 function sync() {
   assert(api.scan("jane@example.com").some(x=>x.entityType==="EMAIL"));
   const ws=api.Workspace.create(new Uint8Array(16),new Uint8Array(16));
@@ -105,12 +109,14 @@ if (mode === "rejected-model-open") {
     await assert.rejects(api.ModelSession.open({...config,engine}),e=>e.code==="invalid_configuration"&&e.path===path&&e.reason===reason);
   }
 }
-if (mode.startsWith("worker-")) {
-  const source=`const {parentPort}=require('node:worker_threads'); const api=require('@datafog/node'); api.scan('jane@example.com'); const ws=api.Workspace.create(new Uint8Array(16),new Uint8Array(16)); ws.close(); ${mode==="worker-terminate"?"setInterval(()=>{},1000);":""} parentPort.postMessage('ready');`;
+if (mode.startsWith("worker-") || mode === "node-worker-terminate") {
+  const loadAddon=mode.startsWith("worker-");
+  const terminate=mode.endsWith("terminate");
+  const source=`const {parentPort}=require('node:worker_threads'); (async()=>{ ${loadAddon?"const api=await import('@datafog/node'); api.scan('jane@example.com'); const ws=api.Workspace.create(new Uint8Array(16),new Uint8Array(16)); ws.close();":""} ${terminate?"setInterval(()=>{},1000);":""} parentPort.postMessage('ready'); })().catch(error=>{throw error});`;
   const worker=new Worker(source,{eval:true});
   const exit=new Promise((resolve,reject)=>{worker.once('error',reject);worker.once('exit',resolve)});
   await new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject)});
-  if(mode==="worker-terminate") await worker.terminate();
+  if(terminate) await worker.terminate();
   else assert.equal(await exit,0);
 }
 console.log(`[DEBUG-df-node-shutdown] completed ${mode}`);
@@ -128,10 +134,10 @@ for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baselin
     installed = run(version + "-install", [*NPM, "install", "--ignore-scripts", "--omit=optional", str(root_tarball), str(platform_tarball)], consumer)
     assert installed.returncode == 0
     (consumer / "probe.mjs").write_text(probe, encoding="utf-8")
-    for mode in ["import-only", "sync", "rejected-model-open", "worker-natural", "worker-terminate"]:
+    for mode in os.environ.get("DIAGNOSE_MODES", "import-only,sync,rejected-model-open,worker-natural,worker-terminate").split(","):
         for index in range(50):
             run(f"{version}-{mode}-{index:03}", [NODE, "probe.mjs", mode], consumer)
-    for index in range(3):
+    for index in range(0 if os.environ.get("DIAGNOSE_SKIP_FULL") == "1" else 3):
         run(f"{version}-full-suite-{index:03}", [NODE, str(source / "scripts/test-node-package.mjs"), "--prebuilt", "--tarball", str(root_tarball), "--platform-tarball", str(platform_tarball)], source)
 
 counts = {}

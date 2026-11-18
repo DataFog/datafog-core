@@ -27,6 +27,9 @@ jobs:
       - name: Diagnose exact candidate and public baseline
         env:
           GH_TOKEN: ${{ github.token }}
+          DIAGNOSE_MODES: node-only,node-worker-terminate,worker-natural,worker-terminate
+          DIAGNOSE_SKIP_FULL: "1"
+          DIAGNOSE_ASYNC_HOOKS: "1"
         run: python scripts/diagnose-windows-node-shutdown.py
       - uses: actions/upload-artifact@v4
         if: always()
