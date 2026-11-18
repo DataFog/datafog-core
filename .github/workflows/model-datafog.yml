@@ -1,147 +1,45 @@
-name: Windows postmortem capture diagnosis
+name: Windows Node output before-after
 on:
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 jobs:
-  diagnose:
+  compare:
     runs-on: windows-latest
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        capture: ["1"]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 725b0dd490ad085c676b50922721a7d6d0d7b565
+          path: candidate-source
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.2"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build own diagnostic Win32 error-mode shim
-        if: matrix.capture == '1'
-        shell: pwsh
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+      - name: Build exact reviewed fixed binding
         run: |
-          python scripts/prepare-diagnostic-node-sdk.py
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify official Node SDK inputs' }
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -latest -property installationPath
-          $env:VCVARS64 = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-          if (-not (Test-Path $env:VCVARS64)) { throw 'MSVC developer environment missing' }
-          @'
-          @echo off
-          call "%VCVARS64%"
-          if errorlevel 1 exit /b 1
-          cl /nologo /LD /MD /O2 /std:c17 /I"%CD%\diagnostic-sdk\node-v24.22.2\include\node" scripts\diagnostic-error-mode.c /link /OUT:"%CD%\shutdown-diagnosis\error-mode.node" "%CD%\diagnostic-sdk\node.lib"
-          '@ | Set-Content build-error-mode.cmd
-          & cmd.exe /d /c build-error-mode.cmd
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot build diagnostic shim' }
-          Get-FileHash shutdown-diagnosis/error-mode.node -Algorithm SHA256
-          "DIAGNOSE_ERROR_MODE_SHIM=$pwd/shutdown-diagnosis/error-mode.node" >> $env:GITHUB_ENV
-      - name: Configure application-scoped postmortem dumps
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force shutdown-diagnosis/wer-dumps | Out-Null
-          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe'
-          if (Test-Path $key) {
-            reg export 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe' wer-backup.reg /y
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot back up existing node.exe dump configuration' }
-          }
-          New-Item -Path $key -Force | Out-Null
-          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value (Resolve-Path shutdown-diagnosis/wer-dumps).Path -Force | Out-Null
-          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
-          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 32 -Force | Out-Null
-          Get-ItemProperty $key | Format-List DumpFolder,DumpType,DumpCount
-          Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug' -ErrorAction SilentlyContinue | Select-Object Debugger,Auto
-          Test-Path 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
-      - name: Execute exact candidate partition
+          npm ci --prefix candidate-source/bindings/node
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned Node build tools' }
+          npm run build --prefix candidate-source/bindings/node -- --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot build reviewed fixed source' }
+      - name: Compare fixed counts against the original exact artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          DIAGNOSE_MODES: ""
-          DIAGNOSE_SKIP_FULL: "1"
-          DIAGNOSE_RELEASES: "1.8.0"
-          DIAGNOSE_FULL_CONSUMER_REPEATS: "50"
-          DIAGNOSE_PARTITION: full-no-models
-          DIAGNOSE_ENABLE_WER: ${{ matrix.capture }}
-        run: python scripts/diagnose-windows-node-shutdown.py
-      - name: Restore application dump configuration
-        if: always()
-        shell: pwsh
-        run: |
-          Remove-Item 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe' -Recurse -Force -ErrorAction SilentlyContinue
-          if (Test-Path wer-backup.reg) {
-            reg import wer-backup.reg
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot restore existing node.exe dump configuration' }
-          }
+        run: python scripts/compare-node-output-shutdown.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shutdown-partition-wer-${{ matrix.capture }}
+          name: windows-output-before-after
           path: |
-            shutdown-diagnosis/*.json
-            shutdown-diagnosis/*.stdout
-            shutdown-diagnosis/*.stderr
-            shutdown-diagnosis/*-full-consumer.mjs
-            shutdown-diagnosis/*-selected-partition.mjs
-            shutdown-diagnosis/error-mode.node
-            shutdown-diagnosis/wer-dumps/*.dmp
-          if-no-files-found: error
-  analyze:
-    if: always()
-    needs: diagnose
-    runs-on: windows-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: shutdown-partition-*
-          path: partitions
-      - name: Analyze uninstrumented crash dumps
-        shell: pwsh
-        run: |
-          $dumps = @(Get-ChildItem partitions -Filter '*.dmp' -Recurse)
-          New-Item -ItemType Directory -Force stacks | Out-Null
-          if ($dumps.Count -eq 0) {
-            '{"dump_count":0,"classification":"No postmortem dump captured; no stack conclusion"}' | Set-Content stacks/summary.json
-            exit 0
-          }
-          $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
-          if (-not (Test-Path $cdb)) {
-            $sdk = Get-ItemProperty 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object DisplayName -match 'Windows Software Development Kit' | Sort-Object DisplayVersion -Descending | Select-Object -First 1
-            $installer = $sdk.BundleCachePath
-            if (-not $installer -or -not (Test-Path $installer)) {
-              Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2349110' -OutFile winsdksetup.exe
-              $installer = (Resolve-Path winsdksetup.exe).Path
-            }
-            $signature = Get-AuthenticodeSignature $installer
-            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'Untrusted SDK installer' }
-            $installed = Start-Process $installer -ArgumentList '/features OptionId.WindowsDesktopDebuggers /q /norestart' -Wait -PassThru
-            if ($installed.ExitCode -notin @(0,3010) -or -not (Test-Path $cdb)) { throw 'Cannot install official CDB' }
-          }
-          Invoke-WebRequest 'https://nodejs.org/dist/v24.22.2/win-x64/node_pdb.7z' -OutFile node_pdb.7z
-          Invoke-WebRequest 'https://nodejs.org/dist/v24.22.2/SHASUMS256.txt' -OutFile node-SHASUMS256.txt
-          $checksums = Get-Content node-SHASUMS256.txt -Raw
-          $line = @($checksums -split "`n" | Where-Object { $_.Trim() -match '\swin-x64/node_pdb\.7z$' })
-          if ($line.Count -ne 1) { throw 'Ambiguous Node PDB checksum' }
-          $expected = ($line[0].Trim() -split '\s+')[0]
-          if ((Get-FileHash node_pdb.7z -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Node PDB checksum differs' }
-          & 7z x node_pdb.7z '-onode-symbols' -y
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot extract Node PDB' }
-          $pdb = @(Get-ChildItem node-symbols -Filter node.pdb -Recurse)
-          if ($pdb.Count -ne 1) { throw 'Ambiguous Node PDB' }
-          $symbolPath = "$($pdb[0].Directory.FullName);SRV*$pwd/symbol-cache*https://msdl.microsoft.com/download/symbols"
-          $rows = @()
-          foreach ($dump in $dumps) {
-            $log = Join-Path (Resolve-Path stacks).Path ($dump.Directory.Parent.Name + '-' + $dump.BaseName + '.txt')
-            & $cdb -z $dump.FullName -y $symbolPath -lines -c '.ecxr;kv;lm;q' -logo $log
-            $rows += @{dump=$dump.FullName;sha256=(Get-FileHash $dump.FullName -Algorithm SHA256).Hash.ToLowerInvariant();stack=$log;cdb_exit=$LASTEXITCODE}
-          }
-          @{dump_count=$dumps.Count;node_pdb_sha256=$expected;analyses=$rows} | ConvertTo-Json -Depth 8 | Set-Content stacks/summary.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: shutdown-native-stacks
-          path: stacks
+            output-comparison/*.json
+            output-comparison/*.stdout
+            output-comparison/*.stderr
+            output-comparison/fixed/*.tgz
           if-no-files-found: error
