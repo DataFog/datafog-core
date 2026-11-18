@@ -6,6 +6,17 @@ Earlier release notes are in [docs/releases](docs/releases/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-18
+
+### Changed
+
+- Release coordinated Core SDK and companion packages at 1.8.0. Finding
+  boundaries change for EMAIL; consumers pinned to `<1.8` must admit the new
+  minor line to receive the mixed-script boundary fix.
+- Replace the verification CLI's unmaintained Chrono timestamp dependency with
+  Jiff, preserving UTC report and directory formats. Runtime SDK dependencies
+  are unchanged.
+
 ### Fixed
 
 - Report every ASCII-form EMAIL in text written without spaces (#272). Since

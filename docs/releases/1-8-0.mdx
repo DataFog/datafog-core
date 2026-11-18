@@ -1,0 +1,74 @@
+---
+title: "1.8.0"
+description: "Keep email addresses covered in text written without spaces."
+---
+
+Core 1.8.0 fixes EMAIL boundaries in mixed-script text, including Japanese and
+Chinese sentences written without spaces around addresses. It is coordinated
+across Rust, Python, Node.js, WASM and the Core-owned companion packages.
+Workspace contract 1, marker syntax, snapshot formats and supported platforms
+remain unchanged from [1.7.0](/releases/1-7-0).
+
+## Install
+
+```sh
+python -m pip install datafog-core==1.8.0 datafog-fogvault==1.8.0
+npm install --save-exact @datafog/node@1.8.0 @datafog/wasm@1.8.0
+cargo add datafog-core@=1.8.0
+```
+
+Consumers constrained to `<1.8` must update their allowed minor line. The
+independent FogVault engine keeps its own version; it is not relabeled 1.8.0.
+
+## EMAIL changes
+
+- `alice@example.comとbob@example.net` reports both addresses. Versions
+  1.5.0–1.7.0 reported one over-wide address and could leave the second domain
+  in a transformed copy.
+- `SSNは123-45-6789でメールはalice@example.comです` reports the SSN and address
+  separately. A card or phone in the same kind of sentence can also be counted
+  under its own selected type instead of being swallowed by EMAIL.
+- Internationalized addresses such as `用户@例子.广告`, `jörg@müller.de` and
+  `josé@example.com` retain their complete spans.
+- A local part mixing another script with a trailing ASCII name before a Latin
+  domain, such as `用户alice@example.com`, is now reported from `alice`. The
+  leading text stays visible unless another selected detector covers it.
+- Mixed-script final domain labels can narrow too: `alice@example.coм`, with
+  Cyrillic `м`, reports `alice@example.co` and leaves that final letter visible.
+  `δοκιμήtest@example.com` likewise leaves `δοκιμή` visible. These valid
+  address shapes cannot be distinguished from surrounding unspaced prose;
+  complete coverage of every mixed-script mailbox is not guaranteed.
+- An accented Latin letter between adjacent addresses belongs to the second
+  address when it can begin that address. Some ambiguous adjacent addresses
+  are covered as one span. Coverage is preserved without claiming that every
+  input can be separated into independent mailboxes.
+
+See [email boundaries](/guides/email-boundaries) for the exact rules and
+remaining limitations. ASCII-only matching is unchanged by this release.
+
+## Coverage and limits
+
+Tighter EMAIL findings stop removing nearby text as a side effect. A malformed
+SSN or phone that its own detector rejects can therefore remain visible where
+an over-wide EMAIL previously swallowed it. A clean scan is not proof that the
+source contains no sensitive data. Select the relevant types and inspect copies.
+
+The committed [comparison harness](https://github.com/DataFog/datafog-core/tree/main/scripts/email-boundary-comparison)
+visits 1,382,400 mixed-script texts with 6,912,000 planted values against exact
+published Rust 0.4.4 and 1.7.0. No value covered by its own EMAIL, SSN,
+CREDIT_CARD or PHONE detector in either baseline loses that coverage. The
+report separately records lost incidental coverage from another detector.
+This finite matrix is regression evidence, not exhaustive Unicode coverage.
+
+## Coordinated package set
+
+The 15 Core-owned distributions use 1.8.0: three Rust crates, two Python
+distributions and ten npm packages, including platform-specific Node packages
+and native/browser adapters. Base Python targets Linux x64/ARM64 GNU and musl,
+Linux s390x/ppc64le, macOS ARM64 and Windows x64/ARM64. Base Node targets macOS
+ARM64, Linux x64/ARM64 GNU and Windows x64. Optional native Node/Python adapters
+retain macOS ARM64, Linux x64 GNU and Windows x64. Intel macOS requires an
+unqualified source build.
+
+Publication requires the exact versioned commit to pass ordinary CI, the
+Core/FogVault gate's 19 required scopes and all 12 required native model checks.

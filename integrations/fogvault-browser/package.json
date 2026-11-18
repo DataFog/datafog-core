@@ -1,6 +1,6 @@
 {
   "name": "@datafog/core-fogvault-browser",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@datafog/wasm": "^1.7.0",
+    "@datafog/wasm": "^1.8.0",
     "@datafog/fogvault-browser": "0.1.0"
   },
   "scripts": {

@@ -1,4 +1,4 @@
-use chrono::Utc;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ pub struct ToolVersions {
 impl RunMetadata {
     pub fn collect() -> Self {
         Self {
-            timestamp_utc: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            timestamp_utc: Timestamp::now().strftime("%Y-%m-%dT%H:%M:%SZ").to_string(),
             git_commit_sha: get_git_sha(),
             git_branch: get_git_branch(),
             git_dirty: is_git_dirty(),
@@ -114,7 +114,7 @@ fn discover_workspace_root(start: &Path) -> Option<PathBuf> {
 }
 
 pub fn create_run_directory() -> std::io::Result<PathBuf> {
-    let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let timestamp = Timestamp::now().strftime("%Y%m%dT%H%M%SZ").to_string();
     let run_dir = workspace_root()
         .join("target")
         .join("dfv")
@@ -141,7 +141,7 @@ mod workspace_tests {
         let path = std::env::temp_dir().join(format!(
             "dfv-worktree-root-{}-{}",
             std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+            jiff::Timestamp::now().as_nanosecond()
         ));
         let nested = path.join(".worktrees/feature");
         for root in [&path, &nested] {
