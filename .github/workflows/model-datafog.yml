@@ -1,18 +1,17 @@
-name: Windows Node output before-after
+name: Observe Node no-op contention
 on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 jobs:
-  compare:
-    runs-on: windows-latest
+  observe:
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 725b0dd490ad085c676b50922721a7d6d0d7b565
+          ref: 6c18c023fab49f30c1887a927afb0a4093886214
           path: candidate-source
       - uses: actions/setup-node@v4
         with:
@@ -23,23 +22,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.94.1"
-      - name: Build exact reviewed fixed binding
+      - name: Build exact copied-buffer binding
         run: |
           npm ci --prefix candidate-source/bindings/node
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot install pinned Node build tools' }
-          npm run build --prefix candidate-source/bindings/node -- --target x86_64-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot build reviewed fixed source' }
-      - name: Compare fixed counts against the original exact artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python scripts/compare-node-output-shutdown.py
+          npm run build --prefix candidate-source/bindings/node
+      - name: Record actual same-head no-op outcomes
+        run: python scripts/diagnose-node-noop-contention.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-output-before-after
-          path: |
-            output-comparison/*.json
-            output-comparison/*.stdout
-            output-comparison/*.stderr
-            output-comparison/fixed/*.tgz
+          name: node-noop-contention
+          path: noop-diagnosis
           if-no-files-found: error
