@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import urllib.request
 import zipfile
+import time
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "shutdown-diagnosis"
@@ -20,6 +21,10 @@ RUN_ID = 44297537516
 ARTIFACT_ID = 14426252339
 HEAD = "8513a0f1b3216abc75173dcd94a7c137e24cbeca"
 RESULTS = []
+ENABLE_WER = os.environ.get("DIAGNOSE_ENABLE_WER") == "1"
+if os.name == "nt":
+    import ctypes
+    (OUT / "parent-error-mode.json").write_text(json.dumps({"python_parent_error_mode": ctypes.windll.kernel32.GetErrorMode()}))
 
 
 def api(endpoint):
@@ -33,7 +38,8 @@ def digest(path):
 def run(label, command, cwd):
     child_environment = {key: value for key, value in os.environ.items()
                          if not any(marker in key.upper() for marker in ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY"))}
-    with subprocess.Popen(command, cwd=cwd, env=child_environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as process:
+    creation_flags = subprocess.CREATE_DEFAULT_ERROR_MODE if ENABLE_WER and os.name == "nt" else 0
+    with subprocess.Popen(command, cwd=cwd, env=child_environment, creationflags=creation_flags, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as process:
         try:
             stdout, stderr = process.communicate(timeout=300)
             result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
@@ -131,6 +137,18 @@ console.log(`[DEBUG-df-node-shutdown] completed ${mode}`);
 
 versions = subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions)"], text=True)
 (OUT / "node-versions.json").write_text(versions, encoding="utf-8")
+if ENABLE_WER:
+    shim = os.environ["DIAGNOSE_ERROR_MODE_SHIM"]
+    calibration = run("wer-calibration-abort", [NODE, "-e", "const s=require(process.env.DIAGNOSE_ERROR_MODE_SHIM); console.log('[DEBUG-df-node-shutdown] WER calibration '+JSON.stringify(s.enableWer())); process.abort();"], ROOT)
+    assert calibration.returncode != 0
+    calibration_pid = RESULTS[-1]["pid"]
+    for _ in range(150):
+        dumps = list((OUT / "wer-dumps").glob(f"*.{calibration_pid}.dmp"))
+        if dumps:
+            break
+        time.sleep(0.2)
+    (OUT / "wer-calibration.json").write_text(json.dumps({"intentional_abort": True, "pid": calibration_pid, "returncode": calibration.returncode, "dumps": [str(p) for p in dumps], "capture_verified": bool(dumps)}, indent=2))
+    assert dumps, "WER calibration failed; no ordinary-consumer capture claim"
 for version, directory, source in [("1.8.0", candidate, ROOT), ("1.7.0", baseline, ROOT / "baseline-source")]:
     if version not in os.environ.get("DIAGNOSE_RELEASES", "1.8.0,1.7.0").split(","):
         continue
@@ -201,6 +219,10 @@ console.log('[DEBUG-df-node-shutdown] pure Node SQLite control completed');
         selected_test = full_consumer / "selected-partition.mjs"
         selected_test.write_text(selected, encoding="utf-8")
         (OUT / (version + "-selected-partition.mjs")).write_text(selected, encoding="utf-8")
+        if ENABLE_WER:
+            launcher = full_consumer / "wer-enabled-consumer.mjs"
+            launcher.write_text("import {createRequire} from 'node:module';\nconst require=createRequire(import.meta.url);\nconst shim=require(process.env.DIAGNOSE_ERROR_MODE_SHIM);\nconsole.error('[DEBUG-df-node-shutdown] WER enabled '+JSON.stringify(shim.enableWer()));\nawait import('./selected-partition.mjs');\n", encoding="utf-8")
+            selected_test = launcher
         for index in range(repetitions):
             run(f"{version}-{partition}-{index:03}", [NODE, str(selected_test), str(source / "fixtures")], full_consumer)
         capture = os.environ.get("DIAGNOSE_PROCDUMP")
@@ -216,6 +238,9 @@ console.log('[DEBUG-df-node-shutdown] pure Node SQLite control completed');
 counts = {}
 for result in RESULTS:
     key = result["label"].rsplit("-", 1)[0]
+    if result["label"] == "wer-calibration-abort":
+        counts[key] = {"intentional_abort_observations": 1, "expected_nonzero_exit": result["returncode"]}
+        continue
     if "-captured-full-consumer-" in result["label"]:
         value = counts.setdefault(key, {"capture_attempts": 0, "debugger_returncodes": {}})
         value["capture_attempts"] += 1

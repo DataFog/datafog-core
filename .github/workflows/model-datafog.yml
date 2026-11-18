@@ -1,4 +1,4 @@
-name: Windows shutdown partition diagnosis
+name: Windows postmortem capture diagnosis
 on:
   workflow_dispatch:
 permissions:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        partition: [full-no-models, full-no-hosts, prefix-all-models, prefix-workspace, prefix-hosts, node-sqlite]
+        capture: ["0", "1"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,6 +20,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Build own diagnostic Win32 error-mode shim
+        if: matrix.capture == '1'
+        shell: pwsh
+        run: |
+          python scripts/prepare-diagnostic-node-sdk.py
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify official Node SDK inputs' }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $env:VCVARS64 = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          if (-not (Test-Path $env:VCVARS64)) { throw 'MSVC developer environment missing' }
+          @'
+          @echo off
+          call "%VCVARS64%"
+          if errorlevel 1 exit /b 1
+          cl /nologo /LD /MD /O2 /std:c17 /I"%CD%\diagnostic-sdk\node-v24.22.2\include\node" scripts\diagnostic-error-mode.c /link /OUT:"%CD%\shutdown-diagnosis\error-mode.node" "%CD%\diagnostic-sdk\node.lib"
+          '@ | Set-Content build-error-mode.cmd
+          & cmd.exe /d /c build-error-mode.cmd
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot build diagnostic shim' }
+          Get-FileHash shutdown-diagnosis/error-mode.node -Algorithm SHA256
+          "DIAGNOSE_ERROR_MODE_SHIM=$pwd/shutdown-diagnosis/error-mode.node" >> $env:GITHUB_ENV
       - name: Configure application-scoped postmortem dumps
         shell: pwsh
         run: |
@@ -42,8 +62,9 @@ jobs:
           DIAGNOSE_MODES: ""
           DIAGNOSE_SKIP_FULL: "1"
           DIAGNOSE_RELEASES: "1.8.0"
-          DIAGNOSE_FULL_CONSUMER_REPEATS: "25"
-          DIAGNOSE_PARTITION: ${{ matrix.partition }}
+          DIAGNOSE_FULL_CONSUMER_REPEATS: "50"
+          DIAGNOSE_PARTITION: full-no-models
+          DIAGNOSE_ENABLE_WER: ${{ matrix.capture }}
         run: python scripts/diagnose-windows-node-shutdown.py
       - name: Restore application dump configuration
         if: always()
@@ -57,13 +78,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shutdown-partition-${{ matrix.partition }}
+          name: shutdown-partition-wer-${{ matrix.capture }}
           path: |
             shutdown-diagnosis/*.json
             shutdown-diagnosis/*.stdout
             shutdown-diagnosis/*.stderr
             shutdown-diagnosis/*-full-consumer.mjs
             shutdown-diagnosis/*-selected-partition.mjs
+            shutdown-diagnosis/error-mode.node
             shutdown-diagnosis/wer-dumps/*.dmp
           if-no-files-found: error
   analyze:
@@ -99,7 +121,8 @@ jobs:
             if ($installed.ExitCode -notin @(0,3010) -or -not (Test-Path $cdb)) { throw 'Cannot install official CDB' }
           }
           Invoke-WebRequest 'https://nodejs.org/dist/v24.22.2/win-x64/node_pdb.7z' -OutFile node_pdb.7z
-          $checksums = (Invoke-WebRequest 'https://nodejs.org/dist/v24.22.2/SHASUMS256.txt').Content
+          Invoke-WebRequest 'https://nodejs.org/dist/v24.22.2/SHASUMS256.txt' -OutFile node-SHASUMS256.txt
+          $checksums = Get-Content node-SHASUMS256.txt -Raw
           $line = @($checksums -split "`n" | Where-Object { $_.Trim() -match '\swin-x64/node_pdb\.7z$' })
           if ($line.Count -ne 1) { throw 'Ambiguous Node PDB checksum' }
           $expected = ($line[0].Trim() -split '\s+')[0]
