@@ -1,17 +1,20 @@
-name: Observe Node no-op contention
+name: Compare final Node shutdown workload
 on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
-  observe:
-    runs-on: ubuntu-24.04
+  compare:
+    runs-on: windows-2025
     timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 6c18c023fab49f30c1887a927afb0a4093886214
+          ref: 60a009832271f4240f44895a30cbce6eb3585c2d
           path: candidate-source
       - uses: actions/setup-node@v4
         with:
@@ -26,11 +29,11 @@ jobs:
         run: |
           npm ci --prefix candidate-source/bindings/node
           npm run build --prefix candidate-source/bindings/node
-      - name: Record actual same-head no-op outcomes
-        run: python scripts/diagnose-node-noop-contention.py
+      - name: Compare shared final conformance workload
+        run: python scripts/compare-node-output-shutdown.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: node-noop-contention
-          path: noop-diagnosis
+          name: node-output-final-workload-comparison
+          path: output-comparison
           if-no-files-found: error

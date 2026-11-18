@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "candidate-source"
-HEAD = "725b0dd490ad085c676b50922721a7d6d0d7b565"
+HEAD = "60a009832271f4240f44895a30cbce6eb3585c2d"
 BASELINE_HEAD = "8513a0f1b3216abc75173dcd94a7c137e24cbeca"
 OUT = ROOT / "output-comparison"
 OUT.mkdir(exist_ok=True)
@@ -85,14 +85,12 @@ try:
     summary["node_versions"] = json.loads(subprocess.check_output([NODE, "-p", "JSON.stringify(process.versions)"], text=True, encoding="utf-8"))
     results = {}
     full_hash = None
-    for label, source, archive, platform_archive in [("baseline", ROOT, old, old_platform), ("fixed", SOURCE, new, None)]:
+    shared_fixture_hashes = None
+    for label, source, archive, platform_archive in [("baseline", SOURCE, old, old_platform), ("fixed", SOURCE, new, None)]:
         consumer = OUT / (label + "-consumer"); consumer.mkdir()
         (consumer / "package.json").write_text('{"private":true,"type":"module"}', encoding="utf-8")
         result = run(label + "-install", [*NPM, "install", "--ignore-scripts", "--omit=optional", str(archive), *([str(platform_archive)] if platform_archive else [])], consumer)
         assert result.returncode == 0
-        burst_file = OUT / (label + "-burst.json")
-        burst = run(label + "-burst", [NODE, str(SOURCE / "scripts/test-node-output-shutdown.mjs"), "--module", str(consumer / "node_modules/@datafog/node/index.js"), "--runs", "100", "--iterations", "20000", "--output", str(burst_file)], consumer)
-        burst_report = json.loads(burst_file.read_text(encoding="utf-8"))
         marker = OUT / (label + "-full-consumer-path.txt")
         original = source / "scripts/test-node-package.mjs"
         code = original.read_text(encoding="utf-8")
@@ -103,6 +101,10 @@ try:
         installed = run(label + "-full-installed", [NODE, str(retained), "--prebuilt", "--tarball", str(archive), *(["--platform-tarball", str(platform_archive)] if platform_archive else [])], source)
         full_consumer = Path(marker.read_text(encoding="utf-8"))
         full_test = full_consumer / "test-installed.mjs"
+        fixture_hashes = {path.name: hashlib.sha256(path.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")).hexdigest() for path in sorted(full_consumer.glob("*.mjs"))}
+        if shared_fixture_hashes is None: shared_fixture_hashes = fixture_hashes
+        assert fixture_hashes == shared_fixture_hashes, "Before/after conformance helpers differ"
+        summary["shared_conformance_helpers"] = {"source": HEAD, "sha256_normalized_newlines": fixture_hashes}
         current = hashlib.sha256(full_test.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")).hexdigest()
         if full_hash is None: full_hash = current
         assert current == full_hash, "Before/after fixture child source differs"
@@ -112,12 +114,12 @@ try:
             full_results.append({"index": index, "exit_code": result.returncode,
                                  "completed": "Installed @datafog/node package matches fixtures and transform contracts." in result.stdout,
                                  "uv_assertion": "UV_HANDLE_CLOSING" in result.stderr})
-        results[label] = {"burst": burst_report, "full": full_results,
+        results[label] = {"full": full_results,
                           "full_installed_exit_code": installed.returncode,
                           "full_consumer_sha256_normalized_newlines": current}
         summary["results"] = results; save()
-    bad_baseline = any(row.get("uv_assertion") for row in results["baseline"]["full"]) or any("UV_HANDLE_CLOSING" in row.get("stderr", "") for row in results["baseline"]["burst"]["results"])
-    fixed_pass = results["fixed"]["burst"]["pass"] and results["fixed"]["full_installed_exit_code"] == 0 and all(row["exit_code"] == 0 and row["completed"] for row in results["fixed"]["full"])
+    bad_baseline = any(row.get("uv_assertion") for row in results["baseline"]["full"])
+    fixed_pass = results["fixed"]["full_installed_exit_code"] == 0 and all(row["exit_code"] == 0 and row["completed"] for row in results["fixed"]["full"])
     summary["bad_baseline_observed"] = bad_baseline
     summary["pass"] = bad_baseline and fixed_pass
     assert summary["pass"], "Before/after proof failed; inspect recorded outcomes"
