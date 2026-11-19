@@ -1,8 +1,9 @@
 name: Model integration
 
-# Explicit integration checks only. Routine PR/push CI never downloads model assets.
+# Integration checks run manually and in the full merge-queue suite.
 # Cached files are reverified by the pinned provisioner before every installation.
 on:
+  workflow_call:
   workflow_dispatch:
 
 permissions:

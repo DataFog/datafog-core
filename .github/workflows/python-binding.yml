@@ -1,6 +1,7 @@
 name: Python binding
 
 on:
+  workflow_call:
   # Tags are excluded: release tags point at commits already tested on a branch.
   push:
     branches: [main, "release/**"]
@@ -9,7 +10,7 @@ on:
 # Superseded pull request runs are cancelled. Pushes to main and release
 # branches get their own group, so every pushed commit is tested.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-python-binding-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -49,6 +50,7 @@ jobs:
               done <<< "$files"
             fi
           fi
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then code=true; fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
       - if: steps.scope.outputs.code == 'true'
         id: rust-version

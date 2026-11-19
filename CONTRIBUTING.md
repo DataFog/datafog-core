@@ -224,3 +224,40 @@ event file is supplied with `--event`.
 
 Once the workflow lands on `main`, add `Changelog policy` to the required checks
 in GitHub branch rules. The workflow alone does not prevent merging a failed check.
+
+
+## Merge queue verification
+
+Require the `Full technical suite` and `Changelog policy` checks in the main-branch
+ruleset, and require pull requests to enter the merge queue. Keep the existing PR
+checks required for early feedback. Path-selected PR workflows remain unchanged;
+the aggregate's PR run validates the gate configuration and policy tests so any
+PR can enter the queue, including documentation-only changes.
+
+On `merge_group`, the aggregate calls every non-publication technical workflow
+against the queue's merge commit. This includes the complete platform matrices,
+installed model packages, model evaluation and full live parity, bounded fuzzing,
+advisory scanning, and container builds. No technical workflow is path-filtered
+at queue admission, and docs-only shortcuts are disabled. The model candidate
+builder runs through model integration; it is not invoked a second time. Release
+publication workflows are excluded because they upload packages to registries.
+
+The final `Full technical suite` job runs even after dependency failure and accepts
+only success from every technical workflow. Missing, skipped, cancelled, or failed
+queue results block it. Its PR admission result does not assert that the full suite
+ran on the PR; the full suite is required on the queue commit before merge. Queue
+runs are isolated from standalone workflow concurrency groups and are not cancelled
+by newer PR updates. Only the container call gets package-read permission; no
+repository secrets are forwarded by the aggregate.
+
+`Changelog policy` validates each PR's committed entry or its explicit label/body
+exemption before queue admission. Its queue run executes the policy regression
+tests on the merge commit, without treating a group as a single PR or inventing
+an exemption. Keep that check required on PRs as well as the aggregate.
+
+Run `python3 scripts/test-merge-gate.py`, `python3 scripts/test-changelog.py`, and
+`actionlint` when changing the gate. The inventory test requires every new technical
+workflow to be added to the aggregate. After deployment, confirm a queue run on a
+throwaway PR with a deliberate formatting failure ends with a failed aggregate and
+cannot merge; remove that failure before merging the PR. Branch protection and
+merge queue rules are repository settings and are not enabled by this workflow.

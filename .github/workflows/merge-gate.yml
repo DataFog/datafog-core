@@ -1,0 +1,97 @@
+name: Merge gate
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-gate-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/test-merge-gate.py
+      - run: python scripts/test-changelog.py
+  advisory:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/advisory.yml
+  application-vaults:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/application-vaults.yml
+  browser-model:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/browser-model.yml
+  browser-v1-1:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/browser-v1-1.yml
+  credential-stores:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/credential-stores.yml
+  devcontainer:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/devcontainer.yml
+    permissions:
+      contents: read
+      packages: read
+  dfv-check:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/dfv-check.yml
+  dfv-models:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/dfv-models.yml
+  fogvault-integration:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/fogvault-integration.yml
+  fogvault-native-languages:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/fogvault-native-languages.yml
+  fuzz:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/fuzz.yml
+  model-datafog:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/model-datafog.yml
+  native-python-host:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/native-python-host.yml
+  node-binding:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/node-binding.yml
+  python-binding:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/python-binding.yml
+  rust-quality:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/rust-quality.yml
+  wasm-binding:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/wasm-binding.yml
+  workspace-contract:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/workspace-contract.yml
+  workspace-integration:
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/workspace-integration.yml
+  gate:
+    name: Full technical suite
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: ["policy", "advisory", "application-vaults", "browser-model", "browser-v1-1", "credential-stores", "devcontainer", "dfv-check", "dfv-models", "fogvault-integration", "fogvault-native-languages", "fuzz", "model-datafog", "native-python-host", "node-binding", "python-binding", "rust-quality", "wasm-binding", "workspace-contract", "workspace-integration"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require every selected check to succeed
+        env:
+          GATE_RESULTS: ${{ toJSON(needs) }}
+        run: python3 scripts/check-merge-gate.py

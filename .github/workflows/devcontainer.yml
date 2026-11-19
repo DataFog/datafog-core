@@ -1,6 +1,7 @@
 name: Development container
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - ".cursor/Dockerfile"
@@ -33,7 +34,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: devcontainer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-devcontainer-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

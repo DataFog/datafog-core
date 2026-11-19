@@ -1,6 +1,7 @@
 name: Model verification
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'crates/core/src/models/**'
@@ -21,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-dfv-models-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -241,30 +242,30 @@ jobs:
       - name: Run model eval
         run: cargo dfv eval --models --json
 
-      - name: Set up Node for nightly parity
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Set up Node for full parity
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
       - name: Build Node binding for parity
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: cargo dfv build --sdk node
 
-      - name: Install WASM tooling for nightly parity
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Install WASM tooling for full parity
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: cargo install wasm-bindgen-cli --version "$(./scripts/pin.sh wasm-bindgen)" --locked
 
       - name: Build WASM binding for parity
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: cargo dfv build --sdk wasm
 
-      - name: Install Chromium dependencies for nightly parity
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Install Chromium dependencies for full parity
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: npx --prefix bindings/wasm playwright install --with-deps chromium
 
-      - name: Full live parity check (nightly/manual only)
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Full live parity check (nightly/manual/queue)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: cargo dfv parity --live --full --json
 
       - if: always()
