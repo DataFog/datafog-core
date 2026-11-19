@@ -1,0 +1,126 @@
+{
+  "scenario": {
+    "scenarioVersion": 1,
+    "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+    "mode": "storage_workspace",
+    "seed": 1,
+    "mappingTarget": 10,
+    "historyProfile": "fresh",
+    "valueReuse": "mostly_new",
+    "inputShape": "unicode",
+    "fixtureRef": "synthetic://browser-pseudonymization/v1/storage_workspace-m10-fresh-mostly_new-unicode-s1"
+  },
+  "seedInputs": [],
+  "inputs": [
+    {
+      "id": "trial-00",
+      "text": "\ud83e\uddea sample 00000 \u2014 \u540d\u5b57: Synthetic Person 000011 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00001 \u2014 \u540d\u5b57: Synthetic Person 000012 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00002 \u2014 \u540d\u5b57: Synthetic Person 000013 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00003 \u2014 \u540d\u5b57: Synthetic Person 000014 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00004 \u2014 \u540d\u5b57: Synthetic Person 000015 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00005 \u2014 \u540d\u5b57: Synthetic Person 000016 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00006 \u2014 \u540d\u5b57: Synthetic Person 000017 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00007 \u2014 \u540d\u5b57: Synthetic Person 000018 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00008 \u2014 \u540d\u5b57: Synthetic Person 000019 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00009 \u2014 \u540d\u5b57: Synthetic Person 000020 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d",
+      "findings": [
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000011",
+          "startByte": 30,
+          "endByte": 53
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000012",
+          "startByte": 108,
+          "endByte": 131
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000013",
+          "startByte": 186,
+          "endByte": 209
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000014",
+          "startByte": 264,
+          "endByte": 287
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000015",
+          "startByte": 342,
+          "endByte": 365
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000016",
+          "startByte": 420,
+          "endByte": 443
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000017",
+          "startByte": 498,
+          "endByte": 521
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000018",
+          "startByte": 576,
+          "endByte": 599
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000019",
+          "startByte": 654,
+          "endByte": 677
+        },
+        {
+          "entityType": "PERSON",
+          "matchedText": "Synthetic Person 000020",
+          "startByte": 732,
+          "endByte": 755
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "initialMappingCount": 0,
+    "finalMappingCount": 10,
+    "trialFindingCount": 10,
+    "seedFindingCount": 0,
+    "seedDistinctValues": 0,
+    "trialDistinctValues": 10,
+    "seedInputCount": 0,
+    "trialInputCount": 1,
+    "seedSourceBytes": 0,
+    "trialSourceBytes": 779,
+    "restoreTexts": [
+      {
+        "inputId": "trial-00",
+        "text": "\ud83e\uddea sample 00000 \u2014 \u540d\u5b57: Synthetic Person 000011 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00001 \u2014 \u540d\u5b57: Synthetic Person 000012 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00002 \u2014 \u540d\u5b57: Synthetic Person 000013 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00003 \u2014 \u540d\u5b57: Synthetic Person 000014 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00004 \u2014 \u540d\u5b57: Synthetic Person 000015 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00005 \u2014 \u540d\u5b57: Synthetic Person 000016 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00006 \u2014 \u540d\u5b57: Synthetic Person 000017 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00007 \u2014 \u540d\u5b57: Synthetic Person 000018 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00008 \u2014 \u540d\u5b57: Synthetic Person 000019 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d\n\ud83e\uddea sample 00009 \u2014 \u540d\u5b57: Synthetic Person 000020 \u00b7 r\u00e9sum\u00e9 test \u00b7 \ub05d"
+      }
+    ],
+    "history": {
+      "operations": 0,
+      "conversations": 0,
+      "messagesPerConversation": 0,
+      "recipe": null
+    }
+  },
+  "assertions": {
+    "requiredGates": [
+      "exact_restore_after_browser_restart",
+      "no_handoff_before_confirmed_save_and_activation",
+      "wrong_credentials_rejected",
+      "conflicting_save_rejected_without_overwrite",
+      "lost_save_reply_recovers_without_duplicate_activation",
+      "lock_during_save_prevents_handoff",
+      "stale_review_rejected",
+      "conversation_scope_enforced",
+      "recovery_preserves_mappings_and_authority"
+    ],
+    "admission": {
+      "coreMaxSourceBytesPerPrepare": 1048576,
+      "coreMaxFindingsPerPrepare": 10000,
+      "coreMaxBatchInputs": 32,
+      "recordResultEvenWhenRejected": true
+    }
+  },
+  "fixtureSha256": "d73da5e07b9882f13a85803a53c5990b546ad9b24e3a23b920f88ede76c3e3fe"
+}

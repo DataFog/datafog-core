@@ -1,0 +1,588 @@
+{
+  "schema": "datafog-browser-pseudonymization-receipt/v1",
+  "schemaVersion": 1,
+  "runId": "review-pilot-cdp",
+  "runKind": "pilot",
+  "trialId": "review-pilot-cdp-fogvault-r1",
+  "profileId": "fogvault-review-pilot-cdp-fogvault-r1",
+  "orderBlock": "manual",
+  "backend": "fogvault",
+  "timestampUtc": "2026-11-11T22:18:20.549Z",
+  "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+  "scenarioVersion": 1,
+  "scenario": {
+    "scenarioVersion": 1,
+    "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+    "mode": "storage_workspace",
+    "seed": 1,
+    "mappingTarget": 10,
+    "historyProfile": "fresh",
+    "valueReuse": "mostly_new",
+    "inputShape": "unicode",
+    "fixtureRef": "synthetic://browser-pseudonymization/v1/storage_workspace-m10-fresh-mostly_new-unicode-s1"
+  },
+  "fixtureSha256": "4a911d0d32ef3fe35c6ff425b0ab420933b9982c10b601268b521daa639a1fc8",
+  "repositoryCommit": "a1e2abe200f3eff5e57e3647ecf771f0c45ccd1d",
+  "harnessCommit": "a1e2abe200f3eff5e57e3647ecf771f0c45ccd1d",
+  "repositoryDirty": true,
+  "repositoryStatus": "M benchmarks/browser/harness/README.md\n M benchmarks/browser/harness/flow.mjs\n M benchmarks/browser/harness/run-matrix.mjs\n M benchmarks/browser/harness/run.mjs",
+  "runtime": {
+    "node": "v25.8.2",
+    "host": "sids-MacBook-Pro-2.local",
+    "platform": "darwin",
+    "kernelRelease": "25.6.0",
+    "macProductVersion": "26.6.2",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 51539607552,
+    "powerState": "unavailable"
+  },
+  "browser": {
+    "name": "Google Chrome retail",
+    "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "channel": "installed retail binary",
+    "headless": true,
+    "version": "157.0.8103.40",
+    "profileId": "fogvault-review-pilot-cdp-fogvault-r1",
+    "profileLifecycle": "unique temporary user-data directory per trial; same directory reused across the deliberate full process restart"
+  },
+  "packageArtifacts": [
+    {
+      "name": "@datafog/wasm",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-sqlite-browser",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/fogvault-browser",
+      "version": "0.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-fogvault-browser",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
+      "source": "npm registry exact version"
+    }
+  ],
+  "extensionArtifact": {
+    "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-057e866a57eea9d59ead4be9b3e8b3776b9ec4e5ff4a481ef0d1f964d062102d.zip",
+    "bytes": 40880620,
+    "sha256": "93a2f09782ab0417371b60071ad02d13e7be3ac6eb01118c7c7ebba1adcc7c41",
+    "loadedDirectorySha256": "057e866a57eea9d59ead4be9b3e8b3776b9ec4e5ff4a481ef0d1f964d062102d"
+  },
+  "backendConfiguration": {
+    "adapter": "@datafog/core-fogvault-browser@1.1.0",
+    "fogvaultOptions": {
+      "limits": {
+        "payload": 16777216,
+        "metadata": 88,
+        "records": 64
+      },
+      "storageProfile": "arraybuffer",
+      "kdfProfiles": [
+        {
+          "memory_kib": 65536,
+          "passes": 3
+        }
+      ]
+    },
+    "durability": "FogVault published default"
+  },
+  "admission": {
+    "status": "admitted"
+  },
+  "correctness": {
+    "gates": {
+      "exact_restore_after_browser_restart": {
+        "status": "pass",
+        "detail": "exact post-restart scoped restoration succeeded"
+      },
+      "no_handoff_before_confirmed_save_and_activation": {
+        "status": "pass",
+        "detail": "flow reads commit previews only after awaiting the encrypted adapter commit/activation promise"
+      },
+      "wrong_credentials_rejected": {
+        "status": "pass",
+        "detail": "wrong synthetic password rejected before any Workspace was opened"
+      },
+      "conflicting_save_rejected_without_overwrite": {
+        "status": "unsupported",
+        "detail": "not exercised per trial; pinned adapters have separate conflict conformance suites"
+      },
+      "lost_save_reply_recovers_without_duplicate_activation": {
+        "status": "unsupported",
+        "detail": "not exercised per trial; pinned adapters have separate lost-reply conformance suites"
+      },
+      "lock_during_save_prevents_handoff": {
+        "status": "unsupported",
+        "detail": "not exercised per trial; pinned adapters have separate lock/fault conformance suites"
+      },
+      "stale_review_rejected": {
+        "status": "pass",
+        "detail": "Core rejected the stale prepared review (inactive_plan) without changing the current head"
+      },
+      "conversation_scope_enforced": {
+        "status": "pass",
+        "detail": "scoped restore succeeds only after a separately saved observed-send record"
+      },
+      "backup_recovery_preserves_mappings_and_authority": {
+        "status": "unsupported",
+        "detail": "authenticated Core bundle migration/recovery preserved mappings and observed-send authority, but this does not qualify encrypted backup archive recovery"
+      },
+      "authenticated_bundle_migration_recovery": {
+        "status": "pass",
+        "detail": "Core authenticated bundle migrated to a fresh FogVault vault; encrypted backup archive API is unavailable"
+      },
+      "mapping_target_admitted": {
+        "status": "pass",
+        "detail": {
+          "expected": 10,
+          "uniqueCommittedMarkersObserved": 10
+        }
+      },
+      "history_recipe": {
+        "status": "pass",
+        "detail": {
+          "actualBeforeTrialCounts": {
+            "confirmedHandoffs": 0,
+            "operations": 1,
+            "preparedInputs": 0,
+            "reportedBlockedAttempts": 0,
+            "transformedSpans": 0
+          },
+          "history": {
+            "status": "complete",
+            "operationOutcomes": 0,
+            "conversations": 0,
+            "messagesPerConversation": 0,
+            "simulatedSends": 0
+          },
+          "uniqueCommittedMarkersBeforeTrial": 10
+        }
+      },
+      "observedSendAuthorityAfterRestart": {
+        "status": "pass"
+      }
+    }
+  },
+  "timings": {
+    "sdkInitialization": {
+      "durationMs": 7.9000000059604645,
+      "clock": "performance.now",
+      "startEvent": "WASM init() called",
+      "endEvent": "WASM init() resolved",
+      "status": "measured"
+    },
+    "vaultCreate": {
+      "durationMs": 134.29999999701977,
+      "clock": "performance.now",
+      "startEvent": "backend create called",
+      "endEvent": "new encrypted vault created",
+      "status": "measured"
+    },
+    "workspaceCreate": {
+      "durationMs": 6.299999997019768,
+      "clock": "performance.now",
+      "startEvent": "Core Workspace create called",
+      "endEvent": "empty complete bundle confirmed saved and activated",
+      "status": "measured"
+    },
+    "vaultContainerOpen": {
+      "durationMs": 10.900000005960464,
+      "clock": "performance.now",
+      "startEvent": "FogVault.open called",
+      "endEvent": "vault container opened",
+      "status": "measured"
+    },
+    "initialVaultPasswordUnlock": {
+      "durationMs": 110,
+      "clock": "performance.now",
+      "startEvent": "FogVault.unlock called with correct synthetic password",
+      "endEvent": "vault unlocked",
+      "status": "measured"
+    },
+    "initialWorkspaceOpen": {
+      "durationMs": 1.3999999910593033,
+      "clock": "performance.now",
+      "startEvent": "FogVaultWorkspace.open called for empty existing workspace",
+      "endEvent": "empty encrypted bundle decrypted and Core Workspace reconstructed",
+      "status": "measured"
+    },
+    "historyPopulation": {
+      "durationMs": 0,
+      "clock": "performance.now",
+      "startEvent": "history recipe started",
+      "endEvent": "all history events durably saved and activated",
+      "status": "measured"
+    },
+    "existingVaultContainerOpen": {
+      "durationMs": 10.299999997019768,
+      "clock": "performance.now",
+      "startEvent": "FogVault.open called for populated workspace",
+      "endEvent": "vault container opened",
+      "status": "measured"
+    },
+    "vaultPasswordUnlock": {
+      "durationMs": 107.79999999701977,
+      "clock": "performance.now",
+      "startEvent": "FogVault.unlock called with correct password for populated workspace",
+      "endEvent": "vault credential accepted",
+      "status": "measured"
+    },
+    "existingWorkspaceReopen": {
+      "durationMs": 1.4000000059604645,
+      "clock": "performance.now",
+      "startEvent": "FogVaultWorkspace.open called for populated existing workspace",
+      "endEvent": "complete encrypted bundle decrypted and Core Workspace reconstructed",
+      "status": "measured"
+    },
+    "adapterOpenAndUnlock": {
+      "durationMs": 119.5,
+      "clock": "performance.now",
+      "startEvent": "FogVault.open called after populated workspace history",
+      "endEvent": "adapter workspace opened with authenticated password and Core Workspace reconstructed",
+      "status": "measured",
+      "componentIntervals": [
+        "existingVaultContainerOpen",
+        "vaultPasswordUnlock",
+        "existingWorkspaceReopen"
+      ]
+    },
+    "trialPreparation": {
+      "durationMs": 0.5999999940395355,
+      "clock": "performance.now",
+      "startEvent": "trial review preparation called",
+      "endEvent": "trial review prepared",
+      "status": "measured"
+    },
+    "approvalToSavedActivation": {
+      "durationMs": 4.100000008940697,
+      "clock": "performance.now",
+      "startEvent": "explicit approved:true passed to commit",
+      "endEvent": "encrypted save confirmed, Core activated, and handoff preview returned",
+      "status": "measured"
+    },
+    "conversationIntentPersistence": {
+      "durationMs": 2.3999999910593033,
+      "clock": "performance.now",
+      "startEvent": "conversation review commit called",
+      "endEvent": "initial message and pending send intent encrypted-save confirmed",
+      "status": "measured"
+    },
+    "observedSendPersistence": {
+      "durationMs": 3.2000000029802322,
+      "clock": "performance.now",
+      "startEvent": "prepareObservedSend called after synthetic confirmation",
+      "endEvent": "observed-send plan save and Core activation confirmed",
+      "status": "measured"
+    },
+    "warmScopedRestore": {
+      "durationMs": 0.20000000298023224,
+      "clock": "performance.now",
+      "startEvent": "restoreInConversation called with saved observed-send marker",
+      "endEvent": "scoped restore returned",
+      "status": "measured"
+    },
+    "backupExport": {
+      "status": "unsupported",
+      "reason": "published Core-owned FogVault adapter does not expose a backup export API"
+    },
+    "backupRecovery": {
+      "status": "unsupported",
+      "reason": "no authenticated backup bytes can be exported by the published Core-owned FogVault adapter"
+    },
+    "authenticatedBundleRecovery": {
+      "durationMs": 128.8999999910593,
+      "clock": "performance.now",
+      "startEvent": "approved authenticated Core bundle imported into a fresh FogVault vault",
+      "endEvent": "Core recovery activated and mappings/authority verified",
+      "status": "measured"
+    },
+    "postRestartSdkInitialization": {
+      "durationMs": 6.700000002980232,
+      "clock": "performance.now",
+      "startEvent": "WASM init() called after new Chrome process start",
+      "endEvent": "WASM init() resolved",
+      "status": "measured"
+    },
+    "postRestartVaultOpen": {
+      "durationMs": 15,
+      "clock": "performance.now",
+      "startEvent": "FogVault.open called after Chrome process restart",
+      "endEvent": "vault container opened",
+      "status": "measured"
+    },
+    "postRestartPasswordUnlock": {
+      "durationMs": 109.3999999910593,
+      "clock": "performance.now",
+      "startEvent": "FogVault.unlock called after Chrome process restart",
+      "endEvent": "credential accepted",
+      "status": "measured"
+    },
+    "postRestartReopen": {
+      "durationMs": 4.600000008940697,
+      "clock": "performance.now",
+      "startEvent": "adapter workspace open called after restart",
+      "endEvent": "encrypted bundle decrypted and Core Workspace reconstructed",
+      "status": "measured"
+    },
+    "postRestartScopedRestore": {
+      "durationMs": 0.5999999940395355,
+      "clock": "performance.now",
+      "startEvent": "restoreInConversation called after full Chrome process restart and explicit credential unlock",
+      "endEvent": "scoped restore returned",
+      "status": "measured"
+    }
+  },
+  "measurements": {
+    "counts": {
+      "confirmedHandoffs": 1,
+      "operations": 4,
+      "preparedInputs": 2,
+      "reportedBlockedAttempts": 0,
+      "transformedSpans": 20
+    },
+    "head": {
+      "commitId": [
+        158,
+        218,
+        59,
+        23,
+        43,
+        81,
+        23,
+        162,
+        215,
+        255,
+        108,
+        71,
+        45,
+        130,
+        198,
+        204
+      ],
+      "revision": "3"
+    },
+    "history": {
+      "status": "complete",
+      "operationOutcomes": 0,
+      "conversations": 0,
+      "messagesPerConversation": 0,
+      "simulatedSends": 0
+    },
+    "storageEstimateBefore": {
+      "quota": 10737418289,
+      "usage": 49,
+      "usageDetails": {
+        "serviceWorkerRegistrations": 49
+      }
+    },
+    "storageEstimateAfter": {
+      "quota": 10737449643,
+      "usage": 31403,
+      "usageDetails": {
+        "indexedDB": 31354,
+        "serviceWorkerRegistrations": 49
+      }
+    },
+    "storageEstimateDeltaBytes": 31354,
+    "processMemory": {
+      "status": "collected-by-host",
+      "method": "ps -o rss= for Chrome main process",
+      "process": "browser"
+    },
+    "browserLongTasks": {
+      "status": "measured",
+      "entries": []
+    },
+    "mainThread": {
+      "status": "measured",
+      "source": "PerformanceObserver longtask entries in extension page"
+    },
+    "workerMemory": {
+      "status": "unavailable",
+      "reason": "Chrome does not expose isolated worker heap attribution to this harness"
+    },
+    "wasmMemory": {
+      "status": "unavailable",
+      "reason": "WASM heap cannot be separated from extension page JavaScript heap"
+    },
+    "storageBytesWritten": {
+      "status": "unavailable",
+      "reason": "browser APIs do not expose reliable per-operation disk write bytes"
+    },
+    "serializedWorkspaceBundleBytes": 1359,
+    "serializedWorkspaceBundleStatus": "measured by observing exact Core candidate bundle bytes passed to adapter",
+    "encryptedArtifactBytes": {
+      "status": "unavailable",
+      "reason": "published adapter APIs return decrypted records; they do not expose sealed on-disk payload size"
+    },
+    "bundleSamples": [
+      {
+        "kind": "workspace_bundle",
+        "phase": "initial",
+        "bytes": 104
+      },
+      {
+        "kind": "candidate_bundle",
+        "phase": "trial",
+        "bytes": 705
+      },
+      {
+        "kind": "candidate_bundle",
+        "phase": "trial",
+        "bytes": 956
+      },
+      {
+        "kind": "candidate_bundle",
+        "phase": "trial",
+        "bytes": 1359
+      }
+    ],
+    "restoration": [
+      {
+        "inputIndex": 0,
+        "exact": true
+      }
+    ],
+    "backupExportBytes": null,
+    "instrumentationOverhead": {
+      "status": "not separately calibrated",
+      "note": "named intervals use performance.now; size and long-task observers add bounded work outside most intervals"
+    },
+    "browserProcessMemorySamples": [
+      {
+        "sampledAtUtc": "2026-11-11T22:18:22.621Z",
+        "pid": 77798,
+        "rssBytes": 217432064,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:18:23.940Z",
+        "pid": 77834,
+        "rssBytes": 219693056,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      }
+    ],
+    "postRestart": {
+      "trialId": "review-pilot-cdp-fogvault-r1",
+      "backend": "fogvault",
+      "timings": {
+        "postRestartSdkInitialization": {
+          "durationMs": 6.700000002980232,
+          "clock": "performance.now",
+          "startEvent": "WASM init() called after new Chrome process start",
+          "endEvent": "WASM init() resolved",
+          "status": "measured"
+        },
+        "postRestartVaultOpen": {
+          "durationMs": 15,
+          "clock": "performance.now",
+          "startEvent": "FogVault.open called after Chrome process restart",
+          "endEvent": "vault container opened",
+          "status": "measured"
+        },
+        "postRestartPasswordUnlock": {
+          "durationMs": 109.3999999910593,
+          "clock": "performance.now",
+          "startEvent": "FogVault.unlock called after Chrome process restart",
+          "endEvent": "credential accepted",
+          "status": "measured"
+        },
+        "postRestartReopen": {
+          "durationMs": 4.600000008940697,
+          "clock": "performance.now",
+          "startEvent": "adapter workspace open called after restart",
+          "endEvent": "encrypted bundle decrypted and Core Workspace reconstructed",
+          "status": "measured"
+        },
+        "postRestartScopedRestore": {
+          "durationMs": 0.5999999940395355,
+          "clock": "performance.now",
+          "startEvent": "restoreInConversation called after full Chrome process restart and explicit credential unlock",
+          "endEvent": "scoped restore returned",
+          "status": "measured"
+        }
+      },
+      "correctness": {
+        "gates": {
+          "exact_restore_after_browser_restart": {
+            "status": "pass",
+            "detail": "exact post-restart scoped restoration succeeded"
+          },
+          "observedSendAuthorityAfterRestart": {
+            "status": "pass"
+          }
+        }
+      },
+      "counts": {
+        "confirmedHandoffs": 1,
+        "operations": 4,
+        "preparedInputs": 2,
+        "reportedBlockedAttempts": 0,
+        "transformedSpans": 20
+      },
+      "storageEstimate": {
+        "quota": 10737450270,
+        "usage": 32030,
+        "usageDetails": {
+          "indexedDB": 31981,
+          "serviceWorkerRegistrations": 49
+        }
+      }
+    },
+    "pageErrors": [],
+    "externalRequests": [],
+    "temporaryBrowserProfile": {
+      "status": "removed after successful trial",
+      "uniquePerTrial": true,
+      "reusedAcrossRestart": true
+    }
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "exclusionReason": null,
+  "resolvedDependencyManifest": {
+    "path": "benchmarks/browser/results/pilot/artifacts/resolved-dependencies-59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6.json",
+    "sha256": "59cb0477df48a5b670ccaf1943c6203251c3fafc0ec18cb031ac598052cdadb6",
+    "bytes": 16327
+  },
+  "completedAtUtc": "2026-11-11T22:18:24.307Z",
+  "status": "complete",
+  "browserProcessMemory": {
+    "status": "measured",
+    "process": "Chrome main browser process",
+    "sampleCount": 2,
+    "minRssBytes": 217432064,
+    "maxRssBytes": 219693056,
+    "meanRssBytes": 218562560
+  },
+  "instrumentation": {
+    "browserProcessSampling": {
+      "status": "measured",
+      "method": "ps RSS at one second intervals; includes browser process, not child renderer/utility processes"
+    },
+    "performanceClock": "performance.now in extension page",
+    "hostClock": "Node process wall clock",
+    "observerOverhead": "process sampling runs on host at one-second intervals; page timing excludes host-side process sampling"
+  }
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="78" viewBox="0 0 900 78">
+<style>text{font:12px sans-serif}.bar{fill:#4169a1}</style>
+<text x="12" y="20">p50 latency (ms): backupRecovery</text>
+<text x="8" y="44">storage_workspace-m10-fresh-mostly_new-unicode-s1 / sqlite</text><rect class="bar" x="280" y="30" width="580.00" height="16"/><text x="865.00" y="43">139.850</text>
+</svg>

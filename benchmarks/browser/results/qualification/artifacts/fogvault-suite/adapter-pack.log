@@ -1,0 +1,46 @@
+[
+  {
+    "id": "@datafog/core-fogvault-browser@1.1.0",
+    "name": "@datafog/core-fogvault-browser",
+    "version": "1.1.0",
+    "size": 10957,
+    "unpackedSize": 36021,
+    "shasum": "223cbfc6ba23b70b10c0a25230ce57bcdd19f904",
+    "integrity": "sha512-KAU+Jjk6fPetoXo7Wcr+Xb06c1DvqeKO7hWsW6cDbKBETOEFBRmcTC/m0nOOJg6Aw2eGyz0Oz7Ke2hmeqfAR4g==",
+    "filename": "datafog-core-fogvault-browser-1.1.0.tgz",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 1064,
+        "mode": 420
+      },
+      {
+        "path": "README.md",
+        "size": 10250,
+        "mode": 420
+      },
+      {
+        "path": "binding.mjs",
+        "size": 2661,
+        "mode": 420
+      },
+      {
+        "path": "index.d.ts",
+        "size": 4762,
+        "mode": 420
+      },
+      {
+        "path": "index.mjs",
+        "size": 16465,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 819,
+        "mode": 420
+      }
+    ],
+    "entryCount": 6,
+    "bundled": []
+  }
+]
