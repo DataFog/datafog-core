@@ -20,7 +20,7 @@ mod workspace_parity;
 use std::env;
 use std::process::ExitCode;
 
-fn main() -> ExitCode {
+fn main()    -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
 
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
