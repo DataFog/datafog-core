@@ -144,8 +144,8 @@ cargo dfv eval --models      # Per-entity metrics with model detectors
 Tests live in:
 - `crates/core/tests/`: Rust unit tests per detector
 - `bindings/python/tests/`: Python conformance tests
-- `bindings/node/scripts/`: Node.js package tests
-- `bindings/wasm/scripts/`: WASM package tests
+- `scripts/test-node-package.mjs`: Node.js package tests (and conformance helpers in `scripts/`)
+- `scripts/test-wasm-package.mjs`: WASM package tests
 
 ## Gotchas
 
