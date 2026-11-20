@@ -260,9 +260,12 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
         run: cargo dfv build --sdk wasm
 
-      - name: Install Chromium dependencies for full parity
+      - name: Install and launch pinned Chromium for full parity
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
-        run: npx --prefix bindings/wasm playwright install --with-deps chromium
+        working-directory: bindings/wasm
+        run: |
+          node node_modules/playwright/cli.js install chromium
+          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
 
       - name: Full live parity check (nightly/manual/queue)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group'
