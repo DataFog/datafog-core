@@ -121,8 +121,11 @@ jobs:
           } | tee target/fogvault-integration/ci/environment.log
       - name: Build Core bindings
         run: cargo dfv build 2>&1 | tee target/fogvault-integration/ci/core-bindings-build.log
-      - name: Install browser prerequisites
-        run: node bindings/wasm/node_modules/playwright/cli.js install --with-deps ${{ matrix.engine }}
+      # The hosted runner's regional apt mirror has stalled on browser fonts.
+      # The Ubuntu 24.04 image provides the runtime libraries. The installed
+      # consumer check launches each selected engine, including the Edge channel.
+      - name: Install browser for the installed consumer check
+        run: node bindings/wasm/node_modules/playwright/cli.js install ${{ matrix.engine }}
       # Explicit setup builds the exact pinned FogVault checkout inside Core's
       # ignored target tree. It does not alter the maintained FogVault repository.
       - name: Prepare pinned installed candidates
