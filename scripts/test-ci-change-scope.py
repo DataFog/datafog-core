@@ -78,6 +78,8 @@ class ScopeTests(unittest.TestCase):
             for job in jobs:
                 self.assertIn(f"  {job}:\n    needs: scope\n    if: ${{{{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}}}\n", source)
             self.assertNotIn('continue-on-error:', source)
+        native = (ROOT / '.github/workflows/fogvault-native-languages.yml').read_text()
+        self.assertIn("if: ${{ !cancelled() && needs.installed-native-languages.result == 'success' }}", native)
         helper = (ROOT / '.github/workflows/change-scope.yml').read_text()
         self.assertIn('if [[ "$EVENT" != pull_request ]]; then', helper)
         self.assertIn("echo 'code=true'", helper)
