@@ -58,7 +58,8 @@ class MergeGateTests(unittest.TestCase):
 
     def test_workflow_inventory_and_dependencies_are_complete(self):
         directory = ROOT / ".github/workflows"
-        excluded = {"changelog", "model-candidates", "merge-gate"}
+        # change-scope is a scheduling helper, not an independently required check.
+        excluded = {"changelog", "model-candidates", "merge-gate", "change-scope"}
         technical = {
             path.stem for path in directory.glob("*.yml")
             if path.stem not in excluded and not path.stem.startswith("publish-")
