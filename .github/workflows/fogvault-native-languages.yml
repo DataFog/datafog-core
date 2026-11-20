@@ -21,7 +21,12 @@ defaults:
     shell: bash
 
 jobs:
+  scope:
+    uses: ./.github/workflows/change-scope.yml
+
   installed-native-languages:
+    needs: scope
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
     name: Core–FogVault Node/Python / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -115,6 +120,8 @@ jobs:
   assemble-node:
     name: Core–FogVault unified Node archive
     needs: installed-native-languages
+    # A non-PR run skips the scope grandparent. Check the actual build result.
+    if: ${{ !cancelled() && needs.installed-native-languages.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

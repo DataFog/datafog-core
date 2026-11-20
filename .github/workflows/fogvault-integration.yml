@@ -21,7 +21,12 @@ defaults:
     shell: bash
 
 jobs:
+  scope:
+    uses: ./.github/workflows/change-scope.yml
+
   native:
+    needs: scope
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
     name: Core–FogVault native / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -69,6 +74,8 @@ jobs:
           if-no-files-found: error
 
   joint:
+    needs: scope
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
     name: Core–FogVault joint / ${{ matrix.engine }}
     strategy:
       fail-fast: false

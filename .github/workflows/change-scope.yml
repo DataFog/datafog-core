@@ -1,0 +1,37 @@
+name: PR change scope
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        value: ${{ jobs.scope.outputs.code }}
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      # Queue, push and manual runs never evaluate PR-controlled classification.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT" != pull_request ]]; then
+            echo 'code=true' >> "$GITHUB_OUTPUT"
+          else
+            python3 scripts/test-ci-change-scope.py
+            python3 scripts/ci-change-scope.py >> "$GITHUB_OUTPUT"
+          fi
