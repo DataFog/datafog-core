@@ -1,5 +1,6 @@
 """Explicit installed-wheel lifecycle/failure qualification with actual local workers."""
 from concurrent.futures import ThreadPoolExecutor
+import faulthandler
 import json
 from pathlib import Path
 import sys
@@ -71,7 +72,10 @@ def reject(call, code):
         raise AssertionError(f"expected {code}; operation returned successful protection")
 
 
+# Emit stacks if a worker exceeds its request and cleanup budgets on CI.
+faulthandler.dump_traceback_later(wait_seconds, repeat=True)
 with ThreadPoolExecutor(max_workers=1) as executor:
+    print("Checking active cancellation and busy admission", flush=True)
     session, worker, processes = open_worker()
     try:
         reject(lambda: session.scan_model("x" * (limits["max_input_bytes"] + 1)), "invalid_configuration")
@@ -93,6 +97,7 @@ with ThreadPoolExecutor(max_workers=1) as executor:
     finally:
         session.close()
 
+    print("Checking abrupt worker death", flush=True)
     session, worker, processes = open_worker()
     try:
         stopped_at = time.monotonic()
@@ -103,6 +108,7 @@ with ThreadPoolExecutor(max_workers=1) as executor:
     finally:
         session.close()
 
+    print("Checking close during active inference", flush=True)
     session, worker, processes = open_worker()
     baseline = cpu_time(processes)
     pending = executor.submit(session.scan_model, long_text)
@@ -113,6 +119,7 @@ with ThreadPoolExecutor(max_workers=1) as executor:
     assert_stopped(processes, stopped_at)
     session.close()
 
+print("Checking model startup failures", flush=True)
 if "gliner2" in config:
     # The Core test interpreter has the runner but no optional model dependencies.
     missing_runtime = dict(config, gliner2=dict(config["gliner2"], python=sys.executable))
@@ -123,4 +130,5 @@ if "gliner2" in config:
 
 bad = dict(config, manifest_sha256="0" * 64)
 reject(lambda: ModelSession.open(bad), "model_load_failed")
+faulthandler.cancel_dump_traceback_later()
 print("Actual worker active cancellation, busy admission, abrupt death, close interruption, oversize and sanitized atomic failures passed.")

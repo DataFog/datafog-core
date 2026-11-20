@@ -243,8 +243,14 @@ builder runs through model integration; it is not invoked a second time. Release
 publication workflows are excluded because they upload packages to registries.
 
 The final `Full technical suite` job runs even after dependency failure and accepts
-only success from every technical workflow. Missing, skipped, cancelled, or failed
-queue results block it. Its PR admission result does not assert that the full suite
+only success from every technical workflow. It also reads every job from the
+current run attempt through the paginated Actions API: a reusable workflow can
+report success even when a technical child was skipped. Every child must have
+completed successfully, and every selected workflow must be represented. Only
+the currently executing final gate job is excluded, matched by exact name and
+runner identity. Missing API data, API errors, skipped, cancelled, or failed jobs
+block the gate. Rerun the entire suite when a fresh attempt is needed; successful
+jobs from an older attempt do not satisfy current-attempt coverage. Its PR admission result does not assert that the full suite
 ran on the PR; the full suite is required on the queue commit before merge. Queue
 runs are isolated from standalone workflow concurrency groups and are not cancelled
 by newer PR updates. Only the container call gets package-read permission; no
