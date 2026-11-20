@@ -1,6 +1,8 @@
 name: Changelog
 
 on:
+  merge_group:
+    types: [checks_requested]
   pull_request:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
 
@@ -8,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: changelog-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: changelog-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changelog:
@@ -19,14 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Test changelog policy
         run: python scripts/test-changelog.py
+      # Queue admission already requires this policy on each constituent PR.
+      # A merge_group has no single PR body/labels to pass to the checker.
       - name: Check PR entry or explicit exemption
+        if: github.event_name == 'pull_request'
         env:
           CHANGELOG_BASE: ${{ github.event.pull_request.base.sha }}
         run: python scripts/check-changelog.py --event "$GITHUB_EVENT_PATH"

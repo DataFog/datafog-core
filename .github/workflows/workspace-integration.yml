@@ -1,6 +1,7 @@
 name: Workspace integration
 
 on:
+  workflow_call:
   push:
     branches: [main]
     paths:

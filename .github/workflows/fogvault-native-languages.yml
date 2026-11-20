@@ -1,6 +1,7 @@
 name: Core and FogVault native language packages
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -9,7 +10,7 @@ on:
 # Every PR receives explicit results, including docs-only changes. Superseded PR
 # runs are cancelled; main pushes and manual runs retain their own scopes.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
+  group: ${{ github.workflow }}-fogvault-native-languages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

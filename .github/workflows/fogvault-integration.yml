@@ -1,6 +1,7 @@
 name: Core and FogVault integration
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -9,7 +10,7 @@ on:
 # PRs, main pushes and manual runs retain separate scopes. No path filters leave
 # required checks waiting forever when a change only affects documentation.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
+  group: ${{ github.workflow }}-fogvault-integration-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

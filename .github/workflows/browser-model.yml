@@ -1,6 +1,7 @@
 name: Browser model
 
 on:
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
@@ -40,7 +41,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: browser-model-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-browser-model-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

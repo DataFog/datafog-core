@@ -1,12 +1,13 @@
 name: Verification CLI
 
 on:
+  workflow_call:
   push:
     branches: [main, "release/**"]
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-dfv-check-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -33,6 +34,7 @@ jobs:
               done <<< "$files"
             fi
           fi
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then code=true; fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
       - if: steps.scope.outputs.code == 'true'
         id: rust-version

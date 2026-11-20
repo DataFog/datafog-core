@@ -1,6 +1,7 @@
 name: Native Python host qualification
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'bindings/python/**'

@@ -1,6 +1,7 @@
 name: Fuzz
 
 on:
+  workflow_call:
   workflow_dispatch:
   # Pull requests only build the targets. A fuzz run is nightly work.
   pull_request:
@@ -12,12 +13,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-fuzz-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,13 +34,17 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           code=true
-          files="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
+          files=""
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            files="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
+          fi
           if [[ -n "$files" ]]; then
             code=false
             while IFS= read -r file; do
               case "$file" in docs/*|*.md|*.mdx) ;; *) code=true ;; esac
             done <<< "$files"
           fi
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then code=true; fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
       - if: steps.scope.outputs.code == 'true'
         uses: dtolnay/rust-toolchain@nightly
@@ -70,7 +75,7 @@ jobs:
         with:
           workspaces: crates/core/fuzz
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked --version 0.13.2
+        run: cargo +nightly install cargo-fuzz --locked --version 0.13.2
       - name: Fuzz ${{ matrix.target }} for 60s
         # `-max_total_time` is the budget; libFuzzer exits non-zero with the crash
         # in `artifacts/<target>/`. Seeds are committed, so a fresh target starts

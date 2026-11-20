@@ -1,6 +1,7 @@
 name: Workspace contract draft
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'docs/contracts/**'
