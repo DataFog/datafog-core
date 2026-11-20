@@ -74,15 +74,20 @@ class ScopeTests(unittest.TestCase):
     def test_matrix_wiring_preserves_full_non_pr_runs(self):
         for name, jobs in WORKFLOWS.items():
             source = (ROOT / f'.github/workflows/{name}.yml').read_text()
-            self.assertIn("  scope:\n    if: github.event_name == 'pull_request'\n    uses: ./.github/workflows/change-scope.yml\n", source)
+            self.assertIn("  scope:\n    uses: ./.github/workflows/change-scope.yml\n", source)
             for job in jobs:
                 self.assertIn(f"  {job}:\n    needs: scope\n    if: ${{{{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}}}\n", source)
+            self.assertNotIn("  scope:\n    if:", source)
             self.assertNotIn('continue-on-error:', source)
         native = (ROOT / '.github/workflows/fogvault-native-languages.yml').read_text()
         self.assertIn("if: ${{ !cancelled() && needs.installed-native-languages.result == 'success' }}", native)
         helper = (ROOT / '.github/workflows/change-scope.yml').read_text()
         self.assertIn('if [[ "$EVENT" != pull_request ]]; then', helper)
         self.assertIn("echo 'code=true'", helper)
+        self.assertIn("if: github.event_name == 'pull_request'", helper)
+        non_pr, pr = helper.split('          else\n')
+        self.assertNotIn('python3 ', non_pr)
+        self.assertIn('python3 scripts/test-ci-change-scope.py', pr)
 
 
 if __name__ == '__main__':

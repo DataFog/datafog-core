@@ -22,7 +22,6 @@ defaults:
 
 jobs:
   scope:
-    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/change-scope.yml
 
   native:
