@@ -121,17 +121,17 @@ public declaration hashes for:
 
 | Package | Public runtime values | Reviewed declarations / installed consumer proof |
 | --- | --- | --- |
-| `@datafog/core-fogvault-node` | `DataFogVaultError`, `NativeWorkspace`, `PreparedChange`, `RestoreStream` | [types](../../integrations/fogvault-node/index.d.ts), [consumer](../../integrations/fogvault-node/test/consumer.mjs), [TypeScript](../../integrations/fogvault-node/test/types.ts) |
-| `@datafog/core-fogvault-browser` | `FogVaultWorkspace`, `WorkspaceVaultError` | [types](../../integrations/fogvault-browser/index.d.ts), [browser consumer](../../integrations/fogvault-browser/test/browser.mjs), [TypeScript](../../integrations/fogvault-browser/test/types.ts) |
-| `@datafog/core-fogvault-legacy-browser` | `LegacyBackupImport`, `LegacyImportError` | [types](../../integrations/fogvault-legacy-browser/index.d.ts), [browser consumer](../../integrations/fogvault-legacy-browser/test/browser.mjs), [TypeScript](../../integrations/fogvault-legacy-browser/test/types.ts) |
-| `datafog-fogvault` | `FogVaultWorkspaceError`, `WorkspaceHead`, `NativeWorkspace`, `PreparedChange`, `RestoreStream`, `__version__` | [stub](../../integrations/fogvault-python/datafog_fogvault.pyi), [installed tests](../../integrations/fogvault-python/tests/test_installed.py) |
+| `@datafog/core-fogvault-node` | `DataFogVaultError`, `NativeWorkspace`, `PreparedChange`, `RestoreStream` | [types](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-node/index.d.ts), [consumer](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-node/test/consumer.mjs), [TypeScript](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-node/test/types.ts) |
+| `@datafog/core-fogvault-browser` | `FogVaultWorkspace`, `WorkspaceVaultError` | [types](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-browser/index.d.ts), [browser consumer](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-browser/test/browser.mjs), [TypeScript](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-browser/test/types.ts) |
+| `@datafog/core-fogvault-legacy-browser` | `LegacyBackupImport`, `LegacyImportError` | [types](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/index.d.ts), [browser consumer](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/test/browser.mjs), [TypeScript](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/test/types.ts) |
+| `datafog-fogvault` | `FogVaultWorkspaceError`, `WorkspaceHead`, `NativeWorkspace`, `PreparedChange`, `RestoreStream`, `__version__` | [stub](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-python/datafog_fogvault.pyi), [installed tests](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-python/tests/test_installed.py) |
 
 The Python inventory checks explicit PyO3 registrations and public names; normal
 Python module metadata is not part of that value list. Its runtime version must
 match installed distribution metadata. Browser private helper files and native
 transport handles are not root public APIs.
 
-Rust's [native owner source](../../integrations/fogvault-native/src/lib.rs) is the
+Rust's [native owner source](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-native/src/lib.rs) is the
 canonical source API for `Binding`, `Error`, `Result<T>`, `Change`, `Committed`,
 `Owner`, `BINDING_BYTES`, and the explicit `core` / `vault` re-exports. Review must
 cover all public signatures, borrowed/generic types, DTO fields and error
@@ -149,7 +149,7 @@ The public DTOs are:
   paging; strict and progressive restoration; lock and child invalidation.
 
 The native suite includes ten external consumer tests plus one internal lost-ack
-fault test (11 total). [Consumer tests](../../integrations/fogvault-native/tests/native.rs)
+fault test (11 total). [Consumer tests](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-native/tests/native.rs)
 exercise exact bridge vectors, beta.3 interoperability, persistence/reopen,
 foreign-owner and saved-head rejection, lifecycle invalidation, recovery,
 conversation authority, facade coverage and payload admission. The internal test
@@ -158,13 +158,13 @@ Both source API tests and installed Node/Python consumers remain required; this
 inventory is not a claim of stable Rust binary ABI or exhaustive automated Rust
 signature analysis.
 
-Rust's [migration source](../../integrations/fogvault-migration/src/lib.rs) exposes
+Rust's [migration source](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-migration/src/lib.rs) exposes
 `MigrationError`, opaque `RecoveryCandidate`, and `stage_authenticated_bundle`.
 The candidate exposes namespace, source/candidate heads, snapshot format and
 borrowed candidate bytes. It grants no persistence or handoff authority. The
 caller must authenticate/decrypt the source before staging, and the destination
 must atomically require an empty record, re-encrypt and reopen durable state.
-[Recovery tests](../../integrations/fogvault-migration/tests/recovery.rs) retain
+[Recovery tests](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-migration/tests/recovery.rs) retain
 v1/v2/v3 semantics, full binding checks, malformed-source rejection and exhausted
 or reused authority behavior. Changes to either Rust integration's public
 signatures, DTOs or method coverage require explicit source-contract review even

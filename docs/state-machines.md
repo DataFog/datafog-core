@@ -17,10 +17,10 @@ when changing persistence or cancellation semantics.
 
 ## Core workspace and prepared changes
 
-Sources: [`workspace.rs`](../crates/core/src/workspace.rs),
-[`operations.rs`](../crates/core/src/workspace/operations.rs),
-[`policy.rs`](../crates/core/src/workspace/policy.rs),
-[`review.rs`](../crates/core/src/workspace/review.rs).
+Sources: [`workspace.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace.rs),
+[`operations.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/operations.rs),
+[`policy.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/policy.rs),
+[`review.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/review.rs).
 
 Workspace state is an optional committed snapshot plus a lifetime flag and a
 read epoch. A prepared change owns an immutable candidate, its parent head, and
@@ -46,7 +46,7 @@ save/activate lifecycle above.
 
 ## Conversation send intent
 
-Source: [`conversation.rs`](../crates/core/src/workspace/conversation.rs).
+Source: [`conversation.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/conversation.rs).
 
 | Current state | Event / guard | Next state | Invariant |
 |---|---|---|---|
@@ -65,8 +65,8 @@ converted into a send resolution or transport retry.
 
 ## Restore streams
 
-Sources: [`buffered_restore.rs`](../crates/core/src/workspace/buffered_restore.rs),
-[`progressive_restore.rs`](../crates/core/src/workspace/progressive_restore.rs),
+Sources: [`buffered_restore.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/buffered_restore.rs),
+[`progressive_restore.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/workspace/progressive_restore.rs),
 and SDK adapters under `bindings/*/src/workspace/stream.rs`.
 
 Buffered restore has `active`, `finalized/failed`, and `closed` states. It pins
@@ -102,8 +102,8 @@ stale head is terminal until reset where the API allows it.
 
 ## Model session and admitted request
 
-Source: [`models.rs`](../crates/core/src/models.rs),
-[`process.rs`](../crates/core/src/models/process.rs).
+Source: [`models.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/models.rs),
+[`process.rs`](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/models/process.rs).
 
 The model session's atomic state values are initializing (0), ready (1), failed
 (2), and closed (3); `closing` is an additional admission fence. `ModelRequest`
@@ -123,7 +123,7 @@ session lifecycle, input limit, cancellation, and output bound.
 
 ## Browser FogVault owner
 
-Source: [`integrations/fogvault-browser/index.mjs`](../integrations/fogvault-browser/index.mjs).
+Source: [`integrations/fogvault-browser/index.mjs`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-browser/index.mjs).
 
 The owner combines `open/closed`, `idle/busy`, an epoch fence, a saved receipt,
 and at most one pending plan wrapper. The plan wrapper is weakly held while the
@@ -147,9 +147,9 @@ never by trusting the late reply.
 
 ## Native FogVault owner and binding handles
 
-Sources: [`integrations/fogvault-native/src/lib.rs`](../integrations/fogvault-native/src/lib.rs),
-[`integrations/fogvault-node/src/lib.rs`](../integrations/fogvault-node/src/lib.rs),
-and [`integrations/fogvault-python/src/lib.rs`](../integrations/fogvault-python/src/lib.rs).
+Sources: [`integrations/fogvault-native/src/lib.rs`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-native/src/lib.rs),
+[`integrations/fogvault-node/src/lib.rs`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-node/src/lib.rs),
+and [`integrations/fogvault-python/src/lib.rs`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-python/src/lib.rs).
 
 The native `Owner` has the same durable boundary as the browser owner: an open
 vault/Core pair, pending changes, exact save, activation, lock, and reconciliation.
@@ -172,7 +172,7 @@ qualification suites.
 
 ## Legacy browser backup import
 
-Source: [`integrations/fogvault-legacy-browser/index.mjs`](../integrations/fogvault-legacy-browser/index.mjs).
+Source: [`integrations/fogvault-legacy-browser/index.mjs`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/index.mjs).
 
 This import-only adapter authenticates/decrypts a supported archive into a
 staged session, then delegates approved installation to the current browser
@@ -196,9 +196,9 @@ tested and fail-closed; this audit did not establish a correctness bug.
 
 ## Included extension host
 
-Source: [`examples/workspace-extension/src/broker.js`](../examples/workspace-extension/src/broker.js),
-[`rpc.js`](../examples/workspace-extension/src/rpc.js), and
-[`storage.js`](../examples/workspace-extension/src/storage.js). This is the
+Source: [`examples/workspace-extension/src/broker.js`](https://github.com/DataFog/datafog-core/blob/main/examples/workspace-extension/src/broker.js),
+[`rpc.js`](https://github.com/DataFog/datafog-core/blob/main/examples/workspace-extension/src/rpc.js), and
+[`storage.js`](https://github.com/DataFog/datafog-core/blob/main/examples/workspace-extension/src/storage.js). This is the
 repository's synthetic integration harness, not the Core library API.
 
 The broker encodes locked/unlocked in `session`, one pending Core plan, one

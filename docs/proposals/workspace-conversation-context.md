@@ -220,7 +220,7 @@ trusted observation can still leave an intent pending and scoped restore paused.
 Read/export and explicit compatibility behavior retain their existing contracts.
 
 The first executable contract data is
-[the existing-conversation crash fixture](../../fixtures/workspace/conversation-contract-draft.json).
+[the existing-conversation crash fixture](https://github.com/DataFog/datafog-core/blob/main/fixtures/workspace/conversation-contract-draft.json).
 It specifies expected future behavior only. Current SDKs do not execute these
 commands; implementation must add actual Rust/WASM/Python/Node and MV3 qualification
 before claiming acceptance or freezing the API.

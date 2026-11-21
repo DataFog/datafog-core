@@ -14,7 +14,7 @@ claim that the model catches everything. No paid provider or real user PII is us
 
 ## Corpus and scoring contract
 
-[`qualification-v1.json`](../fixtures/browser-detection/qualification-v1.json)
+[`qualification-v1.json`](https://github.com/DataFog/datafog-core/blob/main/fixtures/browser-detection/qualification-v1.json)
 has 64 synthetic pasted-text records: 28 PERSON, 13 full ADDRESS and 11 structured
 identifier gold spans, plus hard negatives. It covers Unicode/combining prefixes,
 repeated values, names in code, compound/inverted names, international address
@@ -93,7 +93,7 @@ that custom configuration in Small.
 
 ## PR #115 review
 
-[`pr115-review.json`](../fixtures/browser-detection/pr115-review.json) pins the
+[`pr115-review.json`](https://github.com/DataFog/datafog-core/blob/main/fixtures/browser-detection/pr115-review.json) pins the
 reviewed head/blob/content hash: 85 records, 106 entities, all codepoint offsets
 valid at that head. Several STREET_ADDRESS labels include city/postcode/country,
 inconsistent with the stated street-line convention. USERNAME-versus-PERSON and
@@ -124,8 +124,8 @@ by this runner. The corpus and adapter configuration are fixed in the fixture.
 Each run writes `target/browser-detection/<timestamp>/receipt.json` (complete
 findings, sources, scores and all misses/false positives), plus compact
 `summary.json` and `observations.jsonl`. The committed receipt is
-[`browser-detection-small-preparation.json`](../baselines/browser-detection-small-preparation.json)
-and its paired [per-record observations](../baselines/browser-detection-small-preparation.jsonl).
+[`browser-detection-small-preparation.json`](https://github.com/DataFog/datafog-core/blob/main/baselines/browser-detection-small-preparation.json)
+and its paired [per-record observations](https://github.com/DataFog/datafog-core/blob/main/baselines/browser-detection-small-preparation.jsonl).
 The scorer tests recompute its exact/overlap totals and verify the corpus/scorer
 hashes and observation digest. The other hashes describe the recorded historical
 package/runtime run; changing a future dependency does not rewrite that history.
@@ -200,8 +200,8 @@ manual approval or later recall as automatic first-pass detection, lower the bar
 or tune solely to these examples. **G2 remains open.**
 
 The current clean source run is `b9348af90d3783346d07109b2cf97f6f7119f3ed`.
-Its [current summary](../baselines/browser-detection-small-current.json) and
-[paired raw observations](../baselines/browser-detection-small-current.jsonl)
+Its [current summary](https://github.com/DataFog/datafog-core/blob/main/baselines/browser-detection-small-current.json) and
+[paired raw observations](https://github.com/DataFog/datafog-core/blob/main/baselines/browser-detection-small-current.jsonl)
 preserve package/runtime/model identities and the six read-only recall/recovery
 phases. The full local receipt is retained under
 `target/browser-detection/2026-10-29T09-38-30-141Z/receipt.json`.

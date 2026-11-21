@@ -1,6 +1,6 @@
 # Workspace Aliasing V1: Implementation Sequence
 
-Decisions are in [ADR 004](adr/004-workspace-aliasing-v1.md). V1 is free-text
+Decisions are in [ADR 004](https://github.com/DataFog/datafog-core/blob/main/docs/adr/004-workspace-aliasing-v1.md). V1 is free-text
 paste: pseudonymize pasted text, send it to ChatGPT, restore the answer. Work runs
 in two repositories: `datafog-core` (Core, WASM, detection, harness), driven by
 Sid, and the Chrome extension, driven by Josh.
@@ -187,7 +187,7 @@ Real text goes into a workspace only when all of these hold:
   [B3 / #142](https://github.com/DataFog/datafog-core/issues/142) fixes new backup
   exports at Argon2id v1.3, 256 MiB, three passes and one lane, rewrapping the root
   without the old 64 MiB password wrapper. The KDF decision is recorded in
-  [ADR 005](adr/005-backup-export-kdf.md); it does not complete the G4 review.
+  [ADR 005](https://github.com/DataFog/datafog-core/blob/main/docs/adr/005-backup-export-kdf.md); it does not complete the G4 review.
 
 Before that, real-data testing uses a throwaway browser profile or a build that
 saves no mappings. The critical path is the review screen (Core PRs 1–4) and

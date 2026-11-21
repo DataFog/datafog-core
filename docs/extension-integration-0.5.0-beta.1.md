@@ -111,7 +111,7 @@ and prepare a fresh preview; do not add an unknown-marker passthrough exception.
 
 The SDK owns marker identity and snapshot semantics. The host owns credentials,
 encryption, storage, user approval and handoff. The vault/broker/storage/backup
-files in [the reference harness](../examples/workspace-extension/README.md) show
+files in [the reference harness](https://github.com/DataFog/datafog-core/blob/main/examples/workspace-extension/README.md) show
 this flow with real IndexedDB and cryptography. They are reference host code,
 not SDK exports; do not copy the test-only fault controls into a shipping extension.
 
@@ -179,8 +179,8 @@ explicitly when needed. A model session is not persisted with the encrypted vaul
 ## Complete public API reference
 
 This inventory covers every public function and session/plan method declared in
-[`@datafog/wasm`](../bindings/wasm/index.d.ts) and
-[`@datafog/wasm/models`](../bindings/wasm/models/index.d.ts) for `0.5.0-beta.1`.
+[`@datafog/wasm`](https://github.com/DataFog/datafog-core/blob/main/bindings/wasm/index.d.ts) and
+[`@datafog/wasm/models`](https://github.com/DataFog/datafog-core/blob/main/bindings/wasm/models/index.d.ts) for `0.5.0-beta.1`.
 Type names below refer to those declarations. Workspace calls are synchronous;
 model operations are asynchronous except `describe()`. Host encryption, storage,
 approval, clipboard insertion and backup UI are separate host responsibilities.
@@ -347,7 +347,7 @@ these codes do not add it, and are not workspace credential-unlock errors.
 
 ### Host persistence and worker errors
 
-The reference host's [`HostError`/RPC boundary](../examples/workspace-extension/src/rpc.js)
+The reference host's [`HostError`/RPC boundary](https://github.com/DataFog/datafog-core/blob/main/examples/workspace-extension/src/rpc.js)
 is separate from SDK `DataFogError`. Errors crossing a worker boundary need safe
 code/location serialization; do not rely on an Error prototype surviving RPC.
 The reference host also forwards known workspace codes above. Its additional

@@ -200,7 +200,7 @@ The earlier [encoder-only receipt](evidence/conversation-wire-growth.json) at
 qualify a conversation decoder or final admission; current real Core tests replace
 the prototype map-carry experiment. No provider acceptance is inferred.
 
-The [draft adversarial fixtures](../../fixtures/workspace/conversation-contract-draft.json)
+The [draft adversarial fixtures](https://github.com/DataFog/datafog-core/blob/main/fixtures/workspace/conversation-contract-draft.json)
 describe same-chat partial batches, uncertain sends, wrong context, malformed
 relations and scoped-stream stops. They need actual Rust/Python/Node/WASM execution,
 reference-host crash/CAS tests, password/recovery backup, nonempty-key9 resource

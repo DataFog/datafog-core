@@ -147,7 +147,7 @@ matches, maximum no-hit source, and explicit result/index/work exhaustion.
 The proof report records exact source/tarball/model identities and samples under
 `examples/workspace-extension/output/playwright/<run>/report.json`.
 
-The [retained observation fixture](../fixtures/workspace/recall-browser-benchmark.json)
+The [retained observation fixture](https://github.com/DataFog/datafog-core/blob/main/fixtures/workspace/recall-browser-benchmark.json)
 records three calls per case on Apple M5 Pro / 48 GiB with bundled Chromium
 151.0.7922.34 after stable zeroizing index storage was added. Median observations
 were 3.6 ms for 1,000 values/130,500-byte no-hit input,
