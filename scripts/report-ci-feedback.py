@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+from urllib.parse import quote
 
 SPEC = importlib.util.spec_from_file_location("scope", Path(__file__).with_name("ci-change-scope.py"))
 SCOPE = importlib.util.module_from_spec(SPEC)
@@ -61,7 +62,7 @@ def collect(repository, prs, queue_runs, recent_prs=0):
         runs = pages(f"{root}/actions/runs?event=pull_request&head_sha={pr['head']['sha']}", "workflow_runs")
         # A head SHA may occur on multiple PRs. Do not silently attribute such
         # a run to this PR when GitHub supplies a different association.
-        associations = pages(f"{root}/commits/{pr['head']['sha']}/pulls")
+        associations = pages(f"{root}/pulls?state=all&head={quote(pr['head']['label'], safe='')}")
         matching = [p['number'] for p in associations if p['head']['sha'] == pr['head']['sha']
                     and p['head']['ref'] == pr['head']['ref'] and p['head']['repo'] and pr['head']['repo']
                     and p['head']['repo']['full_name'] == pr['head']['repo']['full_name']]
@@ -165,7 +166,8 @@ def report(snapshot):
                             "completed_at": job.get('completed_at'), "url": job['html_url'],
                             "run_attempt": run['run_attempt']})
             rows.append({"pr": subject.get('pr'), "head_sha": subject['head_sha'], "cohort": cohort,
-                "outcome": 'failure' if any(r['conclusion'] == 'failure' for r in batch) else 'success',
+                "outcome": ('other' if any(r['conclusion'] not in {'success', 'failure'} for r in batch) else
+                            'failure' if any(r['conclusion'] == 'failure' for r in batch) else 'success'),
                 "observed_required_contexts": contexts,
                 "eligible": not reasons, "exclusions": sorted(set(reasons)),
                 "run_ids": [r['id'] for r in batch], "policy_run_ids_excluded": policy,
