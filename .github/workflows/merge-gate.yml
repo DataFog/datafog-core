@@ -23,6 +23,7 @@ jobs:
           python-version: '3.12'
       - run: python scripts/test-merge-gate.py
       - run: python scripts/test-changelog.py
+      - run: python scripts/test-ci-feedback.py
   advisory:
     if: github.event_name == 'merge_group'
     uses: ./.github/workflows/advisory.yml
