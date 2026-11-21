@@ -19,34 +19,19 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-## Node.js installed-package test
+## Cross-SDK verification
+
+Use the repository verifier to check toolchain pins, build the bindings and exercise the installed packages.
 
 ```bash
-npm ci --prefix bindings/node
-npm run test:package --prefix bindings/node
+cargo dfv doctor
+cargo dfv build
+cargo dfv check
+cargo dfv smoke
+cargo dfv parity --live
 ```
 
-## Browser/WASM installed-package test
-
-```bash
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.127 --locked
-npm ci --prefix bindings/wasm
-npx --prefix bindings/wasm playwright install chromium
-npm run test:package --prefix bindings/wasm
-```
-
-## Python installed-package test
-
-```bash
-python -m venv .venv
-.venv/bin/python -m pip install maturin
-.venv/bin/maturin build --manifest-path bindings/python/Cargo.toml --release
-.venv/bin/python -m pip install --force-reinstall target/wheels/*.whl
-.venv/bin/python bindings/python/tests/test_installed.py
-.venv/bin/python -m pip install -r bindings/python/tests/requirements-typing.txt
-.venv/bin/python bindings/python/tests/test_typing.py
-```
+Run `cargo dfv check --models` for model changes. Each run writes a report under `target/dfv/runs/`.
 
 ## Documentation preview
 
@@ -75,38 +60,7 @@ docs/               Architecture records and Mintlify documentation
 
 ## Publish a release from GitHub Actions
 
-Keep the four Cargo package versions, Python project version, both npm
-package versions, and their lockfiles aligned. The publishing workflows run
-`python3 scripts/check-release.py <runtime>` and reject inconsistent versions
-or a release tag that does not match the package version.
-
-For future releases, run the quality gates and installed-package tests above
-on the release commit, complete the
-[integration checklist](/releases/0-4-0#release-readiness-gate), and merge the
-release preparation PR before creating runtime tags on that same commit.
-Version 0.4.1 has already been published using the tags below; do not recreate
-or move these tags. A source version bump alone does not publish packages:
-
-| Tag | Workflow | Destination |
-| --- | --- | --- |
-| `rust-v0.4.1` | `publish-rust.yml` | crates.io |
-| `python-v0.4.1` | `publish-python.yml` | PyPI |
-| `node-v0.4.1` | `publish-node.yml` | npm: Node and five native platform packages |
-| `wasm-v0.4.1` | `publish-wasm.yml` | npm: browser WASM |
-
-Push runtime tags individually and confirm that each publishing workflow starts.
-If a tag already exists without a run, dispatch its publishing workflow against
-that existing tag; never move the tag to retrigger publication. For 0.4.1, the
-workflows were dispatched after a batch tag push did not produce workflow events.
-Check all four runs and install the published versions before announcing the
-combined release. Registry
-publication is not atomic across packages; inspect any partial result before
-retrying. Never move a tag that has already published a package.
-
-The npm workflows also accept a manual `dry_run` input, which defaults to
-`true`. A dry run builds and verifies package contents without publishing.
-For an actual manual publish, select the intended release tag and set
-`dry_run` to `false`.
+Qualify the release commit and publish the base SDKs and companion packages in dependency order. Push each runtime tag separately. If publication stops partway through, check the registry versions and completed workflow runs before retrying. The [publication runbook](https://github.com/DataFog/datafog-core/blob/main/docs/core-v1-publication.md) covers qualification, tag handling, companion workflows and installed-package checks.
 
 ### npm trusted publisher setup
 

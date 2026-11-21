@@ -56,6 +56,8 @@ await manager.scanAndTransform(text, config, context?)
 await manager.restore(text, context)
 ```
 
+For recipient names and mailing addresses in prose, use [`EmbeddedCnnDetector`](/reference/embedded-cnn).
+
 ## Native distribution targets
 
 The package build is configured for:
@@ -89,7 +91,7 @@ for aliases, policy configuration, input limits, and examples.
 German locale routing and the seven additional entity labels are documented in
 the [German entity reference](/reference/german-entities).
 
-Core 0.4.0 shares its detector registry with Rust and Python. Runtime `capabilities()` discovery is exposed by Rust and Python only; this binding retains its existing scan APIs. See the [capability inventory](/reference/capabilities) and [compatibility policy](/reference/compatibility).
+This SDK shares the Rust detector registry. See the [rule inventory](/reference/capabilities) for activation settings.
 
 ## Email source context
 

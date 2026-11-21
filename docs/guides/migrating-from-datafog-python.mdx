@@ -1,21 +1,20 @@
 ---
 title: "Migrate from datafog Python"
-description: "Move from datafog 4.8.x to the canonical datafog core 0.3.x Python API."
+description: "Move from datafog 4.8.x to the canonical datafog core 1.8.x Python API."
 icon: "arrow-right-arrow-left"
 ---
 
-<Warning>
-  This guide covers migration of the synchronous text detection and
-  transformation API from `datafog` 4.8.x to `datafog-core` 0.2.x. datafog
-  core is a new canonical API, not a drop-in replacement for the established
-  datafog Python package.
-</Warning>
+This guide translates synchronous text detection and transformation calls from the
+`datafog` 4.8.x API to `datafog-core` 1.8.x. The packages version independently.
+The newer [`datafog` 4.12.0 release](https://github.com/DataFog/datafog-python/releases/tag/v4.12.0)
+requires `datafog-core~=1.5.0`. Use separate environments to compare that adapter
+with standalone Core 1.8.
 
 datafog core makes detection results, text ranges, transformation policy, and
 provider-backed operations consistent across Rust, Python, Node.js, and
 browser/WASM. That consistency requires a few deliberate API changes in Python.
 
-datafog core 0.3 does not replace the legacy package's optional spaCy, GLiNER,
+The standalone Core SDK does not replace the legacy package's optional spaCy, GLiNER,
 OCR, distributed-processing, CLI, or application-guardrail features. Keep the
 established package for those workloads while adopting Core where its smaller,
 cross-runtime contract fits.
@@ -25,11 +24,11 @@ cross-runtime contract fits.
 <CodeGroup>
 
 ```bash datafog Python 4.8.x
-python -m pip install datafog
+python -m pip install 'datafog==4.8.*'
 ```
 
-```bash datafog core 0.3.x
-python -m pip install datafog-core
+```bash datafog core 1.8.x
+python -m pip install 'datafog-core==1.8.*'
 ```
 
 </CodeGroup>
@@ -40,15 +39,14 @@ python -m pip install datafog-core
 from datafog.engine import Entity, redact, scan, scan_and_redact
 ```
 
-```python datafog core 0.3.x
+```python datafog core 1.8.x
 from datafog_core import Finding, scan, scan_and_transform, transform
 ```
 
 </CodeGroup>
 
 The distribution name uses a hyphen (`datafog-core`), while the Python import
-uses an underscore (`datafog_core`). The two distributions can be installed at
-the same time while an application is migrated incrementally.
+uses an underscore (`datafog_core`).
 
 ## Update scan results
 
@@ -70,7 +68,7 @@ for entity in result.entities:
     print(entity.type, entity.text, entity.start, entity.end)
 ```
 
-```python datafog core 0.3.x
+```python datafog core 1.8.x
 from datafog_core import scan
 
 findings = scan("Email jane@example.com")
@@ -90,7 +88,7 @@ Use `codepoint_range` when slicing a Python string. Use `byte_range` when
 addressing the UTF-8 encoded input. Both ranges are zero-based and
 end-exclusive.
 
-| datafog Python 4.8.x | datafog core 0.3.x |
+| datafog Python 4.8.x | datafog core 1.8.x |
 | --- | --- |
 | `ScanResult.entities` | The return value from `scan` |
 | `Entity.type` | `Finding.entity_type` |
@@ -124,7 +122,7 @@ result = scan_and_redact(
 print(result.redacted_text)
 ```
 
-```python datafog core 0.3.x
+```python datafog core 1.8.x
 from datafog_core import scan_and_transform
 
 result = scan_and_transform(
@@ -142,7 +140,7 @@ print(result.text)
 
 </CodeGroup>
 
-| datafog Python 4.8.x | datafog core 0.3.x |
+| datafog Python 4.8.x | datafog core 1.8.x |
 | --- | --- |
 | `scan_and_redact(...)` | `scan_and_transform(text, {"scan": ..., "transform": ...})` |
 | `redact(text, entities, ...)` | `transform(text, findings, config)` |
@@ -179,16 +177,13 @@ behavior and threat-model distinctions.
 ## Remove legacy engine selection
 
 Do not translate `engine="regex"`, `"smart"`, `"spacy"`, or `"gliner"` into
-Core configuration. datafog core 0.3 owns detector composition and exposes
-`locale` as its scan setting. Detector provenance appears on each finding.
+Core configuration. The default scan uses rules. For model-backed prose detection,
+see the [embedded CNN reference](/reference/embedded-cnn).
 
-Entity names are exact and case-sensitive. The built-in Core entities are:
-
-`EMAIL`, `PHONE`, `SSN`, `CREDIT_CARD`, `IP_ADDRESS`, `DATE`, and `ZIP_CODE`.
-
-Use canonical names such as `DATE` and `ZIP_CODE` rather than legacy aliases
-such as `DOB` or `ZIP`. Entity selection belongs in the transformation config,
-not the scan config.
+Use canonical labels such as `DATE` and `ZIP_CODE`. Query `capabilities()` for the
+[rule inventory and activation settings](/reference/capabilities). Supply `scan.entities`
+to limit detection in a combined call or `transform.entities` to select findings
+for replacement. Detector activation settings such as `locale` still apply.
 
 ## Migration checklist
 
@@ -229,14 +224,8 @@ All matching preserves source casing and separators. Allowlist entries must use
 that source representation. Required context stays in the output, except postal
 prefixes, which are part of the finding and are replaced too.
 
-The Python adapter may translate explicit German entity requests into locale
-`de` and then filter results, but must separately test legacy overlap and
-selection semantics. Core adds no plural `locales`, engine switch or scan-time
-entity selector. The capability-aware higher-level adapter and its
-`datafog-core>=0.4.0,<0.5` dependency were merged in
-[PR #179](https://github.com/DataFog/datafog-python/pull/179). The higher-level
-Python package has its own release process; see the
-[reviewed legacy NPI selection limitation](/releases/0-4-0#python-adapter-dependency-and-npi-selection).
+For the original adapter’s overlap and selection behavior, see the
+[legacy NPI selection limitation](/releases/0-4-0#python-adapter-dependency-and-npi-selection).
 
 ## Credential detector migration (0.4.1)
 

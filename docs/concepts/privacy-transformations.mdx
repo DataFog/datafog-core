@@ -29,7 +29,7 @@ Redaction replaces each selected finding with an unnumbered entity placeholder.
 
 Masking replaces every non-revealed Unicode code point. The default character
 is `*`. A custom character must be exactly one non-whitespace, non-control
-Unicode code point.
+Unicode code point. Reveal counts leave at least one code point masked, even when the requested count reaches the length of the finding.
 
 ```json
 {

@@ -62,7 +62,7 @@ documented behavior; all supplied findings validate before filtering.
 - `unsupported_strategy`
 - `internal_error`
 
-### Workspace operations in 0.5.0-beta.1
+### Workspace operations
 
 - `invalid_batch`
 - `closed_workspace`
@@ -70,7 +70,10 @@ documented behavior; all supplied findings validate before filtering.
 - `workspace_conflict`
 - `invalid_marker`
 - `invalid_snapshot`
-- `invalid_operation_id`
+- `invalid_operation_id`, `invalid_operation`, `operation_reused`
+- `invalid_policy`
+- `invalid_conversation`, `conversation_unknown`, `conversation_pending`, `invalid_send_intent`
+- `inactive_stream`, `invalid_encoding`
 - `resource_limit`
 
 `Workspace.restoreReport` returns marker issues with `text: null`; the strict
@@ -78,7 +81,7 @@ documented behavior; all supplied findings validate before filtering.
 and resource errors can still throw from either call. Source preparation rejects
 invalid markers before approval and may carry `markerIssues` on the error.
 
-### Optional browser model operations in 0.5.0-beta.1
+### Optional browser model operations
 
 - `model_load_failed`
 - `model_inference_failed`
@@ -91,10 +94,7 @@ Some model pre-validation and initialization failures are native JavaScript
 exceptions. Catch those at the host boundary too; do not treat failures as an
 empty successful scan or an implicit rule-only fallback.
 
-The [0.5.0-beta.1 integration contract](https://github.com/DataFog/datafog-core/blob/main/docs/extension-integration-0.5.0-beta.1.md#errors-and-retry)
-lists every declared browser SDK code, retry/lifecycle handling and the separate
-reference host's persistence/worker errors. Provider codes in the shared error
-union do not enable key/token providers in browser WASM.
+See the [browser SDK declarations](https://github.com/DataFog/datafog-core/blob/main/bindings/wasm/index.d.ts) for the complete `DataFogErrorCode` union.
 
 ## JavaScript example
 

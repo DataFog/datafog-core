@@ -28,8 +28,7 @@ assert!(info.supported_entities.iter().any(|label| label == "UUID"));
 ```
 
 Node.js and browser WASM share the core detector behavior but do not export a
-capability-discovery API in 0.4.1. Their existing scan APIs remain
-available.
+capability-discovery API in Core 1.8.
 
 ## Response contract
 
@@ -50,11 +49,9 @@ that entity. For example, UUID uses `{"detect_uuid":true}` and German entities
 use `{"locale":"de"}`. The `scopes` field distinguishes text scanning from
 structured scanning; inspect it before choosing a runtime operation.
 
-## Version 0.4.1 inventory
+## Core 1.8 rule inventory
 
-<Note>This inventory describes Core 0.4.1. Core 0.4.0 exposes 20 supported entities and 11 default text detectors; its history is preserved in the [0.4.0 release notes](/releases/0-4-0).</Note>
-
-This table was generated from the Rust `capabilities()` response. It reports **23 supported entities** and **14 default text detectors**, with unchanged `contract_version: 1`. Query the installed runtime for its actual inventory.
+The released SDK reports **25 supported entities**, including **16 default text detectors**. Request-local [literal deny rules](/reference/literal-denylists) and the [embedded model](/reference/embedded-cnn) provide additional coverage outside this registry.
 
 | Entity | Scopes | Activation | Scan settings |
 | --- | --- | --- | --- |
@@ -94,7 +91,7 @@ This table was generated from the Rust `capabilities()` response. It reports **2
 | `en-US` | None |
 | `fr` | None |
 
-The three new default labels are [API_KEY](/reference/api-keys), [BEARER_TOKEN](/reference/bearer-token), and [CREDENTIAL_URI](/reference/credential-uri). Bearer recognition uses explicit header context in text and also the immediate `Authorization` field key in structured objects. Neither other field names nor transformation selection activate arbitrary token detection.
+Credential detectors include [API_KEY](/reference/api-keys), [BEARER_TOKEN](/reference/bearer-token), and [CREDENTIAL_URI](/reference/credential-uri). Bearer recognition uses explicit header context in text and also the immediate `Authorization` field key in structured objects. Neither other field names nor transformation selection activate arbitrary token detection.
 
 ## Locale handling
 
@@ -102,7 +99,7 @@ Locale comparison trims the supplied value and uses ASCII case-insensitive
 matching. The original configured string remains preserved. German aliases
 activate their locale-specific entities; `en-US` and `fr` retain base detection.
 Omitted locale runs base detection. Unsupported explicit locale strings raise
-the existing configuration error in Core 0.4.0.
+the existing configuration error.
 
 Selecting an entity for transformation does not activate its detector. Use the
 reported scan settings and keep transformation selection separate. Structured

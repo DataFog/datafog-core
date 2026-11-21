@@ -6,7 +6,7 @@ description: 'Bounded lexical account-number coverage with model compatibility.'
 `ACCOUNT_NUMBER` detects 6–17 contiguous ASCII digits immediately after
 `account number`, `account no.`, `acct number` or `acct no.` (ASCII case
 insensitive). The value span excludes the label. Supported spacing, delimiters,
-boundaries and exclusions are defined in the [rule contract](../account-number-rule-contract.md).
+boundaries and exclusions are defined in the [rule contract](https://github.com/DataFog/datafog-core/blob/main/docs/account-number-rule-contract.md).
 This is lexical coverage, not bank validation or universal account detection.
 
 ```python
@@ -28,7 +28,7 @@ console.assert(result.text === "bank account number: [ACCOUNT_NUMBER]");
 
 Rules run by default across locales. Bare numbers, generic `account:` labels,
 intervening prose, split numeric values and alphanumeric accounts are excluded.
-The [masked-account contract](../masked-account-number-rule-contract.md) also
+The [masked-account contract](https://github.com/DataFog/datafog-core/blob/main/docs/masked-account-number-rule-contract.md) also
 accepts account-labelled four-digit endings and bounded X/asterisk masks. For
 `account ending in 1234`, only `1234` is the value. For
 `account number: XXXX1234`, the whole `XXXX1234` token is the value. A visible

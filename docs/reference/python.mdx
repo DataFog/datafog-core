@@ -104,11 +104,13 @@ async def restore_batch(scope: str, items: list[dict]) -> list[dict]:
 Exceptions expose stable `code`, optional `reason`, optional `path`, and
 optional `finding_index` attributes. See [Errors](/reference/errors).
 
-## Testing hook
+## Model detection and encrypted storage
 
-`panic_probe()` forces a Rust panic through the detached-work path and raises
-`DataFogInternalError` (code `internal_error`, message including the panic text).
-Use it to check that your own error handling covers the Rust boundary.
+Use [`EmbeddedCnnDetector`](/reference/embedded-cnn) for recipient names and mailing addresses in prose. The optional `datafog-fogvault` package provides `ApplicationVault` for an encrypted Workspace shared across application processes. See the [Python vault guide](https://github.com/DataFog/datafog-core/tree/main/integrations/fogvault-python).
+
+## Deprecated testing hook
+
+Since Core 1.5, `panic_probe()` emits a deprecation warning and raises `DataFogInternalError` without triggering a Rust panic.
 
 ## Structured JSON and PERSON fields
 
@@ -128,7 +130,7 @@ the [German entity reference](/reference/german-entities).
 
 ## Capability discovery (0.4.0+)
 
-Use `capabilities()` to inspect the runtime registry, including supported entities, default detectors, locale aliases, and activation settings. See the [capabilities contract and generated inventory](/reference/capabilities) and [0.4.x compatibility policy](/reference/compatibility).
+Use `capabilities()` to inspect the runtime registry, including supported entities, default detectors, locale aliases, and activation settings. See the [capabilities contract and generated inventory](/reference/capabilities) and [compatibility policy](/reference/compatibility).
 
 ## Email source context
 

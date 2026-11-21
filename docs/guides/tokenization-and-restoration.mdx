@@ -115,5 +115,5 @@ Token envelopes use the canonical
 Base64URL components. Treat the envelope as opaque application data; do not
 parse or construct it yourself.
 
-Browser/WASM rejects selected tokenization and every restoration call with
-`unsupported_strategy`.
+Browser/WASM rejects provider-backed tokenization and restoration with
+`unsupported_strategy`. Use a [browser Workspace](/reference/browser-wasm) to restore its locally issued markers.

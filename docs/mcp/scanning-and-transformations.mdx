@@ -15,7 +15,8 @@ Put a CSV or text file inside an allowed folder. Ask Claude Code:
 
 Use an absolute path if the file is outside the agent's current directory.
 The scan returns counts by entity type and finding locations. CSV/TSV findings
-include record and column numbers; text findings include character offsets.
+include record and column numbers. Text findings include character offsets.
+Scans with more than 700 findings return complete counts and omit individual locations.
 
 You can try the [fictional customer CSV](https://github.com/DataFog/datafog-mcp/blob/main/docs/demo/customers.csv)
 from the MCP repository. Save it inside an allowed folder first.
