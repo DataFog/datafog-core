@@ -208,6 +208,32 @@ The `allowlist` field preserves specific values:
 
 Allowlisted findings are skipped during transformation.
 
+### Literal denylists
+
+The `deny` field adds explicit sensitive phrases that remain protected regardless of allowlists:
+
+```json
+{
+  "scan": {
+    "deny": [
+      {"phrase": "Project Atlas"},
+      {"phrase": "internal-token", "case_sensitive": false, "boundary": "substring"}
+    ]
+  },
+  "transform": {"default": {"strategy": "redact"}}
+}
+```
+
+Denylist findings use entity type `DENYLIST` and detector `datafog-core/denylist`. They:
+- Run regardless of `entities` selection (no need to select `DENYLIST`)
+- Win over exact or regex allowlists
+- Are not listed in `capabilities()` (configured, not built-in)
+- Use the configured default strategy or `DENYLIST` override
+
+Options: `phrase` (required nonempty string), `case_sensitive` (default true, uses Unicode simple case folding when false), `boundary` ("word" default or "substring"). Word boundaries require both adjacent characters to be absent or non-letter/number/underscore.
+
+See `docs/reference/literal-denylists.mdx` for full matching rules and Workspace policy interaction.
+
 ### Provider requirements
 
 - `pseudonymize` requires a key provider that implements `resolve_key(key_ref, key_version)`
