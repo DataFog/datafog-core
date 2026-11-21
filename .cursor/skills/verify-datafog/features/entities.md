@@ -152,15 +152,23 @@ Tests live in:
 ### Email boundary handling
 
 The `format` option affects email detection boundaries:
-- Default: standard email extraction
+- Default: standard email extraction with label trimming
 - `format: "env"`: handles `EMAIL=jane@example.com` assignments
 - `format: "sql"`: handles quoted strings in SQL
+
+Additional boundary rules:
+- **Script boundaries**: EMAIL matching stops at script boundaries in non-ASCII text. `alice@example.comとbob@example.net` finds both addresses; surrounding text in another script is not read as part of the local part.
+- **After dots**: An EMAIL directly following dots is reported from its first local-part character: `see [1].alice@example.com` finds `alice@example.com`.
+- **Mixed-script narrowing**: A local part mixing another script with trailing ASCII narrows to the ASCII portion: `δοκιμήtest@example.com` reports `test@example.com`.
+
+See the [email boundaries guide](../../../docs/guides/email-boundaries.mdx) for detailed examples.
 
 ### Phone number validation
 
 - Numbers without `+` use North American rules (10 digits, area/exchange 2-9)
 - Numbers with `+` use permissive 7-15 digit check
 - Country codes and assigned numbers are not validated
+- **Per-line matching**: PHONE is matched on each line separately; a number at line end is reported when the next line starts with a digit
 
 ### Labeled identifiers
 
@@ -176,9 +184,15 @@ All of these enable German detection: `de`, `de-DE`, `de_DE`. The locale does no
 
 Setting `detect_uuid: true` enables UUID detection. Selecting UUID in entities without this setting does not activate it.
 
-### Decimal and CSV handling
+### Decimal, CSV and phone handling
 
-Contiguous card digits after digit+comma or digit+period are suppressed to avoid false positives in decimal numbers. Parse CSV/TSV into cells before scanning.
+The behavior after `digit,` and `digit.` depends on the candidate structure:
+
+- **After digit+comma**: Phone validation decides. `row 2,202-555-0143` finds the phone; an unsigned single-dot decimal like `6,306.2723362` is not reported.
+- **After digit+period**: A candidate with `+`, parentheses, or a non-dot separator is reported (`3.202-555-0143`); unseparated and dotted runs stay rejected (`3.14159265358`).
+- **Credit cards**: Contiguous card digits after digit+comma or digit+period are suppressed to avoid decimal false positives.
+
+For cleanest results, parse CSV/TSV into cells before scanning.
 
 ### PERSON detection
 
