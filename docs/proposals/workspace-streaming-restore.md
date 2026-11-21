@@ -115,7 +115,7 @@ No operation mutates workspace state or creates a plan/alias/record.
 
 ## Evidence and remaining work
 
-[The executable Core fixture](../../fixtures/workspace/streaming-contract-v1.json)
+[The executable Core fixture](https://github.com/DataFog/datafog-core/blob/main/fixtures/workspace/streaming-contract-v1.json)
 exercises actual feed/finalize/reset/cancel/head lifecycles for both encodings,
 late invalid markers, bare markers, EOF and oversized prefixes. Every byte and
 UTF-16 split of valid responses matches R2 output; original-coordinate errors,

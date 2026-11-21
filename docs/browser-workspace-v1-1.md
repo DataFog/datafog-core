@@ -37,7 +37,7 @@ await owner.lock();
 
 The application supplies the saved routing identifiers, password UI, local
 preview and actual approval event. For new vault creation, backup, recovery and
-credential changes, see the [SQLite adapter](../integrations/sqlite-browser/README.md).
+credential changes, see the [SQLite adapter](https://github.com/DataFog/datafog-core/blob/main/integrations/sqlite-browser/README.md).
 The same coordinator accepts a [FogVault Workspace owner](integrations/fogvault.md).
 Both adapters keep sending separate from saving; preserve the existing
 conversation/send-observation contract for network handoff.

@@ -9,12 +9,12 @@ regression remain unchanged. Production-host acceptance remains separate.
 
 ## Start here
 
-- Browser: [typed owner, runnable example and installed-package proof](../../integrations/fogvault-browser/README.md).
-- Native Node: [installed addon, tenant boundaries and lifecycle](../../integrations/fogvault-node/README.md).
-- Native Python: [installed wheel, thread boundaries and lifecycle](../../integrations/fogvault-python/README.md).
-- Native Rust: [registered SQLite owner and recovery](../../integrations/fogvault-native/README.md).
-- Legacy backups: [authenticated reference-format importer](../../integrations/fogvault-legacy-browser/README.md).
-- Migration: [authenticated/decrypted bundle recovery staging](../../integrations/fogvault-migration/README.md).
+- Browser: [typed owner, runnable example and installed-package proof](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-browser/README.md).
+- Native Node: [installed addon, tenant boundaries and lifecycle](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-node/README.md).
+- Native Python: [installed wheel, thread boundaries and lifecycle](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-python/README.md).
+- Native Rust: [registered SQLite owner and recovery](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-native/README.md).
+- Legacy backups: [authenticated reference-format importer](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/README.md).
+- Migration: [authenticated/decrypted bundle recovery staging](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-migration/README.md).
 - Shared [record and save/lifetime contract](fogvault-contract.md).
 - [Compatibility, backup differences and open-issue reconciliation](fogvault-compatibility.md).
 
@@ -146,4 +146,4 @@ Named evidence is retained as `legacy.json` beside `browser.json`.
 This covers the non-shipping reference-host format; it does not establish the
 archive provenance or format of Josh's shipping extension. The Core contract review and production extension security review are separate
 release decisions. See the
-[reader scope and resource limits](../../integrations/fogvault-legacy-browser/README.md).
+[reader scope and resource limits](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-legacy-browser/README.md).

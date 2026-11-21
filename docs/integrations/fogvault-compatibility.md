@@ -49,7 +49,7 @@ and FogVault [backup/data-transfer contract](https://github.com/DataFog/fogvault
 
 ## What the Core-only recovery helper does
 
-[`integrations/fogvault-migration`](../../integrations/fogvault-migration/README.md)
+[`integrations/fogvault-migration`](https://github.com/DataFog/datafog-core/blob/main/integrations/fogvault-migration/README.md)
 accepts a separately authenticated/decrypted bundle and expected source identity.
 It checks the namespace **and both head fields**, prepares an explicit fresh-ID
 Core recovery, and reopens the resulting candidate through the public decoder.
@@ -89,7 +89,7 @@ Sources: FogVault [native manifest](https://github.com/DataFog/fogvault/blob/6c6
 [backup manifest](https://github.com/DataFog/fogvault/blob/6c6176a3a9df320447ba42b924b26de7ac4d693a/crates/fogvault-backup/Cargo.toml),
 [browser manifest](https://github.com/DataFog/fogvault/blob/6c6176a3a9df320447ba42b924b26de7ac4d693a/packages/browser/package.json),
 [dependency scope](https://github.com/DataFog/fogvault/blob/6c6176a3a9df320447ba42b924b26de7ac4d693a/docs/dependency-scope.md),
-and Core [release version check](../../scripts/check-release.py).
+and Core [release version check](https://github.com/DataFog/datafog-core/blob/main/scripts/check-release.py).
 
 I6 remains open until both exact candidate versions have compatible dependency
 graphs, clean install/dry-run and joint-verifier evidence, approved release notes,

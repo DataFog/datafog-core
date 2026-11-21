@@ -86,7 +86,7 @@ Integration correctness and documented first-party regression policy still apply
 
 The supplied raw weight file is 1,022,900 bytes; config plus layout bring the
 bundle total to 1,025,143. Full package size and live memory are larger.
-[Provenance and licenses](../crates/core/src/cnn/assets/PROVENANCE.md) identify the
+[Provenance and licenses](https://github.com/DataFog/datafog-core/blob/main/crates/core/src/cnn/assets/PROVENANCE.md) identify the
 source revision, hashes and explicit supplied-weight redistribution authorization.
 Rust consumers can opt into the `embedded-cnn` feature and use
 `datafog_core::cnn::CnnDetector`; the browser package includes that feature.

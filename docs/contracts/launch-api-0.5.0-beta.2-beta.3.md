@@ -130,7 +130,7 @@ false-positive correction may leave the exact existing normalized `(entity type,
 value)` visible. Core cannot verify its truth, so a person may intentionally
 expose actual PII with this exception. A source/needs-review flag or detector name
 never grants it. A narrower or differently typed correction does not waive wider
-protected coverage. [ADR 004](../adr/004-workspace-aliasing-v1.md) records this
+protected coverage. [ADR 004](https://github.com/DataFog/datafog-core/blob/main/docs/adr/004-workspace-aliasing-v1.md) records this
 exception; the prior blanket rejection of `not_sensitive` is superseded.
 
 Merged #166 protects all built-in PII types plus `PERSON`, `FIRST_NAME`,
