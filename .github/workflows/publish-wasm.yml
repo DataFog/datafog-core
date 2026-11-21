@@ -26,7 +26,7 @@ jobs:
       actions: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require exact-commit Core and FogVault qualification for v1+
         run: python3 scripts/check-fogvault-release.py
         env:
@@ -43,7 +43,7 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org

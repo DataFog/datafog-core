@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Docs-only changes skip the remaining steps but still report success, so
@@ -67,7 +67,7 @@ jobs:
       matrix:
         target: [workspace_snapshot, utf16_range, email_context]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       - uses: dtolnay/rust-toolchain@nightly
@@ -83,7 +83,7 @@ jobs:
         run: cargo dfv fuzz run ${{ matrix.target }} -- -max_total_time=60
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-artifacts-${{ matrix.target }}
           path: crates/core/fuzz/artifacts/
