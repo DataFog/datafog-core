@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('feedback', Path(__file__).with_name('report-ci-feedback.py'))
 feedback = importlib.util.module_from_spec(spec)
@@ -59,6 +60,17 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(result, {'n': 20, 'p50_seconds': 127, 'p95_seconds': 127})
         data['subjects'] = data['subjects'][:4]
         self.assertIsNone(feedback.report(data)['cohort_summaries']['docs']['completed_first_attempts']['p50_seconds'])
+
+    def test_truncated_file_inventory_fails_collection(self):
+        pr = {'head': {'sha': 'abc'}, 'changed_files': 3001}
+        with patch.object(feedback, 'api', return_value=pr), patch.object(feedback, 'pages', return_value=[{}] * 3000):
+            with self.assertRaisesRegex(ValueError, 'file listing incomplete'):
+                feedback.collect('example/repo', [1], [])
+
+    def test_pagination_detects_missing_jobs(self):
+        with patch.object(feedback, 'api', return_value={'total_count': 2, 'jobs': [{'id': 1}]}):
+            with self.assertRaisesRegex(ValueError, 'pagination incomplete'):
+                feedback.pages('example/jobs', 'jobs')
 
     def test_stale_head_excluded(self):
         data = fixture()

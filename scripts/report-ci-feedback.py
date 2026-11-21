@@ -43,6 +43,8 @@ def pages(path, field=None):
 
 
 def collect(repository, prs, queue_runs, recent_prs=0):
+    prs = list(dict.fromkeys(prs))
+    queue_runs = list(dict.fromkeys(queue_runs))
     root = f"repos/{repository}"
     snapshot = {"repository": repository, "collected_at": datetime.now(timezone.utc).isoformat(), "subjects": []}
     if recent_prs:
