@@ -88,11 +88,12 @@ class MergeGateTests(unittest.TestCase):
 
 class JobVerificationTests(unittest.TestCase):
     def jobs(self):
+        # Names captured from successful queue run 44831214983; no tokens or logs.
+        names = json.loads((ROOT / "scripts/fixtures/merge-queue-job-names.json").read_text())
         jobs = [
             {"id": index, "run_id": 123, "run_attempt": 2, "head_sha": "abc",
-             "name": "policy" if name == "policy" else f"{name} / technical child",
-             "status": "completed", "conclusion": "success"}
-            for index, name in enumerate(("policy", *gate.TECHNICAL_WORKFLOWS), 1)
+             "name": name, "status": "completed", "conclusion": "success"}
+            for index, name in enumerate(names, 1) if name != "Full technical suite"
         ]
         jobs.append({"id": 100, "run_id": 123, "run_attempt": 2, "head_sha": "abc",
                      "name": "Full technical suite", "runner_name": "gate-runner",
@@ -124,15 +125,32 @@ class JobVerificationTests(unittest.TestCase):
             self.check(jobs)
 
     def test_missing_workflow_or_gate_and_duplicate_jobs_fail(self):
-        for index in range(len(self.jobs())):
-            jobs = self.jobs()
-            del jobs[index]
-            with self.subTest(index=index), self.assertRaises(ValueError):
+        for workflow in ("policy", *gate.TECHNICAL_WORKFLOWS):
+            jobs = [job for job in self.jobs() if job["name"].split(" / ", 1)[0] != workflow]
+            with self.subTest(workflow=workflow), self.assertRaises(ValueError):
                 self.check(jobs)
+        with self.assertRaises(ValueError):
+            self.check(self.jobs()[:-1])
         with self.assertRaises(ValueError):
             self.check(self.jobs() + [self.jobs()[0]])
         with self.assertRaises(ValueError):
             self.check(self.jobs() + [dict(self.jobs()[-1], id=101)])
+
+    def test_every_required_matrix_member_is_independently_required(self):
+        for workflow, scopes in gate.QUEUE_SCOPES.items():
+            for scope in scopes:
+                name = f"{workflow} / {scope}"
+                jobs = [job for job in self.jobs() if job["name"] != name]
+                # A green helper must never stand in for a missing qualification.
+                jobs.append(dict(self.jobs()[0], id=1001, name=f"{workflow} / scope / scope"))
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, "Required technical scope"):
+                    self.check(jobs)
+                original = next(job for job in self.jobs() if job["name"] == name)
+                with self.subTest(duplicate=name), self.assertRaisesRegex(ValueError, "exactly once"):
+                    self.check(self.jobs() + [dict(original, id=1000)])
+
+    def test_additional_successful_scopes_are_allowed(self):
+        self.check(self.jobs() + [dict(self.jobs()[0], id=1000, name="application-vaults / future platform")])
 
     def test_exact_gate_identity_and_attempt_are_required(self):
         for field, value in (("runner_name", "other"), ("name", "Full technical suite / other"),

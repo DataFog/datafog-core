@@ -1,9 +1,12 @@
 """Require successful queue checks; PRs validate the gate before queue admission."""
 
+from collections import Counter
 import json
 import os
 import sys
 from urllib.request import Request, urlopen
+
+from ci_qualification_scopes import QUEUE_SCOPES
 
 
 TECHNICAL_WORKFLOWS = (
@@ -65,6 +68,7 @@ def validate_jobs(jobs, run_id, attempt, head_sha, runner_name):
     """Reusable workflow success does not guarantee every child job succeeded."""
     expected = {"policy", *TECHNICAL_WORKFLOWS}
     covered = set()
+    scope_counts = Counter()
     identifiers = set()
     current_gate = []
     for job in jobs:
@@ -90,10 +94,16 @@ def validate_jobs(jobs, run_id, attempt, head_sha, runner_name):
         if job.get("status") != "completed" or job.get("conclusion") != "success":
             raise ValueError(f"Technical job did not succeed: {name}: {job.get('conclusion')}")
         covered.add(workflow)
+        scope_counts[name] += 1
     if len(current_gate) != 1:
         raise ValueError("Jobs API must contain exactly one executing final gate job")
     if covered != expected:
         raise ValueError(f"Missing technical workflow coverage: {sorted(expected - covered)}")
+    for workflow, scopes in QUEUE_SCOPES.items():
+        for scope in sorted(scopes):
+            name = f"{workflow} / {scope}"
+            if scope_counts[name] != 1:
+                raise ValueError(f"Required technical scope must occur exactly once: {name}")
 
 
 def main():
