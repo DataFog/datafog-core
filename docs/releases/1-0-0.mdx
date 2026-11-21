@@ -7,7 +7,7 @@ icon: "tag"
 Core `1.0.0` aligns the Rust, Python, native Node and browser WASM SDK versions.
 The public Workspace API contract is version **1**; the snapshot writer remains
 version **3**, with supported readers for versions **1, 2 and 3**. These identifiers
-are separate. The [reviewed compatibility contract](../contracts/core-v1.md)
+are separate. The [reviewed compatibility contract](https://github.com/DataFog/datafog-core/blob/v1.0.0/docs/contracts/core-v1.md)
 records their guarantees and limits.
 
 ## What changes from beta.3
@@ -42,7 +42,7 @@ npm install --save-exact @datafog/node@1.0.0
 npm install --save-exact @datafog/wasm@1.0.0
 ```
 
-The optional [FogVault integration guide](../integrations/fogvault.md) describes
+The optional [FogVault integration guide](https://github.com/DataFog/datafog-core/blob/v1.0.0/docs/integrations/fogvault.md) describes
 `datafog-fogvault-native`, `datafog-fogvault-migration`, `datafog-fogvault`,
 `@datafog/core-fogvault-node`, `@datafog/core-fogvault-browser` and
 `@datafog/core-fogvault-legacy-browser`, all version `1.0.0`. FogVault itself is
@@ -76,5 +76,5 @@ This is an SDK release. Shipping-extension/provider acceptance, real key-provide
 integration, certification, CUDA/all-device OOM guarantees and global memory SLAs
 are not established by these checks. CSV remains deferred. Browser model accuracy
 measurements retain actual misses/false positives and do not become an extension
-accuracy promise. See the [release scope](../core-v1-release-scope.md) and
-[publication runbook](../core-v1-publication.md).
+accuracy promise. See the [release scope](https://github.com/DataFog/datafog-core/blob/v1.0.0/docs/core-v1-release-scope.md) and
+[publication runbook](https://github.com/DataFog/datafog-core/blob/v1.0.0/docs/core-v1-publication.md).

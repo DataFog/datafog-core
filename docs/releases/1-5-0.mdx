@@ -1,0 +1,10 @@
+---
+title: "1.5.0"
+description: "Corrective privacy fixes for masking, overlapping findings, token validation and Python providers."
+---
+
+Core 1.5.0 retains the public APIs and Workspace and model wire contracts. Masking now conceals at least one code point. Combined scan-and-transform calls protect the union of overlapping detector spans. Explicit transforms still require review when a partial overlap would leave text exposed.
+
+Tokenization validates reserved token prefixes before contacting a provider. Python async providers must return awaitables. Several detectors also change finding boundaries. Review the [1.5 migration guide](/guides/migrating-to-core-1-5) for affected inputs and the [release notes](https://github.com/DataFog/datafog-core/releases/tag/v1.5.0) for package details.
+
+Applications upgrading today should also review the later [EMAIL and PHONE corrections in 1.7](/releases/1-7-0) and [mixed-script EMAIL corrections in 1.8](/releases/1-8-0).

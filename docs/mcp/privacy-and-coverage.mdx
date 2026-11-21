@@ -7,7 +7,7 @@ icon: "shield-halved"
 ## Know what is checked
 
 Default checks cover email, SSN, credit cards, labeled US routing numbers and
-NPIs, and supported credentials. Phone, date, ZIP code, and IP address checks
+NPIs, and supported credentials. Phone, date, ZIP code, IP address, labeled account number and labeled street address checks
 are available but off by default. Plain-text names and unlabelled street addresses need a model or user review.
 The bounded labelled street-line rule uses `STREET_ADDRESS`; full model `ADDRESS`
 remains distinct.
@@ -20,6 +20,8 @@ Supported inputs are UTF-8 text files up to **10 MB**, including CSV, TSV, JSON,
 logs, ENV, and SQL. CSV/TSV headers are preserved and not scanned by default;
 use `has_header=false` when the first record must be checked. PDF, DOCX, XLSX,
 images, and archives are not parsed. A refused scan means the file was not checked.
+
+ENV assignments and SQL quoted strings use format-specific [email boundaries](/guides/email-boundaries). In mixed-script text, review the span when an address touches surrounding letters.
 
 ## Understand the privacy boundary
 

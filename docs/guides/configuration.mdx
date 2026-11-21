@@ -152,3 +152,7 @@ Use `{"detect_uuid":true}` in a text or structured scan configuration to enable
 not change it. The option accepts only booleans, including an explicit `false`.
 For scan-and-transform, place it under `scan` and use `transform.entities` to
 select UUID replacements. Selection alone never enables scanning.
+
+## Literal deny rules
+
+Supply `deny` in the scan configuration to protect application-specific phrases. A matching phrase takes precedence over allowlists and entity filters for that request. See [literal denylists](/reference/literal-denylists) for word boundaries and case sensitivity.
