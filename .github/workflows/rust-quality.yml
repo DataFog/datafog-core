@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Docs-only changes skip the remaining steps but still report success, so
@@ -54,7 +54,7 @@ jobs:
           # Pull requests reuse caches from main without adding their own.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - if: steps.scope.outputs.code == 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - if: steps.scope.outputs.code == 'true'

@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 30
     environment: crates-io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require exact-commit Core and FogVault qualification for v1+
         run: python3 scripts/check-fogvault-release.py
         env:
