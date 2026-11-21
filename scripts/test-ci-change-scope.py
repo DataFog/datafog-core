@@ -15,6 +15,7 @@ WORKFLOWS = {
     'fogvault-native-languages': ('installed-native-languages',),
     'application-vaults': ('application-vault',),
     'credential-stores': ('credential-store',),
+    'python-binding': ('installed-wheel',),
 }
 
 

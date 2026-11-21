@@ -14,7 +14,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  scope:
+    uses: ./.github/workflows/change-scope.yml
+
   installed-wheel:
+    needs: scope
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.code != 'false') }}
     name: CPython ${{ matrix.python-version }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -30,62 +35,33 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # Docs-only changes skip the remaining steps but still report success, so
-      # required checks never wait for a run that path filters would not start.
-      - name: Detect docs-only changes
-        id: scope
-        shell: bash
-        env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          code=true
-          if [[ -n "$BASE" && "$BASE" != 0000000000000000000000000000000000000000 ]] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            files="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
-            if [[ -n "$files" ]]; then
-              code=false
-              while IFS= read -r file; do
-                case "$file" in docs/*|*.md|*.mdx) ;; *) code=true ;; esac
-              done <<< "$files"
-            fi
-          fi
-          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then code=true; fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-      - if: steps.scope.outputs.code == 'true'
-        id: rust-version
+      - id: rust-version
         run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
-      - if: steps.scope.outputs.code == 'true'
-        uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - if: steps.scope.outputs.code == 'true'
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}
           # Pull requests reuse caches from main without adding their own.
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - if: steps.scope.outputs.code == 'true'
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - if: steps.scope.outputs.code == 'true' && (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12')
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         name: Test publication check without downloading models
         run: |
           python scripts/test-model-publish-check.py
           python scripts/test-model-manifest.py
-      - if: steps.scope.outputs.code == 'true'
-        run: python -m pip install maturin
-      - if: steps.scope.outputs.code == 'true'
-        run: maturin build --manifest-path bindings/python/Cargo.toml --release
-      - if: steps.scope.outputs.code == 'true'
-        run: |
+      - run: python -m pip install maturin
+      - run: maturin build --manifest-path bindings/python/Cargo.toml --release
+      - run: |
           python -m venv .venv
           .venv/bin/python -m pip install target/wheels/*.whl
           .venv/bin/python -m pip install -r bindings/python/tests/requirements-typing.txt
           .venv/bin/python bindings/python/tests/test_installed.py
           .venv/bin/python bindings/python/tests/test_typing.py
-      - if: steps.scope.outputs.code == 'true' && (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10')
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
         name: Verify typing survives a source distribution rebuild
         run: |
           maturin sdist --manifest-path bindings/python/Cargo.toml --out target/sdist
