@@ -7,3 +7,11 @@ members = [
   "bindings/wasm",
 ]
 resolver = "2"
+
+# The recovery boundary test repeatedly wipes large buffers. Optimize both the
+# caller and zeroize's concrete implementations while retaining test assertions.
+[profile.test.package.datafog-core]
+opt-level = 1
+
+[profile.test.package.zeroize]
+opt-level = 3
