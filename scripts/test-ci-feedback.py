@@ -12,7 +12,7 @@ spec.loader.exec_module(feedback)
 def fixture():
     return {'repository': 'example/repo', 'collected_at': '2026-11-20T00:00:00Z', 'subjects': [{
         'pr': 12, 'head_sha': 'current', 'current_head_sha': 'current', 'files': [{'filename': 'README.md'}],
-        'runs': [{'id': 1, 'name': 'Python binding', 'head_sha': 'current', 'run_attempt': 1,
+        'runs': [{'id': 1, 'pr_identity_verified': True, 'name': 'Python binding', 'head_sha': 'current', 'run_attempt': 1,
                   'status': 'completed', 'conclusion': 'success', 'created_at': '2026-11-20T00:00:00Z',
                   'jobs': [{'id': 9, 'name': 'Python', 'html_url': 'https://example/job/9',
                             'head_sha': 'current', 'run_attempt': 1, 'status': 'completed', 'conclusion': 'success',
@@ -31,6 +31,34 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(row['observed_feedback_seconds'], 127)
         self.assertEqual(row['execution_seconds_sum'], 5)
         self.assertEqual(row['jobs'][0]['wait_seconds'], 120)
+
+    def test_failures_are_included_separately(self):
+        data = fixture()
+        data['subjects'][0]['runs'][0]['conclusion'] = 'failure'
+        result = feedback.report(data)
+        self.assertTrue(result['batches'][0]['eligible'])
+        self.assertEqual(result['cohort_summaries']['docs']['failed_first_attempts'], 1)
+        self.assertEqual(result['cohort_summaries']['docs']['success_only']['n'], 0)
+
+    def test_empty_inventory_and_missing_timestamps(self):
+        data = fixture()
+        data['subjects'][0]['runs'][0]['jobs'][0]['started_at'] = None
+        self.assertIn('incomplete_job_timing', self.row(data)['exclusions'])
+        data['subjects'][0]['runs'] = []
+        self.assertIn('no_technical_runs', self.row(data)['exclusions'])
+
+    def test_ambiguous_pr_identity_excluded(self):
+        data = fixture()
+        data['subjects'][0]['runs'][0]['pr_identity_verified'] = False
+        self.assertIn('unverified_pr_identity', self.row(data)['exclusions'])
+
+    def test_percentiles_have_small_sample_guards(self):
+        data = fixture()
+        data['subjects'] = [copy.deepcopy(data['subjects'][0]) for _ in range(20)]
+        result = feedback.report(data)['cohort_summaries']['docs']['completed_first_attempts']
+        self.assertEqual(result, {'n': 20, 'p50_seconds': 127, 'p95_seconds': 127})
+        data['subjects'] = data['subjects'][:4]
+        self.assertIsNone(feedback.report(data)['cohort_summaries']['docs']['completed_first_attempts']['p50_seconds'])
 
     def test_stale_head_excluded(self):
         data = fixture()
@@ -51,7 +79,7 @@ class FeedbackTests(unittest.TestCase):
 
     def test_reruns_cancellations_and_incomplete_runs_excluded(self):
         for field, value, reason in [('run_attempt', 2, 'retried_run'),
-                                      ('conclusion', 'cancelled', 'unsuccessful_run'),
+                                      ('conclusion', 'cancelled', 'cancelled_or_other_run'),
                                       ('status', 'in_progress', 'incomplete_run')]:
             data = fixture()
             data['subjects'][0]['runs'][0][field] = value
