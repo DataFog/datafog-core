@@ -101,6 +101,7 @@ cargo dfv eval --model datafog     # Evaluate specific engine
 cargo dfv eval --update-baseline   # Write current metrics as new baseline
 cargo dfv bench                    # Latency benchmark against baseline
 cargo dfv bench --runs 10          # Custom run count
+cargo dfv bench --application-vault  # Measure encrypted application vault latency
 cargo dfv bench --update-baseline  # Write current median as new baseline
 cargo dfv smoke                    # Install and test packages as user would
 cargo dfv smoke --sdk python       # Test only Python

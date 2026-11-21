@@ -4,6 +4,8 @@ DataFog Core provides a Workspace API for privacy-preserving session management.
 
 Browser extensions can use `BrowserWorkspace` from `@datafog/wasm/cnn/workspace` to coordinate the bundled CNN detector with either FogVault or SQLite persistence. See `docs/browser-workspace-v1-1.md`.
 
+Native applications can use `ApplicationVault` from `datafog_fogvault` (Python) for fast application-scoped encrypted opens. It uses OS credential storage (Keychain/Windows Credential Manager/Secret Service) or explicit file/external keys, process locking, and CAS-only encrypted storage. See `docs/design/application-vaults.md` and `integrations/fogvault-python/README.md`.
+
 ## Sub-features
 
 ### Core operations
