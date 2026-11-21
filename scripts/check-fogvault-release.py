@@ -13,26 +13,7 @@ import subprocess
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-PLATFORMS = ("ubuntu-24.04", "macos-15", "windows-2025")
-REQUIRED = {
-    "credential-stores.yml": {
-        f"Credential store / {platform}" for platform in PLATFORMS
-    },
-    "application-vaults.yml": {
-        f"Application vault / {platform}" for platform in (
-            "ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "windows-2025")
-    },
-    "fogvault-integration.yml": {
-        *(f"Core–FogVault native / {platform}" for platform in PLATFORMS),
-        *(f"Core–FogVault joint / {engine}" for engine in ("chromium", "firefox", "msedge")),
-    },
-    "browser-model.yml": {"extraction"},
-    "browser-v1-1.yml": {"installed-extension"},
-    "fogvault-native-languages.yml": {
-        "Core–FogVault unified Node archive",
-        *(f"Core–FogVault Node/Python / {platform}" for platform in PLATFORMS),
-    },
-}
+from ci_qualification_scopes import PLATFORMS, RELEASE_SCOPES as REQUIRED
 
 
 def api(repository, endpoint):
