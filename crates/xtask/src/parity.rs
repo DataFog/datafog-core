@@ -60,6 +60,8 @@ pub struct ParityDiscrepancy {
 
 type ScanResult = Result<Vec<SdkFinding>, String>;
 const LIVE_SDKS: [&str; 3] = ["python", "node", "wasm"];
+// Bound subprocess payloads and preserve completed-batch evidence if a later scan fails.
+const LIVE_BATCH_SIZE: usize = 128;
 
 fn command_output(command: &mut Command, stage: &str) -> Result<Output, String> {
     let output = command
@@ -72,11 +74,42 @@ fn command_output(command: &mut Command, stage: &str) -> Result<Output, String> 
     Ok(output)
 }
 
-fn parse_scan_output(output: Output) -> ScanResult {
-    let stdout =
-        std::str::from_utf8(&output.stdout).map_err(|_| "scan output is not UTF-8".to_string())?;
-    serde_json::from_str(stdout.trim())
-        .map_err(|_| "scan output is not a findings array".to_string())
+type BatchResult = Result<Vec<Vec<SdkFinding>>, String>;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BatchScan {
+    id: String,
+    findings: Vec<SdkFinding>,
+}
+
+fn parse_batch_output(output: Output, fixtures: &[&FixtureMeta]) -> BatchResult {
+    let scans: Vec<BatchScan> = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "scan output is not a fixture findings array".to_string())?;
+    if scans.len() != fixtures.len() {
+        return Err(
+            "scan output does not contain every requested fixture exactly once".to_string(),
+        );
+    }
+    scans
+        .into_iter()
+        .zip(fixtures)
+        .map(|(scan, fixture)| {
+            if scan.id != fixture.id {
+                return Err("scan output fixture IDs do not match the requested order".to_string());
+            }
+            Ok(scan.findings)
+        })
+        .collect()
+}
+
+fn write_batch_input(path: &std::path::Path, fixtures: &[&FixtureMeta]) -> Result<(), String> {
+    let input: Vec<_> = fixtures
+        .iter()
+        .map(|fixture| serde_json::json!({"id": fixture.id, "text": fixture.text}))
+        .collect();
+    let encoded = serde_json::to_vec(&input).map_err(|_| "could not encode scan input")?;
+    fs::write(path, encoded).map_err(|_| "could not write scan input".to_string())
 }
 
 struct PythonEnv {
@@ -90,38 +123,52 @@ fn init_python_env(root: &std::path::Path) -> Result<PythonEnv, String> {
     Ok(PythonEnv { python_bin })
 }
 
-fn scan_with_python(text: &str, root: &std::path::Path, env: &PythonEnv) -> ScanResult {
-    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
-    let code = format!(
-        r#"
-import json
+fn scan_with_python(
+    fixtures: &[&FixtureMeta],
+    input: &std::path::Path,
+    root: &std::path::Path,
+    env: &PythonEnv,
+) -> BatchResult {
+    let code = r#"
+import json, sys
 from datafog_core import scan
-findings = scan({text_json})
-result = [dict(entity_type=f.entity_type, matched_text=f.matched_text,
-    codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end,
-    byte_start=f.byte_range.start, byte_end=f.byte_range.end) for f in findings]
+with open(sys.argv[1], encoding="utf-8") as source:
+    fixtures = json.load(source)
+result = []
+for fixture in fixtures:
+    findings = scan(fixture["text"])
+    result.append(dict(id=fixture["id"], findings=[dict(
+        entity_type=f.entity_type, matched_text=f.matched_text,
+        codepoint_start=f.codepoint_range.start, codepoint_end=f.codepoint_range.end,
+        byte_start=f.byte_range.start, byte_end=f.byte_range.end) for f in findings]))
 print(json.dumps(result))
-"#,
-    );
-    parse_scan_output(command_output(
-        Command::new(&env.python_bin)
-            .args(["-I", "-c", &code])
-            .current_dir(root),
-        "Python scan",
-    )?)
+"#;
+    parse_batch_output(
+        command_output(
+            Command::new(&env.python_bin)
+                .args(["-I", "-c", code])
+                .arg(input)
+                .current_dir(root),
+            "Python scan",
+        )?,
+        fixtures,
+    )
 }
 
-fn scan_with_node(text: &str, root: &std::path::Path) -> ScanResult {
+fn scan_with_node(
+    fixtures: &[&FixtureMeta],
+    input: &std::path::Path,
+    root: &std::path::Path,
+) -> BatchResult {
     let node_dir = root.join("bindings/node");
     if !node_dir.join("index.js").is_file() {
         return Err("Node setup: binding index.js is missing".to_string());
     }
-    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
-    let code = format!(
-        r#"
-import {{ scan }} from './index.js';
-const findings = scan({text_json});
-const result = findings.map(f => ({{
+    let code = r#"
+import { readFileSync } from 'node:fs';
+import { scan } from './index.js';
+const fixtures = JSON.parse(readFileSync(process.argv[1], 'utf8'));
+const result = fixtures.map(fixture => ({id: fixture.id, findings: scan(fixture.text).map(f => ({
     entity_type: f.entityType,
     matched_text: f.matchedText,
     codepoint_start: f.codepointRange.start,
@@ -130,16 +177,19 @@ const result = findings.map(f => ({{
     byte_end: f.byteRange.end,
     utf16_start: f.utf16Range.start,
     utf16_end: f.utf16Range.end
-}}));
+}))}));
 console.log(JSON.stringify(result));
-"#,
-    );
-    parse_scan_output(command_output(
-        Command::new("node")
-            .args(["--input-type=module", "-e", &code])
-            .current_dir(&node_dir),
-        "Node scan",
-    )?)
+"#;
+    parse_batch_output(
+        command_output(
+            Command::new("node")
+                .args(["--input-type=module", "-e", code])
+                .arg(input)
+                .current_dir(&node_dir),
+            "Node scan",
+        )?,
+        fixtures,
+    )
 }
 
 struct WasmEnv {
@@ -211,57 +261,63 @@ fn init_wasm_env(root: &std::path::Path, run_dir: &std::path::Path) -> Result<Wa
     Ok(WasmEnv { temp_dir })
 }
 
-fn scan_with_wasm(text: &str, env: &WasmEnv) -> ScanResult {
-    let text_json = serde_json::to_string(text).map_err(|_| "could not encode scan input")?;
-    let server_code = format!(
-        r#"
-import {{ createServer }} from "node:http";
-import {{ readFileSync }} from "node:fs";
+fn scan_with_wasm(
+    fixtures: &[&FixtureMeta],
+    input: &std::path::Path,
+    env: &WasmEnv,
+) -> BatchResult {
+    let server_code = r#"
+import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import {{ chromium }} from "playwright";
+import { chromium } from "playwright";
 const tempDir = process.argv[2];
-const server = createServer((req, res) => {{
+const fixtures = JSON.parse(readFileSync(process.argv[3], "utf8"));
+const server = createServer((req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
-  const file = path.resolve(tempDir, `./${{pathname === "/" ? "/index.html" : pathname}}`);
+  const file = path.resolve(tempDir, `./${pathname === "/" ? "/index.html" : pathname}`);
   const type = file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".html") ? "text/html" : "text/javascript";
-  try {{ res.writeHead(200, {{ "content-type": type }}); res.end(readFileSync(file)); }}
-  catch {{ res.writeHead(404).end(); }}
-}});
+  try { res.writeHead(200, { "content-type": type }); res.end(readFileSync(file)); }
+  catch { res.writeHead(404).end(); }
+});
 let browser;
-try {{
-  await new Promise((resolve, reject) => {{
+try {
+  await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
-  }});
+  });
   browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${{server.address().port}}`);
-  const result = await page.evaluate(async () => {{
-    const {{ init, scan }} = await import("/node_modules/@datafog/wasm/index.js");
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  const result = await page.evaluate(async (fixtures) => {
+    const { init, scan } = await import("/node_modules/@datafog/wasm/index.js");
     await init();
-    return scan({text_json}).map(f => ({{
+    return fixtures.map(fixture => ({id: fixture.id, findings: scan(fixture.text).map(f => ({
       entity_type: f.entityType, matched_text: f.matchedText,
       codepoint_start: f.codepointRange.start, codepoint_end: f.codepointRange.end,
       byte_start: f.byteRange.start, byte_end: f.byteRange.end,
       utf16_start: f.utf16Range.start, utf16_end: f.utf16Range.end
-    }}));
-  }});
+    }))}));
+  }, fixtures);
   console.log(JSON.stringify(result));
-}} finally {{
-  try {{ if (browser) await browser.close(); }}
-  finally {{ await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }}
-}}
-"#,
-    );
+} finally {
+  try { if (browser) await browser.close(); }
+  finally { await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+}
+"#;
     fs::write(env.temp_dir.join("parity-scan.mjs"), server_code)
         .map_err(|_| "WASM scan: could not write browser script")?;
-    parse_scan_output(command_output(
-        Command::new("node")
-            .arg("parity-scan.mjs")
-            .arg(&env.temp_dir)
-            .current_dir(&env.temp_dir),
-        "WASM browser scan",
-    )?)
+    parse_batch_output(
+        command_output(
+            Command::new("node")
+                .arg("parity-scan.mjs")
+                .arg(&env.temp_dir)
+                .arg(input)
+                .current_dir(&env.temp_dir),
+            "WASM browser scan",
+        )?,
+        fixtures,
+    )
 }
 
 /// Identifies if a fixture contains multibyte characters that could cause offset drift.
@@ -536,6 +592,29 @@ fn record_live_fixture(
     result.pass &= result.discrepancies.is_empty();
 }
 
+fn record_live_batch(
+    result: &mut ParityResult,
+    fixtures: &[&FixtureMeta],
+    batches: [(&str, BatchResult); 3],
+) {
+    let mut batches = batches.map(|(sdk, batch)| (sdk, batch.map(Vec::into_iter)));
+    for fixture in fixtures {
+        let scans = batches.each_mut().map(|(sdk, batch)| {
+            let scan = match batch {
+                Ok(scans) => scans
+                    .next()
+                    .ok_or_else(|| "scan output omitted a fixture".to_string()),
+                Err(message) => Err(message.clone()),
+            };
+            (*sdk, scan)
+        });
+        record_live_fixture(result, fixture, scans);
+        if !result.errors.is_empty() {
+            break;
+        }
+    }
+}
+
 fn run_live_parity(
     run_dir: &std::path::Path,
     root: &std::path::Path,
@@ -583,25 +662,43 @@ fn run_live_parity(
                 );
             }
             result.sdks_compared = LIVE_SDKS.iter().map(|sdk| (*sdk).to_string()).collect();
+            let input = run_dir.join("parity-input.json");
             let python_env = OnceLock::new();
             let wasm_env = OnceLock::new();
-            for fixture in selected {
-                let python = python_env
-                    .get_or_init(|| init_python_env(root))
-                    .as_ref()
-                    .map_err(Clone::clone)
-                    .and_then(|env| scan_with_python(&fixture.text, root, env));
-                let node = scan_with_node(&fixture.text, root);
-                let wasm = wasm_env
-                    .get_or_init(|| init_wasm_env(root, run_dir))
-                    .as_ref()
-                    .map_err(Clone::clone)
-                    .and_then(|env| scan_with_wasm(&fixture.text, env));
-                record_live_fixture(
-                    &mut result,
-                    fixture,
-                    [("python", python), ("node", node), ("wasm", wasm)],
-                );
+            for fixtures in selected.chunks(LIVE_BATCH_SIZE) {
+                let prepared = write_batch_input(&input, fixtures);
+                let batches = [
+                    (
+                        "python",
+                        prepared
+                            .clone()
+                            .and_then(|()| {
+                                python_env
+                                    .get_or_init(|| init_python_env(root))
+                                    .as_ref()
+                                    .map_err(Clone::clone)
+                            })
+                            .and_then(|env| scan_with_python(fixtures, &input, root, env)),
+                    ),
+                    (
+                        "node",
+                        prepared
+                            .clone()
+                            .and_then(|()| scan_with_node(fixtures, &input, root)),
+                    ),
+                    (
+                        "wasm",
+                        prepared
+                            .and_then(|()| {
+                                wasm_env
+                                    .get_or_init(|| init_wasm_env(root, run_dir))
+                                    .as_ref()
+                                    .map_err(Clone::clone)
+                            })
+                            .and_then(|env| scan_with_wasm(fixtures, &input, env)),
+                    ),
+                ];
+                record_live_batch(&mut result, fixtures, batches);
                 if !result.errors.is_empty() {
                     break;
                 }
@@ -1170,11 +1267,150 @@ mod tests {
             };
             let mut result = report();
             let mut scans = successful_scans();
-            scans[2].1 = parse_scan_output(output);
+            scans[2].1 = parse_batch_output(output, &[&fixture("bad-response")])
+                .map(|mut scans| scans.remove(0));
             record_live_fixture(&mut result, &fixture("bad-response"), scans);
             assert!(!result.pass);
             assert_eq!(result.errors[0].sdk.as_deref(), Some("wasm"));
         }
+    }
+
+    #[test]
+    fn batch_output_requires_exact_fixture_identity_and_cardinality() {
+        let first = fixture("first");
+        let second = fixture("second");
+        let fixtures = [&first, &second];
+        for rows in [
+            serde_json::json!([]),
+            serde_json::json!([{"id": "first", "findings": []}]),
+            serde_json::json!([{"id": "first", "findings": []}, {"id": "first", "findings": []}]),
+            serde_json::json!([{"id": "second", "findings": []}, {"id": "first", "findings": []}]),
+            serde_json::json!([{"id": "first", "findings": []}, {"id": "unknown", "findings": []}]),
+            serde_json::json!([{"id": "first", "findings": []}, {"id": "second", "findings": []}, {"id": "extra", "findings": []}]),
+            serde_json::json!([{"id": "first", "findings": []}, {"id": "second"}]),
+            serde_json::json!([{"id": "first", "findings": []}, {"id": "second", "findings": [{}]}]),
+        ] {
+            let output = Output {
+                status: Default::default(),
+                stdout: serde_json::to_vec(&rows).unwrap(),
+                stderr: Vec::new(),
+            };
+            assert!(
+                parse_batch_output(output, &fixtures).is_err(),
+                "accepted {rows}"
+            );
+        }
+        let output = Output {
+            status: Default::default(),
+            stdout: br#"[{"id":"first","findings":[]},{"id":"second","findings":[]}]"#.to_vec(),
+            stderr: Vec::new(),
+        };
+        assert_eq!(parse_batch_output(output, &fixtures).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_failed_later_batch_preserves_completed_fixture_evidence() {
+        let first: Vec<_> = (0..LIVE_BATCH_SIZE)
+            .map(|index| fixture(&index.to_string()))
+            .collect();
+        let mut result = report();
+        record_live_batch(
+            &mut result,
+            &first.iter().collect::<Vec<_>>(),
+            LIVE_SDKS.map(|sdk| (sdk, Ok(vec![Vec::new(); LIVE_BATCH_SIZE]))),
+        );
+        assert!(result.pass);
+        let failed = fixture("failed-batch");
+        record_live_batch(
+            &mut result,
+            &[&failed],
+            [
+                ("python", Ok(vec![Vec::new()])),
+                ("node", Ok(vec![Vec::new()])),
+                ("wasm", Err("scan output omitted a fixture".into())),
+            ],
+        );
+        assert!(!result.pass);
+        assert_eq!(result.fixtures_checked, LIVE_BATCH_SIZE + 1);
+        assert_eq!(result.errors[0].fixture_id.as_deref(), Some("failed-batch"));
+        for fixture in first {
+            for sdk in LIVE_SDKS {
+                assert!(
+                    result
+                        .sdk_results
+                        .as_ref()
+                        .unwrap()
+                        .contains_key(&format!("{}_{sdk}", fixture.id))
+                );
+            }
+        }
+        assert!(
+            !result
+                .sdk_results
+                .as_ref()
+                .unwrap()
+                .contains_key("failed-batch_wasm")
+        );
+    }
+
+    #[test]
+    #[ignore = "requires cargo dfv build and pinned Chromium; run by Verification CLI CI"]
+    fn installed_batch_matches_fresh_process_scans() {
+        let directory = TestDirectory::new();
+        let root = workspace_root();
+        let python = init_python_env(&root).unwrap();
+        let wasm = init_wasm_env(&root, &directory.0.join("reports")).unwrap();
+        // Repeat the positive after empty/negative inputs to detect shared scanner state.
+        let fixtures: Vec<_> = [
+            "👋 é jane@example.com",
+            "",
+            "No sensitive values.",
+            "äöü ß	first@example.com\nsecond@example.com",
+            "👋 é jane@example.com",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            FixtureMeta::from_record(&serde_json::json!({"id": index.to_string(), "text": text}))
+                .unwrap()
+        })
+        .collect();
+        let selected: Vec<_> = fixtures.iter().collect();
+        let input = directory.0.join("input.json");
+        write_batch_input(&input, &selected).unwrap();
+        let batched = [
+            scan_with_python(&selected, &input, &root, &python).unwrap(),
+            scan_with_node(&selected, &input, &root).unwrap(),
+            scan_with_wasm(&selected, &input, &wasm).unwrap(),
+        ];
+        for (index, fixture) in selected.iter().enumerate() {
+            write_batch_input(&input, &[*fixture]).unwrap();
+            let fresh = [
+                scan_with_python(&[*fixture], &input, &root, &python).unwrap(),
+                scan_with_node(&[*fixture], &input, &root).unwrap(),
+                scan_with_wasm(&[*fixture], &input, &wasm).unwrap(),
+            ];
+            let scans = LIVE_SDKS
+                .into_iter()
+                .enumerate()
+                .map(|(sdk_index, sdk)| {
+                    assert_eq!(
+                        serde_json::to_value(&batched[sdk_index][index]).unwrap(),
+                        serde_json::to_value(&fresh[sdk_index][0]).unwrap(),
+                        "{sdk} fixture {index}"
+                    );
+                    (sdk, Ok(batched[sdk_index][index].clone()))
+                })
+                .collect::<Vec<_>>();
+            let mut result = report();
+            record_live_fixture(&mut result, fixture, scans.try_into().unwrap());
+            assert!(result.pass, "{result:?}");
+        }
+        assert!(
+            batched
+                .iter()
+                .all(|batch| !batch[0].is_empty() && batch[1].is_empty() && batch[2].is_empty())
+        );
     }
 
     #[test]

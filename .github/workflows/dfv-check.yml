@@ -83,6 +83,9 @@ jobs:
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv parity --live --json
       - if: steps.scope.outputs.code == 'true'
+        name: Compare batched parity with fresh installed SDK processes
+        run: cargo test -p xtask parity::tests::installed_batch_matches_fresh_process_scans -- --ignored
+      - if: steps.scope.outputs.code == 'true'
         run: node --test scripts/test-workspace-parity-protocol.mjs
       - if: steps.scope.outputs.code == 'true'
         run: cargo dfv parity --workspace --json
