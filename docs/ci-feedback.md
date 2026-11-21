@@ -1,0 +1,17 @@
+# Measuring CI feedback
+
+Use `python3 scripts/report-ci-feedback.py --pr 286 --pr 287 --queue-run 44659384965 --save-snapshot /tmp/ci-input.json > /tmp/ci-report.json` with authenticated `gh`. Calls are read-only. Select a consecutive creation-ordered window with `--recent-prs 20` (all states, maximum 1000). Repeat `--pr` or `--queue-run` for an explicitly selected cohort. Replay without GitHub access using `--snapshot /tmp/ci-input.json`; retain snapshots alongside reports to make observations reproducible.
+
+The JSON separates docs, code and merge-queue batches. PR scope uses the conservative prose classifier, including the previous filename of renamed files. It retrieves current/final PR-head runs and checks that the head did not change while fetching files. Workflow creations within 60 seconds form one observed batch. Later Changelog-only events are excluded because label/body edits do not constitute new technical feedback. Multiple technical batches remain visible; older batches are excluded. Rerun, cancelled, incomplete, unverified PR identity, mixed-head and duplicate-workflow batches carry explicit exclusions. Original-attempt jobs are fetched even when retries exist.
+
+`eligible` means the observed batch passed these accounting filters, **not** that all expected workflows ran or branch protection passed. API results cannot establish workflows that should have triggered but never did. Inspect workflow revisions and selection before treating a batch as complete. Selected PRs are not a representative random population; nearest-rank p50 is suppressed below five eligible samples and p95 below twenty. Summaries separately count completed first attempts (including real failures), success-only attempts and exclusions. These are descriptive sample statistics, not population estimates.
+
+Feedback time runs from first workflow creation to last observed job completion. Waiting time runs from each job's creation to start; it includes scheduling delay but does not identify the responsible capacity limit. Summed execution seconds are neither billed minutes nor elapsed feedback time. Skipped jobs do not count as allocations; unfinished jobs with no valid execution interval are reported as exclusions. The last-finishing job is evidence of the tail, not a reconstructed dependency critical path. GitHub timestamps have second resolution.
+
+Do not pool docs and code, PRs and queues, historical and current workflow revisions, or cancelled pushes with successful first attempts. For capacity decisions, collect a stable period and report cohort sizes, exclusions, runner labels and actual billing separately. A current-head snapshot cannot reconstruct historical PR files or identify every push from timestamps alone.
+
+Run regression fixtures with `python3 scripts/test-ci-feedback.py`.
+
+Fixed `Full technical suite` and `Changelog policy` context observations are listed separately, including their conclusions and attempts, for runs created within the technical batch window. This is not a dynamic branch-rules evaluation or proof of required-check satisfaction. Missing contexts remain visible as absent observations; later label/body policy reruns do not extend technical feedback.
+
+Queue selections fetch only the explicitly named run and its original-attempt jobs. A separate sibling Changelog workflow is not fetched by queue-head SHA; absent Changelog observations must not be interpreted as passing or missing required checks. Batches with no completed allocated jobs are excluded from latency summaries.
