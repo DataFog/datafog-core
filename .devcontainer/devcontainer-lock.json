@@ -11,9 +11,9 @@
       "integrity": "sha256:92ac985e3dd74481f142f28e456e252583ca5b80e4051418721eb20df3de3387"
     },
     "ghcr.io/datafog/devcontainer-features/playwright:1": {
-      "version": "1.0.0",
-      "resolved": "ghcr.io/datafog/devcontainer-features/playwright@sha256:973b341f9869e9820034d471ee194244982a4f5ab0e0746bd2deb5f97b625061",
-      "integrity": "sha256:973b341f9869e9820034d471ee194244982a4f5ab0e0746bd2deb5f97b625061"
+      "version": "1.0.1",
+      "resolved": "ghcr.io/datafog/devcontainer-features/playwright@sha256:9cd78e583d588bd129bc115d784c470b916108ddba25b2d5e0841f3e48da1b40",
+      "integrity": "sha256:9cd78e583d588bd129bc115d784c470b916108ddba25b2d5e0841f3e48da1b40"
     },
     "ghcr.io/datafog/devcontainer-features/python-tools:1": {
       "version": "1.0.0",
