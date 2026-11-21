@@ -70,7 +70,7 @@ def collect(repository, prs, queue_runs, recent_prs=0):
             run['pr_identity_verified'] = any(p['number'] == number for p in run.get('pull_requests', [])) or (
                 not run.get('pull_requests') and matching == [number]
                 and run['head_branch'] == pr['head']['ref']
-                and run['head_repository']['full_name'] == pr['head']['repo']['full_name'])
+                and (run.get('head_repository') or {}).get('full_name') == pr['head']['repo']['full_name'])
         current = api(f"{root}/pulls/{number}")
         snapshot["subjects"].append({"pr": number, "head_sha": pr['head']['sha'],
             "current_head_sha": current['head']['sha'], "files": files, "runs": runs})
@@ -146,6 +146,8 @@ def report(snapshot):
                         "wait_seconds": wait, "execution_seconds": active,
                         "completed_at": job['completed_at'], "conclusion": job['conclusion'],
                         "runner_labels": job.get('labels', [])})
+            if not jobs:
+                reasons.append('no_completed_allocated_jobs')
             cohort = 'queue'
             if subject.get('pr'):
                 files = subject['files']
@@ -156,7 +158,11 @@ def report(snapshot):
             for run in subject['runs']:
                 if abs((timestamp(run['created_at']) - timestamp(batch[0]['created_at'])).total_seconds()) > 60:
                     continue
+                if run['head_sha'] != subject['head_sha'] or (subject.get('pr') and not run.get('pr_identity_verified', False)):
+                    continue
                 for job in run['jobs']:
+                    if job.get('head_sha') != subject['head_sha'] or job.get('run_attempt') != 1:
+                        continue
                     if job.get('name') in {'Changelog policy', 'Full technical suite'}:
                         try:
                             context_seconds = seconds(batch[0]['created_at'], job.get('completed_at'))
@@ -164,7 +170,7 @@ def report(snapshot):
                             context_seconds = None
                         contexts.append({"feedback_seconds": context_seconds, "name": job['name'], "conclusion": job['conclusion'],
                             "completed_at": job.get('completed_at'), "url": job['html_url'],
-                            "run_attempt": run['run_attempt']})
+                            "run_attempt": job['run_attempt']})
             rows.append({"pr": subject.get('pr'), "head_sha": subject['head_sha'], "cohort": cohort,
                 "outcome": ('other' if any(r['conclusion'] not in {'success', 'failure'} for r in batch) else
                             'failure' if any(r['conclusion'] == 'failure' for r in batch) else 'success'),

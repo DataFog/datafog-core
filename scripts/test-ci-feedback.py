@@ -72,6 +72,22 @@ class FeedbackTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'pagination incomplete'):
                 feedback.pages('example/jobs', 'jobs')
 
+    def test_all_skipped_has_no_percentile_sample(self):
+        data = fixture()
+        data['subjects'][0]['runs'][0]['jobs'] = [{'conclusion': 'skipped'}]
+        result = feedback.report(data)
+        self.assertIn('no_completed_allocated_jobs', result['batches'][0]['exclusions'])
+        self.assertEqual(result['cohort_summaries']['docs']['completed_first_attempts']['n'], 0)
+
+    def test_context_uses_original_job_identity_and_attempt(self):
+        data = fixture()
+        run = data['subjects'][0]['runs'][0]
+        run['run_attempt'] = 2
+        run['jobs'][0]['name'] = 'Full technical suite'
+        self.assertEqual(self.row(data)['observed_required_contexts'][0]['run_attempt'], 1)
+        run['jobs'][0]['head_sha'] = 'other'
+        self.assertEqual(self.row(data)['observed_required_contexts'], [])
+
     def test_stale_head_excluded(self):
         data = fixture()
         data['subjects'][0]['current_head_sha'] = 'new'

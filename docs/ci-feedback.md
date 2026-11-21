@@ -13,3 +13,5 @@ Do not pool docs and code, PRs and queues, historical and current workflow revis
 Run regression fixtures with `python3 scripts/test-ci-feedback.py`.
 
 Fixed `Full technical suite` and `Changelog policy` context observations are listed separately, including their conclusions and attempts, for runs created within the technical batch window. This is not a dynamic branch-rules evaluation or proof of required-check satisfaction. Missing contexts remain visible as absent observations; later label/body policy reruns do not extend technical feedback.
+
+Queue selections fetch only the explicitly named run and its original-attempt jobs. A separate sibling Changelog workflow is not fetched by queue-head SHA; absent Changelog observations must not be interpreted as passing or missing required checks. Batches with no completed allocated jobs are excluded from latency summaries.
