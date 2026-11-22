@@ -1,0 +1,343 @@
+{
+  "schema": "datafog-browser-pseudonymization-receipt/v1",
+  "schemaVersion": 1,
+  "runId": "harness-pilot",
+  "runKind": "pilot",
+  "trialId": "storage-10-fresh-mostly-new-unicode-r1-sqlite",
+  "profileId": "sqlite-storage-10-fresh-mostly-new-unicode-r1-sqlite",
+  "orderBlock": "manual",
+  "backend": "sqlite",
+  "timestampUtc": "2026-11-11T22:01:37.376Z",
+  "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+  "scenarioVersion": 1,
+  "scenario": {
+    "scenarioVersion": 1,
+    "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+    "mode": "storage_workspace",
+    "seed": 1,
+    "mappingTarget": 10,
+    "historyProfile": "fresh",
+    "valueReuse": "mostly_new",
+    "inputShape": "unicode",
+    "fixtureRef": "synthetic://browser-pseudonymization/v1/storage_workspace-m10-fresh-mostly_new-unicode-s1"
+  },
+  "fixtureSha256": "4a911d0d32ef3fe35c6ff425b0ab420933b9982c10b601268b521daa639a1fc8",
+  "repositoryCommit": "8104738e4b31e6ce40b1cac2109aeeec232ad836",
+  "harnessCommit": "8104738e4b31e6ce40b1cac2109aeeec232ad836",
+  "repositoryDirty": true,
+  "repositoryStatus": "?? benchmarks/",
+  "runtime": {
+    "node": "v25.8.2",
+    "host": "sids-MacBook-Pro-2.local",
+    "platform": "darwin 25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 51539607552,
+    "powerState": "unavailable"
+  },
+  "browser": {
+    "name": "Google Chrome retail",
+    "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "channel": "installed retail binary",
+    "headless": true
+  },
+  "packageArtifacts": [
+    {
+      "name": "@datafog/wasm",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-sqlite-browser",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/fogvault-browser",
+      "version": "0.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-fogvault-browser",
+      "version": "1.1.0",
+      "file": "benchmarks/browser/results/pilot/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
+      "source": "npm registry exact version"
+    }
+  ],
+  "extensionArtifact": {
+    "path": "benchmarks/browser/results/pilot/artifacts/mv3-extension-529d149200a999b5ebbf318dde65b5cd580136324858f064c8ccf7a8ea16e990.zip",
+    "bytes": 40880324,
+    "sha256": "2adf56ab6e97a922e3a0f9c2b8b6e7be1d89e21e9fb29a10f9a83fbd2ddd8afa",
+    "loadedDirectorySha256": "529d149200a999b5ebbf318dde65b5cd580136324858f064c8ccf7a8ea16e990"
+  },
+  "backendConfiguration": null,
+  "admission": {
+    "status": "unknown"
+  },
+  "correctness": {
+    "gates": {
+      "harness": {
+        "status": "fail",
+        "detail": "browserContext.waitForEvent: Timeout 30000ms exceeded while waiting for event \"serviceworker\""
+      }
+    }
+  },
+  "timings": {},
+  "measurements": {
+    "browserProcessMemorySamples": [
+      {
+        "sampledAtUtc": "2026-11-11T22:01:47.422Z",
+        "pid": 71946,
+        "rssBytes": 214532096,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:48.479Z",
+        "pid": 71946,
+        "rssBytes": 215351296,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:49.482Z",
+        "pid": 71946,
+        "rssBytes": 211222528,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:50.490Z",
+        "pid": 71946,
+        "rssBytes": 190676992,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:52.173Z",
+        "pid": 71946,
+        "rssBytes": 190709760,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:52.490Z",
+        "pid": 71946,
+        "rssBytes": 191053824,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:53.468Z",
+        "pid": 71946,
+        "rssBytes": 192004096,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:54.475Z",
+        "pid": 71946,
+        "rssBytes": 192004096,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:55.478Z",
+        "pid": 71946,
+        "rssBytes": 192004096,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:56.478Z",
+        "pid": 71946,
+        "rssBytes": 192004096,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:57.474Z",
+        "pid": 71946,
+        "rssBytes": 191938560,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:58.486Z",
+        "pid": 71946,
+        "rssBytes": 188334080,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:01:59.488Z",
+        "pid": 71946,
+        "rssBytes": 188334080,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:00.496Z",
+        "pid": 71946,
+        "rssBytes": 188448768,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:01.490Z",
+        "pid": 71946,
+        "rssBytes": 188448768,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:02.492Z",
+        "pid": 71946,
+        "rssBytes": 188612608,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:03.490Z",
+        "pid": 71946,
+        "rssBytes": 188579840,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:04.491Z",
+        "pid": 71946,
+        "rssBytes": 188579840,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:05.493Z",
+        "pid": 71946,
+        "rssBytes": 188579840,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:06.485Z",
+        "pid": 71946,
+        "rssBytes": 188579840,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:07.505Z",
+        "pid": 71946,
+        "rssBytes": 188579840,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:08.500Z",
+        "pid": 71946,
+        "rssBytes": 187727872,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:10.568Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:10.634Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:11.612Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:12.611Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:13.616Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:14.619Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:15.614Z",
+        "pid": 71946,
+        "rssBytes": 187711488,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      },
+      {
+        "sampledAtUtc": "2026-11-11T22:02:16.612Z",
+        "pid": 71946,
+        "rssBytes": 188121088,
+        "process": "Chrome main browser process",
+        "method": "ps RSS"
+      }
+    ],
+    "pageErrors": [],
+    "externalRequests": []
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "exclusionReason": "trial failed; raw failure retained",
+  "status": "failed",
+  "completedAtUtc": "2026-11-11T22:02:17.429Z",
+  "failure": {
+    "name": "TimeoutError",
+    "message": "browserContext.waitForEvent: Timeout 30000ms exceeded while waiting for event \"serviceworker\"",
+    "stack": "browserContext.waitForEvent: Timeout 30000ms exceeded while waiting for event \"serviceworker\"\n    at launchChrome (/Users/sid/projects/datafog/datafog-core-browser-harness/benchmarks/browser/harness/run.mjs:172:63)\n    at async file:///Users/sid/projects/datafog/datafog-core-browser-harness/benchmarks/browser/harness/run.mjs:213:17"
+  },
+  "browserProcessMemory": {
+    "status": "measured",
+    "process": "Chrome main browser process",
+    "sampleCount": 30,
+    "minRssBytes": 187711488,
+    "maxRssBytes": 215351296,
+    "meanRssBytes": 191613611
+  },
+  "instrumentation": {
+    "browserProcessSampling": {
+      "status": "measured",
+      "method": "ps RSS at one second intervals; includes browser process, not child renderer/utility processes"
+    },
+    "performanceClock": "performance.now in extension page",
+    "hostClock": "Node process wall clock",
+    "observerOverhead": "process sampling runs on host at one-second intervals; page timing excludes host-side process sampling"
+  },
+  "failureWorkspace": null,
+  "failureWorkspaceOmitted": true
+}

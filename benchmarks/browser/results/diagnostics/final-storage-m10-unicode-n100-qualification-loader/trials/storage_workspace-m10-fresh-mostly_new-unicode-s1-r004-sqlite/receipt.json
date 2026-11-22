@@ -1,0 +1,125 @@
+{
+  "schema": "datafog-browser-pseudonymization-receipt/v1",
+  "schemaVersion": 1,
+  "runId": "final-storage-m10-unicode-n100",
+  "runKind": "final",
+  "trialId": "storage_workspace-m10-fresh-mostly_new-unicode-s1-r004-sqlite",
+  "profileId": "profile-storage_workspace-m10-fresh-mostly_new-unicode-s1-r004-sqlite",
+  "orderBlock": "storage_workspace-m10-fresh-mostly_new-unicode-s1-repeat-4",
+  "backend": "sqlite",
+  "timestampUtc": "2026-11-11T22:30:30.842Z",
+  "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+  "scenarioVersion": 1,
+  "scenario": {
+    "scenarioVersion": 1,
+    "scenarioId": "storage_workspace-m10-fresh-mostly_new-unicode-s1",
+    "mode": "storage_workspace",
+    "seed": 1,
+    "mappingTarget": 10,
+    "historyProfile": "fresh",
+    "valueReuse": "mostly_new",
+    "inputShape": "unicode",
+    "fixtureRef": "synthetic://browser-pseudonymization/v1/storage_workspace-m10-fresh-mostly_new-unicode-s1"
+  },
+  "fixtureSha256": "d73da5e07b9882f13a85803a53c5990b546ad9b24e3a23b920f88ede76c3e3fe",
+  "repositoryCommit": "cf4e7be90f9cc194838c535f5609e01641b6995d",
+  "harnessCommit": "cf4e7be90f9cc194838c535f5609e01641b6995d",
+  "repositoryDirty": false,
+  "repositoryStatus": "",
+  "runtime": {
+    "node": "v25.8.2",
+    "host": "sids-MacBook-Pro-2.local",
+    "platform": "darwin",
+    "kernelRelease": "25.6.0",
+    "macProductVersion": "26.6.2",
+    "arch": "arm64",
+    "cpu": "Apple M5 Pro",
+    "logicalCpus": 18,
+    "totalMemoryBytes": 51539607552,
+    "powerState": "unavailable"
+  },
+  "browser": {
+    "name": "Google Chrome retail",
+    "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "channel": "installed retail binary",
+    "headless": true
+  },
+  "packageArtifacts": [
+    {
+      "name": "@datafog/wasm",
+      "version": "1.1.0",
+      "file": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100/artifacts/datafog-wasm-1.1.0.tgz",
+      "bytes": 2031540,
+      "sha256": "3456bb85dd46c53540d0a76f5d0768589fc0d12ff8bb4dd66f49223c5188d0e9",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-sqlite-browser",
+      "version": "1.1.0",
+      "file": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100/artifacts/datafog-core-sqlite-browser-1.1.0.tgz",
+      "bytes": 591484,
+      "sha256": "5970e2ab74bda2d67deec5d3646eb3770cf7e7d4f1845aaa43e3338bbe1d2cfc",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/fogvault-browser",
+      "version": "0.1.0",
+      "file": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100/artifacts/datafog-fogvault-browser-0.1.0.tgz",
+      "bytes": 578991,
+      "sha256": "08f27ae872adca46e135326a248dc59dd4dd45f0603e1995d9dc2839116ad675",
+      "source": "npm registry exact version"
+    },
+    {
+      "name": "@datafog/core-fogvault-browser",
+      "version": "1.1.0",
+      "file": "target/browser-pseudonymization/final/final-storage-m10-unicode-n100/artifacts/datafog-core-fogvault-browser-1.1.0.tgz",
+      "bytes": 10957,
+      "sha256": "8664f66078e434ef33f097458a653793a450b52ed2c60f813b059cca19d0e7b8",
+      "source": "npm registry exact version"
+    }
+  ],
+  "extensionArtifact": null,
+  "backendConfiguration": null,
+  "admission": {
+    "status": "unknown"
+  },
+  "correctness": {
+    "gates": {
+      "harness": {
+        "status": "fail",
+        "detail": "qualification evidence omitted wrong-credential rejection"
+      }
+    }
+  },
+  "timings": {},
+  "measurements": {
+    "browserProcessMemorySamples": [],
+    "pageErrors": [],
+    "externalRequests": []
+  },
+  "externalRequests": [],
+  "pageErrors": [],
+  "exclusionReason": "trial failed; raw failure retained",
+  "status": "failed",
+  "completedAtUtc": "2026-11-11T22:30:32.679Z",
+  "failure": {
+    "name": "Error",
+    "message": "qualification evidence omitted wrong-credential rejection",
+    "stack": "Error: qualification evidence omitted wrong-credential rejection\n    at loadQualification (file://benchmarks/browser/harness/run.mjs:190:88)\n    at async file://benchmarks/browser/harness/run.mjs:237:25"
+  },
+  "browserProcessMemory": {
+    "status": "unavailable"
+  },
+  "instrumentation": {
+    "browserProcessSampling": {
+      "status": "unavailable",
+      "reason": "Chrome main process could not be identified using the profile path"
+    },
+    "performanceClock": "performance.now in extension page",
+    "hostClock": "Node process wall clock",
+    "observerOverhead": "process sampling runs on host at one-second intervals; page timing excludes host-side process sampling"
+  },
+  "failureWorkspace": null,
+  "diagnosticClassification": "qualification loader rejected valid SQLite wrongCredentials evidence because it was stored outside gates; trial did not start backend flow",
+  "failureWorkspaceOmitted": true
+}
