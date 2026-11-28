@@ -42,28 +42,28 @@ jobs:
       MODEL_BACKEND: ${{ matrix.backend }}
       PYTHONUTF8: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: rust-version
         run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: rustfmt, clippy
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: native-candidates-${{ matrix.platform }}
           path: candidate-native
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: common-model-candidates
           path: candidate-common
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: node-model-candidates
           path: candidate-node
@@ -143,7 +143,7 @@ jobs:
       - name: Install build and explicit provisioning tools
         run: python -m pip install 'huggingface_hub==1.27.0' 'psutil==7.2.2'
       - name: Restore pinned model assets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: model-assets
         with:
           path: |
@@ -217,7 +217,7 @@ jobs:
             stream.write(f"WORKER_PYTHON={interpreter}\nDATAFOG_MODEL_CONFIG={root / 'model-session.json'}\nHF_HUB_OFFLINE=1\n")
           PYTHON
       - name: Cache verified pinned assets
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: steps.model-assets.outputs.cache-hit != 'true' && (steps.verified-datafog.outcome == 'success' || steps.verified-gliner.outcome == 'success')
         with:
           path: |
@@ -231,7 +231,7 @@ jobs:
         run: echo "dir=$("$WORKER_PYTHON" -m pip cache dir)" >> "$GITHUB_OUTPUT"
       - name: Reuse downloaded GLiNER2 dependencies
         if: matrix.backend != 'datafog'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.worker-pip.outputs.dir }}
           # Versions are pinned in pyproject.toml; pip still installs exactly those pins.
@@ -269,7 +269,7 @@ jobs:
           node scripts/test-node-package.mjs --prebuilt --tarball "$package" --platform-tarball "$platform_package"
       - name: Qualify actual worker faults and cancellation
         run: python -I -X utf8 scripts/model-fault-conformance.py "$DATAFOG_MODEL_CONFIG"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: model-${{ matrix.backend }}-${{ matrix.platform }}
           path: dist/

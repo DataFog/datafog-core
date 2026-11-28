@@ -33,7 +33,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: rust-version
         run: echo "version=$(./scripts/pin.sh rust)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
@@ -41,10 +41,10 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: rustfmt, clippy
           targets: ${{ matrix.target }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
       - run: python -m pip install 'maturin>=1.9.4,<2.0'
@@ -71,11 +71,11 @@ jobs:
           for source in wheels + binaries:
               shutil.copy2(source, Path("candidate") / source.name)
           PYTHON
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-candidates-${{ matrix.platform }}
           path: candidate/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.platform == 'linux-x86_64'
         with:
           name: candidate-node-wrapper
@@ -89,7 +89,7 @@ jobs:
           cargo package -p datafog-core --locked --allow-dirty
           core_version="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("crates/core/Cargo.toml").read_text(encoding="utf-8"))["package"]["version"])')"
           cp "target/package/datafog-core-${core_version}.crate" common/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.platform == 'linux-x86_64'
         with:
           name: common-model-candidates
@@ -99,15 +99,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: native-candidates-*
           path: candidates
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: candidate-node-wrapper
           path: bindings/node
@@ -123,7 +123,7 @@ jobs:
             (cd "$package" && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/node-candidates")
           done
           npm pack --ignore-scripts --pack-destination ../../node-candidates
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: node-model-candidates
           path: node-candidates/

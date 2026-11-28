@@ -52,8 +52,8 @@ jobs:
       run:
         working-directory: spike/gliner2-browser
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -69,7 +69,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo install wasm-bindgen-cli --version "$(../../scripts/pin.sh wasm-bindgen)" --locked
       - run: npm ci --prefix ../../bindings/wasm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python3 -m pip install maturin==1.14.1
@@ -87,7 +87,7 @@ jobs:
         working-directory: .
         run: cargo dfv check --core-sdk --json
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: core-sdk-qualification
           path: |
@@ -95,12 +95,12 @@ jobs:
             target/dfv/runs/
           retention-days: 30
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-entities
           path: spike/gliner2-browser/results/entities.json
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mv3-model-proof
           path: |

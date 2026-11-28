@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: python scripts/test-merge-gate.py
@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 5
     needs: ["policy", "advisory", "application-vaults", "browser-model", "browser-v1-1", "credential-stores", "devcontainer", "dfv-check", "dfv-models", "fogvault-integration", "fogvault-native-languages", "fuzz", "model-datafog", "native-python-host", "node-binding", "python-binding", "rust-quality", "wasm-binding", "workspace-contract", "workspace-integration"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require every selected check to succeed
         env:
           GATE_RESULTS: ${{ toJSON(needs) }}
