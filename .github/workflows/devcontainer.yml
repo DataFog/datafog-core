@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Feature options match the pin files
         run: bash scripts/check-devcontainer-pins.sh
 
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install devcontainer CLI
         # Pinned: --frozen-lockfile is what enforces .devcontainer/devcontainer-lock.json.
         run: npm install --global @devcontainers/cli@0.90.0
@@ -89,6 +89,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build Cursor cloud image
         run: docker build --progress=plain --file .cursor/Dockerfile --tag datafog-cursor:ci .
